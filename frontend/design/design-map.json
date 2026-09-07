@@ -1,0 +1,63 @@
+{
+  "$description": "화면·컴포넌트 → design.pen(Pencil) 노드 매핑. 디자인의 확정본은 Pencil이다. 화면·컴포넌트를 구현하기 전에 여기서 pencil 노드 id를 찾아 Pencil MCP `Get`(구조·프레임 자체의 fill·좌표)과 `TakeScreenshot`(시각)으로 대조한다. pencil이 '없음'이면 DESIGN.md 기준으로 구현하고 보고서에 'Pencil 미대조'로 표시한다. figma 필드는 `pnpm figma:build`로 내보내는 Figma 프레임 이름(출력물)이며 코드는 Figma를 읽지 않는다.",
+  "pencil": {
+    "file": "design.pen",
+    "importedAt": "2026-08-30",
+    "note": "Figma UI 킷을 붙여넣은 작업 파일. 킷 원본 프레임(Home, 로그인, Color style, Text style …)은 참고용으로 유지하고, 구현 기준 아트보드는 screens 키 이름(home, home/dark)으로 별도 둔다. 새 화면은 pencil-design 스킬로 그리고 여기에 노드 id를 기록한다.",
+    "tokenFrames": {
+      "colorStyle": "Color style / tokens (J81sgU) — 문서 변수 $<semantic> 라이트/다크 스와치",
+      "textStyle": "Text style / tokens (khZeU) — text-<name> 샘플"
+    },
+    "variables": "문서 변수 51개 = tokens.json semantic.color 35개(mode: light/dark) + white/black + radius-* + size-* + font-sans(Pretendard). scripts/sync-pen-tokens.cjs가 tokens.json으로 동기화하고 tokens:check가 불일치를 잡는다."
+  },
+  "components": {
+    "Text": { "code": "components/ui/text.tsx", "source": "react-native-reusables", "pencil": "없음 (RNR 기본, Text style / tokens 참조)" },
+    "Button": { "code": "components/ui/button.tsx", "source": "react-native-reusables", "pencil": "Button / Primary / Active (Jj2rR)" },
+    "Input": { "code": "components/ui/input.tsx", "source": "react-native-reusables", "pencil": "Text field / Default (idi6K)" },
+    "Card": { "code": "components/ui/card.tsx", "source": "react-native-reusables", "pencil": "Card / 1 (eCPyS)" },
+    "Badge": { "code": "components/ui/badge.tsx", "source": "react-native-reusables", "pencil": "없음" },
+    "Skeleton": { "code": "components/ui/skeleton.tsx", "source": "react-native-reusables", "pencil": "없음" },
+    "Separator": { "code": "components/ui/separator.tsx", "source": "react-native-reusables", "pencil": "없음" },
+    "Icon": { "code": "components/ui/icon.tsx", "source": "react-native-reusables", "pencil": "없음 (lucide icon 노드)" },
+    "Dialog": { "code": "components/ui/dialog.tsx", "source": "react-native-reusables", "pencil": "없음 (킷: System / Popover toP2P)" },
+    "AmountText": { "code": "components/ui/amount-text.tsx", "pencil": "없음 (home 아트보드 AmountText / md 텍스트)" },
+    "AmountInput": { "code": "components/ui/amount-input.tsx", "pencil": "Amount / Default·Active (kJ5d5, U7I9O) — 빠른 금액 칩" },
+    "EmptyState": { "code": "components/ui/empty-state.tsx", "pencil": "없음" },
+    "Toast": { "code": "components/ui/toast.tsx", "pencil": "없음" },
+    "BottomSheet": { "code": "components/ui/bottom-sheet.tsx", "pencil": "없음" },
+    "ListGroup": { "code": "components/ui/list-group.tsx", "pencil": "없음 (킷: Row / Select Language mjauX·tseRt)" },
+    "AccountCard": { "code": "features/account/components/AccountCard.tsx", "pencil": "home 아트보드 AccountCard / default · 킷 Card Bank / 1 (G7STAl) — 장식 원 제외, 단색 사각형" },
+    "TransactionRow": { "code": "features/account/components/TransactionRow.tsx", "pencil": "Row / Transaction (Screen) / Increase·Reduction (iYqhi, dO0dg)" },
+    "PinPad": { "code": "features/auth/components/PinPad.tsx", "pencil": "없음 (킷: System / Keyboards / Numbers Byp0i)" },
+    "TabBar": { "code": "components/ui/tab-bar.tsx", "pencil": "home 아트보드 TabBar · 킷 Tab bar / Home·Search·Message·Setting (q9GAqW, lPI0Y, MeobY, qI9Ti)" }
+  },
+  "screens": {
+    "onboarding": { "route": "app/(auth)/onboarding.tsx", "pencil": "없음 (킷: Sign up #1·#2 ACqgw·Snfjp)", "figma": "Screens / Sign up #1, Sign up #2" },
+    "login": { "route": "app/(auth)/login.tsx", "pencil": "로그인 (aXqux, 킷 Sign in)", "figma": "Screens / 로그인" },
+    "pin": { "route": "app/(auth)/pin.tsx", "pencil": "없음 (킷: System / Touch ID CJdAN)" },
+    "home": { "route": "app/(tabs)/index.tsx", "pencil": "home (ClQlB) 구현 기준 · home/dark (DyDYf) · 킷 원본 Home (CbQy2)", "figma": "Screens / home, home/dark, Home" },
+    "account-detail": { "route": "app/account/[accountId].tsx", "pencil": "없음" },
+    "transfer-recipient": { "route": "app/transfer/recipient.tsx", "pencil": "없음" },
+    "transfer-amount": { "route": "app/transfer/amount.tsx", "pencil": "없음" },
+    "transfer-confirm": { "route": "app/transfer/confirm.tsx", "pencil": "없음" },
+    "transfer-complete": { "route": "app/transfer/complete.tsx", "pencil": "없음" },
+    "settings": { "route": "app/(tabs)/settings.tsx", "pencil": "없음 (킷: Tab bar / Setting qI9Ti 탭만 존재)", "note": "화면 디자인 없음 — 준비 중 EmptyState 플레이스홀더" },
+    "search": { "route": "app/(tabs)/search.tsx", "pencil": "없음 (킷: Tab bar / Search lPI0Y 탭만 존재)", "note": "화면 디자인 없음 — 준비 중 EmptyState 플레이스홀더" },
+    "messages": { "route": "app/(tabs)/messages.tsx", "pencil": "없음 (킷: Tab bar / Message MeobY 탭만 존재)", "note": "화면 디자인 없음 — 준비 중 EmptyState 플레이스홀더" }
+  },
+  "figmaExport": {
+    "$note": "Pencil → Figma 한 방향 내보내기(scripts/figma, pnpm figma:build). 공유·열람용 출력물이며 코드 구현·대조에는 쓰지 않는다. SCREEN_IDS 순서.",
+    "로그인": { "pencil": "aXqux", "figma": "Screens / 로그인" },
+    "Sign up #1": { "pencil": "ACqgw", "figma": "Screens / Sign up #1" },
+    "Sign up #2": { "pencil": "Snfjp", "figma": "Screens / Sign up #2" },
+    "Forgot password #1": { "pencil": "h6Ziyl", "figma": "Screens / Forgot password #1" },
+    "Forgot password #2": { "pencil": "wV0pm", "figma": "Screens / Forgot password #2" },
+    "Forgot password #3": { "pencil": "QvgnZ", "figma": "Screens / Forgot password #3" },
+    "Forgot password #4": { "pencil": "vbpej", "figma": "Screens / Forgot password #4" },
+    "Change password #1": { "pencil": "jiH3j", "figma": "Screens / Change password #1" },
+    "Change password #2": { "pencil": "Fo8cc", "figma": "Screens / Change password #2" },
+    "Home": { "pencil": "CbQy2", "figma": "Screens / Home", "note": "킷 원본" },
+    "home": { "pencil": "ClQlB", "figma": "Screens / home", "note": "구현 기준 · 색 변수 바인딩 · lucide 아이콘" },
+    "home/dark": { "pencil": "DyDYf", "figma": "Screens / home/dark", "note": "구현 기준 · color 컬렉션 dark 모드 고정" }
+  }
+}
