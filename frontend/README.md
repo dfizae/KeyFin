@@ -30,7 +30,7 @@ pnpm ui:add https://reactnativereusables.com/r/nativewind/<name>.json   # RNR �
 pnpm tokens:sync      # design.pen 변수 → design/tokens.json → tailwind.config.js, global.css, lib/theme.ts
 pnpm tokens:check     # design.pen↔tokens.json 일치 + 산출물 최신 여부 + UI 코드의 토큰 위반 검사
 pnpm harness:sync     # .agents → .claude 미러 동기화
-pnpm harness:check    # 미러·JSON·skills-lock·Pencil↔토큰·산출물 무결성 검사
+pnpm harness:check    # 미러·JSON·skills-lock·Pencil↔토큰·산출물·design.pen 이미지 참조(고아 파일) 무결성 검사
 pnpm figma:build      # (선택) design.pen 화면 + 토큰 → Figma 로컬 플러그인 code.js (공유용 출력물)
 ```
 
