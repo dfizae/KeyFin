@@ -1,7 +1,7 @@
 import { Image, Pressable, View } from "react-native";
 
 import type { CharacterSummary } from "@/features/home/model";
-import { RoomSceneLoader } from "@/features/room/components/RoomSceneLoader";
+import { RoomView } from "@/features/room/components/RoomView";
 
 // Pencil 홈 CharacterRoom (Rj36w) 327×596, 홈(캐릭터 활성화) CharacterRoom (Plvf1) 327×404.
 // 빈 방은 정지 이미지(CTA 버튼이 그려져 있음), 캐릭터가 있으면 Skia 방 씬(features/room)을 그린다.
@@ -38,8 +38,8 @@ function CharacterRoom({ character, onRegisterPress }: CharacterRoomProps) {
   }
 
   return (
-    <View className="px-6" accessible accessibilityRole="image" accessibilityLabel={`${character.name} 캐릭터가 방에 있어요`}>
-      <RoomSceneLoader />
+    <View className="px-6">
+      <RoomView accessibilityLabel={`${character.name} 캐릭터가 방에 있어요`} />
     </View>
   );
 }

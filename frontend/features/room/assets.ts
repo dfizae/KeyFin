@@ -1,9 +1,4 @@
-import type { SceneSize } from "@/features/room/model";
-
-// 0단계 스파이크용 에셋. 바닥은 빈 방 이미지를 임시로 쓴다(CTA 문구가 그려져 있음 — 캐릭터·문구 없는 바닥 원본이 필요하다, TBD).
-// 스프라이트는 앱 에셋이므로 assets/sprites 에만 둔다. 시트를 넣기 전에 Git LFS 를 켠다.
-export const ROOM_FLOOR = require("@/assets/images/character-room-empty.png");
+// 방 씬 에셋. 스프라이트는 앱 에셋이므로 assets/sprites 에만 둔다(Git LFS 대상). 가구는 features/room/catalog.ts 에 있다.
+// 바닥은 Pencil AI 생성 원본(design/images/ai/floor-default.jpg)을 씬 비율(327:404)로 잘라 창문(window.jpg)을 합성한 622×768 이미지다.
+export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-default.png");
 export const CHARACTER_IDLE = require("@/assets/sprites/char1-idle.png");
-
-/** char1-idle.png 는 496×756 이라 씬 단위로 72×110 정도가 Pencil 목업의 캐릭터 크기다. */
-export const CHARACTER_SIZE: SceneSize = { width: 72, height: 110 };
