@@ -122,6 +122,67 @@ console.log("▶ 규칙 파일 frontmatter(paths)");
   if (ok) console.log("  OK");
 }
 
+console.log("▶ design.pen 이미지 참조 ↔ design/images 파일");
+{
+  // .pen 파일의 image fill url은 그 .pen 파일 기준 상대경로다.
+  // (1) url 없는 image fill = 붙여넣기 때 이미지가 안 들어온 것, (2) 파일이 없는 url,
+  // (3) 어떤 .pen도 참조하지 않는 파일 = 고아 파일이 쌓이는 것을 막는다.
+  const IMAGE_EXT = /\.(png|jpe?g|webp|gif|svg)$/i;
+  const penFiles = ["design.pen"];
+  if (fs.existsSync("design/pencil"))
+    for (const f of fs.readdirSync("design/pencil")) if (f.endsWith(".pen")) penFiles.push(`design/pencil/${f}`);
+  const referenced = new Set();
+  const noUrl = [];
+  const missing = [];
+  for (const pen of penFiles) {
+    let doc;
+    try {
+      doc = JSON.parse(fs.readFileSync(pen, "utf8"));
+    } catch {
+      console.log(`  FAIL: ${pen} 파싱 오류`);
+      fail = true;
+      continue;
+    }
+    const penDir = path.dirname(pen);
+    const walk = (n, chain) => {
+      if (!n || typeof n !== "object") return;
+      for (const f of [].concat(n.fill || [])) {
+        if (!f || typeof f !== "object" || f.type !== "image") continue;
+        if (!f.url) {
+          noUrl.push(`${pen}: ${chain.join(" > ")} (${n.id})`);
+          continue;
+        }
+        if (/^(https?:|data:)/.test(f.url)) continue;
+        const rel = path.normalize(path.join(penDir, f.url)).split(path.sep).join("/");
+        referenced.add(rel);
+        if (!fs.existsSync(rel)) missing.push(`${pen}: ${f.url} (${n.id})`);
+      }
+      for (const c of n.children || []) walk(c, [...chain, c.name || c.id]);
+    };
+    walk({ children: doc.children }, []);
+  }
+  const orphans = fs.existsSync("design/images")
+    ? fs.readdirSync("design/images").filter((f) => IMAGE_EXT.test(f) && !referenced.has(`design/images/${f}`))
+    : [];
+  if (noUrl.length) {
+    console.log(`  FAIL: url 없는 image fill ${noUrl.length}개 (이미지가 들어오지 않은 노드)`);
+    for (const s of noUrl.slice(0, 10)) console.log(`    ${s}`);
+    fail = true;
+  }
+  if (missing.length) {
+    console.log(`  FAIL: 파일이 없는 이미지 참조 ${missing.length}개`);
+    for (const s of missing.slice(0, 10)) console.log(`    ${s}`);
+    fail = true;
+  }
+  if (orphans.length) {
+    console.log(`  FAIL: 어떤 .pen도 참조하지 않는 파일 ${orphans.length}개 (design/images) — 삭제하거나 참조를 연결한다`);
+    for (const s of orphans.slice(0, 10)) console.log(`    ${s}`);
+    fail = true;
+  }
+  if (!noUrl.length && !missing.length && !orphans.length)
+    console.log(`  OK 참조 ${referenced.size}개 파일, 고아 파일 없음`);
+}
+
 if (fail) {
   console.log();
   console.log("하네스 검사 실패");
