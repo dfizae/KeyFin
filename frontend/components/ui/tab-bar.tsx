@@ -1,5 +1,5 @@
 import type { Tabs } from "expo-router";
-import { House, Mail, Search, Settings, type LucideIcon } from "lucide-react-native";
+import { Calculator, ChartColumn, House, User, Wallet, type LucideIcon } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -10,21 +10,24 @@ import { cn } from "@/lib/utils";
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>["tabBar"]>>[0];
 
+// Pencil 홈 BottomTabBar (NaYk9) 의 Tab-* 프레임 안 아이콘 이름 = lucide 이름
 const TAB_ICONS: Record<string, LucideIcon> = {
   index: House,
-  search: Search,
-  messages: Mail,
-  settings: Settings,
+  assets: Wallet,
+  budget: Calculator,
+  report: ChartColumn,
+  my: User,
 };
 
-const MIN_BOTTOM_INSET = 20;
+// Pencil Tabs 프레임 padding [12,16,8,16]. 홈 인디케이터 영역은 safe area 로 대체한다.
+const MIN_BOTTOM_INSET = 8;
 
 function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
 
   return (
     <View
-      className="flex-row items-center justify-between bg-card px-10 pt-5 dark:border-t dark:border-border"
+      className="flex-row items-center justify-between border-t border-border bg-background px-4 pt-3"
       style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}
       accessibilityRole="tablist"
     >
@@ -46,14 +49,13 @@ function TabBar({ state, descriptors, navigation }: TabBarProps) {
             accessibilityRole="tab"
             accessibilityLabel={label}
             accessibilityState={{ selected: focused }}
-            hitSlop={8}
             className={cn(
-              "h-9 min-w-touch flex-row items-center justify-center gap-2 rounded-full",
-              focused ? "bg-primary px-4" : "active:bg-muted"
+              "h-12 min-w-touch items-center justify-center gap-1 rounded-lg px-3 py-1",
+              focused ? "bg-accent" : "active:opacity-70"
             )}
           >
-            <Icon as={icon} size={focused ? 20 : 24} className={focused ? "text-primary-foreground" : "text-muted-foreground"} />
-            {focused ? <Text className="text-caption text-primary-foreground">{label}</Text> : null}
+            <Icon as={icon} size={20} className={focused ? "text-primary" : "text-muted-foreground"} />
+            <Text className={cn("text-caption", focused ? "text-primary" : "text-muted-foreground")}>{label}</Text>
           </Pressable>
         );
       })}
