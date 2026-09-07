@@ -19,7 +19,7 @@ case "$REL" in
     echo "tokens.json 변경 → 산출물 재생성 완료 (tailwind.config.js, global.css, lib/theme.ts)"
     ;;
   .agents/*)
-    bash scripts/sync-harness.sh >/dev/null && echo ".agents 변경 → .claude 미러 동기화 완료"
+    node scripts/sync-harness.cjs >/dev/null && echo ".agents 변경 → .claude 미러 동기화 완료"
     ;;
   app/*.ts|app/*.tsx|components/*.ts|components/*.tsx|features/*.ts|features/*.tsx|lib/*.ts|lib/*.tsx)
     [ "$REL" = "lib/theme.ts" ] && exit 0
