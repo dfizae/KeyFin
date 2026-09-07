@@ -1,0 +1,54 @@
+{
+  "version": 2,
+  "$description": "외부 스킬의 출처와 도입 시 체크섬. project 출처는 이 저장소에서 작성한 스킬이다. 외부 스킬을 갱신하면 computedHash를 다시 계산해 기록한다.",
+  "skills": {
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "93f53fd1c0352d3d7ec17b8f73d7351bf76f4821e55d123c9d2abc2c53ba48e4",
+      "note": "웹(HTML/CSS) 전제. React Native로 번안해 적용."
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "skillPath": "skills/react-best-practices/SKILL.md",
+      "computedHash": "ca7b0c0c6e5f2750043f7f0cd72d16ac4e2abc48f9b5500d047a4b77a2506212",
+      "note": "리렌더링·훅 규칙만 적용. SSR/hydration/번들 규칙 미적용."
+    },
+    "ui-ux-pro-max": {
+      "source": "ui-ux-pro-max",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "0b64203a5ca7fd979bcc0c5bd8b6e9af09a1f43696f9286755ffdf993338d747",
+      "note": "data/stacks/react-native.csv, colors.csv, typography.csv를 주로 참조. 스택 CSV는 검색 스크립트 의존성 때문에 유지.",
+      "hashOf": "SKILL.md (after project trim)"
+    },
+    "design-system": {
+      "source": "claudekit",
+      "sourceType": "github",
+      "skillPath": "skills/design-system/SKILL.md",
+      "computedHash": "635d8780d42e45f932151719f82f48c48615c0872a91448d56ea07848c374903",
+      "note": "토큰 아키텍처 참조만 유지. 슬라이드 데이터·스크립트는 제거(2026-08-29). 실제 토큰 생성은 scripts/sync-tokens.cjs.",
+      "hashOf": "SKILL.md (after project trim)"
+    },
+    "brand": {
+      "source": "claudekit",
+      "sourceType": "github",
+      "skillPath": "skills/brand/SKILL.md",
+      "computedHash": "917f5003417aec958504b15d9de114a64e731c85ca11f66b47341ce665bd21ac",
+      "note": "브랜드 가이드라인 템플릿·참조만 유지. 웹 CLI 스크립트는 제거(2026-08-29).",
+      "hashOf": "SKILL.md (after project trim)"
+    },
+    "pencil-design": {
+      "source": "project",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/pencil-design/SKILL.md"
+    },
+    "fintech-ui-patterns": {
+      "source": "project",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/fintech-ui-patterns/SKILL.md"
+    }
+  }
+}
