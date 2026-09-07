@@ -118,7 +118,9 @@
 | `Toast` | `components/ui/toast.tsx` | — | `info` `success` `error`, `bg-inverse` |
 | `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Dialog` 또는 별도 | `bg-popover` |
 | `ListGroup` | `components/ui/list-group.tsx` | `Separator` | 설정·메뉴 목록 |
-| `TabBar` | `components/ui/tab-bar.tsx` | `Pressable`, `Icon` | 킷 `Tab bar / *` — 활성 탭은 `bg-primary rounded-full` 알약 + 라벨, 비활성은 `text-muted-foreground` 아이콘. `app/(tabs)/_layout.tsx`의 `tabBar` |
+| `TabBar` | `components/ui/tab-bar.tsx` | `Pressable`, `Icon`, `Text` | Pencil 홈 `BottomTabBar`(NaYk9) — 탭 5개(홈·자산·예산·리포트·마이), 아이콘 20 + `text-caption` 라벨 상시 표시. 활성 탭은 `bg-accent rounded-lg` + `text-primary`, 비활성은 `text-muted-foreground`. 상단 `border-border`. `app/(tabs)/_layout.tsx`의 `tabBar` |
+| `CharacterRoom` | `features/home/components/CharacterRoom.tsx` | `Image`, `Pressable` | Pencil 홈 `CharacterRoom`(Rj36w · Plvf1) — 좌우 여백 24, 이미지 `rounded-xl`. 캐릭터 없음: 빈 방 이미지 전체가 "캐릭터를 등록하세요" 버튼(327×596). 캐릭터 있음: 캐릭터 방 이미지(327×404) |
+| `BudgetCard` | `features/home/components/BudgetCard.tsx` | `Text` | Pencil `BudgetCard`(oIAhy) — `bg-primary rounded-xl p-5 gap-4`, 제목 `text-h3`, 상태 라벨 `text-caption text-positive`, 남은 예산 `text-display tabular-nums`, 설명 `text-caption`, 진행 바 `h-2 rounded-full bg-accent` + `bg-positive` |
 | `AccountCard` | `features/account/components/AccountCard.tsx` | `View`(`bg-primary rounded-lg`) | `default` `selected` — 킷 `Card Bank / 1`을 단색 사각형으로 |
 | `TransactionRow` | `features/account/components/TransactionRow.tsx` | `Text`, `Badge` | `deposit` `withdrawal` `pending` |
 | `PinPad` | `features/auth/components/PinPad.tsx` | `Button` | 6자리, 셔플 옵션 |
@@ -128,8 +130,8 @@
 ## 6. 화면 패턴
 
 - 화면 제목은 `text-h1` 하나. 뒤로가기는 플랫폼 기본 헤더 또는 좌상단 아이콘 버튼(`accessibilityLabel="뒤로"`).
-- 하단 탭은 킷 기준 4개(홈·검색·메시지·설정, `TabBar`). 이체·결제 같은 핵심 액션은 탭이 아니라 홈 카테고리 그리드.
-- 홈 헤더는 `bg-primary` 위에 흰 아바타 원(`w-avatar bg-white`)·인사말·알림 벨(흰색, 배지 `bg-destructive`). 헤더 아래 흰 본문, 계좌 카드 뒤에 `destructive`·`primary/60` 사각형 2장이 8pt씩 보이는 멀티 카드 스택(킷 `Card Bank / Multi`). 카테고리 타일 3열, 간격 16.
+- 하단 탭은 KeyFin 기준 5개(홈·자산·예산·리포트·마이, `TabBar`). 핵심 액션은 각 탭 화면 안에 둔다.
+- 홈은 흰 배경(`bg-background`). 헤더는 `px-6 py-4`, 좌측에 `text-caption text-muted-foreground` "환영합니다"와 `text-h2` 인사말("{이름}님, 안녕하세요!"), 우측에 코인 배지(`bg-accent rounded-full`, 노란 원 + `text-label tabular-nums`)와 상점 버튼(40 원형 `bg-accent`, 우상단 배지 `bg-destructive`). 본문은 캐릭터 룸 이미지(좌우 여백 24). 캐릭터가 없으면 룸 전체가 "캐릭터를 등록하세요" 버튼이고 코인 배지·예산 카드는 숨긴다. 캐릭터가 있으면 룸 아래 `pt-6`에 예산 카드(`BudgetCard`).
 - 이체 플로우는 `받는 사람 → 금액 → 확인 → 인증(PIN/생체) → 완료`의 5단계를 넘지 않는다. 확인 화면은 금액을 `text-amount-lg`로, 받는 사람·계좌를 마스킹해 표시한다.
 - 로딩은 스피너보다 `Skeleton`. 1초 이상 걸리는 작업에만 진행 표시.
 - 오류는 필드 근처에 원인 + 해결 방법. 재시도 버튼은 중복 요청을 막는다.
