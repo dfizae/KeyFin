@@ -9,6 +9,7 @@ Expo(SDK 57) / React Native 0.86 기반 핀테크 모바일 클라이언트와, 
 | Runtime | Expo SDK 57 · React Native 0.86 · React 19.2 · TypeScript strict | 설치됨 |
 | Routing / Styling | Expo Router · NativeWind v4 | 설치됨 |
 | Animation | Reanimated 4 | 설치됨 |
+| Room Scene | `@shopify/react-native-skia`(방 씬·스프라이트) · `react-native-gesture-handler`(가구 편집) · `features/room/` | 설치됨 (0단계 스파이크) |
 | UI Components | React Native Reusables (shadcn 규약, `components/ui/`) | 설치됨 |
 | Server / Client State | TanStack Query · Zustand · axios | 설치됨 |
 | Security | expo-secure-store · expo-local-authentication | 설치됨 |
