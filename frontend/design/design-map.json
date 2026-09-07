@@ -8,6 +8,13 @@
       "color": "색상 & 타이포그래피 / 색상 (FL2Vg)",
       "typography": "색상 & 타이포그래피 / 타이포그라피 (E5420p)"
     },
+    "assetFrames": {
+      "container": "에셋 생성 (AI) (Qd6wt) — 방 씬 에셋을 Pencil AI(Generate)로 만드는 프레임. 각 프레임 fill = design/images/ai/*.jpg 원본",
+      "frames": "floor-default (I0nM1) · sofa (MVvPM) · coffee-table (Cjtco) · desk (lxnMV) · fridge (G0VC6) · plant (M5hYn7) · window (HWVe7)",
+      "floorComposite": "floor-default.png = floor-default.jpg 크롭(코너 40%) 위에 window.jpg(마젠타 키 → 투명)를 왼쪽 벽 기울기(가로 100px당 −45px)로 기울여 합성한 것. 창문 위치·크기는 좌상단 (40,95) 폭 180. 바닥만 다시 만들 때는 창문 합성을 다시 해야 한다",
+      "pipeline": "원본(JPEG, 흰색 또는 마젠타 배경) → scripts/assets/remove-white-bg.ps1(배경 제거·발끝 크롭) → assets/sprites/furniture/*.png. 바닥은 원본을 씬 비율(327:404)로 잘라 assets/sprites/floors/. 캐릭터는 정지 이미지(assets/sprites/char1-idle.png) + 코드 모션이며 걷기 시트는 쓰지 않는다(build-sprite-sheet.ps1 은 나중에 프레임 애니메이션이 필요할 때를 위해 남겨둠)",
+      "prompt": "공통 스타일 문구(45° 하이앵글 — 톱뷰는 아니고 홈 룸 이미지 Rectangle 415 와 같은 높이, 좌측 창문광, clay-like 3D)를 모든 프롬프트 앞에 고정한다. 바닥은 '카메라가 방 안에 있어 화면을 꽉 채움(디오라마·바닥 가장자리 금지), 코너는 왼쪽 40%, 왼쪽 벽 짧고 오른쪽 벽 길게, 바닥이 아래 2/3'로 생성한 뒤 코너가 40% 지점에 오도록 327:404 로 자른다. 창문은 생성마다 위치가 튀어 세로 크롭에서 빠질 수 있다(벽은 중요하지 않음). 흰색·크림색 물체는 마젠타(#FF00FF) 배경으로 생성해야 크로마키가 된다. 가구는 26.5° 문구로 만든 것이라 씬에 올려 각도가 튀면 45° 문구로 재생성한다"
+    },
     "variables": "문서 변수 51개 = tokens.json semantic.color 35개(mode: light/dark) + white/black + radius-* + size-* + font-sans(Pretendard). scripts/sync-pen-tokens.cjs가 tokens.json으로 동기화하고 tokens:check가 불일치를 잡는다. 가져온 프레임은 raw hex를 쓰므로 구현 시 tokens.json 값으로 대응시킨다."
   },
   "components": {
@@ -28,8 +35,9 @@
     "ListGroup": { "code": "components/ui/list-group.tsx", "pencil": "없음" },
     "TabBar": { "code": "components/ui/tab-bar.tsx", "pencil": "홈 BottomTabBar (NaYk9) · 공통 컴포넌트 / BottomTabBar (vgESQ) — 탭 5개(홈·자산·예산·리포트·마이), 활성 탭 bg-accent + text-primary" },
     "CharacterRoom": { "code": "features/home/components/CharacterRoom.tsx", "pencil": "홈 CharacterRoom (Rj36w, 빈 방 327×596) · 홈(캐릭터 활성화) CharacterRoom (Plvf1, 327×404)", "note": "빈 방은 assets/images/character-room-empty.png 정지 이미지(CTA 버튼이 그려져 있어 룸 전체를 버튼으로 처리). 캐릭터가 있으면 RoomScene 을 그린다" },
-    "RoomScene": { "code": "features/room/components/RoomScene.tsx", "pencil": "홈(캐릭터 활성화) CharacterRoom (Plvf1) 크기 기준 · 게이미피케이션 디자인 (xzNjW) 의 캐릭터 스프라이트·참고 이미지", "note": "Skia 캔버스. 씬 단위 327×404, 발끝 기준점 y정렬. 0단계 스파이크(바닥 1장 + 정지 캐릭터 왕복) 상태. 스프라이트는 assets/sprites/ 에만 둔다" },
+    "RoomScene": { "code": "features/room/components/RoomScene.tsx", "pencil": "홈(캐릭터 활성화) CharacterRoom (Plvf1) 크기 기준 · 에셋 생성 (AI) (Qd6wt) 의 바닥·가구 원본", "note": "Skia 캔버스. 씬 단위 327×404. 1단계: 바닥(floors/floor-default.png) + 가구 5종(catalog.ts, 기본 배치 scene.ts DEFAULT_LAYOUT)을 발끝 y 기준 painter's 정렬로 그리고, 캐릭터는 가구 경계를 넘을 때만 depthIndex 를 갱신해 사이에 끼운다. 바닥 다각형 FLOOR_POLYGON 은 바닥 이미지의 걸레받이 좌표. 2단계: 캐릭터는 정지 이미지 한 장 + 코드 모션 — useCharacterWalker 가 3~6초 쉬고 가구 발자국(getFootprintRect)을 피해 랜덤 웨이포인트로 일정 속도 이동, 이동 중 잔걸음 바운스와 진행 방향 미러링, 정지 중 호흡 스케일" },
     "BudgetCard": { "code": "features/home/components/BudgetCard.tsx", "pencil": "홈(캐릭터 활성화) BudgetSummary / BudgetCard (oIAhy)" },
+    "RoomEditorOverlay": { "code": "features/room/components/RoomEditorOverlay.tsx", "pencil": "없음", "note": "방 꾸미기(가구 드래그 편집) 컨트롤. 우상단 secondary 버튼 '꾸미기', 편집 중 상단 안내 알약(bg-inverse/80) + 하단 취소(secondary)·완료(default). 시안이 생기면 대조한다" },
     "CoinBadge": { "code": "features/home/components/HomeScreen.tsx (내부)", "pencil": "홈(캐릭터 활성화) HeaderActions / CoinBadge (DsQOx)", "note": "코인 색 #F5D547 은 토큰에 없어 warning 으로 대체" },
     "AccountCard": { "code": "features/account/components/AccountCard.tsx", "pencil": "없음 (킷 제거됨 — 자산관리 UjYhB 구현 시 재대조)" },
     "TransactionRow": { "code": "features/account/components/TransactionRow.tsx", "pencil": "공통 컴포넌트 / 최근 거래 내역 (ZJ2Rl)" },

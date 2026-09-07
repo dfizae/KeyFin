@@ -55572,7 +55572,7 @@
                             "type": "image",
                             "enabled": true,
                             "url": "design/images/character-room-home-active.png",
-                            "mode": "stretch"
+                            "mode": "fill"
                           },
                           "width": "fill_container",
                           "height": 404
@@ -66999,6 +66999,270 @@
           "height": 894
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "Qd6wt",
+      "x": -4960,
+      "y": 14506,
+      "name": "에셋 생성 (AI)",
+      "width": 1300,
+      "height": 720,
+      "fill": "$background",
+      "cornerRadius": "$radius-lg",
+      "stroke": "$border",
+      "layout": "none",
+      "children": [
+        {
+          "type": "text",
+          "id": "cyOMG",
+          "x": 32,
+          "y": 24,
+          "name": "제목",
+          "fill": "$foreground",
+          "content": "AI 에셋 생성 — 프레임 크기는 씬 단위(pt), Export 시 scale 3",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 20,
+          "fontWeight": "600"
+        },
+        {
+          "type": "text",
+          "id": "N94Wy5",
+          "x": 32,
+          "y": 56,
+          "name": "설명",
+          "fill": "$muted-foreground",
+          "content": "각 프레임의 fill 이 생성 원본(design/images/ai/*.jpg). 앱 에셋은 scripts/assets/remove-white-bg.ps1 로 만든 assets/sprites/**/*.png. 카메라는 45° 하이앵글(홈 룸 이미지 Rectangle 415 와 같은 높이), 코너는 왼쪽 40%, 바닥은 가운데를 327:404 로 크롭. 흰색·크림색 물체는 마젠타(#FF00FF) 배경으로 생성. 캐릭터는 정지 이미지 + 코드 모션(걷기 시트 없음).",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 13,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "I0nM1",
+          "x": 32,
+          "y": 110,
+          "name": "floor-default",
+          "clip": true,
+          "width": 327,
+          "height": 404,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/floor-default.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "bta0Y",
+          "x": 32,
+          "y": 522,
+          "name": "label-floor-default",
+          "fill": "$muted-foreground",
+          "content": "바닥·벽 — 45° 하이앵글, 코너 왼쪽 40%, 바닥 2/3, 화면 채움 (327×404 크롭)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "MVvPM",
+          "x": 399,
+          "y": 110,
+          "name": "sofa",
+          "clip": true,
+          "width": 140,
+          "height": 90,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/sofa.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "BjWN3",
+          "x": 399,
+          "y": 208,
+          "name": "label-sofa",
+          "fill": "$muted-foreground",
+          "content": "소파 (140×90)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "Cjtco",
+          "x": 579,
+          "y": 110,
+          "name": "coffee-table",
+          "clip": true,
+          "width": 90,
+          "height": 60,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/coffee-table.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "fZ8yk",
+          "x": 579,
+          "y": 178,
+          "name": "label-coffee-table",
+          "fill": "$muted-foreground",
+          "content": "테이블 (90×60)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "lxnMV",
+          "x": 739,
+          "y": 110,
+          "name": "desk",
+          "clip": true,
+          "width": 120,
+          "height": 110,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/desk.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "TBLsQ",
+          "x": 739,
+          "y": 228,
+          "name": "label-desk",
+          "fill": "$muted-foreground",
+          "content": "책상+의자 (120×110)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "G0VC6",
+          "x": 899,
+          "y": 110,
+          "name": "fridge",
+          "clip": true,
+          "width": 60,
+          "height": 120,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/fridge.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "cD88C",
+          "x": 899,
+          "y": 238,
+          "name": "label-fridge",
+          "fill": "$muted-foreground",
+          "content": "냉장고 (60×120)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "M5hYn7",
+          "x": 1059,
+          "y": 110,
+          "name": "plant",
+          "clip": true,
+          "width": 50,
+          "height": 110,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/plant.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "glz0K",
+          "x": 1059,
+          "y": 228,
+          "name": "label-plant",
+          "fill": "$muted-foreground",
+          "content": "화분 (50×110)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        },
+        {
+          "type": "frame",
+          "id": "HWVe7",
+          "x": 1059,
+          "y": 110,
+          "name": "window",
+          "clip": true,
+          "width": 120,
+          "height": 150,
+          "fill": {
+            "type": "image",
+            "enabled": true,
+            "url": "design/images/ai/window.jpg",
+            "mode": "fill"
+          },
+          "cornerRadius": "$radius-sm",
+          "layout": "none"
+        },
+        {
+          "type": "text",
+          "id": "Nzdmi",
+          "x": 1059,
+          "y": 268,
+          "name": "label-window",
+          "fill": "$muted-foreground",
+          "content": "창문 (왼쪽 벽 합성용, 마젠타 키)",
+          "fontFamily": "Noto Sans KR",
+          "fontSize": 12,
+          "fontWeight": "normal"
+        }
+      ]
+    },
+    {
+      "type": "rectangle",
+      "id": "ZtZoo",
+      "x": -5334,
+      "y": 14628,
+      "name": "Rectangle 415",
+      "fill": {
+        "type": "image",
+        "enabled": true,
+        "url": "design/images/character-room-home-active.png",
+        "mode": "fill"
+      },
+      "width": "fill_container(327)",
+      "height": 404
     }
   ],
   "themes": {
