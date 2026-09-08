@@ -1,16 +1,15 @@
 import { Image, Pressable, View } from "react-native";
 
 import type { CharacterSummary } from "@/features/home/model";
+import { RoomView } from "@/features/room/components/RoomView";
 
 // Pencil 홈 CharacterRoom (Rj36w) 327×596, 홈(캐릭터 활성화) CharacterRoom (Plvf1) 327×404.
-// 이미지는 design/images 원본을 assets/images 로 복사한 것이며, 빈 방 이미지에는 CTA 버튼이 그려져 있다.
+// 빈 방은 정지 이미지(CTA 버튼이 그려져 있음), 캐릭터가 있으면 Skia 방 씬(features/room)을 그린다.
 const EMPTY_ROOM = require("@/assets/images/character-room-empty.png");
-const ACTIVE_ROOM = require("@/assets/images/character-room-active.png");
 const EMPTY_ASPECT_RATIO = 327 / 596;
-const ACTIVE_ASPECT_RATIO = 327 / 404;
 
-// NativeWind 가 RN Image 에는 className 을 적용하지 않아(웹에서 확인: 클래스 문자열이 그대로 DOM 에 남고 원본 크기로 렌더링)
-// 크기는 감싸는 View 가 잡고 Image 는 부모를 채우는 style 만 쓴다.
+// 웹의 RN Image 는 원본 크기를 인라인 style 로 넣어 className(w-full)보다 우선한다(웹에서 확인).
+// 그래서 크기는 감싸는 View 가 잡고 Image 는 부모를 채우는 style 만 쓴다.
 const FILL_PARENT = { width: "100%", height: "100%" } as const;
 
 export const REGISTER_CHARACTER_LABEL = "캐릭터를 등록하세요";
@@ -40,15 +39,7 @@ function CharacterRoom({ character, onRegisterPress }: CharacterRoomProps) {
 
   return (
     <View className="px-6">
-      <View
-        className="w-full overflow-hidden rounded-xl"
-        style={{ aspectRatio: ACTIVE_ASPECT_RATIO }}
-        accessible
-        accessibilityRole="image"
-        accessibilityLabel={`${character.name} 캐릭터가 방에 있어요`}
-      >
-        <Image source={ACTIVE_ROOM} resizeMode="cover" style={FILL_PARENT} accessible={false} />
-      </View>
+      <RoomView accessibilityLabel={`${character.name} 캐릭터가 방에 있어요`} />
     </View>
   );
 }

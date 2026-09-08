@@ -162,7 +162,7 @@ console.log("▶ design.pen 이미지 참조 ↔ design/images 파일");
     walk({ children: doc.children }, []);
   }
   const orphans = fs.existsSync("design/images")
-    ? fs.readdirSync("design/images").filter((f) => IMAGE_EXT.test(f) && !referenced.has(`design/images/${f}`))
+    ? listFiles("design/images").filter((f) => IMAGE_EXT.test(f) && !referenced.has(`design/images/${f}`))
     : [];
   if (noUrl.length) {
     console.log(`  FAIL: url 없는 image fill ${noUrl.length}개 (이미지가 들어오지 않은 노드)`);

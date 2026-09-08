@@ -9,6 +9,7 @@ Expo(SDK 57) / React Native 0.86 기반 핀테크 모바일 클라이언트와, 
 | Runtime | Expo SDK 57 · React Native 0.86 · React 19.2 · TypeScript strict | 설치됨 |
 | Routing / Styling | Expo Router · NativeWind v4 | 설치됨 |
 | Animation | Reanimated 4 | 설치됨 |
+| Room Scene | `@shopify/react-native-skia`(방 씬·스프라이트) · `react-native-gesture-handler`(가구 편집) · `features/room/` | 설치됨 (0단계 스파이크) |
 | UI Components | React Native Reusables (shadcn 규약, `components/ui/`) | 설치됨 |
 | Server / Client State | TanStack Query · Zustand · axios | 설치됨 |
 | Security | expo-secure-store · expo-local-authentication | 설치됨 |
@@ -49,7 +50,8 @@ pnpm figma:build      # (선택) design.pen 화면 + 토큰 → Figma 로컬 플
 │   ├── rules/                #   00~60 기본, 70 디자인 토큰, 80 핀테크 보안, 90 백엔드 계약
 │   └── skills/               #   pencil-design · fintech-ui-patterns (+ 외부 참조 스킬)
 ├── .claude/                  # Claude Code 미러 (rules, skills, settings.json)
-├── scripts/                  # sync-pen-tokens · sync-tokens · check-tokens · sync-harness · check-harness · hooks/post-edit-check · figma/(Figma 내보내기 플러그인)
+├── scripts/                  # sync-pen-tokens · sync-tokens · check-tokens · sync-harness · check-harness · hooks/post-edit-check · figma/(Figma 내보내기 플러그인) · assets/(방 씬 에셋: 배경 제거 remove-white-bg.ps1 · 시트 빌드 build-sprite-sheet.ps1, Windows PowerShell)
+├── assets/sprites/           # 방 씬 앱 에셋(Git LFS 대상): floors/ furniture/ characters/(시트 .png + 프레임 .json)
 ├── docs/                     # 코드 품질 기준 (토스 Frontend Fundamentals, Clean Code)
 ├── app/                      # Expo Router 라우트 — 화면 조립만
 ├── features/<domain>/        # account · transfer · auth · payment … (api/, components/, model.ts)
