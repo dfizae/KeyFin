@@ -48,7 +48,8 @@ app/ 화면 ──▶ features/<domain>/api/queries.ts ──▶ features/<domai
 
 ```ts
 // api/client.ts — 목표 형태 (인터셉터·ApiError 는 아직 없음, 도입 시 이 모양으로)
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? ""; // 호스트만. 비어 있으면 목 모드
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? ""; // 호스트만
+export const USE_MOCKS = API_BASE_URL === "";                          // 도메인 함수의 목 분기 스위치 (§9)
 export const TIMEOUT_QUERY_MS = 10_000;  // 조회
 export const TIMEOUT_MONEY_MS = 30_000;  // 이체 승인·재시도·구매
 
@@ -144,11 +145,10 @@ export function toBudget(dto: BudgetDto): Budget {
 ### ② `features/budget/api/budget.api.ts`
 
 ```ts
-import { API_BASE_URL, api } from "@/api/client";
-import { budgetMock, withMockLatency } from "@/api/mocks/budget";
+import { USE_MOCKS, api } from "@/api/client";
+import { budgetMock } from "@/api/mocks/budget";
+import { withMockLatency } from "@/api/mocks/latency";
 import { toBudget, type Budget, type BudgetDto } from "@/features/budget/model";
-
-export const USE_MOCKS = API_BASE_URL === "";
 
 export async function getBudget(month: string, signal?: AbortSignal): Promise<Budget> {
   if (USE_MOCKS) return toBudget(await withMockLatency(budgetMock(month), signal));

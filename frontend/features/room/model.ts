@@ -1,3 +1,5 @@
+import { ContractMismatchError } from "@/lib/contract";
+
 /**
  * 방 씬의 좌표계와 순수 함수. 씬 단위는 Pencil CharacterRoom(Plvf1) 327×404 pt 를 그대로 쓴다.
  * 기기 폭에 맞춰 scale 만 곱하므로 배치·저장 좌표는 항상 씬 단위다(픽셀 아님).
@@ -192,4 +194,81 @@ export function hitTestTopmost<TId>(point: ScenePoint, targets: readonly HitTarg
     if (rectContainsPoint(targets[i].rect, point)) return targets[i].id;
   }
   return null;
+}
+
+/* ───────────── 서버 계약: GET /room (docs/api-contract.md GAME, FR-GAM-01) ───────────── */
+
+export const SLOT_TYPES = ["WALLPAPER", "FLOOR", "FURNITURE", "HAIR", "OUTFIT", "FACE"] as const;
+export type KnownSlotType = (typeof SLOT_TYPES)[number];
+/** 계약에 없는 값은 UNKNOWN 으로 흡수한다 (규칙 90) */
+export type SlotType = KnownSlotType | "UNKNOWN";
+
+export type RoomDto = {
+  theme: string;
+  avatar: {
+    equipped: { slotType: string; itemId: number; assetKey: string }[];
+    reaction: { type: string; until: string } | null;
+  };
+  coin: { balance: number };
+  board: { month: string; totalRemainingRate: number };
+  attendance: { checkedToday: boolean };
+  stickers?: { count: number; total: number; removableToday: boolean };
+  overEnvelopes?: number[];
+};
+
+export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };
+/** type 값 목록은 미확정(frontend-spec §6 #2). until 은 시간대 없는 KST 문자열 */
+export type AvatarReaction = { type: string; until: string };
+export type RoomStickers = { count: number; total: number; removableToday: boolean };
+
+export type Room = {
+  theme: string;
+  equipped: EquippedItem[];
+  reaction: AvatarReaction | null;
+  coinBalance: number;
+  board: { month: string; totalRemainingRate: number };
+  checkedInToday: boolean;
+  /** P1 압류 딱지. 응답에 없으면 null */
+  stickers: RoomStickers | null;
+  /** P1 초과 봉투 id. 응답에 없으면 빈 배열 */
+  overEnvelopeIds: number[];
+};
+
+const MONTH_KEY = /^\d{6}$/;
+
+function isKnownSlotType(value: string): value is KnownSlotType {
+  return (SLOT_TYPES as readonly string[]).includes(value);
+}
+
+export function toRoom(dto: RoomDto): Room {
+  if (!Number.isSafeInteger(dto.coin.balance) || dto.coin.balance < 0) throw new ContractMismatchError("coin.balance");
+  if (!MONTH_KEY.test(dto.board.month)) throw new ContractMismatchError("board.month");
+  if (!Number.isInteger(dto.board.totalRemainingRate)) throw new ContractMismatchError("board.totalRemainingRate");
+
+  return {
+    theme: dto.theme,
+    equipped: dto.avatar.equipped.map((item) => ({
+      slotType: isKnownSlotType(item.slotType) ? item.slotType : "UNKNOWN",
+      itemId: item.itemId,
+      assetKey: item.assetKey,
+    })),
+    reaction: dto.avatar.reaction,
+    coinBalance: dto.coin.balance,
+    board: { month: dto.board.month, totalRemainingRate: dto.board.totalRemainingRate },
+    checkedInToday: dto.attendance.checkedToday,
+    stickers: dto.stickers ?? null,
+    overEnvelopeIds: dto.overEnvelopes ?? [],
+  };
+}
+
+/* ───────────── 서버 계약: POST /attendance (docs/api-contract.md GAME, FR-GAM-03) ───────────── */
+
+/** granted 는 이번 요청에서 지급된 코인(당일 이미 출석했으면 0), balance 는 지급 후 잔액 */
+export type AttendanceDto = { granted: number; balance: number };
+export type Attendance = { granted: number; balance: number };
+
+export function toAttendance(dto: AttendanceDto): Attendance {
+  if (!Number.isSafeInteger(dto.granted) || dto.granted < 0) throw new ContractMismatchError("granted");
+  if (!Number.isSafeInteger(dto.balance) || dto.balance < 0) throw new ContractMismatchError("balance");
+  return { granted: dto.granted, balance: dto.balance };
 }

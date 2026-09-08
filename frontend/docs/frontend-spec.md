@@ -77,7 +77,7 @@
 | ID | 기능명 | P | FE | API | 비고 |
 | --- | --- | --- | --- | --- | --- |
 | FR-GAM-01 | 방 홈 화면 | P0 | 화면 | `GET /room` | 가을 테마 1종 + 벽 보드·캘린더·아바타·코치. 요소 탭 = 기능 진입. 방 진입 1초 내 실제 데이터 렌더링 |
-| FR-GAM-02 | 아바타 카테고리 반응 | P0 | 표시 | `GET /room` (`avatar.reaction`) | 봉투→반응 매핑(쇼핑=쇼핑백 등)은 소품 오버레이, 착장 유지. 결제 → 90초 내 반응 |
+| FR-GAM-02 | 아바타 카테고리 반응 | P0 | 표시 | `GET /room` (`avatar.reaction`) | 봉투→반응 매핑(쇼핑=쇼핑백 등)은 소품 오버레이, 착장 유지. 결제 → 90초 내 반응. 프론트 구현은 파츠 에셋·`reaction.type` 확정 뒤(§6 #8) |
 | FR-GAM-03 | 일 코인 지급 | P0 | 화면·표시 | `POST /attendance` | 당일 첫 진입 +10(중복이면 `granted=0`), 전건 확정 +30 은 자정 배치 |
 | FR-GAM-04 | 주·월 코인 | P1 | 표시 | `GET /coins` | 주 200(예산 잔여), 월 최대 1,000(공식 미결) |
 | FR-GAM-05 | 방·캐릭터 꾸미기 | P1 | 화면 | `GET /shop`, `POST /shop/purchase`, `PUT/DELETE /items/{userItemId}/equip` | 슬롯 유형: 방 WALLPAPER/FLOOR/FURNITURE, 캐릭터 HAIR/OUTFIT/FACE |
@@ -125,7 +125,7 @@
 
 | 화면 ID | 화면명 | 라우트 | Pencil | P | 주요 API | 주요 기능 |
 | --- | --- | --- | --- | --- | --- | --- |
-| PAGE-10 | 홈(방) | `app/(tabs)/index.tsx` | hcONw · zq2Xl | P0 | `GET /room`, `POST /attendance`, `GET /transactions/pending` | 방 씬(아바타·가구·보드·캘린더·코치), 코인 배지, 분류 질문 말풍선, 출석 |
+| PAGE-10 | 홈(방) | `app/(tabs)/index.tsx` | hcONw · zq2Xl · P0 시안 EWfx2 / XVFf1(예산 미설정) / KQLga(보드 활성화) / m2OQ5(캘린더 활성화) | P0 | `GET /room`, `POST /attendance`, `GET /transactions/pending`, `GET /budgets/{month}`, `GET /payments/calendar` | 방 씬(아바타·가구·벽 보드 에셋·캘린더 에셋·코치 말풍선), 코인 배지, 알림 버튼, 출석 토스트, 봉투 7종 사용률 세로 막대 예산 카드. 벽 보드·캘린더는 방 에셋을 탭해야 팝오버로 활성화된다(결정 2026-09-08). P0 시안 확정(2026-09-08) |
 | PAGE-11 | 자산 | `app/(tabs)/assets.tsx` | UjYhB | P0 | `GET /accounts`, `GET /transactions` | 연결 계좌·카드, 거래 내역 목록(필터·커서) |
 | PAGE-12 | 예산 | `app/(tabs)/budget.tsx` | K8MODs | P0 | `GET /budgets/{month}` | 전체·봉투별 잔액, 미승인 월 배너 |
 | PAGE-13 | 리포트 | `app/(tabs)/report.tsx` | r3Nmq | P1 | `GET /reports/{month}` | 월 선택, 초과·상위 세분류 |
@@ -153,7 +153,7 @@
 
 | 라우트 | 상태 | 제안 |
 | --- | --- | --- |
-| `app/character/register.tsx` | 홈 "캐릭터를 등록하세요" CTA 목적지 | 백엔드는 가입 시 기본 착장을 자동 지급하므로 "캐릭터 없음" 상태가 명세에 없다. 삭제하거나 PAGE-08 입주 연출로 대체 |
+| `app/character/register.tsx` | 홈 "캐릭터를 등록하세요" CTA 목적지 | **결정(2026-09-08)**: 삭제하지 않고 PAGE-08 입주 연출로 재활용한다. 백엔드가 가입 시 기본 착장을 자동 지급하므로 홈의 "캐릭터 없음" 상태와 등록 CTA 는 제거한다 |
 | `app/account/[accountId].tsx` | 계좌 상세 | 명세에 계좌 상세 화면 없음. PAGE-11 의 계좌 필터로 흡수 |
 | `app/transfer/recipient·amount·confirm·complete.tsx` | 일반 송금 플로우 | KeyFin 이체는 승인 기반 결제 준비 이체(PAGE-25)뿐이다. 삭제 또는 PAGE-25 로 재활용 |
 | `features/home/api/home.api.ts` 의 `GET /home/summary` | Pencil 에서 역산한 임시 계약 | 명세에 없는 경로. `GET /room` + `GET /budgets/{month}` 로 교체 |
@@ -202,6 +202,7 @@
 - **출석**은 홈 진입 시 1회 호출, `granted=0` 이면 UI 반응 없이 `balance` 만 갱신한다.
 - **아바타·가구 렌더링**은 `GET /room` 의 `avatar.equipped[].assetKey` 로 로컬 에셋을 찾는다. `assetKey` 가 로컬에 없으면 기본 착장으로 폴백하고 보고한다. `reaction.type` 의 값 목록은 미확정(TBD) — 모르는 값은 기본 모션.
 - **코치 말투** `DODO`/`ONSOON`(기본)/`JIBANG` 은 서버 설정값이며 프론트는 문구를 만들지 않는다.
+- **홈의 벽 보드·캘린더는 방 에셋이 진입점**이다(결정 2026-09-08). 평소에는 에셋 위에 잔여율·다음 출금일 같은 최소 정보만 보이고, 탭하면 팝오버가 열린다. 팝오버 안의 링크가 예산 탭·결제 캘린더로 이어진다. 예산 카드의 봉투 7종은 사용률(`spent ÷ confirmed`, 초과는 100% 캡) 세로 막대로 그린다.
 
 ## 6. 미결·TBD (프론트에 영향 있는 것만)
 
@@ -213,4 +214,5 @@
 | 4 | 에러 `code` 카탈로그 — 확인된 건 `ERR_LOGIN_FAIL` 뿐, 나머지는 공통 401/403/404/409 | API 명세서 | `errors.ts` 는 확인된 코드만 넣고 나머지는 서버 `message` 폴백 |
 | 5 | Pencil 시안 없는 화면(PAGE-01·02·05·07·20~32) | design-map.json | 시안이 생기면 `design-map.json` 에 노드 id 를 넣고 대조 |
 | 6 | 예산 초과 패널티, 월 코인 공식, 커스터마이징 충돌 규칙, 코치 말투 가이드, 카드 할부 재현, 질문 빈도, 상점 밸런싱 | 요구사항 미결 #1~#8 · 미결 사항 정리 C | P1 이후. 화면을 미리 만들지 않는다 |
-| 7 | `app/character/register.tsx`, `app/account/[accountId].tsx`, `app/transfer/*`, `GET /home/summary` 처리 | §2 정리 대상 | 사용자 결정 |
+| 7 | `app/account/[accountId].tsx`, `app/transfer/*`, `GET /home/summary` 처리 | §2 정리 대상 | 사용자 결정 대기. `character/register` 는 입주 연출 재활용으로 결정됨 |
+| 8 | 아바타 착장(슬롯 레이어)·카테고리 반응 연출 | FR-GAM-02, `avatar.equipped`·`reaction` | **결정(2026-09-08)**: P0 홈 작업에서는 정지 캐릭터 1장을 유지하고, 파츠 에셋과 `reaction.type` 값이 확정된 뒤 만든다. 홈 데이터 계약(`GET /room`)은 그대로 받아 두고 렌더링만 미룬다 |

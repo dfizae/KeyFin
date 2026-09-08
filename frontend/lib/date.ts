@@ -76,6 +76,25 @@ export function toKSTDateKey(value: string | Date): string {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
+const MONTH_KEY = /^\d{4}(0[1-9]|1[0-2])$/;
+
+/** KST 기준 "YYYYMM". 서버 계약의 month 파라미터 형식이다 (docs/api-contract.md §1). */
+export function toMonthKey(value: string | Date): string {
+  const { year, month } = getKSTParts(value);
+  return `${year}${pad2(month)}`;
+}
+
+/** 서버 시각 보정을 반영한 이번 달 "YYYYMM" */
+export function currentMonthKey(): string {
+  return toMonthKey(serverClock.now());
+}
+
+/** "202609" → "9월" */
+export function formatMonthKeyLabel(key: string): string {
+  if (!MONTH_KEY.test(key)) throw new InvalidDateError();
+  return `${Number(key.slice(4))}월`;
+}
+
 export type ServerClock = {
   sync: (dateHeader: string) => void;
   now: () => Date;
