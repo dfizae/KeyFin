@@ -1,18 +1,30 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as React from "react";
 
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
+import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock } from "@/api/mocks/transaction";
 import { getBudget } from "@/features/budget/api/budget.api";
 import { toBudget } from "@/features/budget/model";
+import { CLASSIFY_ERROR_MESSAGE } from "@/features/home/components/HomeCoach";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom } from "@/features/room/model";
+import { classifyTransaction, getPendingTransactions, getSubcategories } from "@/features/transaction/api/transaction.api";
+import { toClassifyResult, toPendingTransactions, toSubcategories } from "@/features/transaction/model";
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
 jest.mock("@/features/budget/api/budget.api", () => ({ getBudget: jest.fn() }));
+jest.mock("@/features/transaction/api/transaction.api", () => ({
+  getPendingTransactions: jest.fn(),
+  getSubcategories: jest.fn(),
+  classifyTransaction: jest.fn(),
+}));
+
+// 쿼리 알림을 setTimeout 이 아니라 그 자리에서 보내, 목 응답이 act 범위 안에서 화면에 반영되게 한다.
+notifyManager.setScheduler((callback) => callback());
 
 const MONTH = "202609";
 jest.mock("@/lib/date", () => ({
@@ -32,9 +44,25 @@ jest.mock("expo-router", () => {
 const mockedGetRoom = jest.mocked(getRoom);
 const mockedGetBudget = jest.mocked(getBudget);
 const mockedCheckAttendance = jest.mocked(checkAttendance);
+const mockedGetPending = jest.mocked(getPendingTransactions);
+const mockedGetSubcategories = jest.mocked(getSubcategories);
+const mockedClassify = jest.mocked(classifyTransaction);
+
+/** 방 폭을 재고, 그 뒤 붙는 오버레이(코치)의 조회가 끝날 때까지 기다린다 */
+async function layoutRoom() {
+  await fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
+  await waitForQueriesToSettle();
+}
+
+let client: QueryClient;
+
+/** 확정 뒤 무효화로 도는 재조회가 테스트 밖에서 끝나 act 경고를 내지 않도록 기다린다 */
+async function waitForQueriesToSettle() {
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+}
 
 function renderHome() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
   return render(
     <QueryClientProvider client={client}>
       <HomeScreen />
@@ -48,15 +76,87 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockReset();
     mockedCheckAttendance.mockReset();
     mockedCheckAttendance.mockResolvedValue(toAttendance(attendanceMock));
+    mockedGetPending.mockReset();
+    mockedGetPending.mockResolvedValue({ items: [], nextCursor: null });
+    mockedGetSubcategories.mockReset();
+    mockedGetSubcategories.mockResolvedValue(toSubcategories(subcategoriesMock));
+    mockedClassify.mockReset();
+    mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", envelopeId: 1, remaining: "132000" });
     mockPush.mockReset();
   });
 
-  it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방·예산 카드를 표시한다", async () => {
+  // 확정 뒤 무효화로 다시 불러와도 확정한 거래가 빠지도록, 목 모듈의 상태를 그대로 쓴다.
+  function mockPendingFlow() {
+    resetTransactionMocks();
+    mockedGetPending.mockImplementation(async () => toPendingTransactions(pendingTransactionsMock()));
+    mockedClassify.mockImplementation(async ({ transactionId, request }) => toClassifyResult(classifyTransactionMock(transactionId, request)));
+  }
+
+  it("미확정 거래가 있으면 코치가 묻고, 확정을 누르면 제안된 세분류로 분류한 뒤 다음 질문으로 넘어간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockPendingFlow();
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    expect(await screen.findByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "카페 확정" }));
+
+    await waitFor(() => expect(mockedClassify).toHaveBeenCalledWith({ transactionId: 501, request: { subcategoryId: 102 } }));
+    expect(await screen.findByText("『김씨네분식 12,000원』 음식점 맞나냥?")).toBeTruthy();
+    await waitForQueriesToSettle();
+  });
+
+  it("다른 카테고리를 누르면 세분류 시트가 열리고, 세분류나 제외 태그를 고르면 그대로 분류한다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockPendingFlow();
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    await fireEvent.press(await screen.findByRole("button", { name: "다른 카테고리" }));
+    expect(await screen.findByText("카테고리 선택")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "배달" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "카페" }).props.accessibilityState).toMatchObject({ selected: true });
+
+    await fireEvent.press(screen.getByRole("button", { name: "배달" }));
+    await waitFor(() => expect(mockedClassify).toHaveBeenCalledWith({ transactionId: 501, request: { subcategoryId: 103 } }));
+    await waitFor(() => expect(screen.queryByText("카테고리 선택")).toBeNull());
+
+    await fireEvent.press(await screen.findByRole("button", { name: "다른 카테고리" }));
+    await fireEvent.press(await screen.findByRole("button", { name: "더치페이" }));
+    await waitFor(() => expect(mockedClassify).toHaveBeenLastCalledWith({ transactionId: 502, request: { excludeTag: "DUTCH" } }));
+    await waitForQueriesToSettle();
+  });
+
+  it("분류 저장이 실패하면 말풍선에 오류 문구를 보여주고 다시 시도할 수 있다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockPendingFlow();
+    mockedClassify.mockRejectedValueOnce(new Error("network"));
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    await fireEvent.press(await screen.findByRole("button", { name: "카페 확정" }));
+    expect(await screen.findByText(CLASSIFY_ERROR_MESSAGE)).toBeTruthy();
+    expect(screen.getByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "카페 확정" }));
+    expect(await screen.findByText("『김씨네분식 12,000원』 음식점 맞나냥?")).toBeTruthy();
+    await waitForQueriesToSettle();
+  });
+
+  it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방·예산 카드를 표시한다", async () => {
+    let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
+    mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
     await renderHome();
     expect(screen.getByLabelText("불러오는 중")).toBeTruthy();
 
+    await act(async () => resolveRoom(toRoom({ ...roomMock, attendance: { checkedToday: true } })));
     expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
     expect(screen.getByText("환영합니다")).toBeTruthy();
     expect(screen.getByLabelText("코인 1,250개")).toBeTruthy();
