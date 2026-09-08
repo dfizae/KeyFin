@@ -20,6 +20,10 @@ skills-lock.json
 # 프론트 전용 문서 — 계약·명세의 원천은 팀 Notion 이고 여기 있는 건 사본이다
 docs/
 
+# Pencil 작업 파일 — 디자인 확정 원천이지만 프론트 전용이라 로컬 보관 (2026-09-08)
+# 코드가 읽는 산출물(tailwind.config.js·global.css·lib/theme.ts)은 추적하므로 앱 빌드에는 영향이 없다.
+design.pen
+
 # Native
 .kotlin/
 *.orig.*
