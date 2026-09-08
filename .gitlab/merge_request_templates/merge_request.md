@@ -28,7 +28,7 @@ Jira 이슈 키와 GitLab 이슈 번호를 함께 남겨 주세요. (CONVENTIONS
 Closes / Related to 중 하나만 남기고 나머지는 삭제해 주세요.
 -->
 
-- Jira: S15P11A307-000
+- Jira: S15P21A408-000
 - Closes #이슈번호
 
 ## 📌 개요
