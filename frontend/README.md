@@ -101,10 +101,8 @@ design.pen (Pencil — 확정 원천: 변수 51개 + 아트보드)
 |---|---|---|
 | `pencil-design` | 프로젝트 | Pencil = 확정 원천. A 화면 드래프트 · B 구현 전 대조 · C 변수 → tokens.json 동기화 |
 | `fintech-ui-patterns` | 프로젝트 | 금액·계좌·거래·이체·PIN·오류 패턴 체크리스트 |
-| `frontend-design` | anthropics/skills | 비주얼 방향 수립 (RN 번안) |
-| `ui-ux-pro-max` | ui-ux-pro-max | 팔레트·타이포·RN 가이드 데이터베이스 |
-| `vercel-react-best-practices` | vercel-labs | 리렌더링·훅 규칙만 적용 |
-| `design-system`, `brand` | claudekit | 토큰 아키텍처·브랜드 가이드 참조 (슬라이드·CLI 제거) |
+
+외부 스킬 5종(`frontend-design`, `ui-ux-pro-max`, `vercel-react-best-practices`, `design-system`, `brand`)은 웹 전제 지침이라 2026-09-08 제거했습니다. 필요한 원칙은 `.agents/rules/`에 있습니다.
 
 ## Pencil / Figma 사용 전제
 

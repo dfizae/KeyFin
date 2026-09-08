@@ -9,6 +9,17 @@ dist/
 web-build/
 expo-env.d.ts
 
+# AI 하네스 — 프론트 개발자 1인 전용이라 로컬 보관 (2026-09-08 추적 해제)
+# 백엔드·AI 팀원의 클론과 MR diff 에 섞이지 않게 한다. 하네스 원천은 .agents/, .claude/ 는 harness:sync 미러다.
+.claude/
+.agents/
+AGENTS.md
+CLAUDE.md
+skills-lock.json
+
+# 프론트 전용 문서 — 계약·명세의 원천은 팀 Notion 이고 여기 있는 건 사본이다
+docs/
+
 # Native
 .kotlin/
 *.orig.*
