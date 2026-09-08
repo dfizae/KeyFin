@@ -89,6 +89,11 @@ export function currentMonthKey(): string {
   return toMonthKey(serverClock.now());
 }
 
+/** 서버 시각 보정을 반영한 오늘 "YYYY-MM-DD" */
+export function currentDateKey(): string {
+  return toKSTDateKey(serverClock.now());
+}
+
 /** "202609" → "9월" */
 export function formatMonthKeyLabel(key: string): string {
   if (!MONTH_KEY.test(key)) throw new InvalidDateError();

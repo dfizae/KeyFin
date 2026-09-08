@@ -15,17 +15,22 @@ import type { Budget } from "@/features/budget/model";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { BudgetCard } from "@/features/home/components/BudgetCard";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
+import { HomeCalendar } from "@/features/home/components/HomeCalendar";
 import { HomeCoach } from "@/features/home/components/HomeCoach";
 import { HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 
+/** 벽 오브젝트의 팝오버는 한 번에 하나만 연다 — 보드와 캘린더 팝오버가 겹치는 자리에 뜨기 때문이다. */
+type RoomPanel = "board" | "calendar" | null;
+
 function HomeScreen() {
   const room = useRoom();
   const month = currentMonthKey();
   const budget = useBudget(month);
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
+  const [panel, setPanel] = React.useState<RoomPanel>(null);
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6">
@@ -47,7 +52,14 @@ function HomeScreen() {
             <CharacterRoom>
               {(width) => (
                 <>
-                  <HomeWallBoard width={width} budget={budget.data} month={month} />
+                  <HomeWallBoard
+                    width={width}
+                    budget={budget.data}
+                    month={month}
+                    open={panel === "board"}
+                    onOpenChange={(open) => setPanel(open ? "board" : null)}
+                  />
+                  <HomeCalendar width={width} month={month} open={panel === "calendar"} onOpenChange={(open) => setPanel(open ? "calendar" : null)} />
                   <HomeCoach width={width} />
                 </>
               )}

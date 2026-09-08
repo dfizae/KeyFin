@@ -3,12 +3,15 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-
 import * as React from "react";
 
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
+import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payment";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
 import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock } from "@/api/mocks/transaction";
 import { getBudget } from "@/features/budget/api/budget.api";
 import { toBudget } from "@/features/budget/model";
 import { CLASSIFY_ERROR_MESSAGE } from "@/features/home/components/HomeCoach";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
+import { getPaymentCalendar } from "@/features/payment/api/payment.api";
+import { toPaymentCalendar } from "@/features/payment/model";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom } from "@/features/room/model";
@@ -17,6 +20,7 @@ import { toClassifyResult, toPendingTransactions, toSubcategories } from "@/feat
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
 jest.mock("@/features/budget/api/budget.api", () => ({ getBudget: jest.fn() }));
+jest.mock("@/features/payment/api/payment.api", () => ({ getPaymentCalendar: jest.fn() }));
 jest.mock("@/features/transaction/api/transaction.api", () => ({
   getPendingTransactions: jest.fn(),
   getSubcategories: jest.fn(),
@@ -30,6 +34,7 @@ const MONTH = "202609";
 jest.mock("@/lib/date", () => ({
   ...jest.requireActual<typeof import("@/lib/date")>("@/lib/date"),
   currentMonthKey: () => "202609",
+  currentDateKey: () => "2026-09-08",
 }));
 
 const mockPush = jest.fn();
@@ -44,11 +49,12 @@ jest.mock("expo-router", () => {
 const mockedGetRoom = jest.mocked(getRoom);
 const mockedGetBudget = jest.mocked(getBudget);
 const mockedCheckAttendance = jest.mocked(checkAttendance);
+const mockedGetCalendar = jest.mocked(getPaymentCalendar);
 const mockedGetPending = jest.mocked(getPendingTransactions);
 const mockedGetSubcategories = jest.mocked(getSubcategories);
 const mockedClassify = jest.mocked(classifyTransaction);
 
-/** 방 폭을 재고, 그 뒤 붙는 오버레이(코치)의 조회가 끝날 때까지 기다린다 */
+/** 방 폭을 재고, 그 뒤 붙는 오버레이(보드·캘린더·코치)의 조회가 끝날 때까지 기다린다 */
 async function layoutRoom() {
   await fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
   await waitForQueriesToSettle();
@@ -76,6 +82,8 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockReset();
     mockedCheckAttendance.mockReset();
     mockedCheckAttendance.mockResolvedValue(toAttendance(attendanceMock));
+    mockedGetCalendar.mockReset();
+    mockedGetCalendar.mockResolvedValue(toPaymentCalendar(paymentCalendarMock(MONTH)));
     mockedGetPending.mockReset();
     mockedGetPending.mockResolvedValue({ items: [], nextCursor: null });
     mockedGetSubcategories.mockReset();
@@ -224,7 +232,7 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
     await renderHome();
     await screen.findByText("180,000원");
-    fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
+    await layoutRoom();
 
     const board = await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" });
     expect(screen.queryByText("9월 예산 보드")).toBeNull();
@@ -240,6 +248,7 @@ describe("HomeScreen", () => {
 
     await fireEvent.press(screen.getByRole("button", { name: "보드 닫기" }));
     expect(screen.queryByText("9월 예산 보드")).toBeNull();
+    await waitForQueriesToSettle();
   });
 
   it("예산이 미승인이면 벽 보드는 미설정으로 보이고 팝오버는 승인 안내를 보여준다", async () => {
@@ -247,10 +256,78 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(MONTH)));
     await renderHome();
     await screen.findByText("9월 예산이 아직 없어요");
-    fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
+    await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 예산 미설정" }));
     expect(await screen.findByText("예산을 승인하면 봉투별 잔액이 여기에 보여요.")).toBeTruthy();
+    await waitForQueriesToSettle();
+  });
+
+  it("캘린더 에셋은 다음 출금을 보여주고, 탭하면 날짜별 출금 일정과 준비 상태가 열린다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    const calendar = await screen.findByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" });
+    expect(screen.queryByText("9월 출금 일정")).toBeNull();
+
+    await fireEvent.press(calendar);
+    expect(await screen.findByText("9월 출금 일정")).toBeTruthy();
+    expect(screen.getByText("3건 · 부족 1건")).toBeTruthy();
+    expect(screen.getByLabelText("15일 월세 550,000원, 부족 230,000원")).toBeTruthy();
+    expect(screen.getByLabelText("20일 넷플릭스 17,000원, 준비됨")).toBeTruthy();
+    expect(screen.getByLabelText("25일 통신비 (예상) 55,000원, 준비됨")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "캘린더 열기" }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(mockedGetCalendar).toHaveBeenCalledWith(MONTH, expect.anything());
+
+    await fireEvent.press(screen.getByRole("button", { name: "출금 일정 닫기" }));
+    expect(screen.queryByText("9월 출금 일정")).toBeNull();
+    await waitForQueriesToSettle();
+  });
+
+  it("이번 달 출금 예정이 없으면 캘린더는 예정 없음으로 보이고 팝오버는 빈 상태를 알린다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetCalendar.mockResolvedValue(toPaymentCalendar(paymentCalendarEmptyMock));
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    await fireEvent.press(await screen.findByRole("button", { name: "출금 캘린더, 9월 출금 예정 없음" }));
+    expect(await screen.findByText("이번 달 출금 예정이 없어요.")).toBeTruthy();
+    expect(screen.getByText("0건")).toBeTruthy();
+    await waitForQueriesToSettle();
+  });
+
+  it("벽 오브젝트 팝오버는 한 번에 하나만 열린다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" }));
+    expect(await screen.findByText("9월 예산 보드")).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" }));
+    expect(await screen.findByText("9월 출금 일정")).toBeTruthy();
+    expect(screen.queryByText("9월 예산 보드")).toBeNull();
+    await waitForQueriesToSettle();
+  });
+
+  it("결제 일정만 못 받으면 캘린더 에셋만 감추고 나머지는 그대로 둔다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetCalendar.mockRejectedValue(new Error("network"));
+    await renderHome();
+    await screen.findByText("180,000원");
+    await layoutRoom();
+
+    expect(await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" })).toBeTruthy();
+    expect(screen.queryByLabelText(/출금 캘린더/)).toBeNull();
+    await waitForQueriesToSettle();
   });
 
   it("예산이 미승인이면 승인 유도 배너를 보여주고, 버튼은 예산 탭으로 이동한다", async () => {

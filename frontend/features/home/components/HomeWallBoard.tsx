@@ -1,5 +1,3 @@
-import * as React from "react";
-
 import { BoardPopover } from "@/features/budget/components/BoardPopover";
 import { envelopeHealth, type Budget } from "@/features/budget/model";
 import { WallBoard } from "@/features/room/components/WallBoard";
@@ -12,11 +10,12 @@ type HomeWallBoardProps = {
   budget: Budget | undefined;
   /** "YYYYMM" */
   month: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 };
 
-/** 방 벽의 보드 에셋과, 탭했을 때 열리는 봉투별 잔액 팝오버 (FR-BGT-04). 열림 상태만 로컬 UI 상태다. */
-function HomeWallBoard({ width, budget, month }: HomeWallBoardProps) {
-  const [open, setOpen] = React.useState(false);
+/** 방 벽의 보드 에셋과, 탭했을 때 열리는 봉투별 잔액 팝오버 (FR-BGT-04). 열림 상태는 벽 오브젝트끼리 하나만 열리도록 홈이 갖는다. */
+function HomeWallBoard({ width, budget, month, open, onOpenChange }: HomeWallBoardProps) {
   if (!budget) return null;
 
   const monthLabel = formatMonthKeyLabel(month);
@@ -28,9 +27,9 @@ function HomeWallBoard({ width, budget, month }: HomeWallBoardProps) {
         monthLabel={monthLabel}
         remainingRate={budget.total?.remainingRate ?? null}
         chips={budget.envelopes.map(envelopeHealth)}
-        onPress={() => setOpen(true)}
+        onPress={() => onOpenChange(true)}
       />
-      {open ? <BoardPopover width={width} budget={budget} monthLabel={monthLabel} onClose={() => setOpen(false)} /> : null}
+      {open ? <BoardPopover width={width} budget={budget} monthLabel={monthLabel} onClose={() => onOpenChange(false)} /> : null}
     </>
   );
 }
