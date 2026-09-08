@@ -1,12 +1,13 @@
 import { View } from "react-native";
 
 import { Text } from "@/components/ui/text";
-import { budgetHealth, type BudgetHealth, type BudgetTotal } from "@/features/budget/model";
+import { EnvelopeChart } from "@/features/budget/components/EnvelopeChart";
+import { budgetHealth, type BudgetEnvelope, type BudgetHealth, type BudgetTotal } from "@/features/budget/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-// Pencil home/p0 (EWfx2) BudgetCard: bg-primary · radius 20 · padding 20 · gap 16 · 진행 바 8pt.
-// 봉투 7종 사용률 세로 막대(KZBd3)는 홈 P0 3단계(보드 확장)에서 붙인다. warning/over 문구와 색은 임시. (TBD)
+// Pencil home/p0 (EWfx2) BudgetCard (sMRC0): bg-primary · radius 20 · padding 20 · gap 16 · 진행 바 8pt · 봉투 7종 사용률 세로 막대.
+// good 문구 "좋아요!" 는 Pencil, warning/over 문구는 임시. (TBD)
 const HEALTH_STYLE: Record<BudgetHealth, { label: string; textClassName: string; barClassName: string }> = {
   good: { label: "좋아요!", textClassName: "text-positive", barClassName: "bg-positive" },
   warning: { label: "조금만 아껴요", textClassName: "text-warning", barClassName: "bg-warning" },
@@ -15,9 +16,10 @@ const HEALTH_STYLE: Record<BudgetHealth, { label: string; textClassName: string;
 
 type BudgetCardProps = {
   total: BudgetTotal;
+  envelopes: BudgetEnvelope[];
 };
 
-function BudgetCard({ total }: BudgetCardProps) {
+function BudgetCard({ total, envelopes }: BudgetCardProps) {
   const health = HEALTH_STYLE[budgetHealth(total)];
   const usedPercent = Math.min(100, Math.max(0, 100 - total.remainingRate));
 
@@ -44,6 +46,7 @@ function BudgetCard({ total }: BudgetCardProps) {
       >
         <View className={cn("h-full rounded-full", health.barClassName)} style={{ width: `${usedPercent}%` }} />
       </View>
+      <EnvelopeChart envelopes={envelopes} />
     </View>
   );
 }

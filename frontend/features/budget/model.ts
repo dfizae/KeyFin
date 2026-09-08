@@ -129,3 +129,18 @@ export function budgetHealth(total: BudgetTotal): BudgetHealth {
   if (total.remainingRate < WARNING_REMAINING_RATE) return "warning";
   return "good";
 }
+
+/** 봉투별 상태. 승인 전(잔액 null)은 unset */
+export type EnvelopeHealth = BudgetHealth | "unset";
+
+export function envelopeHealth(envelope: BudgetEnvelope): EnvelopeHealth {
+  if (envelope.remaining === null || envelope.remainingRate === null) return "unset";
+  if (compareKRW(envelope.remaining, "0") < 0) return "over";
+  if (envelope.remainingRate < WARNING_REMAINING_RATE) return "warning";
+  return "good";
+}
+
+/** 서버 잔여율(%)을 사용률(%)로 바꾼다. 초과면 100 을 넘는다 — 막대 길이는 호출부가 100 으로 자른다. */
+export function usedPercent(remainingRate: number): number {
+  return Math.max(0, 100 - remainingRate);
+}

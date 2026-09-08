@@ -8,6 +8,7 @@ import { getBudget } from "@/features/budget/api/budget.api";
 import { toBudget } from "@/features/budget/model";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
+import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom } from "@/features/room/model";
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
@@ -105,6 +106,51 @@ describe("HomeScreen", () => {
     await waitFor(() => expect(mockedCheckAttendance).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("180,000원")).toBeTruthy();
     expect(screen.queryByLabelText(/출석 \+/)).toBeNull();
+  });
+
+  it("예산 카드에 봉투 7종 사용률 막대를 그리고 초과 봉투는 사용률이 100 을 넘는다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    await renderHome();
+
+    expect(await screen.findByText("봉투별 사용률")).toBeTruthy();
+    expect(screen.getByLabelText("외식 사용률 68%, 남은 32,000원")).toBeTruthy();
+    expect(screen.getByLabelText("쇼핑 사용률 109%, 남은 -8,000원")).toBeTruthy();
+    expect(screen.getByText("마트")).toBeTruthy();
+  });
+
+  it("벽 보드 에셋은 잔여율을 보여주고, 탭하면 봉투별 잔액 팝오버가 열리며 링크는 예산 탭으로 간다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    await renderHome();
+    await screen.findByText("180,000원");
+    fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
+
+    const board = await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" });
+    expect(screen.queryByText("9월 예산 보드")).toBeNull();
+
+    await fireEvent.press(board);
+    expect(await screen.findByText("9월 예산 보드")).toBeTruthy();
+    expect(screen.getByText("180,000원 · 36% 남음")).toBeTruthy();
+    expect(screen.getByLabelText("쇼핑 초과 8,000원 남음")).toBeTruthy();
+    expect(screen.getByLabelText("외식 32,000원 남음")).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "예산 탭에서 자세히" }));
+    expect(mockPush).toHaveBeenCalledWith("/budget");
+
+    await fireEvent.press(screen.getByRole("button", { name: "보드 닫기" }));
+    expect(screen.queryByText("9월 예산 보드")).toBeNull();
+  });
+
+  it("예산이 미승인이면 벽 보드는 미설정으로 보이고 팝오버는 승인 안내를 보여준다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(MONTH)));
+    await renderHome();
+    await screen.findByText("9월 예산이 아직 없어요");
+    fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
+
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 예산 미설정" }));
+    expect(await screen.findByText("예산을 승인하면 봉투별 잔액이 여기에 보여요.")).toBeTruthy();
   });
 
   it("예산이 미승인이면 승인 유도 배너를 보여주고, 버튼은 예산 탭으로 이동한다", async () => {

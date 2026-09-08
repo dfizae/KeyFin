@@ -1,6 +1,26 @@
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
-import { WARNING_REMAINING_RATE, budgetHealth, toBudget } from "@/features/budget/model";
+import { envelopeShortName } from "@/features/budget/catalog";
+import { WARNING_REMAINING_RATE, budgetHealth, envelopeHealth, toBudget, usedPercent } from "@/features/budget/model";
 import { ContractMismatchError } from "@/lib/contract";
+
+describe("envelopeHealth · usedPercent · envelopeShortName", () => {
+  it("봉투별 상태는 잔액·잔여율로 정하고 승인 전은 unset 이다", () => {
+    const { envelopes } = toBudget(budgetConfirmedMock("202609"));
+    expect(envelopes.map(envelopeHealth)).toEqual(["good", "good", "good", "warning", "over", "good", "good"]);
+    expect(toBudget(budgetProposedMock("202609")).envelopes.map(envelopeHealth)).toEqual(Array(7).fill("unset"));
+  });
+
+  it("사용률은 100 − 잔여율이고 초과면 100 을 넘는다", () => {
+    expect(usedPercent(36)).toBe(64);
+    expect(usedPercent(-9)).toBe(109);
+    expect(usedPercent(130)).toBe(0);
+  });
+
+  it("차트 축 이름은 카탈로그의 짧은 이름을 쓰고 모르는 id 는 서버 이름이다", () => {
+    expect(envelopeShortName(6, "편의점·마트·잡화")).toBe("마트");
+    expect(envelopeShortName(99, "새 봉투")).toBe("새 봉투");
+  });
+});
 
 const MONTH = "202609";
 

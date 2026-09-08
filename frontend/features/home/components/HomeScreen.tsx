@@ -15,6 +15,7 @@ import type { Budget } from "@/features/budget/model";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { BudgetCard } from "@/features/home/components/BudgetCard";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
+import { HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
@@ -42,7 +43,7 @@ function HomeScreen() {
         <>
           <HomeHeader coinBalance={room.data.coinBalance} />
           <View className="relative">
-            <CharacterRoom />
+            <CharacterRoom>{(width) => <HomeWallBoard width={width} budget={budget.data} month={month} />}</CharacterRoom>
             {attendance.isSuccess && attendance.data.granted > 0 ? <AttendanceToast granted={attendance.data.granted} /> : null}
           </View>
           <View className="px-6 pt-6">
@@ -93,7 +94,7 @@ function BudgetSection({ budget, month }: BudgetSectionProps) {
     );
   }
   if (budget.data.total === null) return <BudgetUnsetBanner month={month} />;
-  return <BudgetCard total={budget.data.total} />;
+  return <BudgetCard total={budget.data.total} envelopes={budget.data.envelopes} />;
 }
 
 type HomeHeaderProps = {
