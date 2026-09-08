@@ -1,8 +1,9 @@
-# 프로젝트: 모바일 핀테크 앱 (React Native + Java 백엔드)
+# 프로젝트: KeyFin — 생활 금융 관리 앱 (React Native + Spring 백엔드)
 
 ## 프로젝트 기본 정보
 
-- 모바일 핀테크 서비스(계좌 조회, 이체, 결제, 인증)의 React Native 클라이언트다. 백엔드는 Java(Spring) 별도 저장소이며 두 저장소의 계약은 OpenAPI 스펙이다(`.agents/rules/90-backend-contract.md`).
+- **KeyFin** 의 React Native 클라이언트다. 소비 내역을 자동 수집·분류해 봉투 7종 예산을 안내하고, 정기 지출을 위한 결제 계좌 준비 이체를 승인 기반으로 실행하며, 방·캐릭터·코인으로 습관을 지속시킨다. 사용자 유형은 1종, 플랫폼은 Android(APK 배포). 기능 범위·화면·우선순위(P0/P1/P2)는 `docs/frontend-spec.md` 가 기준이다.
+- 백엔드는 같은 저장소의 `backend/`(Java Spring, 별도 팀 담당)이며 계약의 원천은 팀 Notion 의 API 명세서·ERD 다. OpenAPI 가 나오기 전까지 `docs/api-contract.md` 가 클라이언트 쪽 계약 사본이고, 통신 코드 작성 절차는 `docs/api-guide.md`, 계약 규칙은 `.agents/rules/90-backend-contract.md` 를 따른다.
 - Expo 기반이다. 기술 스택은 Expo SDK 57, React Native 0.86, React 19, TypeScript(`strict`)이다.
 - 패키지 매니저는 `pnpm`만 사용한다. 네이티브 모듈이 포함되거나 Expo SDK 버전에 민감한 패키지는 `pnpm expo install`로 설치한다.
 - 라우팅은 Expo Router(파일 기반), 스타일링은 NativeWind(Tailwind 문법)를 사용한다.
@@ -15,10 +16,10 @@
 ## 디렉토리 역할
 
 - `app/` — Expo Router 라우트. 화면 조립, 파라미터 처리, 레이아웃 연결만 담당한다. 라우트가 아닌 파일을 두지 않는다. 인증 여부에 따라 `(auth)`, `(app)` 그룹으로 나눈다.
-- `features/<domain>/` — 도메인 단위 코드(`account`, `transfer`, `auth`, `payment` …). 하위에 `api/`(도메인 API 함수·Query/Mutation), `components/`, `model.ts`, `errors.ts`, 필요 시 `store.ts`를 둔다. 도메인에 종속된 훅·유틸은 여기에 둔다.
+- `features/<domain>/` — 도메인 단위 코드. 도메인 이름은 API 도메인과 1:1 로 맞춘다: `auth`, `settings`, `link`, `account`, `transaction`, `budget`, `payment`, `room`(방·출석·장착), `shop`(상점·코인), `notification`, `coaching`, 그리고 화면 조립용 `home`(`docs/api-guide.md` §2). 하위에 `api/`(`<domain>.api.ts` 도메인 함수, `queries.ts` 키·옵션·훅), `components/`, `model.ts`(DTO → 화면 모델), `errors.ts`, 필요 시 `store.ts`를 둔다. 도메인에 종속된 훅·유틸은 여기에 둔다.
 - `components/ui/` — 도메인과 무관한 공용 UI 컴포넌트. 이름과 variant는 `design/DESIGN.md`의 인벤토리와 Pencil 컴포넌트명을 따른다.
 - `hooks/`, `lib/` — 도메인 무관 커스텀 훅, 순수 유틸(`money.ts`, `mask.ts`, `date.ts`). `lib/theme.ts`는 생성 파일이다.
-- `api/` — `client.ts`(axios 인스턴스·인터셉터), `generated/`(OpenAPI 생성물), `mocks/`.
+- `api/` — `client.ts`(axios 인스턴스·인터셉터), `mocks/`(계약 사본의 응답 예시를 옮긴 목 데이터), `generated/`(OpenAPI 생성물 — 백엔드가 스펙을 내보내기 전까지는 없음).
 - `design/` — 코드가 읽는 디자인 파일. `tokens.json`(값, `design.pen` 변수에서 생성), `DESIGN.md`(의도), `design-map.json`(화면·컴포넌트 ↔ Pencil 노드 id), `pencil/`(대안 드래프트). 디자인의 확정 원천인 Pencil 작업 파일은 루트의 `design.pen`이다.
 - `scripts/` — 하네스·토큰 스크립트. `package.json`의 `tokens:*`, `harness:*` 명령이 이를 호출한다.
 - UI는 `components/ui/`의 RNR 컴포넌트(`Text`, `Button`, `Input`, `Card`, `Badge`, `Skeleton`, `Separator`, `Icon`, `Dialog`)와 React Native 코어 컴포넌트(View, Pressable, FlatList 등)를 사용한다. 텍스트는 RN `Text` 대신 `@/components/ui/text`의 `Text`를 쓴다. 웹 DOM 기반 라이브러리(shadcn/ui 웹판, Radix 등)는 동작하지 않으므로 사용하지 않는다.
@@ -28,6 +29,7 @@
 - 세부 규칙은 `.agents/rules/`에 분리되어 있다. 작업 대상 경로에 적용되는 규칙을 먼저 읽고 함께 적용한다. 번호가 클수록 도메인 특화 규칙이며 충돌 시 큰 번호가 우선한다.
 - `.claude/`는 Claude Code용 미러다. `.agents/rules/`, `.agents/skills/`를 수정하면 `pnpm harness:sync`로 미러를 갱신하고 `pnpm harness:check`로 확인한다. `.claude/`를 직접 편집하지 않는다.
 - 코드 품질 기준은 `docs/frontend-code-quality.md`와 `docs/frontend_clean_code_guide.md`를 따른다. 두 문서의 예시는 웹(React DOM) 기준이므로 원칙만 React Native에 맞게 적용한다.
+- 작업 종류별로 읽는 문서: 화면·기능을 만들거나 범위를 판단할 때 `docs/frontend-spec.md`(기능 ID·화면 목록·이동 흐름·비즈니스 규칙·TBD), 서버 통신 코드를 쓸 때 `docs/api-guide.md`(절차·예시)와 `docs/api-contract.md`(엔드포인트·DTO·열거형). 세 문서는 팀 Notion 을 대조해 만든 요약이며 Notion 과 다르면 Notion 이 이기고 문서를 고친다.
 - 스킬은 `.agents/skills/`에 있다. 프로젝트 전용 스킬은 `pencil-design`, `fintech-ui-patterns`이고, 외부 스킬(`frontend-design`, `ui-ux-pro-max`, `vercel-react-best-practices`, `design-system`, `brand`)은 웹 전제 지침을 React Native에 맞게 번안해 참고한다. `vercel-react-best-practices`는 리렌더링·훅 규칙만 적용하고 SSR·hydration·번들 분할 규칙은 적용하지 않는다.
 - 사용자 요청과 프로젝트 문서가 충돌하면 사용자 요청을 우선한다. 단, `80-fintech-security.md`의 금액·멱등성·민감정보 규칙을 완화하는 요청은 위험을 먼저 알린 뒤 진행한다. 문서끼리 충돌하거나 필수 문서를 읽을 수 없으면 임의로 판단하지 말고 그 사실을 보고한다.
 - 기존 디렉토리 구조, 컴포넌트 패턴, 명명 규칙을 먼저 확인하고 명확한 이유 없이 새로운 패턴이나 별도 아키텍처를 도입하지 않는다.
@@ -44,7 +46,7 @@
 
 ## 작업 범위와 승인
 
-- 명세나 요청에 없는 사용자 기능, 화면, 버튼, 필터, 설정을 임의로 추가하지 않는다.
+- 명세(`docs/frontend-spec.md`)나 요청에 없는 사용자 기능, 화면, 버튼, 필터, 설정을 임의로 추가하지 않는다. P1·P2 기능은 요청이 있을 때만 만들고, 명세의 TBD 항목은 임의로 결정하지 않는다.
 - 로딩, 빈 상태, 오류, 비활성화, 접근성, 다양한 화면 크기 대응, 요청 중 중복 실행 방지, 민감 정보 마스킹은 기능 완성에 필요한 기본 상태로 간주한다.
 - 요청 범위와 관련 없는 리팩터링, 파일 이동, 이름 변경, 포맷 변경을 함께 수행하지 않는다.
 - 전체 구현을 요청받으면 섹션 단위로 구현하고 검증하되 중간 승인을 기다리지 않고 요청된 범위까지 완료한다. 사용자가 단계별 검토를 요청한 경우에만 각 단계에서 확인을 기다린다.

@@ -52,9 +52,9 @@ pnpm figma:build      # (선택) design.pen 화면 + 토큰 → Figma 로컬 플
 ├── .claude/                  # Claude Code 미러 (rules, skills, settings.json)
 ├── scripts/                  # sync-pen-tokens · sync-tokens · check-tokens · sync-harness · check-harness · hooks/post-edit-check · figma/(Figma 내보내기 플러그인) · assets/(방 씬 에셋: 배경 제거 remove-white-bg.ps1 · 시트 빌드 build-sprite-sheet.ps1, Windows PowerShell)
 ├── assets/sprites/           # 방 씬 앱 에셋(Git LFS 대상): floors/ furniture/ characters/(시트 .png + 프레임 .json)
-├── docs/                     # 코드 품질 기준 (토스 Frontend Fundamentals, Clean Code)
+├── docs/                     # frontend-spec.md(KeyFin 기능·화면 명세) · api-guide.md(통신 코드 절차) · api-contract.md(Notion API 명세 사본) · 코드 품질 기준(토스 Frontend Fundamentals, Clean Code)
 ├── app/                      # Expo Router 라우트 — 화면 조립만
-├── features/<domain>/        # account · transfer · auth · payment … (api/, components/, model.ts)
+├── features/<domain>/        # auth · settings · link · account · transaction · budget · payment · room · shop · notification · coaching · home (api/, components/, model.ts)
 ├── components/ui/            # RNR 벤더 컴포넌트 + 프로젝트 컴포넌트 (이름 = Pencil 컴포넌트명)
 ├── components.json           # RNR/shadcn CLI 설정 (별칭 @/)
 ├── lib/                      # utils.ts(cn) · query-client.ts · money.ts · mask.ts · date.ts · theme.ts(생성)
