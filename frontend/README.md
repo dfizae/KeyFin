@@ -9,6 +9,7 @@ Expo(SDK 57) / React Native 0.86 기반 핀테크 모바일 클라이언트와, 
 | Runtime | Expo SDK 57 · React Native 0.86 · React 19.2 · TypeScript strict | 설치됨 |
 | Routing / Styling | Expo Router · NativeWind v4 | 설치됨 |
 | Animation | Reanimated 4 | 설치됨 |
+| Room Scene | `@shopify/react-native-skia`(방 씬·스프라이트) · `react-native-gesture-handler`(가구 편집) · `features/room/` | 설치됨 (0단계 스파이크) |
 | UI Components | React Native Reusables (shadcn 규약, `components/ui/`) | 설치됨 |
 | Server / Client State | TanStack Query · Zustand · axios | 설치됨 |
 | Security | expo-secure-store · expo-local-authentication | 설치됨 |
@@ -49,10 +50,11 @@ pnpm figma:build      # (선택) design.pen 화면 + 토큰 → Figma 로컬 플
 │   ├── rules/                #   00~60 기본, 70 디자인 토큰, 80 핀테크 보안, 90 백엔드 계약
 │   └── skills/               #   pencil-design · fintech-ui-patterns (+ 외부 참조 스킬)
 ├── .claude/                  # Claude Code 미러 (rules, skills, settings.json)
-├── scripts/                  # sync-pen-tokens · sync-tokens · check-tokens · sync-harness · check-harness · hooks/post-edit-check · figma/(Figma 내보내기 플러그인)
-├── docs/                     # 코드 품질 기준 (토스 Frontend Fundamentals, Clean Code)
+├── scripts/                  # sync-pen-tokens · sync-tokens · check-tokens · sync-harness · check-harness · hooks/post-edit-check · figma/(Figma 내보내기 플러그인) · assets/(방 씬 에셋: 배경 제거 remove-white-bg.ps1 · 시트 빌드 build-sprite-sheet.ps1, Windows PowerShell)
+├── assets/sprites/           # 방 씬 앱 에셋(Git LFS 대상): floors/ furniture/ characters/(시트 .png + 프레임 .json)
+├── docs/                     # frontend-spec.md(KeyFin 기능·화면 명세) · api-guide.md(통신 코드 절차) · api-contract.md(Notion API 명세 사본) · 코드 품질 기준(토스 Frontend Fundamentals, Clean Code)
 ├── app/                      # Expo Router 라우트 — 화면 조립만
-├── features/<domain>/        # account · transfer · auth · payment … (api/, components/, model.ts)
+├── features/<domain>/        # auth · settings · link · account · transaction · budget · payment · room · shop · notification · coaching · home (api/, components/, model.ts)
 ├── components/ui/            # RNR 벤더 컴포넌트 + 프로젝트 컴포넌트 (이름 = Pencil 컴포넌트명)
 ├── components.json           # RNR/shadcn CLI 설정 (별칭 @/)
 ├── lib/                      # utils.ts(cn) · query-client.ts · money.ts · mask.ts · date.ts · theme.ts(생성)
@@ -99,10 +101,8 @@ design.pen (Pencil — 확정 원천: 변수 51개 + 아트보드)
 |---|---|---|
 | `pencil-design` | 프로젝트 | Pencil = 확정 원천. A 화면 드래프트 · B 구현 전 대조 · C 변수 → tokens.json 동기화 |
 | `fintech-ui-patterns` | 프로젝트 | 금액·계좌·거래·이체·PIN·오류 패턴 체크리스트 |
-| `frontend-design` | anthropics/skills | 비주얼 방향 수립 (RN 번안) |
-| `ui-ux-pro-max` | ui-ux-pro-max | 팔레트·타이포·RN 가이드 데이터베이스 |
-| `vercel-react-best-practices` | vercel-labs | 리렌더링·훅 규칙만 적용 |
-| `design-system`, `brand` | claudekit | 토큰 아키텍처·브랜드 가이드 참조 (슬라이드·CLI 제거) |
+
+외부 스킬 5종(`frontend-design`, `ui-ux-pro-max`, `vercel-react-best-practices`, `design-system`, `brand`)은 웹 전제 지침이라 2026-09-08 제거했습니다. 필요한 원칙은 `.agents/rules/`에 있습니다.
 
 ## Pencil / Figma 사용 전제
 

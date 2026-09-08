@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
-import { Coins, Store, WifiOff } from "lucide-react-native";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { useFocusEffect } from "expo-router";
+import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -8,86 +8,135 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { homeSummaryQueryOptions } from "@/features/home/api/queries";
+import { selectUserName, useAuthStore } from "@/features/auth/store";
+import { useBudget } from "@/features/budget/api/queries";
+import { BudgetUnsetBanner } from "@/features/budget/components/BudgetUnsetBanner";
+import type { Budget } from "@/features/budget/model";
+import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { BudgetCard } from "@/features/home/components/BudgetCard";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
-import type { HomeSummary } from "@/features/home/model";
+import { HomeCalendar } from "@/features/home/components/HomeCalendar";
+import { HomeCoach } from "@/features/home/components/HomeCoach";
+import { HomeWallBoard } from "@/features/home/components/HomeWallBoard";
+import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
+import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 
-// TBD: 캐릭터 등록 화면(Pencil '캐릭터 입주중' PGyNo 흐름)의 라우트는 아직 없다. 라우트가 생기면 이 상수만 바꾼다.
-const REGISTER_CHARACTER_ROUTE = "/character/register";
+/** 벽 오브젝트의 팝오버는 한 번에 하나만 연다 — 보드와 캘린더 팝오버가 겹치는 자리에 뜨기 때문이다. */
+type RoomPanel = "board" | "calendar" | null;
 
 function HomeScreen() {
-  const summary = useQuery(homeSummaryQueryOptions());
-  const router = useRouter();
+  const room = useRoom();
+  const month = currentMonthKey();
+  const budget = useBudget(month);
+  const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
+  const [panel, setPanel] = React.useState<RoomPanel>(null);
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6">
-      {summary.isPending ? <HomeSkeleton /> : null}
-      {summary.isError ? (
+      {room.isPending ? <HomeSkeleton /> : null}
+      {room.isError ? (
         <View className="flex-1 px-6 pt-6">
           <EmptyState
             icon={WifiOff}
-            title="정보를 불러오지 못했어요"
+            title="방 정보를 불러오지 못했어요"
             description="연결 상태를 확인한 뒤 다시 시도해 주세요."
-            action={{ label: "다시 시도", onPress: () => summary.refetch(), disabled: summary.isFetching }}
+            action={{ label: "다시 시도", onPress: () => room.refetch(), disabled: room.isFetching }}
           />
         </View>
       ) : null}
-      {summary.isSuccess ? (
-        <HomeContent summary={summary.data} onRegisterPress={() => router.push(REGISTER_CHARACTER_ROUTE)} />
+      {room.isSuccess ? (
+        <>
+          <HomeHeader coinBalance={room.data.coinBalance} />
+          <View className="relative">
+            <CharacterRoom>
+              {(width) => (
+                <>
+                  <HomeWallBoard
+                    width={width}
+                    budget={budget.data}
+                    month={month}
+                    open={panel === "board"}
+                    onOpenChange={(open) => setPanel(open ? "board" : null)}
+                  />
+                  <HomeCalendar width={width} month={month} open={panel === "calendar"} onOpenChange={(open) => setPanel(open ? "calendar" : null)} />
+                  <HomeCoach width={width} />
+                </>
+              )}
+            </CharacterRoom>
+            {attendance.isSuccess && attendance.data.granted > 0 ? <AttendanceToast granted={attendance.data.granted} /> : null}
+          </View>
+          <View className="px-6 pt-6">
+            <BudgetSection budget={budget} month={month} />
+          </View>
+        </>
       ) : null}
     </ScrollView>
   );
 }
 
-type HomeContentProps = {
-  summary: HomeSummary;
-  onRegisterPress: () => void;
+/**
+ * 홈에 들어올 때 당일 첫 출석이면 POST /attendance 를 한 번 부른다 (FR-GAM-03).
+ * 서버 checkedToday 가 1차 방어, 세션 중 재진입은 ref 가 막는다. 실패는 조용히 두지 않고 mutation error 로 남기되 화면은 막지 않는다. (TBD: 실패 문구)
+ */
+function useHomeAttendance(shouldCheckIn: boolean) {
+  const attendance = useCheckAttendance();
+  const requested = React.useRef(false);
+  const { mutate: checkIn } = attendance;
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!shouldCheckIn || requested.current) return;
+      requested.current = true;
+      checkIn();
+    }, [shouldCheckIn, checkIn])
+  );
+
+  return attendance;
+}
+
+type BudgetSectionProps = {
+  budget: UseQueryResult<Budget>;
+  month: string;
 };
 
-function HomeContent({ summary, onRegisterPress }: HomeContentProps) {
-  const hasCharacter = summary.character !== null;
-
-  return (
-    <>
-      <HomeHeader
-        userName={summary.userName}
-        coinBalance={summary.coinBalance}
-        badgeCount={summary.unreadNotificationCount}
-        showCoins={hasCharacter}
+// 예산만 실패해도 방은 그대로 두고 이 영역에서만 재시도한다 (규칙 50 일부 실패 대응).
+function BudgetSection({ budget, month }: BudgetSectionProps) {
+  if (budget.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
+  if (budget.isError) {
+    return (
+      <EmptyState
+        icon={WifiOff}
+        title="예산을 불러오지 못했어요"
+        action={{ label: "다시 시도", onPress: () => budget.refetch(), disabled: budget.isFetching }}
+        className="rounded-xl bg-card"
       />
-      <CharacterRoom character={summary.character} onRegisterPress={onRegisterPress} />
-      {hasCharacter && summary.monthlyBudget ? (
-        <View className="px-6 pt-6">
-          <BudgetCard budget={summary.monthlyBudget} />
-        </View>
-      ) : null}
-    </>
-  );
+    );
+  }
+  if (budget.data.total === null) return <BudgetUnsetBanner month={month} />;
+  return <BudgetCard total={budget.data.total} envelopes={budget.data.envelopes} />;
 }
 
 type HomeHeaderProps = {
-  userName: string;
   coinBalance: number;
-  badgeCount: number;
-  showCoins: boolean;
 };
 
-// Pencil HomeHeader (MVL0x / FDV3H): padding [16,24] · space_between · 좌측 caption+h2 · 우측 HeaderActions gap 8.
-// Pencil 의 빈 방 홈(hcONw)에는 HeaderActions 가 없지만 상점 버튼은 캐릭터 유무와 무관하게 두고, 코인 배지만 캐릭터가 있을 때 보인다. (확인 필요)
-function HomeHeader({ userName, coinBalance, badgeCount, showCoins }: HomeHeaderProps) {
+// Pencil home/p0 (EWfx2) HomeHeader: padding [16,24] · space_between · 좌측 caption+h2 · 우측 코인 배지 + 알림 벨.
+function HomeHeader({ coinBalance }: HomeHeaderProps) {
+  const userName = useAuthStore(selectUserName);
+  const greeting = userName ? `${userName}님, 안녕하세요!` : "안녕하세요!";
+
   return (
     <View className="flex-row items-center justify-between bg-background px-6 py-4">
       <View className="gap-1">
         <Text className="text-caption text-muted-foreground">환영합니다</Text>
         <Text className="text-h2 text-foreground" accessibilityRole="header">
-          {userName}님, 안녕하세요!
+          {greeting}
         </Text>
       </View>
       <View className="flex-row items-center gap-2">
-        {showCoins ? <CoinBadge balance={coinBalance} /> : null}
-        <ShopButton badgeCount={badgeCount} />
+        <CoinBadge balance={coinBalance} />
+        <NotificationButton />
       </View>
     </View>
   );
@@ -107,27 +156,18 @@ function CoinBadge({ balance }: { balance: number }) {
   );
 }
 
-// Pencil NotificationBtn (paMoc): 40pt 원형 bg-accent, 안의 아이콘은 lucide `store`, 우상단 배지 bg-destructive.
-// 레이어 이름은 Notification 이지만 아이콘은 상점이라 상점 버튼으로 구현했다. 배지 수는 미읽음 알림 수를 쓴다. (확인 필요)
-function ShopButton({ badgeCount }: { badgeCount: number }) {
-  const label = badgeCount > 0 ? `상점, 새 소식 ${badgeCount}개` : "상점";
-
+// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide bell. 알림함(PAGE-28)은 P1 이라 진입은 아직 없고 미읽음 배지도 P1 API 다.
+function NotificationButton() {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel="알림"
+      accessibilityState={{ disabled: true }}
+      disabled
       hitSlop={8}
-      className="h-10 w-10 items-center justify-center rounded-full bg-accent active:opacity-70"
+      className="h-10 w-10 items-center justify-center rounded-full bg-accent"
     >
-      <Icon as={Store} size={20} className="text-foreground" />
-      {badgeCount > 0 ? (
-        <View
-          className="absolute -right-0.5 -top-0.5 h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1"
-          accessible={false}
-        >
-          <Text className="text-caption text-white">{badgeCount}</Text>
-        </View>
-      ) : null}
+      <Icon as={Bell} size={20} className="text-foreground" />
     </Pressable>
   );
 }

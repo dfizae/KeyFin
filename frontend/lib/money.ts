@@ -29,6 +29,12 @@ export function normalizeKRW(value: KRW): KRW {
   return fromWon(toWon(value));
 }
 
+/** 서버가 보내는 원 단위 정수(JSON number, 규칙 90)를 KRW 로 바꾼다. 안전 정수가 아니면 InvalidAmountError. */
+export function fromServerWon(value: unknown): KRW {
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new InvalidAmountError();
+  return fromWon(BigInt(value));
+}
+
 export function addKRW(...values: KRW[]): KRW {
   return fromWon(values.reduce((sum, value) => sum + toWon(value), 0n));
 }
