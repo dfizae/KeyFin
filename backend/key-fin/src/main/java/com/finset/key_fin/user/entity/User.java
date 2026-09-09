@@ -1,6 +1,8 @@
 package com.finset.key_fin.user.entity;
 
 import com.finset.key_fin.global.base.BaseEntity;
+import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.user.exception.UserErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -33,24 +35,49 @@ public class User extends BaseEntity {
 	@Column(nullable = false, length = 30)
 	private String name;
 
-	@Column(name = "fin_user_key", nullable = false, length = 60)
+	@Column(name = "fin_user_key", length = 60)
 	private String finUserKey;
 
 	@Column(name = "deleted_at")
 	private LocalDateTime deletedAt;
 
-	private User(String email, String password, String name, String finUserKey) {
+	private User(String email, String password, String name) {
 		this.email = Objects.requireNonNull(email, "email must not be null");
 		this.password = Objects.requireNonNull(password, "password must not be null");
 		this.name = Objects.requireNonNull(name, "name must not be null");
-		this.finUserKey = Objects.requireNonNull(finUserKey, "finUserKey must not be null");
 	}
 
-	public static User create(String email, String password, String name, String finUserKey) {
-		return new User(email, password, name, finUserKey);
+	public static User create(String email, String password, String name) {
+		return new User(email, password, name);
+	}
+
+	public void connectFinance(String finUserKey) {
+		String validatedFinUserKey = validateFinUserKey(finUserKey);
+		if (isFinanceConnected()) {
+			if (this.finUserKey.equals(validatedFinUserKey)) {
+				return;
+			}
+			throw new BusinessException(UserErrorCode.FINANCE_CONNECTION_CONFLICT);
+		}
+
+		this.finUserKey = validatedFinUserKey;
+	}
+
+	public boolean isFinanceConnected() {
+		return finUserKey != null;
 	}
 
 	public boolean isDeleted() {
 		return deletedAt != null;
+	}
+
+	private String validateFinUserKey(String finUserKey) {
+		if (finUserKey == null || finUserKey.isBlank()) {
+			throw new IllegalArgumentException("금융망 사용자 키는 비어 있을 수 없습니다.");
+		}
+		if (finUserKey.length() > 60) {
+			throw new IllegalArgumentException("금융망 사용자 키는 60자를 초과할 수 없습니다.");
+		}
+		return finUserKey;
 	}
 }

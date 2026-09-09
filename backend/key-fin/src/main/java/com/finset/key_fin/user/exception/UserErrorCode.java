@@ -11,7 +11,8 @@ public enum UserErrorCode implements ErrorCode {
 
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_001", "사용자를 찾을 수 없습니다."),
     DUPLICATE_EMAIL(HttpStatus.CONFLICT, "USER_002", "이미 사용 중인 이메일입니다."),
-    DELETED_USER(HttpStatus.FORBIDDEN, "USER_003", "탈퇴한 사용자입니다.");
+	DELETED_USER(HttpStatus.FORBIDDEN, "USER_003", "탈퇴한 사용자입니다."),
+	FINANCE_CONNECTION_CONFLICT(HttpStatus.CONFLICT, "USER_004", "이미 다른 금융망 사용자와 연결되어 있습니다.");
 
     private final HttpStatus httpStatus;
     private final String code;
