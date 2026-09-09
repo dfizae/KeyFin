@@ -1,6 +1,8 @@
 import { FURNITURE } from "@/features/room/catalog";
 import {
+  canvasPointToScene,
   clamp,
+  clampCamera,
   depthIndexAt,
   depthKey,
   getCanvasSize,
@@ -8,6 +10,8 @@ import {
   getSpriteRect,
   hitTestTopmost,
   isPointInPolygon,
+  MAX_ZOOM,
+  MIN_ZOOM,
   pickWaypoint,
   rectContainsPoint,
   rectsIntersect,
@@ -18,6 +22,7 @@ import {
   segmentCrossesRect,
   sortByDepth,
   travelDurationMs,
+  zoomAround,
 } from "@/features/room/model";
 import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintRect, isPlacementValid, resolveDrag } from "@/features/room/scene";
 
@@ -58,6 +63,63 @@ describe("room scene 좌표계", () => {
   });
 });
 
+
+describe("씬 카메라 (확대·이동)", () => {
+  const canvas = getCanvasSize(327); // 327×404
+
+  it("배율은 1~2 로, 평행이동은 방 밖 여백이 안 보이는 범위로 가둔다", () => {
+    expect(clampCamera({ scale: 3, tx: 0, ty: 0 }, canvas).scale).toBe(MAX_ZOOM);
+    expect(clampCamera({ scale: 0.5, tx: 0, ty: 0 }, canvas).scale).toBe(MIN_ZOOM);
+    // 1배에서는 움직일 여지가 없다
+    expect(clampCamera({ scale: 1, tx: 50, ty: -50 }, canvas)).toEqual({ scale: 1, tx: 0, ty: 0 });
+    // 2배에서는 캔버스 한 장만큼(-327, -404) 까지만 밀 수 있다
+    expect(clampCamera({ scale: 2, tx: 10, ty: 10 }, canvas)).toEqual({ scale: 2, tx: 0, ty: 0 });
+    expect(clampCamera({ scale: 2, tx: -400, ty: -500 }, canvas)).toEqual({ scale: 2, tx: -327, ty: -404 });
+    expect(clampCamera({ scale: 2, tx: -100, ty: -200 }, canvas)).toEqual({ scale: 2, tx: -100, ty: -200 });
+  });
+
+  it("핀치 중심으로 확대하면 그 점은 화면에서 제자리에 남는다", () => {
+    const focal = { x: 200, y: 300 };
+    const zoomed = zoomAround({ scale: 1, tx: 0, ty: 0 }, focal, 2);
+    // 화면 좌표 = 씬점 * scale + t 이므로, 중심이 가리키던 씬점을 다시 그리면 같은 화면 좌표가 나온다
+    expect(focal.x * zoomed.scale + zoomed.tx).toBeCloseTo(focal.x);
+    expect(focal.y * zoomed.scale + zoomed.ty).toBeCloseTo(focal.y);
+    expect(zoomed).toEqual({ scale: 2, tx: -200, ty: -300 });
+  });
+
+  it("이미 확대·이동한 상태에서 다시 확대해도 중심은 고정된다", () => {
+    const from = { scale: 1.5, tx: -60, ty: -80 };
+    const focal = { x: 120, y: 140 };
+    const scenePoint = canvasPointToScene(focal, from, 1);
+    const zoomed = zoomAround(from, focal, 2);
+    expect(scenePoint.x * zoomed.scale + zoomed.tx).toBeCloseTo(focal.x);
+    expect(scenePoint.y * zoomed.scale + zoomed.ty).toBeCloseTo(focal.y);
+  });
+
+  it("배율 상한을 넘겨 요청해도 2배에서 멈춘다", () => {
+    expect(zoomAround({ scale: 2, tx: -327, ty: -404 }, { x: 0, y: 0 }, 4).scale).toBe(MAX_ZOOM);
+  });
+
+  it("터치 좌표는 카메라를 되돌려 씬 좌표가 된다", () => {
+    // 1배·이동 없음이면 캔버스 scale 만 되돌린다
+    expect(canvasPointToScene({ x: 327, y: 404 }, { scale: 1, tx: 0, ty: 0 }, 2)).toEqual({ x: 163.5, y: 202 });
+    // 2배로 확대해 왼쪽 위로 민 상태
+    expect(canvasPointToScene({ x: 100, y: 100 }, { scale: 2, tx: -100, ty: -200 }, 1)).toEqual({ x: 100, y: 150 });
+  });
+
+  it("씬 좌표를 그렸다가 되돌리면 원래 좌표가 나온다", () => {
+    const camera = clampCamera({ scale: 1.8, tx: -120, ty: -240 }, canvas);
+    const scenePoint = { x: 160, y: 330 };
+    const sceneScale = getSceneScale(654);
+    const canvasPoint = {
+      x: scenePoint.x * sceneScale * camera.scale + camera.tx,
+      y: scenePoint.y * sceneScale * camera.scale + camera.ty,
+    };
+    const back = canvasPointToScene(canvasPoint, camera, sceneScale);
+    expect(back.x).toBeCloseTo(scenePoint.x);
+    expect(back.y).toBeCloseTo(scenePoint.y);
+  });
+});
 describe("깊이 정렬 (painter's algorithm)", () => {
   const a = { id: "a", anchor: { x: 0, y: 300 } };
   const b = { id: "b", anchor: { x: 0, y: 100 } };

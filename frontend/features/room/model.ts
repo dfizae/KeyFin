@@ -57,6 +57,46 @@ export function sceneRectToCanvas(rect: SceneRect, scale: number): SceneRect {
   return { x: rect.x * scale, y: rect.y * scale, width: rect.width * scale, height: rect.height * scale };
 }
 
+/**
+ * 방 씬 카메라. 화면에 그릴 때 점을 scale 로 키운 뒤 tx·ty 만큼 옮긴다(= [translate, scale] 순서의 변환).
+ * Skia Group 과 RN 오버레이가 같은 값을 읽어 같은 변환을 적용하므로, 배치·저장 좌표는 카메라와 무관하게 씬 단위로 남는다.
+ */
+export type Camera = { scale: number; tx: number; ty: number };
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 2;
+
+/** 확대해도 방 바깥(캔버스 밖 여백)이 드러나지 않도록 배율과 평행이동을 가둔다. */
+export function clampCamera(camera: Camera, canvas: SceneSize): Camera {
+  "worklet";
+  const scale = clamp(camera.scale, MIN_ZOOM, MAX_ZOOM);
+  return {
+    scale,
+    tx: clamp(camera.tx, canvas.width * (1 - scale), 0),
+    ty: clamp(camera.ty, canvas.height * (1 - scale), 0),
+  };
+}
+
+/** 캔버스의 한 점(핀치 중심)을 제자리에 둔 채 배율만 바꾼다. 가둔 결과가 아니므로 clampCamera 와 함께 쓴다. */
+export function zoomAround(camera: Camera, focal: ScenePoint, nextScale: number): Camera {
+  "worklet";
+  const scale = clamp(nextScale, MIN_ZOOM, MAX_ZOOM);
+  const ratio = scale / camera.scale;
+  return {
+    scale,
+    tx: focal.x - (focal.x - camera.tx) * ratio,
+    ty: focal.y - (focal.y - camera.ty) * ratio,
+  };
+}
+
+/** 캔버스 픽셀 좌표(터치 지점)를 카메라를 되돌려 씬 좌표로 바꾼다. sceneRectToCanvas 의 역방향이다. */
+export function canvasPointToScene(point: ScenePoint, camera: Camera, sceneScale: number): ScenePoint {
+  "worklet";
+  return {
+    x: (point.x - camera.tx) / (camera.scale * sceneScale),
+    y: (point.y - camera.ty) / (camera.scale * sceneScale),
+  };
+}
+
 /** 깊이 정렬 키. 작을수록 먼저(뒤에) 그린다. */
 export function depthKey(entity: DepthEntity): number {
   "worklet";
