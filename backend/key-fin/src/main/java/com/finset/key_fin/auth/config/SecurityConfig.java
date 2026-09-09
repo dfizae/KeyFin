@@ -24,6 +24,11 @@ public class SecurityConfig {
 			"/api/v1/auth/login",
 			"/api/v1/auth/refresh"
 	};
+	private static final String[] SWAGGER_ENDPOINTS = {
+			"/v3/api-docs/**",
+			"/swagger-ui/**",
+			"/swagger-ui.html"
+	};
 
 	@Bean
 	public SecurityFilterChain securityFilterChain(
@@ -43,6 +48,7 @@ public class SecurityConfig {
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.POST, PUBLIC_AUTH_ENDPOINTS).permitAll()
+						.requestMatchers(SWAGGER_ENDPOINTS).permitAll()
 						.requestMatchers("/error").permitAll()
 						.anyRequest().authenticated())
 				.exceptionHandling(exception -> exception

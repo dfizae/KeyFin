@@ -111,6 +111,19 @@ class JwtAuthenticationFilterTest {
 		verify(jwtTokenProvider, never()).getUserId(any(), any());
 	}
 
+	@Test
+	void skipsFilterForSwaggerEndpoint() throws Exception {
+		MockHttpServletRequest request = new MockHttpServletRequest("GET", "/v3/api-docs");
+		request.setServletPath("/v3/api-docs");
+		request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer invalid-token");
+		MockHttpServletResponse response = new MockHttpServletResponse();
+
+		filter.doFilter(request, response, filterChain);
+
+		verify(filterChain).doFilter(request, response);
+		verify(jwtTokenProvider, never()).getUserId(any(), any());
+	}
+
 	private MockHttpServletRequest requestWithBearerToken(String token) {
 		MockHttpServletRequest request = new MockHttpServletRequest();
 		request.addHeader(HttpHeaders.AUTHORIZATION, "Bearer " + token);

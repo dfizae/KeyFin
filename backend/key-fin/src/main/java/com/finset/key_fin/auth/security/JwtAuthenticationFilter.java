@@ -47,8 +47,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 		if (HttpMethod.OPTIONS.matches(request.getMethod())) {
 			return true;
 		}
+		String servletPath = request.getServletPath();
+		if (servletPath.startsWith("/v3/api-docs")
+				|| servletPath.startsWith("/swagger-ui")) {
+			return true;
+		}
 		return HttpMethod.POST.matches(request.getMethod())
-				&& PUBLIC_AUTH_ENDPOINTS.contains(request.getServletPath());
+				&& PUBLIC_AUTH_ENDPOINTS.contains(servletPath);
 	}
 
 	@Override
