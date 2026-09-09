@@ -10,6 +10,7 @@ import com.finset.key_fin.auth.service.AuthService;
 import com.finset.key_fin.global.base.BaseResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -44,5 +45,12 @@ public class AuthController implements AuthControllerDocs {
 			@Valid @RequestBody RefreshTokenRequest request
 	) {
 		return BaseResponse.ok(authService.refresh(request));
+	}
+
+	@PostMapping("/logout")
+	@Override
+	public BaseResponse<Void> logout(@AuthenticationPrincipal Long userId) {
+		authService.logout(userId);
+		return BaseResponse.ok();
 	}
 }

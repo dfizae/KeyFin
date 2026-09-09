@@ -83,6 +83,10 @@ public class AuthService {
 		return new AccessTokenResponse(jwtTokenProvider.generateAccessToken(userId));
 	}
 
+	public void logout(long userId) {
+		refreshTokenRepository.delete(userId);
+	}
+
 	private long getRefreshTokenUserId(String refreshToken) {
 		try {
 			return jwtTokenProvider.getUserId(refreshToken, TokenType.REFRESH);

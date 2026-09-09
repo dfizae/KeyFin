@@ -13,6 +13,7 @@ import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
@@ -178,4 +179,37 @@ public interface AuthControllerDocs {
 			)
 			RefreshTokenRequest request
 	);
+
+	@Operation(
+			summary = "로그아웃",
+			description = "인증된 사용자의 Redis Refresh Token을 삭제하여 추가 토큰 재발급을 차단합니다. "
+					+ "이미 발급된 Access Token은 남은 유효시간 동안 사용할 수 있습니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "로그아웃 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "로그아웃 성공",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":null}"
+							)
+					)
+			),
+			@ApiResponse(
+					responseCode = "401",
+					description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(value = "{\"success\":false,\"code\":\"AUTH_002\",\"message\":\"유효하지 않은 토큰입니다.\",\"data\":null}")
+					)
+			),
+			@ApiResponse(responseCode = "405", description = "지원하지 않는 HTTP 메서드", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<Void> logout(Long userId);
 }

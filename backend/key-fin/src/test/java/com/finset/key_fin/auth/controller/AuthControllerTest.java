@@ -11,6 +11,9 @@ import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -31,6 +34,7 @@ class AuthControllerTest {
 		authService = mock(AuthService.class);
 		mockMvc = standaloneSetup(new AuthController(authService))
 				.setControllerAdvice(new GlobalExceptionHandler())
+				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
 				.build();
 	}
 
@@ -89,6 +93,24 @@ class AuthControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.accessToken").value("new-access-token"));
+	}
+
+	@Test
+	void logsOutAuthenticatedUser() throws Exception {
+		UsernamePasswordAuthenticationToken authentication =
+				UsernamePasswordAuthenticationToken.authenticated(1L, null, java.util.List.of());
+		SecurityContextHolder.getContext().setAuthentication(authentication);
+
+		try {
+			mockMvc.perform(post("/api/v1/auth/logout"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.success").value(true))
+					.andExpect(jsonPath("$.data").doesNotExist());
+		} finally {
+			SecurityContextHolder.clearContext();
+		}
+
+		org.mockito.Mockito.verify(authService).logout(1L);
 	}
 
 	@Test

@@ -157,6 +157,13 @@ class AuthServiceTest {
 	}
 
 	@Test
+	void logsOutByDeletingStoredRefreshToken() {
+		authService.logout(USER_ID);
+
+		verify(refreshTokenRepository).delete(USER_ID);
+	}
+
+	@Test
 	void rejectsRefreshTokenThatDoesNotMatchRedis() {
 		when(jwtTokenProvider.getUserId(REFRESH_TOKEN, TokenType.REFRESH)).thenReturn(USER_ID);
 		when(refreshTokenRepository.matches(USER_ID, REFRESH_TOKEN)).thenReturn(false);

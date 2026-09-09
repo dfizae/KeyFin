@@ -31,6 +31,9 @@ class SwaggerDocumentationTest {
 				.andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['200']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/auth/login'].post.responses['401']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/auth/refresh'].post.summary").value("Access Token 재발급"))
-				.andExpect(jsonPath("$.paths['/api/v1/auth/refresh'].post.responses['401']").exists());
+				.andExpect(jsonPath("$.paths['/api/v1/auth/refresh'].post.responses['401']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.summary").value("로그아웃"))
+				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.responses['401']").exists());
 	}
 }
