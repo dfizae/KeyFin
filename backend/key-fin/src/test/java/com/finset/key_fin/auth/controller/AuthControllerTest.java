@@ -2,8 +2,10 @@ package com.finset.key_fin.auth.controller;
 
 import com.finset.key_fin.auth.dto.request.LoginRequest;
 import com.finset.key_fin.auth.dto.request.RefreshTokenRequest;
+import com.finset.key_fin.auth.dto.request.SignupRequest;
 import com.finset.key_fin.auth.dto.response.AccessTokenResponse;
 import com.finset.key_fin.auth.dto.response.LoginResponse;
+import com.finset.key_fin.auth.dto.response.SignupResponse;
 import com.finset.key_fin.auth.service.AuthService;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +32,29 @@ class AuthControllerTest {
 		mockMvc = standaloneSetup(new AuthController(authService))
 				.setControllerAdvice(new GlobalExceptionHandler())
 				.build();
+	}
+
+	@Test
+	void createsUserOnSignup() throws Exception {
+		when(authService.signup(any(SignupRequest.class))).thenReturn(new SignupResponse(1L));
+
+		mockMvc.perform(post("/api/v1/auth/signup")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"email":"kim@ssafy.io","password":"P@ssw0rd!","name":"김싸피"}
+								"""))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.userId").value(1));
+	}
+
+	@Test
+	void rejectsInvalidSignupInput() throws Exception {
+		mockMvc.perform(post("/api/v1/auth/signup")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"email\":\"invalid-email\",\"password\":\"\",\"name\":\"\"}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 
 	@Test

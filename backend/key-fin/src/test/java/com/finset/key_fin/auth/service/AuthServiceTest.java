@@ -2,15 +2,22 @@ package com.finset.key_fin.auth.service;
 
 import com.finset.key_fin.auth.dto.request.LoginRequest;
 import com.finset.key_fin.auth.dto.request.RefreshTokenRequest;
+import com.finset.key_fin.auth.dto.request.SignupRequest;
 import com.finset.key_fin.auth.dto.response.AccessTokenResponse;
 import com.finset.key_fin.auth.dto.response.LoginResponse;
+import com.finset.key_fin.auth.dto.response.SignupResponse;
 import com.finset.key_fin.auth.exception.AuthErrorCode;
 import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.auth.jwt.TokenType;
 import com.finset.key_fin.auth.repository.RefreshTokenRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.entity.User;
+import com.finset.key_fin.user.entity.UserProfile;
+import com.finset.key_fin.user.entity.UserSettings;
+import com.finset.key_fin.user.exception.UserErrorCode;
+import com.finset.key_fin.user.repository.UserProfileRepository;
 import com.finset.key_fin.user.repository.UserRepository;
+import com.finset.key_fin.user.repository.UserSettingsRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +41,8 @@ class AuthServiceTest {
 	private static final String REFRESH_TOKEN = "refresh-token";
 
 	private UserRepository userRepository;
+	private UserProfileRepository userProfileRepository;
+	private UserSettingsRepository userSettingsRepository;
 	private PasswordEncoder passwordEncoder;
 	private JwtTokenProvider jwtTokenProvider;
 	private RefreshTokenRepository refreshTokenRepository;
@@ -42,15 +51,55 @@ class AuthServiceTest {
 	@BeforeEach
 	void setUp() {
 		userRepository = mock(UserRepository.class);
+		userProfileRepository = mock(UserProfileRepository.class);
+		userSettingsRepository = mock(UserSettingsRepository.class);
 		passwordEncoder = mock(PasswordEncoder.class);
 		jwtTokenProvider = mock(JwtTokenProvider.class);
 		refreshTokenRepository = mock(RefreshTokenRepository.class);
 		authService = new AuthService(
 				userRepository,
+				userProfileRepository,
+				userSettingsRepository,
 				passwordEncoder,
 				jwtTokenProvider,
 				refreshTokenRepository
 		);
+	}
+
+	@Test
+	void signsUpUserWithProfileAndSettings() {
+		User savedUser = mock(User.class);
+		when(savedUser.getId()).thenReturn(USER_ID);
+		when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.empty());
+		when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(ENCODED_PASSWORD);
+		when(userRepository.save(org.mockito.ArgumentMatchers.any(User.class))).thenReturn(savedUser);
+
+		SignupResponse response = authService.signup(new SignupRequest(EMAIL, RAW_PASSWORD, "김싸피"));
+
+		assertThat(response.userId()).isEqualTo(USER_ID);
+		verify(passwordEncoder).encode(RAW_PASSWORD);
+		verify(userProfileRepository).save(org.mockito.ArgumentMatchers.any(UserProfile.class));
+		verify(userSettingsRepository).save(org.mockito.ArgumentMatchers.any(UserSettings.class));
+	}
+
+	@Test
+	void rejectsAlreadyRegisteredEmail() {
+		User existingUser = mock(User.class);
+		when(existingUser.isDeleted()).thenReturn(false);
+		when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(existingUser));
+
+		assertSignupError(UserErrorCode.DUPLICATE_EMAIL);
+		verify(passwordEncoder, never()).encode(RAW_PASSWORD);
+	}
+
+	@Test
+	void rejectsDeletedEmailRegistration() {
+		User deletedUser = mock(User.class);
+		when(deletedUser.isDeleted()).thenReturn(true);
+		when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(deletedUser));
+
+		assertSignupError(UserErrorCode.DELETED_USER);
+		verify(passwordEncoder, never()).encode(RAW_PASSWORD);
 	}
 
 	@Test
@@ -148,5 +197,12 @@ class AuthServiceTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting(exception -> ((BusinessException) exception).getErrorCode())
 				.isEqualTo(AuthErrorCode.INVALID_REFRESH_TOKEN);
+	}
+
+	private void assertSignupError(UserErrorCode errorCode) {
+		assertThatThrownBy(() -> authService.signup(new SignupRequest(EMAIL, RAW_PASSWORD, "김싸피")))
+				.isInstanceOf(BusinessException.class)
+				.extracting(exception -> ((BusinessException) exception).getErrorCode())
+				.isEqualTo(errorCode);
 	}
 }

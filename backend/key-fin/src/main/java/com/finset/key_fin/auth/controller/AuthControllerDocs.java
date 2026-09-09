@@ -2,8 +2,10 @@ package com.finset.key_fin.auth.controller;
 
 import com.finset.key_fin.auth.dto.request.LoginRequest;
 import com.finset.key_fin.auth.dto.request.RefreshTokenRequest;
+import com.finset.key_fin.auth.dto.request.SignupRequest;
 import com.finset.key_fin.auth.dto.response.AccessTokenResponse;
 import com.finset.key_fin.auth.dto.response.LoginResponse;
+import com.finset.key_fin.auth.dto.response.SignupResponse;
 import com.finset.key_fin.global.base.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -17,9 +19,63 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 @Tag(
 		name = "인증",
-		description = "회원가입, 로그인 및 토큰 재발급 API입니다. 로그인과 재발급에는 Bearer 인증이 필요하지 않습니다."
+		description = "회원가입, 로그인 및 토큰 재발급 API입니다. 세 API 모두 Bearer 인증이 필요하지 않습니다."
 )
 public interface AuthControllerDocs {
+
+	@Operation(
+			summary = "회원가입",
+			description = "KeyFin 사용자를 생성하고 프로필과 설정 기본행을 초기화합니다. "
+					+ "금융망 연결과 기본 아이템 지급은 별도 과정에서 처리합니다. 탈퇴 이력이 있는 이메일은 다시 가입할 수 없습니다."
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "201",
+					description = "회원가입 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "회원가입 성공",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"userId\":1}}"
+							)
+					)
+			),
+			@ApiResponse(
+					responseCode = "400",
+					description = "입력값 오류 또는 읽을 수 없는 요청 본문",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = {
+									@ExampleObject(name = "입력값 오류", value = "{\"success\":false,\"code\":\"COMMON_001\",\"message\":\"입력값이 올바르지 않습니다.\",\"data\":null}"),
+									@ExampleObject(name = "요청 본문 오류", value = "{\"success\":false,\"code\":\"COMMON_002\",\"message\":\"요청 본문을 읽을 수 없습니다.\",\"data\":null}")
+							}
+					)
+			),
+			@ApiResponse(
+					responseCode = "409",
+					description = "이미 가입했거나 탈퇴 이력이 있는 이메일",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = {
+									@ExampleObject(name = "이메일 중복", value = "{\"success\":false,\"code\":\"USER_002\",\"message\":\"이미 사용 중인 이메일입니다.\",\"data\":null}"),
+									@ExampleObject(name = "탈퇴 이메일", value = "{\"success\":false,\"code\":\"USER_003\",\"message\":\"탈퇴한 이메일은 다시 가입할 수 없습니다.\",\"data\":null}")
+							}
+					)
+			),
+			@ApiResponse(responseCode = "405", description = "지원하지 않는 HTTP 메서드", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "415", description = "지원하지 않는 미디어 타입", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<SignupResponse> signup(
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(
+					description = "가입 이메일, 비밀번호 및 사용자 이름",
+					required = true
+			)
+			SignupRequest request
+	);
 
 	@Operation(
 			summary = "로그인",
