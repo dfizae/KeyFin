@@ -4,9 +4,11 @@ import com.finset.key_fin.global.base.BaseResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
@@ -16,50 +18,69 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
-	@ExceptionHandler(BusinessException.class)
-	public ResponseEntity<BaseResponse<Void>> handleBusinessException(BusinessException exception) {
-		ErrorCode errorCode = exception.getErrorCode();
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<BaseResponse<Void>> handleBusinessException(BusinessException exception) {
+        ErrorCode errorCode = exception.getErrorCode();
 
-		if (errorCode.getHttpStatus().is5xxServerError()) {
-			log.error("Business failure: code={}", errorCode.getCode(), exception);
-		} else {
-			log.warn("Business failure: code={}", errorCode.getCode());
-		}
+        if (errorCode.getHttpStatus().is5xxServerError()) {
+            log.error("Business failure: code={}", errorCode.getCode(), exception);
+        } else {
+            log.warn("Business failure: code={}", errorCode.getCode());
+        }
 
-		return ResponseEntity.status(errorCode.getHttpStatus())
-				.body(BaseResponse.fail(errorCode.getCode(), errorCode.getMessage()));
-	}
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(toBody(errorCode));
+    }
 
-	@Override
-	protected @Nullable ResponseEntity<Object> handleExceptionInternal(
-			Exception exception,
-			@Nullable Object body,
-			HttpHeaders headers,
-			HttpStatusCode statusCode,
-			WebRequest request
-	) {
-		if (statusCode.is5xxServerError()) {
-			log.error("MVC failure: status={}", statusCode.value(), exception);
-		}
+    @Override
+    protected @Nullable ResponseEntity<Object> handleExceptionInternal(
+            Exception exception,
+            @Nullable Object body,
+            HttpHeaders headers,
+            HttpStatusCode statusCode,
+            WebRequest request
+    ) {
+        if (statusCode.is5xxServerError()) {
+            log.error("MVC failure: status={}", statusCode.value(), exception);
+        }
 
-		// Spring MVC가 정한 상태와 헤더, 이미 전송된 응답에 대한 처리를 유지한다.
-		return super.handleExceptionInternal(
-				exception, toBody(statusCode), headers, statusCode, request
-		);
-	}
+        ErrorCode errorCode = resolveCommonErrorCode(exception, statusCode);
 
-	@ExceptionHandler(Exception.class)
-	public ResponseEntity<BaseResponse<Void>> handleUnexpectedException(Exception exception) {
-		log.error("Unhandled exception", exception);
+        // Spring MVC가 정한 상태와 헤더, 이미 전송된 응답에 대한 처리를 유지한다.
+        return super.handleExceptionInternal(
+                exception, toBody(errorCode), headers, statusCode, request
+        );
+    }
 
-		return ResponseEntity.internalServerError()
-				.body(toBody(HttpStatus.INTERNAL_SERVER_ERROR));
-	}
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<BaseResponse<Void>> handleUnexpectedException(Exception exception) {
+        log.error("Unhandled exception", exception);
 
-	private BaseResponse<Void> toBody(HttpStatusCode statusCode) {
-		String message = statusCode.is5xxServerError()
-				? "서버 내부 오류가 발생했습니다."
-				: "요청을 처리할 수 없습니다.";
-		return BaseResponse.fail("HTTP_" + statusCode.value(), message);
-	}
+        CommonErrorCode errorCode = CommonErrorCode.INTERNAL_SERVER_ERROR;
+        return ResponseEntity.status(errorCode.getHttpStatus())
+                .body(toBody(errorCode));
+    }
+
+    private ErrorCode resolveCommonErrorCode(Exception exception, HttpStatusCode statusCode) {
+        if (exception instanceof HttpMessageNotReadableException) {
+            return CommonErrorCode.MESSAGE_NOT_READABLE;
+        }
+        if (exception instanceof HttpRequestMethodNotSupportedException) {
+            return CommonErrorCode.METHOD_NOT_ALLOWED;
+        }
+        if (exception instanceof HttpMediaTypeNotSupportedException) {
+            return CommonErrorCode.UNSUPPORTED_MEDIA_TYPE;
+        }
+        if (statusCode.value() == 400) {
+            return CommonErrorCode.INVALID_INPUT_VALUE;
+        }
+        if (statusCode.is5xxServerError()) {
+            return CommonErrorCode.INTERNAL_SERVER_ERROR;
+        }
+        return CommonErrorCode.REQUEST_FAILED;
+    }
+
+    private BaseResponse<Void> toBody(ErrorCode errorCode) {
+        return BaseResponse.fail(errorCode.getCode(), errorCode.getMessage());
+    }
 }
