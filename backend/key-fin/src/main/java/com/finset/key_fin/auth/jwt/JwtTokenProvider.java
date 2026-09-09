@@ -21,6 +21,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
@@ -70,6 +71,7 @@ public class JwtTokenProvider {
 		Instant issuedAt = clock.instant();
 		Instant expiresAt = issuedAt.plus(expiration);
 		JWTClaimsSet claims = new JWTClaimsSet.Builder()
+				.jwtID(UUID.randomUUID().toString())
 				.issuer(ISSUER)
 				.subject(Long.toString(userId))
 				.issueTime(Date.from(issuedAt))

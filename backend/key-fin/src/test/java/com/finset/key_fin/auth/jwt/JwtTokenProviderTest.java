@@ -49,8 +49,17 @@ class JwtTokenProviderTest {
 		String token = tokenProvider.generateRefreshToken(USER_ID);
 
 		JWTClaimsSet claims = SignedJWT.parse(token).getJWTClaimsSet();
+		assertThat(claims.getJWTID()).isNotBlank();
 		assertThat(claims.getStringClaim("token_type")).isEqualTo("REFRESH");
 		assertThat(claims.getExpirationTime().toInstant()).isEqualTo(NOW.plus(Duration.ofDays(14)));
+	}
+
+	@Test
+	void generatesUniqueRefreshTokensAtSameInstant() {
+		String firstToken = tokenProvider.generateRefreshToken(USER_ID);
+		String secondToken = tokenProvider.generateRefreshToken(USER_ID);
+
+		assertThat(firstToken).isNotEqualTo(secondToken);
 	}
 
 	@Test
