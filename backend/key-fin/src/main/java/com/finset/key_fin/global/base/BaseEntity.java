@@ -18,8 +18,4 @@ public abstract class BaseEntity {
 	@Generated(event = EventType.INSERT)
 	@Column(name = "created_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime createdAt;
-
-	@Generated(event = {EventType.INSERT, EventType.UPDATE})
-	@Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
-	private LocalDateTime updatedAt;
 }
