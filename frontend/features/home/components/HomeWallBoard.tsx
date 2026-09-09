@@ -10,29 +10,37 @@ type HomeWallBoardProps = {
   budget: Budget | undefined;
   /** "YYYYMM" */
   month: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  onOpen: () => void;
 };
 
-/** 방 벽의 보드 에셋과, 탭했을 때 열리는 봉투별 잔액 팝오버 (FR-BGT-04). 열림 상태는 벽 오브젝트끼리 하나만 열리도록 홈이 갖는다. */
-function HomeWallBoard({ width, budget, month, open, onOpenChange }: HomeWallBoardProps) {
+/** 방 벽의 보드 에셋 (FR-BGT-04). 방 안의 오브젝트라 카메라를 따라 함께 확대·이동한다. */
+function HomeWallBoard({ width, budget, month, onOpen }: HomeWallBoardProps) {
   if (!budget) return null;
 
-  const monthLabel = formatMonthKeyLabel(month);
-
   return (
-    <>
-      <WallBoard
-        width={width}
-        monthLabel={monthLabel}
-        remainingRate={budget.total?.remainingRate ?? null}
-        chips={budget.envelopes.map(envelopeHealth)}
-        onPress={() => onOpenChange(true)}
-      />
-      {open ? <BoardPopover width={width} budget={budget} monthLabel={monthLabel} onClose={() => onOpenChange(false)} /> : null}
-    </>
+    <WallBoard
+      width={width}
+      monthLabel={formatMonthKeyLabel(month)}
+      remainingRate={budget.total?.remainingRate ?? null}
+      chips={budget.envelopes.map(envelopeHealth)}
+      onPress={onOpen}
+    />
   );
 }
 
-export { HomeWallBoard };
-export type { HomeWallBoardProps };
+type HomeBoardPanelProps = {
+  width: number;
+  budget: Budget | undefined;
+  month: string;
+  onClose: () => void;
+};
+
+/** 보드를 탭했을 때 열리는 봉투별 잔액 팝오버. 카메라 밖 레이어라 확대 배율과 무관하게 그려진다. */
+function HomeBoardPanel({ width, budget, month, onClose }: HomeBoardPanelProps) {
+  if (!budget) return null;
+
+  return <BoardPopover width={width} budget={budget} monthLabel={formatMonthKeyLabel(month)} onClose={onClose} />;
+}
+
+export { HomeBoardPanel, HomeWallBoard };
+export type { HomeBoardPanelProps, HomeWallBoardProps };

@@ -6,8 +6,10 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { CHARACTER_IDLE, ROOM_FLOOR } from "@/features/room/assets";
+import { readCamera, useRoomCamera } from "@/features/room/camera";
 import { FURNITURE, type FurnitureId, type FurnitureItem } from "@/features/room/catalog";
 import {
+  canvasPointToScene,
   depthIndexAt,
   depthKey,
   getCanvasSize,
@@ -27,6 +29,7 @@ import { getColors } from "@/lib/theme";
 // 바닥 1장 + 가구를 발끝 y 기준 painter's algorithm 으로 그리고, 캐릭터는 정렬된 가구 사이에 끼운다.
 // 캐릭터는 매 프레임 움직이므로 JSX 를 재정렬하는 대신 캐릭터가 들어갈 위치(depthIndex)만 워크릿에서 계산해
 // 그 값이 바뀔 때만 React 상태를 갱신한다(가구 경계를 넘을 때만 리렌더).
+// 확대·이동: RoomView 가 가진 카메라(셰어드 값)를 최상위 Group transform 으로 걸어 씬을 통째로 옮긴다. 원본을 다시 그리므로 확대해도 선명하다.
 // 편집 모드: 캔버스 위 Pan 제스처로 가구를 끌어 옮긴다. 끌리는 가구는 맨 앞에 그리고 위치는 셰어드 값으로 따라가며,
 // 손을 떼면 스토어(draft)에 반영되고 정렬이 다시 계산된다.
 
@@ -40,9 +43,11 @@ type RoomSceneProps = {
 function RoomScene({ width }: RoomSceneProps) {
   const { height } = getCanvasSize(width);
   const scale = getSceneScale(width);
+  const camera = useRoomCamera();
   const floor = useImage(ROOM_FLOOR);
   const { colorScheme } = useColorScheme();
   const themeColors = getColors(colorScheme);
+  const cameraTransform = useDerivedValue(() => [{ translateX: camera.tx.value }, { translateY: camera.ty.value }, { scale: camera.scale.value }]);
 
   const placements = useRoomStore(selectPlacements);
   const isEditing = useRoomStore(selectIsEditing);
@@ -86,7 +91,7 @@ function RoomScene({ width }: RoomSceneProps) {
         .runOnJS(true)
         .minDistance(0)
         .onBegin((event) => {
-          const point = { x: event.x / scale, y: event.y / scale };
+          const point = canvasPointToScene({ x: event.x, y: event.y }, readCamera(camera), scale);
           const targets = sorted.map((p) => ({ id: p.itemId, rect: getSpriteRect(p.anchor, p.item.size, p.item.anchor) }));
           const id = hitTestTopmost(point, targets);
           select(id);
@@ -104,10 +109,11 @@ function RoomScene({ width }: RoomSceneProps) {
         .onUpdate((event) => {
           const start = dragStart.current;
           if (!start) return;
+          const dragScale = scale * camera.scale.value;
           const next = resolveDrag(
             { item: FURNITURE[start.id], otherFootprints: start.others },
             start.from,
-            { x: event.translationX / scale, y: event.translationY / scale }
+            { x: event.translationX / dragScale, y: event.translationY / dragScale }
           );
           dragX.value = next.x;
           dragY.value = next.y;
@@ -119,7 +125,7 @@ function RoomScene({ width }: RoomSceneProps) {
           dragStart.current = null;
           setDraggingId(null);
         }),
-    [isEditing, scale, sorted, select, moveItem, dragX, dragY]
+    [isEditing, scale, camera, sorted, select, moveItem, dragX, dragY]
   );
 
   React.useEffect(() => {
@@ -136,17 +142,19 @@ function RoomScene({ width }: RoomSceneProps) {
     <GestureDetector gesture={pan}>
       <View style={{ width, height }} collapsable={false}>
         <Canvas style={{ width, height }}>
-          {floor ? <SkiaImage image={floor} x={0} y={0} width={width} height={height} fit="cover" /> : null}
-          {behind.map((placed) => (
-            <FurnitureSprite key={placed.itemId} placed={placed} scale={scale} highlighted={placed.itemId === highlightId} ringColor={themeColors.primary} />
-          ))}
-          <CharacterSprite walker={walker} scale={scale} />
-          {inFront.map((placed) => (
-            <FurnitureSprite key={placed.itemId} placed={placed} scale={scale} highlighted={placed.itemId === highlightId} ringColor={themeColors.primary} />
-          ))}
-          {dragging ? (
-            <DraggingSprite placed={dragging} scale={scale} anchorX={dragX} anchorY={dragY} ringColor={themeColors.primary} />
-          ) : null}
+          <Group transform={cameraTransform}>
+            {floor ? <SkiaImage image={floor} x={0} y={0} width={width} height={height} fit="cover" /> : null}
+            {behind.map((placed) => (
+              <FurnitureSprite key={placed.itemId} placed={placed} scale={scale} highlighted={placed.itemId === highlightId} ringColor={themeColors.primary} />
+            ))}
+            <CharacterSprite walker={walker} scale={scale} />
+            {inFront.map((placed) => (
+              <FurnitureSprite key={placed.itemId} placed={placed} scale={scale} highlighted={placed.itemId === highlightId} ringColor={themeColors.primary} />
+            ))}
+            {dragging ? (
+              <DraggingSprite placed={dragging} scale={scale} anchorX={dragX} anchorY={dragY} ringColor={themeColors.primary} />
+            ) : null}
+          </Group>
         </Canvas>
       </View>
     </GestureDetector>

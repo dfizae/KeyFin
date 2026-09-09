@@ -15,9 +15,9 @@ import type { Budget } from "@/features/budget/model";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { BudgetCard } from "@/features/home/components/BudgetCard";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
-import { HomeCalendar } from "@/features/home/components/HomeCalendar";
+import { HomeCalendar, HomeCalendarPanel } from "@/features/home/components/HomeCalendar";
 import { HomeCoach } from "@/features/home/components/HomeCoach";
-import { HomeWallBoard } from "@/features/home/components/HomeWallBoard";
+import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
@@ -31,9 +31,11 @@ function HomeScreen() {
   const budget = useBudget(month);
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
+  // 확대 중에는 방을 끌어 움직이므로 홈의 세로 스크롤을 잠근다.
+  const [roomZoomed, setRoomZoomed] = React.useState(false);
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6">
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6" scrollEnabled={!roomZoomed}>
       {room.isPending ? <HomeSkeleton /> : null}
       {room.isError ? (
         <View className="flex-1 px-6 pt-6">
@@ -49,21 +51,23 @@ function HomeScreen() {
         <>
           <HomeHeader coinBalance={room.data.coinBalance} />
           <View className="relative">
-            <CharacterRoom>
-              {(width) => (
+            <CharacterRoom
+              locked={panel !== null}
+              onZoomedChange={setRoomZoomed}
+              sceneObjects={(width) => (
                 <>
-                  <HomeWallBoard
-                    width={width}
-                    budget={budget.data}
-                    month={month}
-                    open={panel === "board"}
-                    onOpenChange={(open) => setPanel(open ? "board" : null)}
-                  />
-                  <HomeCalendar width={width} month={month} open={panel === "calendar"} onOpenChange={(open) => setPanel(open ? "calendar" : null)} />
+                  <HomeWallBoard width={width} budget={budget.data} month={month} onOpen={() => setPanel("board")} />
+                  <HomeCalendar width={width} month={month} onOpen={() => setPanel("calendar")} />
+                </>
+              )}
+              panels={(width) => (
+                <>
+                  {panel === "board" ? <HomeBoardPanel width={width} budget={budget.data} month={month} onClose={() => setPanel(null)} /> : null}
+                  {panel === "calendar" ? <HomeCalendarPanel width={width} month={month} onClose={() => setPanel(null)} /> : null}
                   <HomeCoach width={width} />
                 </>
               )}
-            </CharacterRoom>
+            />
             {attendance.isSuccess && attendance.data.granted > 0 ? <AttendanceToast granted={attendance.data.granted} /> : null}
           </View>
           <View className="px-6 pt-6">
