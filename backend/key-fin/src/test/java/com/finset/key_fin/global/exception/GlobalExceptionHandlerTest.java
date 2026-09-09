@@ -88,15 +88,15 @@ class GlobalExceptionHandlerTest {
 						.content("{\"name\":\"\"}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.success").value(false))
-				.andExpect(jsonPath("$.code").value("HTTP_400"))
-				.andExpect(jsonPath("$.message").value("요청을 처리할 수 없습니다."));
+				.andExpect(jsonPath("$.code").value("COMMON_001"))
+				.andExpect(jsonPath("$.message").value("입력값이 올바르지 않습니다."));
 	}
 
 	@Test
 	void rejectsInvalidMethodParameter() throws Exception {
 		mockMvc.perform(get("/test/parameter").param("count", "0"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("HTTP_400"));
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 
 	@Test
@@ -105,8 +105,8 @@ class GlobalExceptionHandlerTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"name\":"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("HTTP_400"))
-				.andExpect(jsonPath("$.message").value("요청을 처리할 수 없습니다."));
+				.andExpect(jsonPath("$.code").value("COMMON_002"))
+				.andExpect(jsonPath("$.message").value("요청 본문을 읽을 수 없습니다."));
 	}
 
 	@Test
@@ -114,8 +114,8 @@ class GlobalExceptionHandlerTest {
 		mockMvc.perform(post("/test/success"))
 				.andExpect(status().isMethodNotAllowed())
 				.andExpect(header().string(HttpHeaders.ALLOW, containsString("GET")))
-				.andExpect(jsonPath("$.code").value("HTTP_405"))
-				.andExpect(jsonPath("$.message").value("요청을 처리할 수 없습니다."));
+				.andExpect(jsonPath("$.code").value("COMMON_003"))
+				.andExpect(jsonPath("$.message").value("지원하지 않는 HTTP 메서드입니다."));
 	}
 
 	@Test
@@ -124,14 +124,14 @@ class GlobalExceptionHandlerTest {
 						.contentType(MediaType.TEXT_PLAIN)
 						.content("name"))
 				.andExpect(status().isUnsupportedMediaType())
-				.andExpect(jsonPath("$.code").value("HTTP_415"));
+				.andExpect(jsonPath("$.code").value("COMMON_004"));
 	}
 
 	@ParameterizedTest
 	@CsvSource({
-			"401, HTTP_401, 요청을 처리할 수 없습니다.",
-			"403, HTTP_403, 요청을 처리할 수 없습니다.",
-			"404, HTTP_404, 요청을 처리할 수 없습니다."
+			"401, COMMON_005, 요청을 처리할 수 없습니다.",
+			"403, COMMON_005, 요청을 처리할 수 없습니다.",
+			"404, COMMON_005, 요청을 처리할 수 없습니다."
 	})
 	void mapsMvcClientErrorsWithoutExposingReason(
 			int httpStatus, String code, String message
@@ -148,7 +148,7 @@ class GlobalExceptionHandlerTest {
 		mockMvc.perform(get("/test/unavailable"))
 				.andExpect(status().isServiceUnavailable())
 				.andExpect(header().string(HttpHeaders.RETRY_AFTER, "30"))
-				.andExpect(jsonPath("$.code").value("HTTP_503"))
+				.andExpect(jsonPath("$.code").value("COMMON_006"))
 				.andExpect(jsonPath("$.message").value("서버 내부 오류가 발생했습니다."));
 	}
 
@@ -157,7 +157,7 @@ class GlobalExceptionHandlerTest {
 		mockMvc.perform(get("/test/unexpected"))
 				.andExpect(status().isInternalServerError())
 				.andExpect(jsonPath("$.success").value(false))
-				.andExpect(jsonPath("$.code").value("HTTP_500"))
+				.andExpect(jsonPath("$.code").value("COMMON_006"))
 				.andExpect(jsonPath("$.message").value("서버 내부 오류가 발생했습니다."))
 				.andExpect(jsonPath("$.data").hasJsonPath())
 				.andExpect(jsonPath("$.data").value(nullValue()))
