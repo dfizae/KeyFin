@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cancelAnimation, Easing, runOnJS, useSharedValue, withRepeat, withTiming, type SharedValue } from "react-native-reanimated";
 
-import { pickWaypoint, travelDurationMs, type ScenePoint, type ScenePolygon, type SceneRect } from "@/features/room/model";
+import { pickWaypoint, travelDurationMs, type ScenePoint, type ScenePolygon } from "@/features/room/model";
 import { CHARACTER_MOTION, CHARACTER_SIZE } from "@/features/room/scene";
 
 /** 스프라이트가 화면 좌우 밖으로 잘리지 않도록 목적지 x 를 폭의 절반 + 여유만큼 안쪽으로 제한한다 */
@@ -24,8 +24,10 @@ export type CharacterWalker = {
 
 type UseCharacterWalkerOptions = {
   polygon: ScenePolygon;
-  blocked: readonly SceneRect[];
+  blocked: readonly ScenePolygon[];
   start?: ScenePoint;
+  /** false 면 걷지 않고 제자리에서 호흡만 한다 */
+  walking?: boolean;
 };
 
 /**
@@ -33,7 +35,7 @@ type UseCharacterWalkerOptions = {
  * 일정 시간 쉬었다가(3~6초) 가구를 피해 다음 목적지를 고르고, 일정 속도로 이동한다.
  * 위치·방향·위상은 셰어드 값이라 Skia 캔버스가 React 리렌더 없이 매 프레임 읽는다.
  */
-export function useCharacterWalker({ polygon, blocked, start = CHARACTER_MOTION.start }: UseCharacterWalkerOptions): CharacterWalker {
+export function useCharacterWalker({ polygon, blocked, start = CHARACTER_MOTION.start, walking = true }: UseCharacterWalkerOptions): CharacterWalker {
   const x = useSharedValue(start.x);
   const y = useSharedValue(start.y);
   const facing = useSharedValue(1);
@@ -51,6 +53,7 @@ export function useCharacterWalker({ polygon, blocked, start = CHARACTER_MOTION.
   }, [breathPhase]);
 
   React.useEffect(() => {
+    if (!walking) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let alive = true;
 
@@ -93,7 +96,7 @@ export function useCharacterWalker({ polygon, blocked, start = CHARACTER_MOTION.
       cancelAnimation(y);
       cancelAnimation(bobPhase);
     };
-  }, [polygon, blocked, x, y, facing, moving, bobPhase]);
+  }, [walking, polygon, blocked, x, y, facing, moving, bobPhase]);
 
   return { x, y, facing, moving, bobPhase, breathPhase };
 }
