@@ -1,4 +1,4 @@
-package com.finset.key_fin.coin.entity;
+package com.finset.key_fin.fincoin.entity;
 
 import com.finset.key_fin.global.base.BaseEntity;
 import com.finset.key_fin.user.entity.User;
@@ -41,7 +41,7 @@ public class FinCoin extends BaseEntity {
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "reason_code", nullable = false, length = 20)
-	private CoinReason reasonCode;
+	private FinCoinReason reasonCode;
 
 	@Column(name = "grant_date", nullable = false)
 	private LocalDate grantDate;
