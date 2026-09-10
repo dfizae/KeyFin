@@ -6,6 +6,7 @@ import com.finset.key_fin.link.dto.response.FinanceMember;
 import com.finset.key_fin.link.exception.FinanceErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.web.client.ExpectedCount;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -42,7 +43,11 @@ class FinanceMemberRestClientTest {
 				URI.create(BASE_URL),
 				API_KEY,
 				Duration.ofSeconds(3),
-				Duration.ofSeconds(5)
+				Duration.ofSeconds(5),
+				3,
+				Duration.ZERO,
+				Duration.ZERO,
+				Duration.ofSeconds(1)
 		);
 		client = new FinanceMemberRestClient(builder.build(), properties, JsonMapper.builder().build());
 	}
@@ -89,6 +94,7 @@ class FinanceMemberRestClientTest {
 								"""));
 
 		assertFinanceError(FinanceErrorCode.MEMBER_NOT_FOUND, () -> client.findByEmail(EMAIL));
+		server.verify();
 	}
 
 	@Test
@@ -101,18 +107,40 @@ class FinanceMemberRestClientTest {
 								"""));
 
 		assertFinanceError(FinanceErrorCode.CONFIGURATION_ERROR, () -> client.findByEmail(EMAIL));
+		server.verify();
 	}
 
 	@Test
-	void 금융망_서버_오류는_서비스_이용_불가로_변환한다() {
-		server.expect(requestTo(BASE_URL + "/member/search"))
+	void 금융망_서버_오류는_최대_시도_후_서비스_이용_불가로_변환한다() {
+		server.expect(ExpectedCount.times(3), requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
+
+		assertFinanceError(FinanceErrorCode.SERVICE_UNAVAILABLE, () -> client.findByEmail(EMAIL));
+		server.verify();
+	}
+
+	@Test
+	void 일시적인_서버_오류_후_금융망_회원_조회에_성공한다() {
+		server.expect(ExpectedCount.times(2), requestTo(BASE_URL + "/member/search"))
 				.andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR)
 						.contentType(MediaType.APPLICATION_JSON)
 						.body("""
 								{"responseCode":"Q1000","responseMessage":"일시적인 오류"}
 								"""));
+		server.expect(requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.OK)
+						.contentType(MediaType.APPLICATION_JSON)
+						.body("""
+								{
+								  "userId": "qwer@qwer.com",
+								  "userKey": "test-user-key"
+								}
+								"""));
 
-		assertFinanceError(FinanceErrorCode.SERVICE_UNAVAILABLE, () -> client.findByEmail(EMAIL));
+		FinanceMember member = client.findByEmail(EMAIL);
+
+		assertThat(member.userKey()).isEqualTo(USER_KEY);
+		server.verify();
 	}
 
 	@Test

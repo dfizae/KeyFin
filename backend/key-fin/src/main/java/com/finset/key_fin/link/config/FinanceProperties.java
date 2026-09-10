@@ -11,7 +11,11 @@ public record FinanceProperties(
 		URI baseUrl,
 		String apiKey,
 		Duration connectTimeout,
-		Duration readTimeout
+		Duration readTimeout,
+		int maxAttempts,
+		Duration retryBaseDelay,
+		Duration retryMaxDelay,
+		Duration retryTimeLimit
 ) {
 
 	private static final Set<String> SUPPORTED_SCHEMES = Set.of("http", "https");
@@ -23,6 +27,15 @@ public record FinanceProperties(
 		}
 		validateTimeout(connectTimeout, "금융망 연결 Timeout");
 		validateTimeout(readTimeout, "금융망 응답 Timeout");
+		if (maxAttempts < 1 || maxAttempts > 5) {
+			throw new IllegalArgumentException("금융망 최대 시도 횟수는 1회 이상 5회 이하여야 합니다.");
+		}
+		validateRetryDuration(retryBaseDelay, "금융망 재시도 기본 간격");
+		validateRetryDuration(retryMaxDelay, "금융망 재시도 최대 간격");
+		validateTimeout(retryTimeLimit, "금융망 재시도 시간 제한");
+		if (retryBaseDelay.compareTo(retryMaxDelay) > 0) {
+			throw new IllegalArgumentException("금융망 재시도 최대 간격은 기본 간격보다 짧을 수 없습니다.");
+		}
 	}
 
 	private static void validateBaseUrl(URI baseUrl) {
@@ -37,11 +50,21 @@ public record FinanceProperties(
 		}
 	}
 
+	private static void validateRetryDuration(Duration duration, String name) {
+		if (duration == null || duration.isNegative()) {
+			throw new IllegalArgumentException(name + "은 0 이상이어야 합니다.");
+		}
+	}
+
 	@Override
 	public String toString() {
 		return "FinanceProperties[baseUrl=" + baseUrl
 				+ ", apiKey=******"
 				+ ", connectTimeout=" + connectTimeout
-				+ ", readTimeout=" + readTimeout + "]";
+				+ ", readTimeout=" + readTimeout
+				+ ", maxAttempts=" + maxAttempts
+				+ ", retryBaseDelay=" + retryBaseDelay
+				+ ", retryMaxDelay=" + retryMaxDelay
+				+ ", retryTimeLimit=" + retryTimeLimit + "]";
 	}
 }
