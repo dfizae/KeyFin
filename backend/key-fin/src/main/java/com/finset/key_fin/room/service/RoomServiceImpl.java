@@ -45,7 +45,6 @@ public class RoomServiceImpl implements RoomService {
 		);
 
 		return new RoomResponse(
-				"AUTUMN_2026",
 				new RoomResponse.AvatarResponse(equipped, null),
 				furnitures,
 				new RoomResponse.CoinResponse(1250),
