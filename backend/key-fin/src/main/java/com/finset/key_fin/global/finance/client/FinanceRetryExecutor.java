@@ -1,8 +1,8 @@
-package com.finset.key_fin.link.client;
+package com.finset.key_fin.global.finance.client;
 
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.config.FinanceProperties;
-import com.finset.key_fin.link.exception.FinanceErrorCode;
+import com.finset.key_fin.global.finance.config.FinanceProperties;
+import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;

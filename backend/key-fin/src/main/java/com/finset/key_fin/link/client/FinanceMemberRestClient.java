@@ -1,11 +1,15 @@
 package com.finset.key_fin.link.client;
 
+import com.finset.key_fin.global.finance.client.FinanceResponseCode;
+import com.finset.key_fin.global.finance.client.RetryableFinanceException;
+import com.finset.key_fin.global.finance.client.FinanceRetryExecutor;
+import com.finset.key_fin.global.finance.client.FinanceHttpSupport;
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.config.FinanceProperties;
+import com.finset.key_fin.global.finance.config.FinanceProperties;
 import com.finset.key_fin.link.dto.request.FinanceMemberSearchRequest;
 import com.finset.key_fin.link.dto.response.FinanceMember;
 import com.finset.key_fin.link.dto.response.FinanceMemberSearchResponse;
-import com.finset.key_fin.link.exception.FinanceErrorCode;
+import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -82,20 +86,20 @@ public class FinanceMemberRestClient implements FinanceMemberClient {
 		if (responseCode == null) {
 			responseCode = FinanceHttpSupport.headerResponseCode(root);
 		}
-		if (responseCode == null || FinanceHttpSupport.SUCCESS_RESPONSE_CODE.equals(responseCode)) {
+		if (responseCode == null || FinanceResponseCode.SUCCESS.matches(responseCode)) {
 			return null;
 		}
 		return responseCode;
 	}
 
 	private RuntimeException mapUpstreamError(String responseCode) {
-		if ("E4003".equals(responseCode)) {
+		if (FinanceResponseCode.MEMBER_NOT_FOUND.matches(responseCode)) {
 			return new BusinessException(FinanceErrorCode.MEMBER_NOT_FOUND);
 		}
-		if ("E4004".equals(responseCode)) {
+		if (FinanceResponseCode.MEMBER_API_KEY_INVALID.matches(responseCode)) {
 			return new BusinessException(FinanceErrorCode.CONFIGURATION_ERROR);
 		}
-		if ("Q1000".equals(responseCode)) {
+		if (FinanceResponseCode.UNKNOWN_ERROR.matches(responseCode)) {
 			return new RetryableFinanceException(null);
 		}
 		return new BusinessException(FinanceErrorCode.INVALID_RESPONSE);

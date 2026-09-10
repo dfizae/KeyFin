@@ -1,4 +1,4 @@
-package com.finset.key_fin.link.dto.request;
+package com.finset.key_fin.global.finance.dto.request;
 
 public record FinanceRequestHeader(
 		String apiName,

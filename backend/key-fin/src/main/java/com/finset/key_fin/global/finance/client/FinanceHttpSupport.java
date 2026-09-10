@@ -1,7 +1,7 @@
-package com.finset.key_fin.link.client;
+package com.finset.key_fin.global.finance.client;
 
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.exception.FinanceErrorCode;
+import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import tools.jackson.core.JacksonException;
@@ -15,23 +15,22 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Set;
 
-final class FinanceHttpSupport {
+public final class FinanceHttpSupport {
 
-	static final String SUCCESS_RESPONSE_CODE = "H0000";
 	private static final Set<Integer> RETRYABLE_STATUS_CODES = Set.of(408, 429, 500, 502, 503, 504);
 
 	private FinanceHttpSupport() {
 	}
 
-	static boolean isRetryableStatus(HttpStatusCode statusCode) {
+	public static boolean isRetryableStatus(HttpStatusCode statusCode) {
 		return RETRYABLE_STATUS_CODES.contains(statusCode.value());
 	}
 
-	static RetryableFinanceException retryableResponse(HttpHeaders headers) {
+	public static RetryableFinanceException retryableResponse(HttpHeaders headers) {
 		return new RetryableFinanceException(parseRetryAfter(headers.getFirst(HttpHeaders.RETRY_AFTER)));
 	}
 
-	static JsonNode readTree(ObjectMapper objectMapper, String body) {
+	public static JsonNode readTree(ObjectMapper objectMapper, String body) {
 		if (body == null || body.isBlank()) {
 			throw new BusinessException(FinanceErrorCode.INVALID_RESPONSE);
 		}
@@ -42,7 +41,7 @@ final class FinanceHttpSupport {
 		}
 	}
 
-	static <T> T convert(ObjectMapper objectMapper, JsonNode root, Class<T> type) {
+	public static <T> T convert(ObjectMapper objectMapper, JsonNode root, Class<T> type) {
 		try {
 			return objectMapper.treeToValue(root, type);
 		} catch (JacksonException exception) {
@@ -50,14 +49,14 @@ final class FinanceHttpSupport {
 		}
 	}
 
-	static String textOrNull(JsonNode node) {
+	public static String textOrNull(JsonNode node) {
 		if (node.isMissingNode() || node.isNull() || !node.isTextual() || node.asText().isBlank()) {
 			return null;
 		}
 		return node.asText();
 	}
 
-	static String headerResponseCode(JsonNode root) {
+	public static String headerResponseCode(JsonNode root) {
 		String responseCode = textOrNull(root.path("Header").path("responseCode"));
 		if (responseCode == null) {
 			responseCode = textOrNull(root.path("responseCode"));
@@ -65,7 +64,7 @@ final class FinanceHttpSupport {
 		return responseCode;
 	}
 
-	static Duration parseRetryAfter(String value) {
+	public static Duration parseRetryAfter(String value) {
 		if (value == null || value.isBlank()) {
 			return null;
 		}

@@ -1,7 +1,7 @@
-package com.finset.key_fin.link.client;
+package com.finset.key_fin.global.finance.client;
 
-import com.finset.key_fin.link.config.FinanceProperties;
-import com.finset.key_fin.link.dto.request.FinanceRequestHeader;
+import com.finset.key_fin.global.finance.config.FinanceProperties;
+import com.finset.key_fin.global.finance.dto.request.FinanceRequestHeader;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 

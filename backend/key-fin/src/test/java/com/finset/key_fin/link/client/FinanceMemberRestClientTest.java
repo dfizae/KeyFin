@@ -1,9 +1,10 @@
 package com.finset.key_fin.link.client;
 
+import com.finset.key_fin.global.finance.client.FinanceRetryExecutor;
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.config.FinanceProperties;
+import com.finset.key_fin.global.finance.config.FinanceProperties;
 import com.finset.key_fin.link.dto.response.FinanceMember;
-import com.finset.key_fin.link.exception.FinanceErrorCode;
+import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.client.ExpectedCount;

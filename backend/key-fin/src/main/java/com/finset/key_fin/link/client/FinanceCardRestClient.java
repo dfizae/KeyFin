@@ -1,10 +1,15 @@
 package com.finset.key_fin.link.client;
 
+import com.finset.key_fin.global.finance.client.FinanceResponseCode;
+import com.finset.key_fin.global.finance.client.FinanceRetryExecutor;
+import com.finset.key_fin.global.finance.client.FinanceHttpSupport;
+import com.finset.key_fin.global.finance.client.FinanceHeaderFactory;
+import com.finset.key_fin.global.finance.client.FinanceHeaderErrors;
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.dto.request.FinanceHeaderRequest;
+import com.finset.key_fin.global.finance.dto.request.FinanceHeaderRequest;
 import com.finset.key_fin.link.dto.response.FinanceCard;
 import com.finset.key_fin.link.dto.response.FinanceCardListResponse;
-import com.finset.key_fin.link.exception.FinanceErrorCode;
+import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -69,7 +74,7 @@ public class FinanceCardRestClient implements FinanceCardClient {
 
 		JsonNode root = FinanceHttpSupport.readTree(objectMapper, body);
 		String responseCode = FinanceHttpSupport.headerResponseCode(root);
-		if (!statusCode.is2xxSuccessful() || !FinanceHttpSupport.SUCCESS_RESPONSE_CODE.equals(responseCode)) {
+		if (!statusCode.is2xxSuccessful() || !FinanceResponseCode.SUCCESS.matches(responseCode)) {
 			throw FinanceHeaderErrors.map(responseCode);
 		}
 

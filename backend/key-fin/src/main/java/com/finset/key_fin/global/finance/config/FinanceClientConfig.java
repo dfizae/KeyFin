@@ -1,4 +1,4 @@
-package com.finset.key_fin.link.config;
+package com.finset.key_fin.global.finance.config;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
