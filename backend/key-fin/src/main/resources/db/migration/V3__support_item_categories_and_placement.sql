@@ -81,3 +81,18 @@ CREATE TABLE `user_furnitures` (
 	CONSTRAINT `chk_uf_position_x` CHECK (`position_x` IS NULL OR `position_x` BETWEEN 0 AND 327),
 	CONSTRAINT `chk_uf_position_y` CHECK (`position_y` IS NULL OR `position_y` BETWEEN 0 AND 404)
 ) COMMENT='사용자 보유 가구와 배치 상태';
+
+ALTER TABLE `transactions`
+    MODIFY `exclude_tag` VARCHAR(20) NOT NULL DEFAULT 'NONE'
+        COMMENT '예산 제외 태그 — NONE(전액 차감)/DUTCH(부분 차감)/SELF_TRANSFER/EMERGENCY/CARRYOVER/RESTORE(입금의 봉투 복원)',
+    MODIFY `subcategory_id` INT NULL
+        COMMENT '세분류 ID(분류 결과) — 지출의 분류 결과. 입금은 RESTORE 태그 지정 시에만 사용(복원 대상 봉투)';
+
+ALTER TABLE `user_settings`
+    ADD COLUMN `budget_anchor_day` TINYINT NOT NULL DEFAULT 1
+        COMMENT '예산 기준일 — 주기 = [기준일, 익월 기준일). 온보딩(수입 계좌 지정)에서 입력, 변경은 다음 주기부터 적용'
+        AFTER `coach_persona`,
+    ADD CONSTRAINT `chk_anchor_day` CHECK (`budget_anchor_day` BETWEEN 1 AND 28);
+
+ALTER TABLE users
+    ADD CONSTRAINT uq_users_fin_user_key UNIQUE (fin_user_key);
