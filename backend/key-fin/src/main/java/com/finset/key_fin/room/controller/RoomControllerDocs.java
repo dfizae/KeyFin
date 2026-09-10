@@ -1,0 +1,52 @@
+package com.finset.key_fin.room.controller;
+
+import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.room.dto.response.RoomResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.ExampleObject;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
+
+import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
+
+@Tag(
+		name = "방",
+		description = "방 초기 화면에 필요한 아바타, 가구, 코인, 보드와 출석 데이터를 제공합니다."
+)
+public interface RoomControllerDocs {
+
+	@Operation(
+			summary = "방 홈 화면 데이터 조회",
+			description = "인증된 사용자의 방 초기 화면 데이터를 한 번에 조회합니다. 현재는 고정된 개발용 데이터를 반환합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "방 홈 화면 데이터 조회 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "방 조회 성공",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"theme\":\"AUTUMN_2026\",\"avatar\":{\"equipped\":[{\"slotType\":\"HEAD\",\"itemId\":1,\"assetKey\":\"hair_default\"},{\"slotType\":\"FACE\",\"itemId\":2,\"assetKey\":\"face_default\"},{\"slotType\":\"UPPER_BODY\",\"itemId\":3,\"assetKey\":\"outfit_default\"}],\"reaction\":null},\"furnitures\":[{\"itemId\":4,\"slotType\":\"FLOOR\",\"assetKey\":\"sofa_default\",\"placementStatus\":\"FLOOR\",\"placementDirection\":\"FRONT_RIGHT\",\"positionX\":165.000,\"positionY\":280.000,\"layer\":0}],\"coin\":{\"balance\":1250},\"board\":{\"month\":\"202609\",\"totalRemainingRate\":36},\"attendance\":{\"checkedToday\":false}}}"
+							)
+					)
+			),
+			@ApiResponse(
+					responseCode = "401",
+					description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "500",
+					description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			)
+	})
+	BaseResponse<RoomResponse> getRoom(Long userId);
+}

@@ -29,6 +29,9 @@ public class UserSettings {
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
 
+	@Column(name = "budget_anchor_day", nullable = false)
+	private int budgetAnchorDay = 1;
+
 	private UserSettings(User user) {
 		this.user = Objects.requireNonNull(user, "user must not be null");
 	}
