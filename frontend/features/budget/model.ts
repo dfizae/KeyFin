@@ -1,5 +1,5 @@
 import { ContractMismatchError } from "@/lib/contract";
-import { compareKRW, fromServerWon, type KRW } from "@/lib/money";
+import { addKRW, compareKRW, fromServerWon, toWon, type KRW } from "@/lib/money";
 
 /**
  * GET /budgets/{month} 계약 (docs/api-contract.md BUDGET).
@@ -143,4 +143,78 @@ export function envelopeHealth(envelope: BudgetEnvelope): EnvelopeHealth {
 /** 서버 잔여율(%)을 사용률(%)로 바꾼다. 초과면 100 을 넘는다 — 막대 길이는 호출부가 100 으로 자른다. */
 export function usedPercent(remainingRate: number): number {
   return Math.max(0, 100 - remainingRate);
+}
+
+/**
+ * POST /budgets/proposals 계약 (docs/api-contract.md BUDGET, FR-USR-04·FR-BGT-01).
+ * 조회(GET /budgets/{month})와 달리 봉투마다 근거인 monthlyAvg 가 온다 — 승인 화면(PAGE-07)이 이걸 쓴다.
+ */
+export type BudgetProposalEnvelopeDto = {
+  envelopeId: number;
+  name: string;
+  proposedAmount: number;
+  /** 최근 3개월 월평균 소비 */
+  monthlyAvg: number;
+  adjustment?: number;
+};
+
+export type BudgetProposalDto = {
+  budgetId: number;
+  month: string;
+  status: string;
+  /** 제안 근거 문구. 이력이 없으면 기본 템플릿 폴백 */
+  basis: string;
+  envelopes: BudgetProposalEnvelopeDto[];
+};
+
+export type BudgetProposalEnvelope = {
+  envelopeId: number;
+  name: string;
+  proposed: KRW;
+  monthlyAvg: KRW;
+};
+
+export type BudgetProposal = {
+  budgetId: number;
+  month: string;
+  status: BudgetStatus;
+  basis: string;
+  envelopes: BudgetProposalEnvelope[];
+};
+
+export function toBudgetProposal(dto: BudgetProposalDto): BudgetProposal {
+  if (!MONTH_KEY.test(dto.month)) throw new ContractMismatchError("month");
+  if (!Number.isInteger(dto.budgetId)) throw new ContractMismatchError("budgetId");
+
+  return {
+    budgetId: dto.budgetId,
+    month: dto.month,
+    status: toStatus(dto.status),
+    basis: dto.basis,
+    envelopes: dto.envelopes.map((envelope) => ({
+      envelopeId: envelope.envelopeId,
+      name: envelope.name,
+      proposed: won(envelope.proposedAmount, "envelopes.proposedAmount"),
+      monthlyAvg: won(envelope.monthlyAvg, "envelopes.monthlyAvg"),
+    })),
+  };
+}
+
+/** PUT /budgets/{month}/confirm 요청. 봉투 7개를 전부 보낸다 */
+export type ConfirmBudgetRequest = {
+  envelopes: { envelopeId: number; amount: number }[];
+};
+
+export type ConfirmBudgetResponseDto = { status: string };
+
+/** 화면의 KRW 문자열 금액을 서버가 받는 원 정수로 되돌린다 */
+export function toConfirmRequest(entries: { envelopeId: number; amount: KRW }[]): ConfirmBudgetRequest {
+  return {
+    envelopes: entries.map(({ envelopeId, amount }) => ({ envelopeId, amount: Number(toWon(amount)) })),
+  };
+}
+
+/** 봉투 금액 합계. 빈 목록은 0 원이다 */
+export function sumAmounts(amounts: KRW[]): KRW {
+  return amounts.length === 0 ? "0" : addKRW(...amounts);
 }

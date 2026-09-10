@@ -1,4 +1,4 @@
-import type { BudgetDto, BudgetEnvelopeDto } from "@/features/budget/model";
+import type { BudgetDto, BudgetEnvelopeDto, BudgetProposalDto, ConfirmBudgetResponseDto } from "@/features/budget/model";
 
 /**
  * GET /budgets/{month} 응답 예시 (docs/api-contract.md BUDGET).
@@ -41,3 +41,38 @@ export function budgetProposedMock(month: string): BudgetDto {
 
 /** 목 모드에서 홈이 받는 값. 미승인 상태를 보려면 budgetProposedMock 으로 바꾼다. */
 export const budgetMock = budgetConfirmedMock;
+
+/**
+ * 최근 3개월 월평균. 합계 533,000 으로 제안 합계(500,000)보다 크다 — "분석해서 줄여 제안했다" 는 흐름이 화면에 보이게 한 값이다.
+ * (Pencil budget-proposal g1fhiV 시안과 같은 수치)
+ */
+const MONTHLY_AVG: Record<number, number> = {
+  1: 112000,
+  2: 62000,
+  3: 38000,
+  4: 74000,
+  5: 105000,
+  6: 84000,
+  7: 58000,
+};
+
+/** POST /budgets/proposals 응답 예시 (docs/api-contract.md BUDGET). */
+export function budgetProposalMock(month: string): BudgetProposalDto {
+  return {
+    budgetId: 1,
+    month,
+    status: "PROPOSED",
+    basis: "최근 3개월 카드·계좌 내역",
+    envelopes: ENVELOPES.map(({ envelopeId, name, proposedAmount }) => ({
+      envelopeId,
+      name,
+      proposedAmount,
+      monthlyAvg: MONTHLY_AVG[envelopeId] ?? proposedAmount,
+    })),
+  };
+}
+
+/** PUT /budgets/{month}/confirm 응답 */
+export function confirmBudgetMock(): ConfirmBudgetResponseDto {
+  return { status: "CONFIRMED" };
+}

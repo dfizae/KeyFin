@@ -330,7 +330,7 @@ describe("HomeScreen", () => {
     await waitForQueriesToSettle();
   });
 
-  it("예산이 미승인이면 승인 유도 배너를 보여주고, 버튼은 예산 탭으로 이동한다", async () => {
+  it("예산이 미승인이면 승인 유도 배너를 보여주고, 버튼은 예산 제안·승인 화면으로 이동한다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom(roomMock));
     mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(MONTH)));
     await renderHome();
@@ -339,7 +339,7 @@ describe("HomeScreen", () => {
     expect(screen.queryByText("이번 달 남은 예산")).toBeNull();
 
     await fireEvent.press(screen.getByRole("button", { name: "이 예산으로 시작하기" }));
-    expect(mockPush).toHaveBeenCalledWith("/budget");
+    expect(mockPush).toHaveBeenCalledWith("/onboarding/budget-proposal");
   });
 
   it("방 정보를 못 받으면 화면 전체에 오류와 재시도를 보여주고, 재시도 성공 시 내용을 표시한다", async () => {
