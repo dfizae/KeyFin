@@ -1,0 +1,6 @@
+from pydantic import JsonValue
+from .model import Twin as Twin
+
+class Engine:
+    def __init__(self, twin: Twin) -> None: ...
+    def run(self, request: dict[str, JsonValue]) -> dict[str, JsonValue]: ...
