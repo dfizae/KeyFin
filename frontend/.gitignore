@@ -61,5 +61,7 @@ WORKLOG.md
 # Figma 원본(임포트 소스) — 56MB로 GitHub 한도 초과, 로컬 보관
 *.fig
 
-# Pencil AI 생성 임시 출력. 채택한 원본은 design/images/ai 로 옮겨 .pen 이 참조한다
-images/
+# Pencil AI 생성 임시 출력. 채택한 원본은 design/images/ai 로 옮겨 .pen 이 참조한다.
+# 앞의 "/" 는 프론트 루트의 images/ 만 가리킨다 — 빼면 assets/images·design/images 까지 잡혀
+# 새 이미지가 조용히 누락된다(2026-09-10 수정).
+/images/
