@@ -43,4 +43,11 @@ public class Budget extends BaseEntity {
 
 	@Column(name = "emergency_amount", nullable = false)
 	private Long emergencyAmount = 0L;
+
+	public static Budget propose(User user, String budgetMonth) {
+		Budget budget = new Budget();
+		budget.user = user;
+		budget.budgetMonth = budgetMonth;
+		return budget;
+	}
 }

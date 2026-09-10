@@ -35,4 +35,12 @@ public class BudgetEnvelope {
 
 	@Column(name = "confirmed_amount")
 	private Long confirmedAmount;
+
+	public static BudgetEnvelope propose(Budget budget, int envelopeId, long proposedAmount) {
+		BudgetEnvelope budgetEnvelope = new BudgetEnvelope();
+		budgetEnvelope.budget = budget;
+		budgetEnvelope.envelopeId = envelopeId;
+		budgetEnvelope.proposedAmount = proposedAmount;
+		return budgetEnvelope;
+	}
 }
