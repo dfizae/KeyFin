@@ -118,9 +118,10 @@
 | `Toast` | `components/ui/toast.tsx` | — | `info` `success` `error`, `bg-inverse` |
 | `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Dialog` 또는 별도 | `bg-popover` |
 | `ListGroup` | `components/ui/list-group.tsx` | `Separator` | 설정·메뉴 목록 |
-| `TabBar` | `components/ui/tab-bar.tsx` | `Pressable`, `Icon`, `Text` | Pencil 홈 `BottomTabBar`(NaYk9) — 탭 5개(홈·자산·예산·리포트·마이), 아이콘 20 + `text-caption` 라벨 상시 표시. 활성 탭은 `bg-accent rounded-lg` + `text-primary`, 비활성은 `text-muted-foreground`. 상단 `border-border`. `app/(tabs)/_layout.tsx`의 `tabBar` |
+| `TabBar` | `components/ui/tab-bar.tsx` | `Pressable`, `Icon`, `Text` | Pencil 홈 `BottomTabBar`(NaYk9) — 탭 5개(홈·자산·예산·리포트·마이), 아이콘 20 + `text-caption` 라벨 상시 표시. 활성 탭은 `bg-accent rounded-lg` + `text-primary`, 비활성은 `text-muted-foreground`. 바탕 `bg-card`, 상단 `border-border`. `app/(tabs)/_layout.tsx`의 `tabBar` |
 | `CharacterRoom` | `features/home/components/CharacterRoom.tsx` | `Image`, `Pressable` | Pencil 홈 `CharacterRoom`(Rj36w · Plvf1) — 좌우 여백 24, 이미지 `rounded-xl`. 캐릭터 없음: 빈 방 이미지 전체가 "캐릭터를 등록하세요" 버튼(327×596). 캐릭터 있음: 캐릭터 방 이미지(327×404) |
 | `BudgetCard` | `features/home/components/BudgetCard.tsx` | `Text` | Pencil `BudgetCard`(oIAhy) — `bg-primary rounded-xl p-5 gap-4`, 제목 `text-h3`, 상태 라벨 `text-caption text-positive`, 남은 예산 `text-display tabular-nums`, 설명 `text-caption`, 진행 바 `h-2 rounded-full bg-accent` + `bg-positive` |
+| `BudgetScreen` | `features/budget/components/BudgetScreen.tsx` | `Text`, `Icon`, `Skeleton`, `EmptyState` | Pencil `budget`(kvc1e) · `budget/proposed`(ZOmXC) — 헤더 `bg-card border-b border-border px-6 pb-3` + `text-h1` 제목·`menu` 아이콘, 본문 `px-6 gap-5`. 총예산 카드 `bg-card rounded-2xl p-5 gap-3` + `text-amount-lg` + 진행 바 `h-2`. 봉투 행은 28 `bg-accent rounded-md` 아이콘 타일 + `text-label` 이름 + `text-amount-sm` 금액 + `h-1.5` 사용률 바(`bg-positive`/`bg-warning`/`bg-destructive`). 미승인 월은 총예산 카드 대신 `BudgetUnsetBanner`, 금액은 `제안 …`(muted)이고 바는 빈 트랙 |
 | `AccountCard` | `features/account/components/AccountCard.tsx` | `View`(`bg-primary rounded-lg`) | `default` `selected` — 킷 `Card Bank / 1`을 단색 사각형으로 |
 | `TransactionRow` | `features/account/components/TransactionRow.tsx` | `Text`, `Badge` | `deposit` `withdrawal` `pending` |
 | `PinPad` | `features/auth/components/PinPad.tsx` | `Button` | 6자리, 셔플 옵션 |
