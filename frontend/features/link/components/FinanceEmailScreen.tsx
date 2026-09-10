@@ -12,8 +12,8 @@ import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/er
 import { canSubmitFinanceEmail, FINANCE_EMAIL_MAX_LENGTH } from "@/features/link/model";
 import { cn } from "@/lib/utils";
 
-/** PAGE-04(계좌·카드 연결)가 생기면 그쪽으로 보낸다. 그전까지는 홈으로 간다. (TBD) */
-const NEXT_ROUTE = "/";
+/** 금융망 연결이 끝나야 후보 목록이 나오므로 곧바로 PAGE-04(계좌·카드 연결)로 보낸다 */
+const NEXT_ROUTE = "/onboarding/asset-select";
 
 // Pencil finance-email (mDdag) · finance-email/error (B6jV5).
 function FinanceEmailScreen() {

@@ -1,13 +1,28 @@
 import { ApiError } from "@/api/error";
+import { ContractMismatchError } from "@/lib/contract";
 import {
   connectFinanceMock,
+  createLinksMock,
   financeStatusMock,
+  linkCandidatesMock,
   MOCK_FINANCE_EMAIL,
   MOCK_TAKEN_FINANCE_EMAIL,
   resetLinkMocks,
 } from "@/api/mocks/link";
 import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/errors";
-import { canSubmitFinanceEmail, FINANCE_EMAIL_MAX_LENGTH } from "@/features/link/model";
+import {
+  areAllLinksSelected,
+  canSubmitFinanceEmail,
+  canSubmitLinks,
+  FINANCE_EMAIL_MAX_LENGTH,
+  hasNoLinkCandidates,
+  isLinkSelectable,
+  selectableLinkIds,
+  toggleLinkSelection,
+  toggleSelectAllLinks,
+  toLinkCandidates,
+  toLinkRequest,
+} from "@/features/link/model";
 
 beforeEach(resetLinkMocks);
 
@@ -72,5 +87,131 @@ describe("financeStatusMock", () => {
   it("연결에 실패하면 상태는 그대로 false 다", () => {
     expect(() => connectFinanceMock({ financeEmail: MOCK_TAKEN_FINANCE_EMAIL })).toThrow();
     expect(financeStatusMock()).toEqual({ financeConnected: false });
+  });
+});
+
+describe("toLinkCandidates", () => {
+  it("계좌번호·카드번호를 마스킹하고 잔액을 KRW 로 바꾼다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const shinhan = candidates.accounts[0];
+    expect(shinhan.finAccountNo).toBe("0885401234567890");
+    expect(shinhan.maskedNo).toBe("088*********7890");
+    expect(shinhan.balance).toBe("2450000");
+    expect(candidates.cards[0].maskedNo).toBe("5310********1234");
+  });
+
+  it("출금 계좌번호도 마스킹해 둔다", () => {
+    const card = toLinkCandidates(linkCandidatesMock()).cards[0];
+    expect(card.maskedWithdrawalNo).toBe("088*********7890");
+  });
+
+  it("잔액이 정수가 아니면 계약 불일치로 막는다", () => {
+    const dto = linkCandidatesMock();
+    dto.accounts[0].balance = 1234.5;
+    expect(() => toLinkCandidates(dto)).toThrow(ContractMismatchError);
+  });
+
+  it("계좌번호가 비어 있으면 계약 불일치로 막는다", () => {
+    const dto = linkCandidatesMock();
+    dto.accounts[0].finAccountNo = "";
+    expect(() => toLinkCandidates(dto)).toThrow(ContractMismatchError);
+  });
+});
+
+describe("toggleLinkSelection", () => {
+  it("없으면 넣고 있으면 뺀다", () => {
+    const once = toggleLinkSelection(new Set(), "a");
+    expect([...once]).toEqual(["a"]);
+    expect([...toggleLinkSelection(once, "a")]).toEqual([]);
+  });
+
+  it("원본을 바꾸지 않는다", () => {
+    const before = new Set(["a"]);
+    toggleLinkSelection(before, "b");
+    expect([...before]).toEqual(["a"]);
+  });
+});
+
+describe("toLinkRequest · canSubmitLinks", () => {
+  it("선택한 계좌·카드를 번호 목록으로 나눠 담는다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const request = toLinkRequest(candidates, new Set(["0885401234567890", "5310123412341234"]));
+    expect(request).toEqual({ accounts: ["0885401234567890"], cards: ["5310123412341234"] });
+    expect(canSubmitLinks(request)).toBe(true);
+  });
+
+  it("이미 연결된 항목은 골라도 요청에 넣지 않는다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const linked = candidates.accounts.find((a) => a.linked);
+    expect(linked).toBeDefined();
+    const request = toLinkRequest(candidates, new Set([linked!.finAccountNo]));
+    expect(request).toEqual({ accounts: [], cards: [] });
+    expect(canSubmitLinks(request)).toBe(false);
+  });
+
+  it("후보에 없는 번호는 무시한다", () => {
+    const request = toLinkRequest(toLinkCandidates(linkCandidatesMock()), new Set(["없는번호"]));
+    expect(canSubmitLinks(request)).toBe(false);
+  });
+});
+
+describe("isLinkSelectable · hasNoLinkCandidates", () => {
+  it("연결된 항목은 고를 수 없다", () => {
+    expect(isLinkSelectable({ linked: false })).toBe(true);
+    expect(isLinkSelectable({ linked: true })).toBe(false);
+  });
+
+  it("계좌·카드가 모두 없을 때만 빈 상태다", () => {
+    expect(hasNoLinkCandidates(toLinkCandidates(linkCandidatesMock()))).toBe(false);
+    expect(hasNoLinkCandidates({ accounts: [], cards: [] })).toBe(true);
+  });
+});
+
+describe("createLinksMock", () => {
+  it("새로 연결된 수만 센다 — 다시 보내도 0 이다(멱등)", () => {
+    const request = { accounts: ["0885401234567890"], cards: ["5310123412341234"] };
+    expect(createLinksMock(request)).toEqual({ accounts: 1, cards: 1 });
+    expect(createLinksMock(request)).toEqual({ accounts: 0, cards: 0 });
+  });
+
+  it("연결한 항목은 후보 목록에서 linked 로 바뀐다", () => {
+    createLinksMock({ accounts: ["0041202345678901"], cards: [] });
+    const account = linkCandidatesMock().accounts.find((a) => a.finAccountNo === "0041202345678901");
+    expect(account?.linked).toBe(true);
+  });
+});
+
+describe("selectableLinkIds · areAllLinksSelected · toggleSelectAllLinks", () => {
+  it("전체 선택은 이미 연결된 항목을 빼고 고른다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const linked = candidates.accounts.find((account) => account.linked);
+    expect(linked).toBeDefined();
+
+    const ids = selectableLinkIds(candidates);
+    expect(ids).not.toContain(linked!.finAccountNo);
+    expect(ids).toHaveLength(candidates.accounts.length + candidates.cards.length - 1);
+
+    const selected = toggleSelectAllLinks(candidates, new Set());
+    expect(areAllLinksSelected(candidates, selected)).toBe(true);
+    const request = toLinkRequest(candidates, selected);
+    expect(request.accounts).toHaveLength(candidates.accounts.length - 1);
+    expect(request.cards).toHaveLength(candidates.cards.length);
+  });
+
+  it("일부만 고른 상태에서 누르면 나머지가 채워진다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const partial = new Set([selectableLinkIds(candidates)[0]]);
+    expect(areAllLinksSelected(candidates, partial)).toBe(false);
+    expect(areAllLinksSelected(candidates, toggleSelectAllLinks(candidates, partial))).toBe(true);
+  });
+
+  it("전부 고른 상태에서 다시 누르면 전부 푼다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const all = toggleSelectAllLinks(candidates, new Set());
+    expect(toggleSelectAllLinks(candidates, all).size).toBe(0);
+  });
+
+  it("고를 수 있는 항목이 없으면 전체 선택된 상태로 보지 않는다", () => {
+    expect(areAllLinksSelected({ accounts: [], cards: [] }, new Set())).toBe(false);
   });
 });

@@ -29,3 +29,14 @@ export function financeErrorMessage(error: unknown): string {
 export function isRetryableFinanceError(error: unknown): boolean {
   return isApiError(error) ? !NOT_RETRYABLE.includes(error.code) : true;
 }
+
+const LINK_UNKNOWN_MESSAGE = "자산을 연결하지 못했어요. 잠시 후 다시 시도해 주세요.";
+
+/**
+ * POST /links 실패 문구. 계약에 이 엔드포인트의 code 목록이 아직 없어(docs/api-contract.md LINK)
+ * 금융망 조회가 그대로 실패하는 경우를 같은 표에서 찾고, 없으면 서버 message 를 쓴다 (규칙 90).
+ */
+export function linkErrorMessage(error: unknown): string {
+  if (!isApiError(error)) return LINK_UNKNOWN_MESSAGE;
+  return FINANCE_MESSAGES[error.code] ?? (error.message !== "" ? error.message : LINK_UNKNOWN_MESSAGE);
+}

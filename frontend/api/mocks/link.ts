@@ -1,5 +1,14 @@
 import { ApiError } from "@/api/error";
-import type { FinanceLinkRequest, FinanceLinkResponseDto, FinanceStatusDto } from "@/features/link/model";
+import type {
+  FinanceLinkRequest,
+  FinanceLinkResponseDto,
+  FinanceStatusDto,
+  LinkCandidateAccountDto,
+  LinkCandidateCardDto,
+  LinkCandidatesDto,
+  LinkRequest,
+  LinkResponseDto,
+} from "@/features/link/model";
 
 /**
  * 목 규칙: 금융망에 있는 이메일만 연결된다.
@@ -19,6 +28,9 @@ export function financeStatusMock(): FinanceStatusDto {
 /** 테스트·개발 재시작용 */
 export function resetLinkMocks(): void {
   connected = false;
+  linkedAccounts.clear();
+  linkedAccounts.add("0903303456789012");
+  linkedCards.clear();
 }
 
 export function connectFinanceMock({ financeEmail }: FinanceLinkRequest): FinanceLinkResponseDto {
@@ -31,4 +43,51 @@ export function connectFinanceMock({ financeEmail }: FinanceLinkRequest): Financ
   }
   connected = true;
   return { connected: true };
+}
+
+/**
+ * 연결 후보 목록. 금융망이 주는 값이라 앱에서 만들지 않고, 목에서는 고정 목록으로 둔다.
+ * 로고 있는 은행(088·004·090)과 로고 없는 폴백 타일(999)을 섞어 두 경우를 다 보이게 했다.
+ * 카카오뱅크 계좌는 처음부터 linked=true 라 '연결됨'으로 잠긴 행을 확인할 수 있다.
+ */
+const CANDIDATE_ACCOUNTS: readonly Omit<LinkCandidateAccountDto, "linked">[] = [
+  { finAccountNo: "0885401234567890", bankCode: "088", bankName: "신한은행", balance: 2_450_000 },
+  { finAccountNo: "0041202345678901", bankCode: "004", bankName: "국민은행", balance: 318_400 },
+  { finAccountNo: "0903303456789012", bankCode: "090", bankName: "카카오뱅크", balance: 1_007_250 },
+  { finAccountNo: "9990104567890123", bankCode: "999", bankName: "싸피은행", balance: 50_000 },
+];
+
+const CANDIDATE_CARDS: readonly Omit<LinkCandidateCardDto, "linked">[] = [
+  { cardNo: "5310123412341234", issuerName: "신한카드", cardName: "Deep Dream 체크", withdrawalAccountNo: "0885401234567890" },
+  { cardNo: "9410432143214321", issuerName: "국민카드", cardName: "노리 체크", withdrawalAccountNo: "0041202345678901" },
+];
+
+/** 앱이 도는 동안만 유지되는 연결 결과. 서버의 accounts·cards 테이블 자리를 대신한다 */
+const linkedAccounts = new Set<string>(["0903303456789012"]);
+const linkedCards = new Set<string>();
+
+export function linkCandidatesMock(): LinkCandidatesDto {
+  return {
+    accounts: CANDIDATE_ACCOUNTS.map((a) => ({ ...a, linked: linkedAccounts.has(a.finAccountNo) })),
+    cards: CANDIDATE_CARDS.map((c) => ({ ...c, linked: linkedCards.has(c.cardNo) })),
+  };
+}
+
+/** 이미 연결된 항목은 세지 않는다(멱등). 응답은 '새로 연결된 수' 다 */
+export function createLinksMock({ accounts, cards }: LinkRequest): LinkResponseDto {
+  let addedAccounts = 0;
+  for (const no of accounts) {
+    if (!linkedAccounts.has(no)) {
+      linkedAccounts.add(no);
+      addedAccounts += 1;
+    }
+  }
+  let addedCards = 0;
+  for (const no of cards) {
+    if (!linkedCards.has(no)) {
+      linkedCards.add(no);
+      addedCards += 1;
+    }
+  }
+  return { accounts: addedAccounts, cards: addedCards };
 }
