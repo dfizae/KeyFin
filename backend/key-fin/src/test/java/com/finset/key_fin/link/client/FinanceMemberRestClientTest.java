@@ -51,7 +51,7 @@ class FinanceMemberRestClientTest {
 				Duration.ZERO,
 				Duration.ofSeconds(1)
 		);
-		client = new FinanceMemberRestClient(builder.build(), properties, JsonMapper.builder().build());
+		client = new FinanceMemberRestClient(builder.build(), properties, JsonMapper.builder().build(), new FinanceRetryExecutor(properties));
 	}
 
 	@Test
@@ -177,7 +177,7 @@ class FinanceMemberRestClientTest {
 				Duration.ofSeconds(5)
 		);
 		FinanceMemberRestClient retryAfterClient =
-				new FinanceMemberRestClient(builder.build(), properties, JsonMapper.builder().build());
+				new FinanceMemberRestClient(builder.build(), properties, JsonMapper.builder().build(), new FinanceRetryExecutor(properties));
 
 		retryAfterServer.expect(requestTo(BASE_URL + "/member/search"))
 				.andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
