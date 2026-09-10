@@ -1,9 +1,13 @@
 package com.finset.key_fin.link.controller;
 
+import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
 import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
+import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.link.service.FinanceLinkService;
+import com.finset.key_fin.link.service.LinkCandidateService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,12 +33,14 @@ class LinkControllerTest {
 	private static final long USER_ID = 1L;
 
 	private FinanceLinkService financeLinkService;
+	private LinkCandidateService linkCandidateService;
 	private MockMvc mockMvc;
 
 	@BeforeEach
 	void setUp() {
 		financeLinkService = mock(FinanceLinkService.class);
-		mockMvc = standaloneSetup(new LinkController(financeLinkService))
+		linkCandidateService = mock(LinkCandidateService.class);
+		mockMvc = standaloneSetup(new LinkController(financeLinkService, linkCandidateService))
 				.setControllerAdvice(new GlobalExceptionHandler())
 				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
 				.build();
@@ -88,5 +94,37 @@ class LinkControllerTest {
 				.andExpect(jsonPath("$.data.connected").value(false));
 
 		verify(financeLinkService).getStatus(USER_ID);
+	}
+
+	@Test
+	void 계좌_카드_후보_목록을_조회한다() throws Exception {
+		when(linkCandidateService.getCandidates(USER_ID)).thenReturn(new LinkCandidatesResponse(
+				List.of(new LinkCandidatesResponse.AccountCandidate("0010011073486799", "001", "한국은행", 1_500_000L, false)),
+				List.of(new LinkCandidatesResponse.CardCandidate("1003198565339181", "롯데카드", "디지로카 SEOUL", "0323555042323510", true))
+		));
+
+		mockMvc.perform(get("/api/v1/links/candidates"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.accounts[0].finAccountNo").value("0010011073486799"))
+				.andExpect(jsonPath("$.data.accounts[0].bankName").value("한국은행"))
+				.andExpect(jsonPath("$.data.accounts[0].balance").value(1_500_000))
+				.andExpect(jsonPath("$.data.accounts[0].linked").value(false))
+				.andExpect(jsonPath("$.data.cards[0].cardNo").value("1003198565339181"))
+				.andExpect(jsonPath("$.data.cards[0].issuerName").value("롯데카드"))
+				.andExpect(jsonPath("$.data.cards[0].linked").value(true));
+
+		verify(linkCandidateService).getCandidates(USER_ID);
+	}
+
+	@Test
+	void 금융망_미연결_사용자의_후보_목록_요청은_409로_거절한다() throws Exception {
+		when(linkCandidateService.getCandidates(USER_ID))
+				.thenThrow(new BusinessException(LinkErrorCode.FINANCE_NOT_CONNECTED));
+
+		mockMvc.perform(get("/api/v1/links/candidates"))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.code").value("LINK_002"));
 	}
 }

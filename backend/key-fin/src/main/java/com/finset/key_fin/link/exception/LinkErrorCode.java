@@ -13,6 +13,11 @@ public enum LinkErrorCode implements ErrorCode {
 			HttpStatus.CONFLICT,
 			"LINK_001",
 			"해당 금융망 사용자는 이미 다른 계정과 연결되어 있습니다."
+	),
+	FINANCE_NOT_CONNECTED(
+			HttpStatus.CONFLICT,
+			"LINK_002",
+			"금융망 연결이 필요합니다. 먼저 금융망 회원을 연결해 주세요."
 	);
 
 	private final HttpStatus httpStatus;

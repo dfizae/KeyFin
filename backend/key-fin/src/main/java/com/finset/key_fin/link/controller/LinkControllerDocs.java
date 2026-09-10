@@ -3,6 +3,7 @@ package com.finset.key_fin.link.controller;
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
 import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -119,4 +120,44 @@ public interface LinkControllerDocs {
 			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	})
 	BaseResponse<FinanceLinkResponse> getStatus(@Parameter(hidden = true) Long userId);
+
+	@Operation(
+			summary = "금융망 계좌·카드 후보 목록 조회",
+			description = "연결된 금융망 회원의 수시입출금 계좌와 카드 목록을 조회하고, 각 항목의 KeyFin 연결 여부(linked)를 함께 반환합니다. "
+					+ "금융망 회원이 연결되지 않은 사용자는 409로 거절됩니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "후보 목록 조회 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{"
+											+ "\"accounts\":[{\"finAccountNo\":\"0010011073486799\",\"bankCode\":\"001\",\"bankName\":\"한국은행\",\"balance\":1500000,\"linked\":false}],"
+											+ "\"cards\":[{\"cardNo\":\"1003198565339181\",\"issuerName\":\"롯데카드\",\"cardName\":\"디지로카 SEOUL\",\"withdrawalAccountNo\":\"0323555042323510\",\"linked\":true}]}}"
+							)
+					)
+			),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "KeyFin 사용자를 찾을 수 없음", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(
+					responseCode = "409",
+					description = "금융망 회원 미연결 또는 금융망 연결이 더 이상 유효하지 않음",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = {
+									@ExampleObject(name = "금융망 미연결", value = "{\"success\":false,\"code\":\"LINK_002\",\"message\":\"금융망 연결이 필요합니다. 먼저 금융망 회원을 연결해 주세요.\",\"data\":null}"),
+									@ExampleObject(name = "연결 무효", value = "{\"success\":false,\"code\":\"FINANCE_005\",\"message\":\"금융망 연결이 유효하지 않습니다. 금융망을 다시 연결해 주세요.\",\"data\":null}")
+							}
+					)
+			),
+			@ApiResponse(responseCode = "502", description = "금융망 응답 또는 연동 설정 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "503", description = "일시 장애 재시도 후 금융망 서비스 이용 불가", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<LinkCandidatesResponse> getCandidates(@Parameter(hidden = true) Long userId);
 }
