@@ -11,8 +11,8 @@ import { useAuthStore } from "@/features/auth/store";
 import { saveTermsAgreed } from "@/lib/session-storage";
 import { cn } from "@/lib/utils";
 
-/** PAGE-04(계좌·카드 연결)가 생기면 그쪽으로 보낸다. 그전까지는 홈으로 간다. (TBD) */
-const NEXT_ROUTE = "/";
+/** 약관 다음은 금융망 이메일 연결(PAGE-03B)이다 (유저 플로우 v2, 2026-09-10). */
+const NEXT_ROUTE = "/onboarding/finance-email";
 
 const CLAUSES = [
   {

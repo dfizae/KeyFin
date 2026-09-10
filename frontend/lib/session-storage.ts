@@ -12,6 +12,7 @@ const ACCESS_KEY = "keyfin.accessToken";
 const REFRESH_KEY = "keyfin.refreshToken";
 const USER_KEY = "keyfin.user";
 const TERMS_KEY_PREFIX = "keyfin.terms.";
+const FINANCE_KEY_PREFIX = "keyfin.finance.";
 
 const isWeb = Platform.OS === "web";
 
@@ -95,4 +96,16 @@ export async function loadTermsAgreed(userId: number): Promise<boolean> {
 
 export async function saveTermsAgreed(userId: number): Promise<void> {
   await write(`${TERMS_KEY_PREFIX}${userId}`, "1");
+}
+
+/**
+ * 금융망 연결 여부 (PAGE-03B). 서버가 진짜 상태를 갖고 있지만 조회 API 가 없어 기기에도 남긴다.
+ * 상태 조회 엔드포인트가 생기면 이 기록 대신 서버 값을 쓴다. (TBD)
+ */
+export async function loadFinanceLinked(userId: number): Promise<boolean> {
+  return (await read(`${FINANCE_KEY_PREFIX}${userId}`)) === "1";
+}
+
+export async function saveFinanceLinked(userId: number): Promise<void> {
+  await write(`${FINANCE_KEY_PREFIX}${userId}`, "1");
 }
