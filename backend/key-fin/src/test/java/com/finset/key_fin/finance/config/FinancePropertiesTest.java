@@ -10,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException
 
 class FinancePropertiesTest {
 
-	private static final URI BASE_URL = URI.create("https://finopenapi.ssafy.io");
+	private static final URI BASE_URL = URI.create("https://finance.example.com/finance/api/v1");
 	private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(3);
 	private static final Duration READ_TIMEOUT = Duration.ofSeconds(5);
 
@@ -35,7 +35,7 @@ class FinancePropertiesTest {
 	@Test
 	void rejectsRelativeBaseUrl() {
 		assertThatIllegalArgumentException().isThrownBy(() -> new FinanceProperties(
-				URI.create("/ssafy"),
+				URI.create("/finance"),
 				"finance-api-key",
 				CONNECT_TIMEOUT,
 				READ_TIMEOUT

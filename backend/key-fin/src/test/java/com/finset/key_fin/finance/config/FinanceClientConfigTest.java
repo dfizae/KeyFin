@@ -13,7 +13,7 @@ class FinanceClientConfigTest {
 	@Test
 	void createsFinanceRestClient() {
 		FinanceProperties properties = new FinanceProperties(
-				URI.create("https://finopenapi.ssafy.io"),
+				URI.create("https://finance.example.com/finance/api/v1"),
 				"finance-api-key",
 				Duration.ofSeconds(3),
 				Duration.ofSeconds(5)

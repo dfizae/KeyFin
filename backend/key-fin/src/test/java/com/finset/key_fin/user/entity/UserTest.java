@@ -61,6 +61,6 @@ class UserTest {
 	}
 
 	private User createUser() {
-		return User.create("kim@ssafy.io", "encoded-password", "김싸피");
+		return User.create("qwer@qwer.com", "encoded-password", "김예린");
 	}
 }
