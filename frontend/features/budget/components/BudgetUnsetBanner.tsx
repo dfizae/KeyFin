@@ -8,8 +8,7 @@ import { Text } from "@/components/ui/text";
 import { formatMonthKeyLabel } from "@/lib/date";
 
 // Pencil home/p0/budget-unset (XVFf1) BudgetUnsetBanner (sihjf): bg-warning-muted · radius 20 · padding 20 · gap 12 · CTA h-button-lg.
-// 예산 제안·승인 화면(PAGE-07)이 생기기 전까지 CTA 는 예산 탭으로 보낸다. (TBD)
-const BUDGET_ROUTE = "/budget";
+const PROPOSAL_ROUTE = "/onboarding/budget-proposal";
 
 export const BUDGET_UNSET_CTA = "이 예산으로 시작하기";
 
@@ -30,7 +29,7 @@ function BudgetUnsetBanner({ month }: BudgetUnsetBannerProps) {
       <Text className="text-body-sm text-muted-foreground">
         지난 소비를 분석해 봉투 7종 예산을 제안했어요. 승인하면 벽 보드와 잔액이 켜져요.
       </Text>
-      <Button size="lg" className="h-button-lg rounded-lg" onPress={() => router.push(BUDGET_ROUTE)} accessibilityLabel={BUDGET_UNSET_CTA}>
+      <Button size="lg" className="h-button-lg rounded-lg" onPress={() => router.push(PROPOSAL_ROUTE)} accessibilityLabel={BUDGET_UNSET_CTA}>
         <Text>{BUDGET_UNSET_CTA}</Text>
       </Button>
     </View>

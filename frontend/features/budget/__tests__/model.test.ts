@@ -1,6 +1,15 @@
-import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
+import { budgetConfirmedMock, budgetProposalMock, budgetProposedMock } from "@/api/mocks/budget";
 import { envelopeShortName } from "@/features/budget/catalog";
-import { WARNING_REMAINING_RATE, budgetHealth, envelopeHealth, toBudget, usedPercent } from "@/features/budget/model";
+import {
+  WARNING_REMAINING_RATE,
+  budgetHealth,
+  envelopeHealth,
+  sumAmounts,
+  toBudget,
+  toBudgetProposal,
+  toConfirmRequest,
+  usedPercent,
+} from "@/features/budget/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 describe("envelopeHealth · usedPercent · envelopeShortName", () => {
@@ -66,6 +75,39 @@ describe("toBudget", () => {
     expect(() => toBudget({ ...dto, total: { ...dto.total, remainingRate: 36.4 } })).toThrow(ContractMismatchError);
     expect(() => toBudget({ ...dto, month: "2026-09" })).toThrow(ContractMismatchError);
     expect(() => toBudget({ ...dto, envelopes: [{ ...dto.envelopes[0], proposedAmount: Number.NaN }] })).toThrow(ContractMismatchError);
+  });
+});
+
+describe("toBudgetProposal · sumAmounts · toConfirmRequest", () => {
+  it("제안은 제안액과 근거 월평균을 KRW 문자열로 바꾼다", () => {
+    const proposal = toBudgetProposal(budgetProposalMock(MONTH));
+    expect(proposal.month).toBe(MONTH);
+    expect(proposal.status).toBe("PROPOSED");
+    expect(proposal.basis).toBe("최근 3개월 카드·계좌 내역");
+    expect(proposal.envelopes).toHaveLength(7);
+    expect(proposal.envelopes[0]).toEqual({ envelopeId: 1, name: "외식", proposed: "100000", monthlyAvg: "112000" });
+  });
+
+  it("제안 합계는 500,000 이고 월평균 합계가 더 크다", () => {
+    const { envelopes } = toBudgetProposal(budgetProposalMock(MONTH));
+    expect(sumAmounts(envelopes.map((envelope) => envelope.proposed))).toBe("500000");
+    expect(sumAmounts(envelopes.map((envelope) => envelope.monthlyAvg))).toBe("533000");
+    expect(sumAmounts([])).toBe("0");
+  });
+
+  it("month·budgetId·금액이 계약과 다르면 계약 불일치다", () => {
+    const dto = budgetProposalMock(MONTH);
+    expect(() => toBudgetProposal({ ...dto, month: "2026-09" })).toThrow(ContractMismatchError);
+    expect(() => toBudgetProposal({ ...dto, budgetId: 1.5 })).toThrow(ContractMismatchError);
+    expect(() => toBudgetProposal({ ...dto, envelopes: [{ ...dto.envelopes[0], monthlyAvg: 92000.5 }] })).toThrow(
+      ContractMismatchError
+    );
+  });
+
+  it("승인 요청은 KRW 문자열을 원 정수로 되돌린다", () => {
+    expect(toConfirmRequest([{ envelopeId: 1, amount: "120000" }])).toEqual({
+      envelopes: [{ envelopeId: 1, amount: 120000 }],
+    });
   });
 });
 
