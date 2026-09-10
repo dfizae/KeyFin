@@ -20,7 +20,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,33 +43,39 @@ public class LinkCandidateService {
 		List<FinanceAccount> financeAccounts = financeAccountClient.findAccounts(user.getFinUserKey());
 		List<FinanceCard> financeCards = financeCardClient.findCards(user.getFinUserKey());
 
-		Set<String> linkedAccountNos = accountRepository.findAllByUserId(userId).stream()
+		Map<String, Long> linkedAccountIds = accountRepository.findAllByUserId(userId).stream()
 				.filter(Account::isManaged)
-				.map(Account::getFinAccountNo)
-				.collect(Collectors.toSet());
-		Set<String> linkedCardNos = cardRepository.findAllByUserId(userId).stream()
+				.collect(Collectors.toMap(Account::getFinAccountNo, Account::getId));
+		Map<String, Long> linkedCardIds = cardRepository.findAllByUserId(userId).stream()
 				.filter(Card::isManaged)
-				.map(Card::getFinCardNo)
-				.collect(Collectors.toSet());
+				.collect(Collectors.toMap(Card::getFinCardNo, Card::getId));
 
 		List<AccountCandidate> accounts = financeAccounts.stream()
 				.filter(FinanceAccount::isDemandDeposit)
-				.map(account -> new AccountCandidate(
-						account.accountNo(),
-						account.bankCode(),
-						account.bankName(),
-						account.accountBalance(),
-						linkedAccountNos.contains(account.accountNo())
-				))
+				.map(account -> {
+					Long linkedId = linkedAccountIds.get(account.accountNo());
+					return new AccountCandidate(
+							account.accountNo(),
+							account.bankCode(),
+							account.bankName(),
+							account.accountBalance(),
+							linkedId != null,
+							linkedId
+					);
+				})
 				.toList();
 		List<CardCandidate> cards = financeCards.stream()
-				.map(card -> new CardCandidate(
-						card.cardNo(),
-						card.cardIssuerName(),
-						card.cardName(),
-						card.withdrawalAccountNo(),
-						linkedCardNos.contains(card.cardNo())
-				))
+				.map(card -> {
+					Long linkedId = linkedCardIds.get(card.cardNo());
+					return new CardCandidate(
+							card.cardNo(),
+							card.cardIssuerName(),
+							card.cardName(),
+							card.withdrawalAccountNo(),
+							linkedId != null,
+							linkedId
+					);
+				})
 				.toList();
 
 		return new LinkCandidatesResponse(accounts, cards);

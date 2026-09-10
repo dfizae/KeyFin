@@ -108,8 +108,8 @@ class LinkControllerTest {
 	@Test
 	void 계좌_카드_후보_목록을_조회한다() throws Exception {
 		when(linkCandidateService.getCandidates(USER_ID)).thenReturn(new LinkCandidatesResponse(
-				List.of(new LinkCandidatesResponse.AccountCandidate("0010011073486799", "001", "한국은행", 1_500_000L, false)),
-				List.of(new LinkCandidatesResponse.CardCandidate("1003198565339181", "롯데카드", "디지로카 SEOUL", "0323555042323510", true))
+				List.of(new LinkCandidatesResponse.AccountCandidate("0010011073486799", "001", "한국은행", 1_500_000L, false, null)),
+				List.of(new LinkCandidatesResponse.CardCandidate("1003198565339181", "롯데카드", "디지로카 SEOUL", "0323555042323510", true, 7L))
 		));
 
 		mockMvc.perform(get("/api/v1/links/candidates"))
@@ -119,9 +119,11 @@ class LinkControllerTest {
 				.andExpect(jsonPath("$.data.accounts[0].bankName").value("한국은행"))
 				.andExpect(jsonPath("$.data.accounts[0].balance").value(1_500_000))
 				.andExpect(jsonPath("$.data.accounts[0].linked").value(false))
+				.andExpect(jsonPath("$.data.accounts[0].linkedId").isEmpty())
 				.andExpect(jsonPath("$.data.cards[0].cardNo").value("1003198565339181"))
 				.andExpect(jsonPath("$.data.cards[0].issuerName").value("롯데카드"))
-				.andExpect(jsonPath("$.data.cards[0].linked").value(true));
+				.andExpect(jsonPath("$.data.cards[0].linked").value(true))
+				.andExpect(jsonPath("$.data.cards[0].linkedId").value(7));
 
 		verify(linkCandidateService).getCandidates(USER_ID);
 	}

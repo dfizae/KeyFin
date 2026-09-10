@@ -21,7 +21,9 @@ public record LinkCandidatesResponse(
 			@Schema(description = "계좌 잔액(원)", example = "1500000")
 			Long balance,
 			@Schema(description = "KeyFin 연결 여부", example = "false")
-			boolean linked
+			boolean linked,
+			@Schema(description = "연결된 경우 KeyFin 계좌 ID(연결 해제·수입 계좌 지정에 사용), 미연결이면 null", example = "3", nullable = true)
+			Long linkedId
 	) {
 	}
 
@@ -35,7 +37,9 @@ public record LinkCandidatesResponse(
 			@Schema(description = "청구 출금 계좌번호", example = "0323555042323510")
 			String withdrawalAccountNo,
 			@Schema(description = "KeyFin 연결 여부", example = "true")
-			boolean linked
+			boolean linked,
+			@Schema(description = "연결된 경우 KeyFin 카드 ID(연결 해제에 사용), 미연결이면 null", example = "7", nullable = true)
+			Long linkedId
 	) {
 	}
 }

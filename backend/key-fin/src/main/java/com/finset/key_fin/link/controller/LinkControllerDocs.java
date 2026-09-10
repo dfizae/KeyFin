@@ -138,8 +138,8 @@ public interface LinkControllerDocs {
 							schema = @Schema(implementation = BaseResponse.class),
 							examples = @ExampleObject(
 									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{"
-											+ "\"accounts\":[{\"finAccountNo\":\"0010011073486799\",\"bankCode\":\"001\",\"bankName\":\"한국은행\",\"balance\":1500000,\"linked\":false}],"
-											+ "\"cards\":[{\"cardNo\":\"1003198565339181\",\"issuerName\":\"롯데카드\",\"cardName\":\"디지로카 SEOUL\",\"withdrawalAccountNo\":\"0323555042323510\",\"linked\":true}]}}"
+											+ "\"accounts\":[{\"finAccountNo\":\"0010011073486799\",\"bankCode\":\"001\",\"bankName\":\"한국은행\",\"balance\":1500000,\"linked\":false,\"linkedId\":null}],"
+											+ "\"cards\":[{\"cardNo\":\"1003198565339181\",\"issuerName\":\"롯데카드\",\"cardName\":\"디지로카 SEOUL\",\"withdrawalAccountNo\":\"0323555042323510\",\"linked\":true,\"linkedId\":7}]}}"
 							)
 					)
 			),
