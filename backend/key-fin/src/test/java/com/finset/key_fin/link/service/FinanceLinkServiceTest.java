@@ -6,7 +6,6 @@ import com.finset.key_fin.link.client.FinanceMemberClient;
 import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
 import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
 import com.finset.key_fin.link.dto.response.FinanceMember;
-import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -41,6 +40,9 @@ class FinanceLinkServiceTest {
 	@Mock
 	private FinanceMemberClient financeMemberClient;
 
+	@Mock
+	private FinanceLinkWriter financeLinkWriter;
+
 	@InjectMocks
 	private FinanceLinkService financeLinkService;
 
@@ -53,71 +55,29 @@ class FinanceLinkServiceTest {
 	}
 
 	@Test
-	void 로그인_사용자를_금융망_회원과_연결한다() {
+	void 금융망_조회_후_짧은_저장_트랜잭션에_연결을_위임한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(financeMemberClient.findByEmail(FINANCE_EMAIL))
 				.willReturn(new FinanceMember(FINANCE_EMAIL, FIN_USER_KEY));
-		given(userRepository.existsByFinUserKeyAndIdNot(FIN_USER_KEY, USER_ID)).willReturn(false);
+		given(financeLinkWriter.connect(USER_ID, FIN_USER_KEY))
+				.willReturn(FinanceLinkResponse.of(true));
 
 		FinanceLinkResponse response = financeLinkService.connect(USER_ID, REQUEST);
 
 		assertThat(response.connected()).isTrue();
-		assertThat(user.getFinUserKey()).isEqualTo(FIN_USER_KEY);
 		verify(financeMemberClient).findByEmail(FINANCE_EMAIL);
+		verify(financeLinkWriter).connect(USER_ID, FIN_USER_KEY);
 	}
 
 	@Test
-	void 같은_금융망_회원과의_재연결은_성공한다() {
-		user.connectFinance(FIN_USER_KEY);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(financeMemberClient.findByEmail(FINANCE_EMAIL))
-				.willReturn(new FinanceMember(FINANCE_EMAIL, FIN_USER_KEY));
-		given(userRepository.existsByFinUserKeyAndIdNot(FIN_USER_KEY, USER_ID)).willReturn(false);
-
-		FinanceLinkResponse response = financeLinkService.connect(USER_ID, REQUEST);
-
-		assertThat(response.connected()).isTrue();
-		assertThat(user.getFinUserKey()).isEqualTo(FIN_USER_KEY);
-	}
-
-	@Test
-	void 탈퇴했거나_존재하지_않는_사용자는_연결할_수_없다() {
+	void 탈퇴했거나_존재하지_않는_사용자는_금융망을_호출하지_않는다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.empty());
 
 		assertBusinessError(
 				UserErrorCode.USER_NOT_FOUND,
 				() -> financeLinkService.connect(USER_ID, REQUEST)
 		);
-		verifyNoInteractions(financeMemberClient);
-	}
-
-	@Test
-	void 다른_계정이_사용하는_금융망_회원은_연결할_수_없다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(financeMemberClient.findByEmail(FINANCE_EMAIL))
-				.willReturn(new FinanceMember(FINANCE_EMAIL, FIN_USER_KEY));
-		given(userRepository.existsByFinUserKeyAndIdNot(FIN_USER_KEY, USER_ID)).willReturn(true);
-
-		assertBusinessError(
-				LinkErrorCode.FINANCE_MEMBER_ALREADY_LINKED,
-				() -> financeLinkService.connect(USER_ID, REQUEST)
-		);
-		assertThat(user.isFinanceConnected()).isFalse();
-	}
-
-	@Test
-	void 이미_연결된_사용자를_다른_금융망_회원으로_변경할_수_없다() {
-		user.connectFinance("existing-finance-user-key");
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(financeMemberClient.findByEmail(FINANCE_EMAIL))
-				.willReturn(new FinanceMember(FINANCE_EMAIL, FIN_USER_KEY));
-		given(userRepository.existsByFinUserKeyAndIdNot(FIN_USER_KEY, USER_ID)).willReturn(false);
-
-		assertBusinessError(
-				UserErrorCode.FINANCE_CONNECTION_CONFLICT,
-				() -> financeLinkService.connect(USER_ID, REQUEST)
-		);
-		assertThat(user.getFinUserKey()).isEqualTo("existing-finance-user-key");
+		verifyNoInteractions(financeMemberClient, financeLinkWriter);
 	}
 
 	@Test
@@ -128,7 +88,7 @@ class FinanceLinkServiceTest {
 		FinanceLinkResponse response = financeLinkService.getStatus(USER_ID);
 
 		assertThat(response.connected()).isTrue();
-		verifyNoInteractions(financeMemberClient);
+		verifyNoInteractions(financeMemberClient, financeLinkWriter);
 	}
 
 	@Test
@@ -138,7 +98,7 @@ class FinanceLinkServiceTest {
 		FinanceLinkResponse response = financeLinkService.getStatus(USER_ID);
 
 		assertThat(response.connected()).isFalse();
-		verifyNoInteractions(financeMemberClient);
+		verifyNoInteractions(financeMemberClient, financeLinkWriter);
 	}
 
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {
