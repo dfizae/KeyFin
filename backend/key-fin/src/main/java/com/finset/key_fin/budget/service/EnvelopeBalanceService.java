@@ -1,12 +1,13 @@
 package com.finset.key_fin.budget.service;
 
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+
+import com.finset.key_fin.user.entity.UserSettings;
+import com.finset.key_fin.user.repository.UserSettingsRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -41,16 +42,18 @@ public class EnvelopeBalanceService {
 			ORDER BY be.envelope_id
 			""";
 
+	private static final int DEFAULT_ANCHOR_DAY = 1;
+
 	private final JdbcClient jdbc;
+	private final UserSettingsRepository userSettingsRepository;
 
 	public List<EnvelopeBalance> getMonthlyBalances(long userId, String month) {
-		LocalDate from = LocalDate.parse(month + "01", DateTimeFormatter.BASIC_ISO_DATE);
-		LocalDate to = from.plusMonths(1);
+		BudgetPeriod period = periodOf(userId, month);
 		return jdbc.sql(BALANCE_SQL)
 				.param("userId", userId)
 				.param("month", month)
-				.param("fromDate", from)
-				.param("toDate", to)
+				.param("fromDate", period.from())
+				.param("toDate", period.to())
 				.query((rs, rowNum) -> new EnvelopeBalance(
 						rs.getInt("envelope_id"),
 						rs.getString("envelope_name"),
@@ -64,6 +67,13 @@ public class EnvelopeBalanceService {
 				.filter(b -> b.envelopeId() == envelopeId)
 				.findFirst()
 				.map(EnvelopeBalance::remaining);
+	}
+
+	private BudgetPeriod periodOf(long userId, String month) {
+		int anchorDay = userSettingsRepository.findById(userId)
+				.map(UserSettings::getBudgetAnchorDay)
+				.orElse(DEFAULT_ANCHOR_DAY);
+		return BudgetPeriod.of(month, anchorDay);
 	}
 
 	public record EnvelopeBalance(int envelopeId, String envelopeName, Long confirmedAmount, long spent) {
