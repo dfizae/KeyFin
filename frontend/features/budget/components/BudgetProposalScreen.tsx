@@ -22,6 +22,9 @@ const SLIDER_STEP = 1000;
 
 const CTA_LABEL = "이 예산으로 시작하기";
 
+/** 승인 뒤에는 입주 연출(PAGE-08)을 거쳐 홈으로 간다 (유저 플로우 v2 온보딩 레인) */
+const MOVING_IN_ROUTE = "/character/moving-in";
+
 /** 하단 CTA 가 안전 영역이 없는 기기에서도 탭바처럼 띄워지는 최소 여백 (components/ui/tab-bar.tsx 와 같은 기준) */
 const MIN_BOTTOM_INSET = 12;
 
@@ -96,8 +99,7 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
       envelopeId: envelope.envelopeId,
       amount: amountOf(envelope.envelopeId),
     }));
-    // PAGE-08(캐릭터 입주중)이 생기면 그쪽으로 보낸다. (TBD)
-    confirm.mutate({ month, entries }, { onSuccess: () => router.replace("/") });
+    confirm.mutate({ month, entries }, { onSuccess: () => router.replace(MOVING_IN_ROUTE) });
   };
 
   return (

@@ -61,7 +61,12 @@ checkMirror(".agents/rules", ".claude/rules", Infinity);
 checkMirror(".agents/skills", ".claude/skills", 20);
 
 console.log("▶ design/*.json 파싱");
+// design-map.json 은 로컬 보관(gitignore)이라 없을 수 있다. 있으면 형식만 검사한다.
 for (const f of ["design/tokens.json", "design/design-map.json"]) {
+  if (!fs.existsSync(f)) {
+    console.log(`  건너뜀 ${f} (없음 — 로컬 전용 파일)`);
+    continue;
+  }
   try {
     JSON.parse(fs.readFileSync(f, "utf8"));
     console.log(`  OK ${f}`);
