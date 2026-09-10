@@ -2,6 +2,9 @@ import { DEFAULT_LAYOUT } from "@/features/room/scene";
 import { selectIsEditing, selectPlacements, useRoomStore } from "@/features/room/store";
 
 describe("room store (편집 모드)", () => {
+  // 기본 배치는 격자에서 파생되므로 좌표를 적어두지 않고 여기서 가져온다.
+  const anchorOf = (id: string) => DEFAULT_LAYOUT.find((p) => p.itemId === id)!.anchor;
+
   beforeEach(() => {
     useRoomStore.setState({ layout: DEFAULT_LAYOUT, draft: null, selectedId: null });
   });
@@ -20,12 +23,12 @@ describe("room store (편집 모드)", () => {
     store.moveItem("sofa", { x: 120, y: 300 });
     const state = useRoomStore.getState();
     expect(state.draft!.find((p) => p.itemId === "sofa")!.anchor).toEqual({ x: 120, y: 300 });
-    expect(state.layout.find((p) => p.itemId === "sofa")!.anchor).toEqual({ x: 100, y: 284 });
+    expect(state.layout.find((p) => p.itemId === "sofa")!.anchor).toEqual(anchorOf("sofa"));
   });
 
   it("편집 중이 아니면 moveItem 은 무시한다", () => {
     useRoomStore.getState().moveItem("sofa", { x: 120, y: 300 });
-    expect(useRoomStore.getState().layout.find((p) => p.itemId === "sofa")!.anchor).toEqual({ x: 100, y: 284 });
+    expect(useRoomStore.getState().layout.find((p) => p.itemId === "sofa")!.anchor).toEqual(anchorOf("sofa"));
   });
 
   it("취소하면 사본과 선택을 버리고 확정본으로 돌아간다", () => {
@@ -37,7 +40,7 @@ describe("room store (편집 모드)", () => {
     const state = useRoomStore.getState();
     expect(state.draft).toBeNull();
     expect(state.selectedId).toBeNull();
-    expect(selectPlacements(state).find((p) => p.itemId === "sofa")!.anchor).toEqual({ x: 100, y: 284 });
+    expect(selectPlacements(state).find((p) => p.itemId === "sofa")!.anchor).toEqual(anchorOf("sofa"));
   });
 
   it("완료하면 사본이 확정본이 된다", () => {

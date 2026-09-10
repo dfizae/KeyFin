@@ -26,7 +26,9 @@ describe("RoomEditorOverlay", () => {
     await fireEvent.press(screen.getByRole("button", { name: EDIT_LABEL }));
     useRoomStore.getState().moveItem("sofa", { x: 130, y: 300 });
     await fireEvent.press(screen.getByRole("button", { name: "편집 취소" }));
-    expect(useRoomStore.getState().layout.find((p) => p.itemId === "sofa")!.anchor).toEqual({ x: 100, y: 284 });
+    expect(useRoomStore.getState().layout.find((p) => p.itemId === "sofa")!.anchor).toEqual(
+      DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!.anchor
+    );
     expect(screen.getByRole("button", { name: EDIT_LABEL })).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: EDIT_LABEL }));

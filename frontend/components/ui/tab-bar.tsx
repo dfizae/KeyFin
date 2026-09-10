@@ -27,7 +27,7 @@ function TabBar({ state, descriptors, navigation }: TabBarProps) {
 
   return (
     <View
-      className="flex-row items-center justify-between border-t border-border bg-background px-4 pt-3"
+      className="flex-row items-center justify-between border-t border-border bg-card px-4 pt-3"
       style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}
       accessibilityRole="tablist"
     >

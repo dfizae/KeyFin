@@ -57,6 +57,46 @@ export function sceneRectToCanvas(rect: SceneRect, scale: number): SceneRect {
   return { x: rect.x * scale, y: rect.y * scale, width: rect.width * scale, height: rect.height * scale };
 }
 
+/**
+ * 방 씬 카메라. 화면에 그릴 때 점을 scale 로 키운 뒤 tx·ty 만큼 옮긴다(= [translate, scale] 순서의 변환).
+ * Skia Group 과 RN 오버레이가 같은 값을 읽어 같은 변환을 적용하므로, 배치·저장 좌표는 카메라와 무관하게 씬 단위로 남는다.
+ */
+export type Camera = { scale: number; tx: number; ty: number };
+export const MIN_ZOOM = 1;
+export const MAX_ZOOM = 2;
+
+/** 확대해도 방 바깥(캔버스 밖 여백)이 드러나지 않도록 배율과 평행이동을 가둔다. */
+export function clampCamera(camera: Camera, canvas: SceneSize): Camera {
+  "worklet";
+  const scale = clamp(camera.scale, MIN_ZOOM, MAX_ZOOM);
+  return {
+    scale,
+    tx: clamp(camera.tx, canvas.width * (1 - scale), 0),
+    ty: clamp(camera.ty, canvas.height * (1 - scale), 0),
+  };
+}
+
+/** 캔버스의 한 점(핀치 중심)을 제자리에 둔 채 배율만 바꾼다. 가둔 결과가 아니므로 clampCamera 와 함께 쓴다. */
+export function zoomAround(camera: Camera, focal: ScenePoint, nextScale: number): Camera {
+  "worklet";
+  const scale = clamp(nextScale, MIN_ZOOM, MAX_ZOOM);
+  const ratio = scale / camera.scale;
+  return {
+    scale,
+    tx: focal.x - (focal.x - camera.tx) * ratio,
+    ty: focal.y - (focal.y - camera.ty) * ratio,
+  };
+}
+
+/** 캔버스 픽셀 좌표(터치 지점)를 카메라를 되돌려 씬 좌표로 바꾼다. sceneRectToCanvas 의 역방향이다. */
+export function canvasPointToScene(point: ScenePoint, camera: Camera, sceneScale: number): ScenePoint {
+  "worklet";
+  return {
+    x: (point.x - camera.tx) / (camera.scale * sceneScale),
+    y: (point.y - camera.ty) / (camera.scale * sceneScale),
+  };
+}
+
 /** 깊이 정렬 키. 작을수록 먼저(뒤에) 그린다. */
 export function depthKey(entity: DepthEntity): number {
   "worklet";
@@ -120,13 +160,13 @@ export function getPolygonBounds(polygon: ScenePolygon): SceneRect {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-/** 선분 a→b 를 step 간격으로 샘플링해 사각형을 지나는지 본다. 가구 사이를 "통과"하는 경로를 거르는 용도라 근사로 충분하다. */
-export function segmentCrossesRect(a: ScenePoint, b: ScenePoint, rect: SceneRect, step = 6): boolean {
+/** 선분 a→b 를 step 간격으로 샘플링해 다각형을 지나는지 본다. 가구 사이를 "통과"하는 경로를 거르는 용도라 근사로 충분하다. */
+export function segmentCrossesPolygon(a: ScenePoint, b: ScenePoint, polygon: ScenePolygon, step = 6): boolean {
   const length = distance(a, b);
   const steps = Math.max(1, Math.ceil(length / step));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (rectContainsPoint(rect, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return true;
+    if (isPointInPolygon({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, polygon)) return true;
   }
   return false;
 }
@@ -138,7 +178,7 @@ export type PickWaypointOptions = {
   from: ScenePoint;
   polygon: ScenePolygon;
   /** 발끝이 들어가면 안 되는 영역(가구 발자국). 경로가 지나가도 안 된다 */
-  blocked?: readonly SceneRect[];
+  blocked?: readonly ScenePolygon[];
   rng?: Rng;
   /** 이 거리보다 가까운 후보는 버린다(제자리 걸음 방지) */
   minDistance?: number;
@@ -169,8 +209,8 @@ export function pickWaypoint({
     if (!isPointInPolygon(candidate, polygon)) continue;
     if (!isPointInPolygon({ x: candidate.x, y: candidate.y - wallMargin }, polygon)) continue;
     if (distance(from, candidate) < minDistance) continue;
-    if (blocked.some((rect) => rectContainsPoint(rect, candidate))) continue;
-    if (blocked.some((rect) => segmentCrossesRect(from, candidate, rect))) continue;
+    if (blocked.some((area) => isPointInPolygon(candidate, area))) continue;
+    if (blocked.some((area) => segmentCrossesPolygon(from, candidate, area))) continue;
     return candidate;
   }
   return null;
@@ -202,6 +242,10 @@ export const SLOT_TYPES = ["WALLPAPER", "FLOOR", "FURNITURE", "HAIR", "OUTFIT", 
 export type KnownSlotType = (typeof SLOT_TYPES)[number];
 /** 계약에 없는 값은 UNKNOWN 으로 흡수한다 (규칙 90) */
 export type SlotType = KnownSlotType | "UNKNOWN";
+
+/** 가구를 놓을 수 있는 면. GET/PUT /room/layout 의 surface 필드 (계약 협의 중) */
+export const SURFACE_TYPES = ["FLOOR", "WALL_LEFT", "WALL_RIGHT"] as const;
+export type Surface = (typeof SURFACE_TYPES)[number];
 
 export type RoomDto = {
   theme: string;

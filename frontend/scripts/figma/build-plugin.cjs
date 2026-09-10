@@ -112,6 +112,12 @@ const SCREEN_IDS = [
 ];
 const pen = JSON.parse(fs.readFileSync(PEN_PATH, "utf8"));
 const penTop = new Map(pen.children.map((n) => [n.id, n]));
+const penById = new Map();
+const indexPenNodes = (node) => {
+  penById.set(node.id, node);
+  for (const child of node.children ?? []) indexPenNodes(child);
+};
+pen.children.forEach(indexPenNodes);
 
 // 서체 원천은 tokens.json이다. Pencil의 `$font-sans`는 캔버스 렌더용 대체값일 수 있으므로 토큰 값(Pretendard)으로 치환한다.
 const fontSansToken = (tokens.primitive?.fontFamily?.sans ?? tokens.semantic?.fontFamily?.sans)?.$value;
@@ -161,15 +167,38 @@ function compactPen(node) {
     else if (Array.isArray(v)) v = v.map(round);
     out[key] = v;
   }
-  if (node.type === "ref") throw new Error(`컴포넌트 인스턴스(ref)는 지원하지 않습니다: ${node.id}`);
   if (node.children) out.children = node.children.map(compactPen);
   return out;
 }
-const penScreens = SCREEN_IDS.map((id) => {
-  const node = penTop.get(id);
-  if (!node) throw new Error(`design.pen 최상위에서 화면을 찾을 수 없습니다: ${id}`);
-  return compactPen(node);
-});
+function resolvePenRefs(node, stack = []) {
+  if (node.type !== "ref") {
+    return { ...node, children: node.children?.map((child) => resolvePenRefs(child, stack)) };
+  }
+  if (stack.includes(node.ref)) throw new Error(`컴포넌트 인스턴스 순환 참조: ${node.id}`);
+  const source = penById.get(node.ref);
+  if (!source) throw new Error(`컴포넌트 원본을 찾을 수 없습니다: ${node.ref}`);
+  const resolved = JSON.parse(JSON.stringify(source));
+  const descendants = node.descendants ?? {};
+  const applyOverrides = (child) => {
+    const override = descendants[child.id];
+    return {
+      ...child,
+      ...(override ?? {}),
+      children: child.children?.map(applyOverrides),
+    };
+  };
+  const instance = applyOverrides(resolved);
+  instance.id = node.id;
+  instance.name = node.name ?? instance.name;
+  delete instance.reusable;
+  return resolvePenRefs(instance, [...stack, node.ref]);
+}
+const requestedScreens = SCREEN_IDS.map((id) => penTop.get(id));
+const screenSources = requestedScreens.every(Boolean)
+  ? requestedScreens
+  : pen.children.filter((node) => node.type === "frame");
+if (!screenSources.length) throw new Error("design.pen 최상위에서 내보낼 frame을 찾을 수 없습니다");
+const penScreens = screenSources.map((screen) => compactPen(resolvePenRefs(screen)));
 // Pencil 캔버스 좌표를 그대로 옮기되 원점만 화면들의 좌상단으로 맞춘다
 const origin = { x: Math.min(...penScreens.map((s) => s.x)), y: Math.min(...penScreens.map((s) => s.y)) };
 for (const s of penScreens) {

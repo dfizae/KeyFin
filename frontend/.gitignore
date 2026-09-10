@@ -60,3 +60,6 @@ WORKLOG.md
 
 # Figma 원본(임포트 소스) — 56MB로 GitHub 한도 초과, 로컬 보관
 *.fig
+
+# Pencil AI 생성 임시 출력. 채택한 원본은 design/images/ai 로 옮겨 .pen 이 참조한다
+images/

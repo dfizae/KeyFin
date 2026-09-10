@@ -47,10 +47,12 @@
     "tokens:check": "node scripts/sync-pen-tokens.cjs --check && node scripts/sync-tokens.cjs --check && node scripts/check-tokens.cjs",
     "harness:sync": "node scripts/sync-harness.cjs",
     "harness:check": "node scripts/check-harness.cjs",
+    "harness:backup": "node scripts/harness-backup.cjs",
+    "harness:restore": "node scripts/harness-restore.cjs",
     "ui:add": "pnpm dlx shadcn@latest add --yes",
     "test": "jest",
     "figma:build": "node scripts/figma/build-plugin.cjs",
-    "figma:smoke": "node scripts/figma/build-plugin.cjs && node scripts/figma/smoke.cjs && STARTER=1 node scripts/figma/smoke.cjs && FAIL_EVERY=97 node scripts/figma/smoke.cjs"
+    "figma:smoke": "node scripts/figma/run-smoke.cjs"
   },
   "private": true,
   "devDependencies": {

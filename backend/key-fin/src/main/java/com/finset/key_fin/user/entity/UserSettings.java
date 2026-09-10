@@ -11,6 +11,8 @@ import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.Objects;
 
@@ -28,6 +30,10 @@ public class UserSettings {
 	@OneToOne(fetch = FetchType.LAZY, optional = false)
 	@JoinColumn(name = "user_id", nullable = false)
 	private User user;
+
+	@JdbcTypeCode(SqlTypes.TINYINT)
+	@Column(name = "budget_anchor_day", nullable = false)
+	private int budgetAnchorDay = 1;
 
 	private UserSettings(User user) {
 		this.user = Objects.requireNonNull(user, "user must not be null");

@@ -48,7 +48,7 @@ pnpm figma:build      # (선택) design.pen 화면 + 토큰 → Figma 로컬 플
 │   └── pencil/               #   대안 드래프트 .pen (메인 파일은 루트 design.pen)
 ├── .agents/                  # 하네스 정본
 │   ├── rules/                #   00~60 기본, 70 디자인 토큰, 80 핀테크 보안, 90 백엔드 계약
-│   └── skills/               #   pencil-design · fintech-ui-patterns (+ 외부 참조 스킬)
+│   └── skills/               #   pencil-design · fintech-ui-patterns (프로젝트 전용 2종만)
 ├── .claude/                  # Claude Code 미러 (rules, skills, settings.json)
 ├── scripts/                  # sync-pen-tokens · sync-tokens · check-tokens · sync-harness · check-harness · hooks/post-edit-check · figma/(Figma 내보내기 플러그인) · assets/(방 씬 에셋: 배경 제거 remove-white-bg.ps1 · 시트 빌드 build-sprite-sheet.ps1, Windows PowerShell)
 ├── assets/sprites/           # 방 씬 앱 에셋(Git LFS 대상): floors/ furniture/ characters/(시트 .png + 프레임 .json)
