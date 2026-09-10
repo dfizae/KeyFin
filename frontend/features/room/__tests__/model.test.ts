@@ -19,12 +19,12 @@ import {
   SCENE_HEIGHT,
   SCENE_WIDTH,
   sceneRectToCanvas,
-  segmentCrossesRect,
+  segmentCrossesPolygon,
   sortByDepth,
   travelDurationMs,
   zoomAround,
 } from "@/features/room/model";
-import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintRect, isPlacementValid, resolveDrag } from "@/features/room/scene";
+import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintPolygon } from "@/features/room/scene";
 
 describe("room scene 좌표계", () => {
   it("씬 단위는 Pencil CharacterRoom 327×404 이다", () => {
@@ -168,7 +168,8 @@ describe("바닥 다각형", () => {
   });
 
   it("카탈로그 크기는 PNG 비율을 유지한다", () => {
-    expect(FURNITURE.sofa.size).toEqual({ width: 165, height: 103 });
+    // 크기는 칸을 채우도록 바뀔 수 있으므로 값이 아니라 PNG 종횡비를 검사한다(sofa-v2.png 828x624).
+    expect(FURNITURE.sofa.size.height / FURNITURE.sofa.size.width).toBeCloseTo(624 / 828, 2);
     expect(FURNITURE.fridge.size.height).toBeGreaterThan(FURNITURE.fridge.size.width);
     expect(FURNITURE.plant.size.height).toBeGreaterThan(FURNITURE.plant.size.width);
   });
@@ -180,21 +181,30 @@ describe("캐릭터 이동 (웨이포인트)", () => {
     let i = 0;
     return () => values[i++ % values.length];
   };
-  const blocked = DEFAULT_LAYOUT.map((p) => getFootprintRect(FURNITURE[p.itemId], p.anchor));
+  const blocked = DEFAULT_LAYOUT.map((p) => getFootprintPolygon(FURNITURE[p.itemId], p.anchor));
 
-  it("선분이 사각형을 지나는지 근사로 판정한다", () => {
-    const rect = { x: 100, y: 100, width: 50, height: 50 };
-    expect(segmentCrossesRect({ x: 0, y: 125 }, { x: 300, y: 125 }, rect)).toBe(true);
-    expect(segmentCrossesRect({ x: 0, y: 0 }, { x: 300, y: 0 }, rect)).toBe(false);
-    expect(rectContainsPoint(rect, { x: 120, y: 120 })).toBe(true);
-    expect(rectContainsPoint(rect, { x: 99, y: 120 })).toBe(false);
+  it("선분이 다각형을 지나는지 근사로 판정한다", () => {
+    const square = [
+      { x: 100, y: 100 },
+      { x: 150, y: 100 },
+      { x: 150, y: 150 },
+      { x: 100, y: 150 },
+    ];
+    expect(segmentCrossesPolygon({ x: 0, y: 125 }, { x: 300, y: 125 }, square)).toBe(true);
+    expect(segmentCrossesPolygon({ x: 0, y: 0 }, { x: 300, y: 0 }, square)).toBe(false);
+    expect(rectContainsPoint({ x: 100, y: 100, width: 50, height: 50 }, { x: 120, y: 120 })).toBe(true);
+    expect(rectContainsPoint({ x: 100, y: 100, width: 50, height: 50 }, { x: 99, y: 120 })).toBe(false);
   });
 
-  it("가구 발자국은 발끝 아래 앞쪽까지 포함하고 스프라이트보다 좁다", () => {
-    const rect = getFootprintRect(FURNITURE.sofa, { x: 100, y: 292 });
-    expect(rect.y).toBeLessThan(292);
-    expect(rect.y + rect.height).toBeGreaterThan(292);
-    expect(rect.width).toBeLessThan(FURNITURE.sofa.size.width);
+  it("가구 발자국은 발끝을 앞쪽 경계로 두고 뒤로 뻗는다", () => {
+    const sofa = DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!;
+    const polygon = getFootprintPolygon(FURNITURE.sofa, sofa.anchor);
+    const xs = polygon.map((p) => p.x);
+    const ys = polygon.map((p) => p.y);
+    expect(Math.min(...ys)).toBeLessThan(sofa.anchor.y);
+    expect(Math.max(...ys)).toBeGreaterThanOrEqual(sofa.anchor.y);
+    expect(Math.min(...xs)).toBeLessThanOrEqual(sofa.anchor.x);
+    expect(Math.max(...xs)).toBeGreaterThanOrEqual(sofa.anchor.x);
   });
 
   it("고른 목적지는 항상 바닥 안·가구 발자국 밖·벽 마진 밖이고 최소 거리를 넘는다", () => {
@@ -208,8 +218,8 @@ describe("캐릭터 이동 (웨이포인트)", () => {
       expect(target.x).toBeLessThanOrEqual(327 - 42);
       expect(isPointInPolygon(target, FLOOR_POLYGON)).toBe(true);
       expect(isPointInPolygon({ x: target.x, y: target.y - 12 }, FLOOR_POLYGON)).toBe(true);
-      expect(blocked.some((r) => rectContainsPoint(r, target))).toBe(false);
-      expect(blocked.some((r) => segmentCrossesRect(from, target, r))).toBe(false);
+      expect(blocked.some((area) => isPointInPolygon(target, area))).toBe(false);
+      expect(blocked.some((area) => segmentCrossesPolygon(from, target, area))).toBe(false);
       expect(Math.hypot(target.x - from.x, target.y - from.y)).toBeGreaterThanOrEqual(40);
       from = target;
     }
@@ -230,36 +240,11 @@ describe("캐릭터 이동 (웨이포인트)", () => {
   });
 });
 
-describe("가구 편집 (배치 검증·드래그·히트 테스트)", () => {
-  const others = DEFAULT_LAYOUT.filter((p) => p.itemId !== "sofa").map((p) => getFootprintRect(FURNITURE[p.itemId], p.anchor));
-  const sofa = FURNITURE.sofa;
-
-  it("기본 배치는 모든 가구가 서로 겹치지 않는 유효한 자리다", () => {
-    for (const placement of DEFAULT_LAYOUT) {
-      const rest = DEFAULT_LAYOUT.filter((p) => p !== placement).map((p) => getFootprintRect(FURNITURE[p.itemId], p.anchor));
-      expect(isPlacementValid({ item: FURNITURE[placement.itemId], anchor: placement.anchor, otherFootprints: rest })).toBe(true);
-    }
-  });
-
-  it("벽 위, 다른 가구 위, 화면 밖은 무효다", () => {
-    expect(isPlacementValid({ item: sofa, anchor: { x: 100, y: 120 }, otherFootprints: others })).toBe(false); // 왼쪽 벽
-    expect(isPlacementValid({ item: sofa, anchor: { x: 190, y: 335 }, otherFootprints: others })).toBe(false); // 테이블 위
-    expect(isPlacementValid({ item: sofa, anchor: { x: 20, y: 380 }, otherFootprints: others })).toBe(false); // 스프라이트가 화면 왼쪽 밖
-  });
-
+// 배치 유효성·드래그는 격자 기준으로 옮겼다. grid.test.ts 를 본다.
+describe("가구 편집 (히트 테스트)", () => {
   it("사각형 겹침을 판정한다", () => {
     expect(rectsIntersect({ x: 0, y: 0, width: 10, height: 10 }, { x: 5, y: 5, width: 10, height: 10 })).toBe(true);
     expect(rectsIntersect({ x: 0, y: 0, width: 10, height: 10 }, { x: 10, y: 0, width: 10, height: 10 })).toBe(false);
-  });
-
-  it("드래그는 갈 수 있으면 그대로, 막히면 가로·세로만 움직이고, 그래도 안 되면 제자리다", () => {
-    const check = { item: sofa, otherFootprints: others };
-    const from = { x: 100, y: 284 };
-    expect(resolveDrag(check, from, { x: -10, y: -10 })).toEqual({ x: 90, y: 274 });
-    // 위로 너무 올리면 벽에 걸려 세로는 못 가고 가로만 간다
-    expect(resolveDrag(check, from, { x: 10, y: -170 })).toEqual({ x: 110, y: 284 });
-    // 왼쪽 화면 밖 + 벽 위: 둘 다 막혀 제자리
-    expect(resolveDrag(check, from, { x: -100, y: -170 })).toEqual(from);
   });
 
   it("히트 테스트는 그리는 순서상 가장 앞의 것을 고른다", () => {

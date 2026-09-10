@@ -160,13 +160,13 @@ export function getPolygonBounds(polygon: ScenePolygon): SceneRect {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-/** 선분 a→b 를 step 간격으로 샘플링해 사각형을 지나는지 본다. 가구 사이를 "통과"하는 경로를 거르는 용도라 근사로 충분하다. */
-export function segmentCrossesRect(a: ScenePoint, b: ScenePoint, rect: SceneRect, step = 6): boolean {
+/** 선분 a→b 를 step 간격으로 샘플링해 다각형을 지나는지 본다. 가구 사이를 "통과"하는 경로를 거르는 용도라 근사로 충분하다. */
+export function segmentCrossesPolygon(a: ScenePoint, b: ScenePoint, polygon: ScenePolygon, step = 6): boolean {
   const length = distance(a, b);
   const steps = Math.max(1, Math.ceil(length / step));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (rectContainsPoint(rect, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })) return true;
+    if (isPointInPolygon({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }, polygon)) return true;
   }
   return false;
 }
@@ -178,7 +178,7 @@ export type PickWaypointOptions = {
   from: ScenePoint;
   polygon: ScenePolygon;
   /** 발끝이 들어가면 안 되는 영역(가구 발자국). 경로가 지나가도 안 된다 */
-  blocked?: readonly SceneRect[];
+  blocked?: readonly ScenePolygon[];
   rng?: Rng;
   /** 이 거리보다 가까운 후보는 버린다(제자리 걸음 방지) */
   minDistance?: number;
@@ -209,8 +209,8 @@ export function pickWaypoint({
     if (!isPointInPolygon(candidate, polygon)) continue;
     if (!isPointInPolygon({ x: candidate.x, y: candidate.y - wallMargin }, polygon)) continue;
     if (distance(from, candidate) < minDistance) continue;
-    if (blocked.some((rect) => rectContainsPoint(rect, candidate))) continue;
-    if (blocked.some((rect) => segmentCrossesRect(from, candidate, rect))) continue;
+    if (blocked.some((area) => isPointInPolygon(candidate, area))) continue;
+    if (blocked.some((area) => segmentCrossesPolygon(from, candidate, area))) continue;
     return candidate;
   }
   return null;
@@ -242,6 +242,10 @@ export const SLOT_TYPES = ["WALLPAPER", "FLOOR", "FURNITURE", "HAIR", "OUTFIT", 
 export type KnownSlotType = (typeof SLOT_TYPES)[number];
 /** 계약에 없는 값은 UNKNOWN 으로 흡수한다 (규칙 90) */
 export type SlotType = KnownSlotType | "UNKNOWN";
+
+/** 가구를 놓을 수 있는 면. GET/PUT /room/layout 의 surface 필드 (계약 협의 중) */
+export const SURFACE_TYPES = ["FLOOR", "WALL_LEFT", "WALL_RIGHT"] as const;
+export type Surface = (typeof SURFACE_TYPES)[number];
 
 export type RoomDto = {
   theme: string;
