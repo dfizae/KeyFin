@@ -1,4 +1,4 @@
-package com.finset.key_fin.finance.exception;
+package com.finset.key_fin.link.exception;
 
 import com.finset.key_fin.global.exception.ErrorCode;
 import lombok.Getter;

@@ -1,4 +1,4 @@
-package com.finset.key_fin.finance.dto.request;
+package com.finset.key_fin.link.dto.request;
 
 public record FinanceMemberSearchRequest(
 		String apiKey,

@@ -1,4 +1,4 @@
-package com.finset.key_fin.finance.dto.response;
+package com.finset.key_fin.link.dto.response;
 
 public record FinanceMember(
 		String userId,
