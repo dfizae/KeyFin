@@ -2,7 +2,7 @@ import * as React from "react";
 
 import { setUnauthorizedHandler } from "@/api/client";
 import { useAuthStore } from "@/features/auth/store";
-import { loadFinanceLinked, loadSessionUser, loadTermsAgreed, loadTokens } from "@/lib/session-storage";
+import { loadSessionUser, loadTermsAgreed, loadTokens } from "@/lib/session-storage";
 
 /**
  * 앱 시작 시 저장된 세션을 스토어에 되살린다 (네이티브만 — 웹은 저장소가 메모리라 항상 비로그인으로 시작한다).
@@ -18,11 +18,8 @@ export function useSessionBootstrap(): void {
     async function restoreSession() {
       const { accessToken } = await loadTokens();
       const user = accessToken === null ? null : await loadSessionUser();
-      const onboarding =
-        user === null
-          ? { termsAgreed: false, financeLinked: false }
-          : { termsAgreed: await loadTermsAgreed(user.id), financeLinked: await loadFinanceLinked(user.id) };
-      if (!cancelled) restore(user, accessToken !== null, onboarding);
+      const termsAgreed = user === null ? false : await loadTermsAgreed(user.id);
+      if (!cancelled) restore(user, accessToken !== null, termsAgreed);
     }
 
     void restoreSession();

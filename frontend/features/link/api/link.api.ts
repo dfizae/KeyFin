@@ -1,7 +1,17 @@
 import { USE_MOCKS, api } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
-import { connectFinanceMock } from "@/api/mocks/link";
-import type { FinanceLinkRequest, FinanceLinkResponseDto } from "@/features/link/model";
+import { connectFinanceMock, financeStatusMock } from "@/api/mocks/link";
+import type { FinanceLinkRequest, FinanceLinkResponseDto, FinanceStatusDto } from "@/features/link/model";
+
+/** GET /links/status — 현재 사용자의 금융망 연결 여부 (docs/api-contract.md LINK). 미연결도 200 + false 다. */
+export async function getFinanceStatus(signal?: AbortSignal): Promise<boolean> {
+  if (USE_MOCKS) {
+    const { financeConnected } = await withMockLatency(financeStatusMock(), signal);
+    return financeConnected;
+  }
+  const { data } = await api.get<FinanceStatusDto>("/links/status", { signal });
+  return data.financeConnected;
+}
 
 /**
  * 금융망 회원 연결. Bearer 필요.

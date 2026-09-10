@@ -1,24 +1,36 @@
-import { useMutation } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { useAuthStore } from "@/features/auth/store";
-import { connectFinanceAccount } from "@/features/link/api/link.api";
+import { selectAuthStatus, useAuthStore } from "@/features/auth/store";
+import { connectFinanceAccount, getFinanceStatus } from "@/features/link/api/link.api";
 import type { FinanceLinkRequest } from "@/features/link/model";
-import { saveFinanceLinked } from "@/lib/session-storage";
 
-/**
- * 연결 성공 여부는 서버가 가진 상태지만 조회 API 가 없어 기기에도 남긴다.
- * 상태 조회 엔드포인트가 생기면 이 로컬 기록을 걷어낸다. (TBD)
- */
+export const linkKeys = {
+  all: ["link"] as const,
+  financeStatus: () => [...linkKeys.all, "finance-status"] as const,
+};
+
+/** 연결 상태는 서버가 가진 값이라 로그인해 있는 동안만 조회한다. 온보딩 분기의 근거라 자주 다시 부르지 않는다. */
+export function financeStatusQueryOptions() {
+  return queryOptions({
+    queryKey: linkKeys.financeStatus(),
+    queryFn: ({ signal }) => getFinanceStatus(signal),
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useFinanceStatus() {
+  const authStatus = useAuthStore(selectAuthStatus);
+  return useQuery({ ...financeStatusQueryOptions(), enabled: authStatus === "authenticated" });
+}
+
+/** 연결에 성공하면 상태 조회를 다시 하지 않고 캐시에 바로 반영한다 (docs/api-guide.md §5) */
 export function useConnectFinance() {
-  const user = useAuthStore((state) => state.user);
-  const markFinanceLinked = useAuthStore((state) => state.markFinanceLinked);
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (request: FinanceLinkRequest) => connectFinanceAccount(request),
-    onSuccess: async (connected) => {
-      if (!connected || user === null) return;
-      await saveFinanceLinked(user.id);
-      markFinanceLinked();
+    onSuccess: (connected) => {
+      if (connected) queryClient.setQueryData(linkKeys.financeStatus(), true);
     },
   });
 }

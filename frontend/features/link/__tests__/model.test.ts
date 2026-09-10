@@ -1,7 +1,15 @@
 import { ApiError } from "@/api/error";
-import { connectFinanceMock, MOCK_FINANCE_EMAIL, MOCK_TAKEN_FINANCE_EMAIL } from "@/api/mocks/link";
+import {
+  connectFinanceMock,
+  financeStatusMock,
+  MOCK_FINANCE_EMAIL,
+  MOCK_TAKEN_FINANCE_EMAIL,
+  resetLinkMocks,
+} from "@/api/mocks/link";
 import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/errors";
 import { canSubmitFinanceEmail, FINANCE_EMAIL_MAX_LENGTH } from "@/features/link/model";
+
+beforeEach(resetLinkMocks);
 
 describe("canSubmitFinanceEmail", () => {
   it("이메일 형식이고 100자 이하여야 보낼 수 있다", () => {
@@ -51,5 +59,18 @@ describe("financeErrorMessage · isRetryableFinanceError", () => {
     expect(isRetryableFinanceError(new ApiError(404, "FINANCE_001", ""))).toBe(false);
     expect(isRetryableFinanceError(new ApiError(409, "LINK_001", ""))).toBe(false);
     expect(isRetryableFinanceError(new ApiError(503, "FINANCE_004", ""))).toBe(true);
+  });
+});
+
+describe("financeStatusMock", () => {
+  it("연결 전에는 false, 연결에 성공하면 true 다", () => {
+    expect(financeStatusMock()).toEqual({ financeConnected: false });
+    connectFinanceMock({ financeEmail: MOCK_FINANCE_EMAIL });
+    expect(financeStatusMock()).toEqual({ financeConnected: true });
+  });
+
+  it("연결에 실패하면 상태는 그대로 false 다", () => {
+    expect(() => connectFinanceMock({ financeEmail: MOCK_TAKEN_FINANCE_EMAIL })).toThrow();
+    expect(financeStatusMock()).toEqual({ financeConnected: false });
   });
 });

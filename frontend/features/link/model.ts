@@ -5,6 +5,9 @@
  */
 export type FinanceLinkRequest = { financeEmail: string };
 
+/** GET /links/status. 미연결도 정상 상태라 200 + false 로 온다 */
+export type FinanceStatusDto = { financeConnected: boolean };
+
 export type FinanceLinkResponseDto = { connected: boolean };
 
 /** 금융망 이메일 제한: 형식과 최대 100자 (COMMON_001 을 미리 막는다) */
