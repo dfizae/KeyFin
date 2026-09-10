@@ -4,6 +4,9 @@ INSERT INTO users (id, email, password, name, fin_user_key) VALUES
  (995, 'proposal-partial@keyfin.io', 'x', '부분이력테스터', 'test-user-key-995'),
  (994, 'proposal-fraction@keyfin.io', 'x', '부분달테스터', 'test-user-key-994');
 
+-- 994는 기준일 25 → 2026-09-10 시점 현재 주기 라벨 202608 ([08-25, 09-25)); 나머지는 설정 행 없음 → 기준일 1 → 202609
+INSERT INTO user_settings (user_id, budget_anchor_day) VALUES (994, 25);
+
 -- 테스트 고정 시계 = 2026-09-10 → 집계 구간 [2026-06-10, 2026-09-10), 구간 92일
 INSERT INTO transactions
  (id, user_id, source, tx_type, amount, tx_date, tx_time, subcategory_id, confirm_status, exclude_tag, adjusted_amount, status) VALUES

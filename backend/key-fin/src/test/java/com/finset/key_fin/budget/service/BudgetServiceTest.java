@@ -31,8 +31,7 @@ class BudgetServiceTest {
 	private static final long USER_WITH_HISTORY = 997L;
 	private static final long USER_WITHOUT_HISTORY = 996L;
 	private static final long USER_WITH_SHORT_HISTORY = 995L;
-	private static final long USER_WITH_FRACTIONAL_HISTORY = 994L;
-	private static final String MONTH = "202609";
+	private static final long USER_WITH_ANCHOR_25 = 994L;
 
 	@TestConfiguration
 	static class FixedClockConfig {
@@ -51,13 +50,13 @@ class BudgetServiceTest {
 	private BudgetEnvelopeRepository budgetEnvelopeRepository;
 
 	@Test
-	@DisplayName("신청일 기준 직전 3개월 순소비를 일수 비례 월평균으로 환산해 봉투 7종 전부 제안한다")
+	@DisplayName("요청 시점 기준 직전 3개월 순소비를 일수 비례 월평균으로 환산해 현재 주기에 봉투 7종 전부 제안한다")
 	void proposeFromRecentAverage() {
-		BudgetProposalResponse response = budgetService.propose(USER_WITH_HISTORY, MONTH);
+		BudgetProposalResponse response = budgetService.propose(USER_WITH_HISTORY);
 
+		assertThat(response.month()).isEqualTo("202609");
 		assertThat(response.status()).isEqualTo("PROPOSED");
 		assertThat(response.basis()).isEqualTo("최근 3개월 평균");
-		assertThat(response.month()).isEqualTo(MONTH);
 		assertThat(response.envelopes()).hasSize(7);
 
 		EnvelopeProposal dining = response.envelopes().get(0);
@@ -77,7 +76,7 @@ class BudgetServiceTest {
 	@Test
 	@DisplayName("이력이 한 달 미만이면 확대 없이 그대로 평균으로 쓴다 (하한 30일)")
 	void proposeFromShortHistory() {
-		BudgetProposalResponse response = budgetService.propose(USER_WITH_SHORT_HISTORY, MONTH);
+		BudgetProposalResponse response = budgetService.propose(USER_WITH_SHORT_HISTORY);
 
 		assertThat(response.basis()).isEqualTo("최근 1개월 평균");
 		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(90000);
@@ -85,10 +84,11 @@ class BudgetServiceTest {
 	}
 
 	@Test
-	@DisplayName("부분 달 이력은 커버 일수에 비례해 환산한다 (77일치 → ×30/77)")
-	void proposeFromFractionalHistory() {
-		BudgetProposalResponse response = budgetService.propose(USER_WITH_FRACTIONAL_HISTORY, MONTH);
+	@DisplayName("기준일 25 사용자는 현재 주기 라벨이 전월(202608)이고, 부분 달 이력은 커버 일수에 비례해 환산한다")
+	void proposeForAnchor25UserWithFractionalHistory() {
+		BudgetProposalResponse response = budgetService.propose(USER_WITH_ANCHOR_25);
 
+		assertThat(response.month()).isEqualTo("202608");
 		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(89610);
 		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(90000);
 	}
@@ -96,7 +96,7 @@ class BudgetServiceTest {
 	@Test
 	@DisplayName("이력이 없으면 기본 템플릿(합계 125만)으로 제안한다")
 	void proposeFromDefaultTemplate() {
-		BudgetProposalResponse response = budgetService.propose(USER_WITHOUT_HISTORY, MONTH);
+		BudgetProposalResponse response = budgetService.propose(USER_WITHOUT_HISTORY);
 
 		assertThat(response.basis()).isEqualTo("기본 템플릿");
 		assertThat(response.envelopes())
@@ -105,11 +105,11 @@ class BudgetServiceTest {
 	}
 
 	@Test
-	@DisplayName("같은 주기의 제안이 이미 있으면 BUDGET_ALREADY_EXISTS")
+	@DisplayName("현재 주기의 제안이 이미 있으면 BUDGET_ALREADY_EXISTS")
 	void rejectDuplicateProposal() {
-		budgetService.propose(USER_WITH_HISTORY, MONTH);
+		budgetService.propose(USER_WITH_HISTORY);
 
-		assertThatThrownBy(() -> budgetService.propose(USER_WITH_HISTORY, MONTH))
+		assertThatThrownBy(() -> budgetService.propose(USER_WITH_HISTORY))
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode())
 				.isEqualTo(BudgetErrorCode.BUDGET_ALREADY_EXISTS);

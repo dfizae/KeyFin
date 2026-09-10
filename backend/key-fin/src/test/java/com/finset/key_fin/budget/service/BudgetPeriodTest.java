@@ -38,6 +38,17 @@ class BudgetPeriodTest {
 	}
 
 	@Test
+	@DisplayName("오늘이 기준일 이후면 이번 달, 이전이면 전월 라벨의 주기가 현재 주기다")
+	void currentPeriod() {
+		LocalDate today = LocalDate.of(2026, 9, 10);
+
+		assertThat(BudgetPeriod.current(today, 1).month()).isEqualTo("202609");
+		assertThat(BudgetPeriod.current(today, 25).month()).isEqualTo("202608");
+		assertThat(BudgetPeriod.current(LocalDate.of(2026, 9, 25), 25).month()).isEqualTo("202609");
+		assertThat(BudgetPeriod.current(LocalDate.of(2027, 1, 10), 25).month()).isEqualTo("202612");
+	}
+
+	@Test
 	@DisplayName("윤년 2월에도 기준일이 밀리지 않는다")
 	void leapYearFebruary() {
 		BudgetPeriod leapFebruary = BudgetPeriod.of("202802", 28);

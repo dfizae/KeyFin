@@ -19,7 +19,9 @@ import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.budget.repository.BudgetRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.user.entity.UserSettings;
 import com.finset.key_fin.user.repository.UserRepository;
+import com.finset.key_fin.user.repository.UserSettingsRepository;
 
 import lombok.RequiredArgsConstructor;
 
@@ -58,6 +60,7 @@ public class BudgetService {
 	private static final int WINDOW_MONTHS = 3;
 	private static final int MIN_COVERED_DAYS = 30;
 	private static final int DAYS_PER_MONTH = 30;
+	private static final int DEFAULT_ANCHOR_DAY = 1;
 	private static final String BASIS_RECENT_AVERAGE = "최근 %d개월 평균";
 	private static final String BASIS_DEFAULT_TEMPLATE = "기본 템플릿";
 	private static final Map<Integer, Long> DEFAULT_TEMPLATE = Map.of(
@@ -74,14 +77,16 @@ public class BudgetService {
 	private final BudgetRepository budgetRepository;
 	private final BudgetEnvelopeRepository budgetEnvelopeRepository;
 	private final UserRepository userRepository;
+	private final UserSettingsRepository userSettingsRepository;
 
 	@Transactional
-	public BudgetProposalResponse propose(long userId, String month) {
+	public BudgetProposalResponse propose(long userId) {
+		LocalDate referenceDate = LocalDate.now(clock);
+		String month = BudgetPeriod.current(referenceDate, anchorDayOf(userId)).month();
 		if (budgetRepository.existsByUserIdAndBudgetMonth(userId, month)) {
 			throw new BusinessException(BudgetErrorCode.BUDGET_ALREADY_EXISTS);
 		}
 
-		LocalDate referenceDate = LocalDate.now(clock);
 		LocalDate windowStart = referenceDate.minusMonths(WINDOW_MONTHS);
 		List<EnvelopeSpent> recentSpent = jdbc.sql(RECENT_SPENT_SQL)
 				.param("userId", userId)
@@ -117,6 +122,12 @@ public class BudgetService {
 				budget.getStatus().name(),
 				noHistory ? BASIS_DEFAULT_TEMPLATE : BASIS_RECENT_AVERAGE.formatted(coveredMonthsLabel),
 				proposals);
+	}
+
+	private int anchorDayOf(long userId) {
+		return userSettingsRepository.findById(userId)
+				.map(UserSettings::getBudgetAnchorDay)
+				.orElse(DEFAULT_ANCHOR_DAY);
 	}
 
 	private long coveredDays(long userId, LocalDate windowStart, LocalDate referenceDate) {
