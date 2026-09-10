@@ -1,0 +1,63 @@
+import { ApiError } from "@/api/error";
+import { loginMock, MOCK_PASSWORD } from "@/api/mocks/auth";
+import { authErrorMessage } from "@/features/auth/errors";
+import { canSubmitLogin, isValidEmail, toAuthSession } from "@/features/auth/model";
+import { ContractMismatchError } from "@/lib/contract";
+
+const EMAIL = "qwer@qwer.com";
+
+describe("toAuthSession", () => {
+  it("로그인 응답을 토큰과 사용자로 나눈다", () => {
+    const session = toAuthSession(loginMock({ email: EMAIL, password: MOCK_PASSWORD }));
+    expect(session.accessToken).toBe("mock.access.token");
+    expect(session.refreshToken).toBe("mock.refresh.token");
+    expect(session.user).toEqual({ id: 1, name: "김재영" });
+  });
+
+  it("토큰이 비었거나 사용자 필드가 계약과 다르면 계약 불일치다", () => {
+    const dto = loginMock({ email: EMAIL, password: MOCK_PASSWORD });
+    expect(() => toAuthSession({ ...dto, accessToken: "" })).toThrow(ContractMismatchError);
+    expect(() => toAuthSession({ ...dto, user: { ...dto.user, id: 1.5 } })).toThrow(ContractMismatchError);
+  });
+});
+
+describe("loginMock", () => {
+  it("목 비밀번호가 아니면 서버와 같은 AUTH_001 로 실패한다", () => {
+    expect(() => loginMock({ email: EMAIL, password: "wrong" })).toThrow(ApiError);
+    try {
+      loginMock({ email: EMAIL, password: "wrong" });
+    } catch (error) {
+      expect((error as ApiError).code).toBe("AUTH_001");
+      expect((error as ApiError).status).toBe(401);
+    }
+  });
+});
+
+describe("isValidEmail · canSubmitLogin", () => {
+  it("이메일 형식만 보고 비밀번호 규칙은 서버에 맡긴다", () => {
+    expect(isValidEmail(EMAIL)).toBe(true);
+    expect(isValidEmail(" qwer@qwer.com ")).toBe(true);
+    expect(isValidEmail("qwer@qwer")).toBe(false);
+    expect(isValidEmail("")).toBe(false);
+  });
+
+  it("이메일 형식이 맞고 비밀번호가 비지 않아야 제출할 수 있다", () => {
+    expect(canSubmitLogin(EMAIL, "a")).toBe(true);
+    expect(canSubmitLogin(EMAIL, "")).toBe(false);
+    expect(canSubmitLogin("qwer", "qwer1234@")).toBe(false);
+  });
+});
+
+describe("authErrorMessage", () => {
+  it("확인된 code 는 정해진 문구를, 모르는 code 는 서버 message 를 쓴다", () => {
+    expect(authErrorMessage(new ApiError(401, "AUTH_001", "이메일 또는 비밀번호가 올바르지 않습니다."))).toBe(
+      "이메일 또는 비밀번호가 올바르지 않습니다."
+    );
+    expect(authErrorMessage(new ApiError(409, "USER_002", "무시되는 서버 문구"))).toBe("이미 사용 중인 이메일입니다.");
+    expect(authErrorMessage(new ApiError(500, "SERVER_999", "서버가 응답하지 않습니다."))).toBe("서버가 응답하지 않습니다.");
+  });
+
+  it("ApiError 가 아니면 기본 문구를 쓴다", () => {
+    expect(authErrorMessage(new Error("boom"))).toBe("로그인하지 못했어요. 잠시 후 다시 시도해 주세요.");
+  });
+});
