@@ -25,8 +25,9 @@ public class EnvelopeBalanceService {
 			LEFT JOIN (
 			    SELECT s.envelope_id,
 			           SUM(CASE t.exclude_tag
-			                   WHEN 'NONE'  THEN t.amount
-			                   WHEN 'DUTCH' THEN COALESCE(t.adjusted_amount, 0)
+			                   WHEN 'NONE'    THEN t.amount
+			                   WHEN 'DUTCH'   THEN COALESCE(t.adjusted_amount, 0)
+			                   WHEN 'RESTORE' THEN -t.amount
 			                   ELSE 0 END) AS spent
 			    FROM transactions t
 			    JOIN subcategories s ON s.id = t.subcategory_id

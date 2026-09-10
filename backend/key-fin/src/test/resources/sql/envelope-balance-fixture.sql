@@ -22,4 +22,5 @@ INSERT INTO transactions
  (9006, 999, 'SEED', 'DEPOSIT',  300000, '2026-09-10', '09:00:00', NULL, 'AUTO',      'NONE',          NULL,  'NORMAL'),   -- 입금 → 제외
  (9007, 999, 'SEED', 'CARD',       1500, '2026-10-01', '12:00:00', 201,  'CONFIRMED', 'NONE',          NULL,  'NORMAL'),   -- 다음 달 → 제외
  (9008, 999, 'SEED', 'CARD',       1400, '2026-09-10', '12:00:00', 201,  'CONFIRMED', 'NONE',          NULL,  'NORMAL'),   -- 봉투2 +1400
- (9009, 998, 'SEED', 'CARD',       9999, '2026-09-11', '12:00:00', 101,  'CONFIRMED', 'NONE',          NULL,  'NORMAL');   -- 남의 거래 → 제외
+ (9009, 998, 'SEED', 'CARD',       9999, '2026-09-11', '12:00:00', 101,  'CONFIRMED', 'NONE',          NULL,  'NORMAL'),   -- 남의 거래 → 제외
+ (9010, 999, 'SEED', 'DEPOSIT',    3000, '2026-09-12', '10:00:00', 101,  'AUTO',      'RESTORE',       NULL,  'NORMAL');   -- 환급 입금 → 봉투1 복원 -3000

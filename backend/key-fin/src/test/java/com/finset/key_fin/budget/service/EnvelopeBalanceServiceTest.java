@@ -26,7 +26,7 @@ class EnvelopeBalanceServiceTest {
 	private EnvelopeBalanceService service;
 
 	@Test
-	@DisplayName("차감 규칙: NONE 전액 + DUTCH 내 몫만, PENDING·CANCELED·제외 태그·입금·타인·타월 거래는 집계되지 않는다")
+	@DisplayName("차감 규칙: NONE 전액 + DUTCH 내 몫 + RESTORE 입금은 복원, PENDING·CANCELED·제외 태그·일반 입금·타인·타월 거래는 집계되지 않는다")
 	void monthlyBalances() {
 		List<EnvelopeBalance> balances = service.getMonthlyBalances(USER, MONTH);
 
@@ -34,8 +34,8 @@ class EnvelopeBalanceServiceTest {
 
 		EnvelopeBalance dining = balances.get(0);
 		assertThat(dining.envelopeId()).isEqualTo(1);
-		assertThat(dining.spent()).isEqualTo(10000 + 12500);
-		assertThat(dining.remaining()).isEqualTo(300000 - 22500);
+		assertThat(dining.spent()).isEqualTo(10000 + 12500 - 3000);
+		assertThat(dining.remaining()).isEqualTo(300000 - 19500);
 
 		EnvelopeBalance transport = balances.get(1);
 		assertThat(transport.spent()).isEqualTo(1400);
@@ -55,7 +55,7 @@ class EnvelopeBalanceServiceTest {
 	@Test
 	@DisplayName("단건 잔액 조회 — 존재하면 값, 예산 없는 월이면 empty")
 	void remaining() {
-		assertThat(service.getRemaining(USER, MONTH, 1)).contains(277500L);
+		assertThat(service.getRemaining(USER, MONTH, 1)).contains(280500L);
 		assertThat(service.getRemaining(USER, "202501", 1)).isEmpty();
 		assertThat(service.getRemaining(USER, MONTH, 3)).isEmpty();
 	}
