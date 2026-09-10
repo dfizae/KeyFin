@@ -2,10 +2,12 @@ import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as React from "react";
 
+import { authUserMock } from "@/api/mocks/auth";
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
 import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payment";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
 import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock } from "@/api/mocks/transaction";
+import { useAuthStore } from "@/features/auth/store";
 import { getBudget } from "@/features/budget/api/budget.api";
 import { toBudget } from "@/features/budget/model";
 import { CLASSIFY_ERROR_MESSAGE } from "@/features/home/components/HomeCoach";
@@ -78,6 +80,8 @@ function renderHome() {
 
 describe("HomeScreen", () => {
   beforeEach(() => {
+    // 로그인 화면(PAGE-01)이 생기면서 스토어 기본값이 비로그인이 됐다. 홈은 로그인 이후 화면이라 사용자를 넣고 시작한다.
+    useAuthStore.setState({ user: authUserMock, status: "authenticated" });
     mockedGetRoom.mockReset();
     mockedGetBudget.mockReset();
     mockedCheckAttendance.mockReset();
