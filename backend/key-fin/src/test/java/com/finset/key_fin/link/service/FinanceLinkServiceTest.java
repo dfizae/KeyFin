@@ -120,6 +120,27 @@ class FinanceLinkServiceTest {
 		assertThat(user.getFinUserKey()).isEqualTo("existing-finance-user-key");
 	}
 
+	@Test
+	void 금융망_연결_상태를_조회한다() {
+		user.connectFinance(FIN_USER_KEY);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+
+		FinanceLinkResponse response = financeLinkService.getStatus(USER_ID);
+
+		assertThat(response.connected()).isTrue();
+		verifyNoInteractions(financeMemberClient);
+	}
+
+	@Test
+	void 금융망에_연결되지_않은_상태를_조회한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+
+		FinanceLinkResponse response = financeLinkService.getStatus(USER_ID);
+
+		assertThat(response.connected()).isFalse();
+		verifyNoInteractions(financeMemberClient);
+	}
+
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {
 		assertThatThrownBy(action::run)
 				.isInstanceOf(BusinessException.class)

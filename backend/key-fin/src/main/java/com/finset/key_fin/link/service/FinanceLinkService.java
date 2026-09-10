@@ -22,19 +22,29 @@ public class FinanceLinkService {
 
 	@Transactional
 	public FinanceLinkResponse connect(long userId, FinanceLinkRequest request) {
-		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
-				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+		User user = findActiveUser(userId);
 
 		FinanceMember financeMember = financeMemberClient.findByEmail(request.financeEmail());
 		validateAvailableFinanceMember(financeMember.userKey(), user.getId());
 		user.connectFinance(financeMember.userKey());
 
-		return FinanceLinkResponse.success();
+		return FinanceLinkResponse.of(true);
+	}
+
+	@Transactional(readOnly = true)
+	public FinanceLinkResponse getStatus(long userId) {
+		User user = findActiveUser(userId);
+		return FinanceLinkResponse.of(user.isFinanceConnected());
 	}
 
 	private void validateAvailableFinanceMember(String finUserKey, Long userId) {
 		if (userRepository.existsByFinUserKeyAndIdNot(finUserKey, userId)) {
 			throw new BusinessException(LinkErrorCode.FINANCE_MEMBER_ALREADY_LINKED);
 		}
+	}
+
+	private User findActiveUser(long userId) {
+		return userRepository.findByIdAndDeletedAtIsNull(userId)
+				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 	}
 }

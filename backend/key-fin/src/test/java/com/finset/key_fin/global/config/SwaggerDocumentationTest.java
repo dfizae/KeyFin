@@ -34,6 +34,12 @@ class SwaggerDocumentationTest {
 				.andExpect(jsonPath("$.paths['/api/v1/auth/refresh'].post.responses['401']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.summary").value("로그아웃"))
 				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.security[0].bearerAuth").exists())
-				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.responses['401']").exists());
+				.andExpect(jsonPath("$.paths['/api/v1/auth/logout'].post.responses['401']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/links/connect'].post.summary").value("금융망 회원 연결"))
+				.andExpect(jsonPath("$.paths['/api/v1/links/connect'].post.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/links/connect'].post.requestBody.required").value(true))
+				.andExpect(jsonPath("$.paths['/api/v1/links/connect'].post.responses['409']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/links/status'].get.summary").value("금융망 연결 상태 조회"))
+				.andExpect(jsonPath("$.paths['/api/v1/links/status'].get.security[0].bearerAuth").exists());
 	}
 }
