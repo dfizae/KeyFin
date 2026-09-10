@@ -1,5 +1,6 @@
 package com.finset.key_fin.fincoin.controller;
 
+import com.finset.key_fin.fincoin.dto.response.FinCoinBalanceResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse;
 import com.finset.key_fin.global.base.BaseResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -63,4 +64,33 @@ public interface FinCoinControllerDocs {
 					schema = @Schema(type = "integer", format = "int32", defaultValue = "20", minimum = "1", maximum = "100"))
 			@Min(1) @Max(100) Integer size
 	);
+
+	@Operation(
+			summary = "코인 최종 잔액 조회",
+			description = "인증된 사용자의 ID가 가장 큰 코인 이력에 기록된 잔액을 조회합니다. 이력이 없으면 0을 반환합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "코인 잔액 조회 성공",
+					useReturnTypeSchema = true,
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							examples = @ExampleObject(value = """
+								{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
+								 "data":{"balance":1250}}
+								""")
+					)
+			),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "활성 사용자를 찾을 수 없음 (USER_001)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<FinCoinBalanceResponse> getFinCoinBalance(@Parameter(hidden = true) Long userId);
 }

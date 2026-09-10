@@ -11,8 +11,6 @@ import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 
 @Schema(name = "FinCoinResponse", description = "현재 코인 잔액과 ID 내림차순 이력")
 public record FinCoinResponse(
-		@Schema(description = "커서와 무관한 현재 코인 잔액", example = "1250", requiredMode = REQUIRED)
-		Integer balance,
 		@Schema(description = "코인 이력 목록. 이력이 없으면 빈 배열", requiredMode = REQUIRED)
 		List<FinCoinHistoryResponse> items,
 		@Schema(description = "다음 페이지가 있으면 반환한 마지막 이력 ID, 마지막 페이지는 null",

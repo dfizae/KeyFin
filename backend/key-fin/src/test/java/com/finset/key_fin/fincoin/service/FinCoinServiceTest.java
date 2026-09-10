@@ -7,6 +7,7 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,22 +34,48 @@ class FinCoinServiceTest {
 	@Autowired
 	private JdbcClient jdbcClient;
 
+	@ParameterizedTest
+	@CsvSource({"981, 700", "982, 2000"})
+	void returnsLatestBalanceByUserAndIdAfterPurchase(long userId, int expectedBalance) {
+		assertThat(finCoinService.getFinCoinBalance(userId).balance()).isEqualTo(expectedBalance);
+	}
+
+	@Test
+	void returnsZeroBalanceForUserWithoutHistory() {
+		assertThat(finCoinService.getFinCoinBalance(983L).balance()).isZero();
+	}
+
+	@Test
+	void returnsZeroBalanceAfterSpendingAllCoins() {
+		jdbcClient.sql("""
+				INSERT INTO fin_coin (id, user_id, delta, balance_after, reason_code, grant_date)
+				VALUES (8100000011, 981, -700, 0, 'PURCHASE', '2026-09-11')
+				""").update();
+
+		assertThat(finCoinService.getFinCoinBalance(USER).balance()).isZero();
+	}
+
+	@ParameterizedTest
+	@ValueSource(longs = {984, 985})
+	void rejectsBalanceRequestForDeletedOrMissingUser(long userId) {
+		assertThatThrownBy(() -> finCoinService.getFinCoinBalance(userId))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.USER_NOT_FOUND));
+	}
+
 	@Test
 	void pagesByDescendingIdWithLatestBalanceOnEveryPage() {
 		FinCoinResponse first = finCoinService.getFinCoins(USER, null, 2);
-		assertThat(first.balance()).isEqualTo(700);
 		assertThat(first.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_009L, 8_100_000_007L);
 		assertThat(first.nextCursor()).isEqualTo(8_100_000_007L);
 
 		FinCoinResponse middle = finCoinService.getFinCoins(USER, first.nextCursor(), 2);
-		assertThat(middle.balance()).isEqualTo(700);
 		assertThat(middle.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_005L, 8_100_000_003L);
 		assertThat(middle.nextCursor()).isEqualTo(8_100_000_003L);
 
 		FinCoinResponse last = finCoinService.getFinCoins(USER, middle.nextCursor(), 2);
-		assertThat(last.balance()).isEqualTo(700);
 		assertThat(last.items()).extracting(FinCoinHistoryResponse::id).containsExactly(8_100_000_001L);
 		assertThat(last.nextCursor()).isNull();
 	}
@@ -91,7 +118,6 @@ class FinCoinServiceTest {
 	@Test
 	void isolatesOtherUsersBalanceAndHistory() {
 		FinCoinResponse result = finCoinService.getFinCoins(982L, null, 20);
-		assertThat(result.balance()).isEqualTo(2000);
 		assertThat(result.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_010L, 8_100_000_006L);
 		assertThat(result.nextCursor()).isNull();
@@ -100,7 +126,6 @@ class FinCoinServiceTest {
 	@Test
 	void returnsZeroBalanceAndEmptyItemsForNewUser() {
 		FinCoinResponse result = finCoinService.getFinCoins(983L, null, 20);
-		assertThat(result.balance()).isZero();
 		assertThat(result.items()).isEmpty();
 		assertThat(result.nextCursor()).isNull();
 	}
@@ -109,7 +134,6 @@ class FinCoinServiceTest {
 	@ValueSource(longs = {1, 8_100_000_001L})
 	void retainsLatestBalanceWhenCursorIsPastAllItems(long cursor) {
 		FinCoinResponse result = finCoinService.getFinCoins(USER, cursor, 20);
-		assertThat(result.balance()).isEqualTo(700);
 		assertThat(result.items()).isEmpty();
 		assertThat(result.nextCursor()).isNull();
 	}
@@ -119,7 +143,6 @@ class FinCoinServiceTest {
 		FinCoinResponse result = finCoinService.getFinCoins(USER, 8_100_000_004L, 20);
 		assertThat(result.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_003L, 8_100_000_001L);
-		assertThat(result.balance()).isEqualTo(700);
 		assertThat(result.nextCursor()).isNull();
 	}
 
@@ -128,7 +151,6 @@ class FinCoinServiceTest {
 		FinCoinResponse result = finCoinService.getFinCoins(USER, 8_100_000_006L, 2);
 		assertThat(result.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_005L, 8_100_000_003L);
-		assertThat(result.balance()).isEqualTo(700);
 		assertThat(result.nextCursor()).isEqualTo(8_100_000_003L);
 	}
 
@@ -149,7 +171,6 @@ class FinCoinServiceTest {
 				""").update();
 
 		FinCoinResponse next = finCoinService.getFinCoins(USER, first.nextCursor(), 2);
-		assertThat(next.balance()).isEqualTo(720);
 		assertThat(next.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_005L, 8_100_000_003L);
 		assertThat(next.nextCursor()).isEqualTo(8_100_000_003L);

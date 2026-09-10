@@ -8,6 +8,7 @@ import com.finset.key_fin.auth.security.JwtAccessDeniedHandler;
 import com.finset.key_fin.auth.security.JwtAuthenticationEntryPoint;
 import com.finset.key_fin.auth.security.JwtAuthenticationFilter;
 import com.finset.key_fin.auth.security.SecurityErrorResponseWriter;
+import com.finset.key_fin.fincoin.dto.response.FinCoinBalanceResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse.FinCoinHistoryResponse;
 import com.finset.key_fin.fincoin.entity.FinCoinReason;
@@ -29,6 +30,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import java.time.LocalDate;
 import java.util.List;
 
+import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -142,9 +144,10 @@ class FinCoinControllerTest {
 				.andExpect(jsonPath("$.code").value("USER_001"));
 	}
 
-	@Test
-	void rejectsRequestWithoutToken() throws Exception {
-		mockMvc.perform(get("/api/v1/fin-coins"))
+	@ParameterizedTest
+	@ValueSource(strings = {"/api/v1/fin-coins", "/api/v1/fin-coins/balance"})
+	void rejectsRequestWithoutToken(String path) throws Exception {
+		mockMvc.perform(get(path))
 				.andExpect(status().isUnauthorized())
 				.andExpect(jsonPath("$.code").value("AUTH_005"));
 
@@ -164,8 +167,51 @@ class FinCoinControllerTest {
 		verifyNoInteractions(finCoinService);
 	}
 
+	@ParameterizedTest
+	@ValueSource(ints = {0, 700, Integer.MAX_VALUE})
+	void returnsOnlyBalanceForAuthenticatedUser(int balance) throws Exception {
+		when(finCoinService.getFinCoinBalance(981L)).thenReturn(new FinCoinBalanceResponse(balance));
+
+		mockMvc.perform(authenticatedRequest("/api/v1/fin-coins/balance").param("userId", "982"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.code").value("SUCCESS"))
+				.andExpect(jsonPath("$.data").value(aMapWithSize(1)))
+				.andExpect(jsonPath("$.data.balance").value(balance));
+
+		verify(finCoinService).getFinCoinBalance(981L);
+	}
+
+	@Test
+	void returnsUserNotFoundForBalanceRequest() throws Exception {
+		when(finCoinService.getFinCoinBalance(981L))
+				.thenThrow(new BusinessException(UserErrorCode.USER_NOT_FOUND));
+
+		mockMvc.perform(authenticatedRequest("/api/v1/fin-coins/balance"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.code").value("USER_001"));
+	}
+
+	@ParameterizedTest
+	@EnumSource(value = AuthErrorCode.class, names = {"INVALID_TOKEN", "EXPIRED_TOKEN"})
+	void preservesTokenErrorsForBalanceRequest(AuthErrorCode errorCode) throws Exception {
+		when(jwtTokenProvider.getUserId("bad-token", TokenType.ACCESS))
+				.thenThrow(new BusinessException(errorCode));
+
+		mockMvc.perform(get("/api/v1/fin-coins/balance").header("Authorization", "Bearer bad-token"))
+				.andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.code").value(errorCode.getCode()));
+
+		verifyNoInteractions(finCoinService);
+	}
+
 	private MockHttpServletRequestBuilder authenticatedRequest() {
+		return authenticatedRequest("/api/v1/fin-coins");
+	}
+
+	private MockHttpServletRequestBuilder authenticatedRequest(String path) {
 		when(jwtTokenProvider.getUserId("coin-access-token", TokenType.ACCESS)).thenReturn(981L);
-		return get("/api/v1/fin-coins").header("Authorization", "Bearer coin-access-token");
+		return get(path).header("Authorization", "Bearer coin-access-token");
 	}
 }

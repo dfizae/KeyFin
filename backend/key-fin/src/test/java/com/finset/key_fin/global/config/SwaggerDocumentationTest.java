@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -17,6 +18,26 @@ class SwaggerDocumentationTest {
 
 	@Autowired
 	private MockMvc mockMvc;
+
+	@Test
+	void documentsFinCoinBalanceWithoutQueryParameters() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.summary").value("코인 최종 잔액 조회"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.parameters").doesNotExist())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['200'].content['application/json'].schema['$ref']")
+						.value("#/components/schemas/BaseResponseFinCoinBalanceResponse"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['401']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['403']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['404']").exists())
+				.andExpect(jsonPath("$.components.schemas.BaseResponseFinCoinBalanceResponse.properties.data['$ref']")
+						.value("#/components/schemas/FinCoinBalanceResponse"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinBalanceResponse.properties").value(aMapWithSize(1)))
+				.andExpect(jsonPath("$.components.schemas.FinCoinBalanceResponse.properties.balance.type").value("integer"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinBalanceResponse.properties.balance.format").value("int32"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinBalanceResponse.required").value(containsInAnyOrder("balance")));
+	}
 
 	@Test
 	void documentsFinCoinQueryParametersAndActualResponseTypes() throws Exception {

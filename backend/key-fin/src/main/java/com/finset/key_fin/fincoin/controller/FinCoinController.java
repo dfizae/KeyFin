@@ -1,5 +1,6 @@
 package com.finset.key_fin.fincoin.controller;
 
+import com.finset.key_fin.fincoin.dto.response.FinCoinBalanceResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse;
 import com.finset.key_fin.fincoin.service.FinCoinService;
 import com.finset.key_fin.global.base.BaseResponse;
@@ -27,5 +28,11 @@ public class FinCoinController implements FinCoinControllerDocs {
 			@RequestParam(defaultValue = "20") Integer size
 	) {
 		return BaseResponse.ok(finCoinService.getFinCoins(userId, cursor, size));
+	}
+
+	@GetMapping(value = "/balance", produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<FinCoinBalanceResponse> getFinCoinBalance(@AuthenticationPrincipal Long userId) {
+		return BaseResponse.ok(finCoinService.getFinCoinBalance(userId));
 	}
 }

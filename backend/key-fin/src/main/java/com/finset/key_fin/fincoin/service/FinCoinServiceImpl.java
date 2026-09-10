@@ -1,5 +1,6 @@
 package com.finset.key_fin.fincoin.service;
 
+import com.finset.key_fin.fincoin.dto.response.FinCoinBalanceResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse.FinCoinHistoryResponse;
 import com.finset.key_fin.fincoin.entity.FinCoin;
@@ -24,12 +25,7 @@ public class FinCoinServiceImpl implements FinCoinService {
 	@Transactional(readOnly = true)
 	@Override
 	public FinCoinResponse getFinCoins(long userId, Long cursor, int size) {
-		userRepository.findByIdAndDeletedAtIsNull(userId)
-				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-
-		int balance = finCoinRepository.findFirstByUserIdOrderByIdDesc(userId)
-				.map(FinCoin::getBalanceAfter)
-				.orElse(0);
+		int balance = findCurrentBalance(userId);
 
 		PageRequest pageRequest = PageRequest.of(0, size + 1);
 		List<FinCoin> finCoins = cursor == null
@@ -43,5 +39,20 @@ public class FinCoinServiceImpl implements FinCoinService {
 				.toList();
 		Long nextCursor = hasNext ? items.getLast().id() : null;
 		return new FinCoinResponse(balance, items, nextCursor);
+	}
+
+	@Transactional(readOnly = true)
+	@Override
+	public FinCoinBalanceResponse getFinCoinBalance(long userId) {
+		return new FinCoinBalanceResponse(findCurrentBalance(userId));
+	}
+
+	private int findCurrentBalance(long userId) {
+		userRepository.findByIdAndDeletedAtIsNull(userId)
+				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+
+		return finCoinRepository.findFirstByUserIdOrderByIdDesc(userId)
+				.map(FinCoin::getBalanceAfter)
+				.orElse(0);
 	}
 }
