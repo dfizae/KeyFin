@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -11,6 +11,12 @@ import { useLogin } from "@/features/auth/api/queries";
 import { authErrorMessage } from "@/features/auth/errors";
 import { canSubmitLogin } from "@/features/auth/model";
 import { cn } from "@/lib/utils";
+
+/** Pencil login (HUL5i) 의 Main Logo 1 (LfIsh) 을 3배로 내보낸 이미지 */
+const LOGO = require("@/assets/brand/keyfin-logo.png");
+
+/** NativeWind className 은 RN Image 에 적용되지 않아 크기만 style 로 준다. 폭에 맞춰 contain 하면 시안의 338x91 과 같아진다. */
+const LOGO_STYLE = { width: "100%", height: 96 } as const;
 
 const HOME_ROUTE = "/";
 const SIGNUP_ROUTE = "/(auth)/signup";
@@ -38,12 +44,13 @@ function LoginScreen() {
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <View className="flex-1 justify-between px-6 pb-8">
         <View className="gap-8 pt-16">
-          <View className="gap-2">
-            <Text className="text-display text-foreground" accessibilityRole="header">
-              KeyFin
-            </Text>
-            <Text className="text-body-sm text-muted-foreground">봉투로 관리하는 우리 집 생활비</Text>
-          </View>
+          <Image
+            source={LOGO}
+            style={LOGO_STYLE}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="KeyFin"
+          />
 
           {signedUpEmail === undefined ? null : (
             <View className="rounded-lg bg-positive-muted px-4 py-3" accessibilityLiveRegion="polite">
