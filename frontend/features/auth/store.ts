@@ -11,19 +11,26 @@ export type AuthStatus = "loading" | "authenticated" | "anonymous";
 type AuthState = {
   user: AuthUser | null;
   status: AuthStatus;
-  signIn: (user: AuthUser) => void;
+  /** 약관 동의 여부. null 은 아직 읽지 않았다는 뜻이다 (PAGE-03) */
+  termsAgreed: boolean | null;
+  signIn: (user: AuthUser, termsAgreed: boolean) => void;
   signOut: () => void;
-  /** 앱 시작 시 저장된 세션을 반영한다. null 이면 비로그인. 토큰만 있고 사용자 정보가 없으면 user 는 null 로 둔다. */
-  restore: (user: AuthUser | null, authenticated: boolean) => void;
+  agreeToTerms: () => void;
+  /** 앱 시작 시 저장된 세션을 반영한다. 토큰만 있고 사용자 정보가 없으면 user 는 null 로 둔다. */
+  restore: (user: AuthUser | null, authenticated: boolean, termsAgreed: boolean) => void;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   status: "loading",
-  signIn: (user) => set({ user, status: "authenticated" }),
-  signOut: () => set({ user: null, status: "anonymous" }),
-  restore: (user, authenticated) => set({ user, status: authenticated ? "authenticated" : "anonymous" }),
+  termsAgreed: null,
+  signIn: (user, termsAgreed) => set({ user, status: "authenticated", termsAgreed }),
+  signOut: () => set({ user: null, status: "anonymous", termsAgreed: null }),
+  agreeToTerms: () => set({ termsAgreed: true }),
+  restore: (user, authenticated, termsAgreed) =>
+    set({ user, status: authenticated ? "authenticated" : "anonymous", termsAgreed }),
 }));
 
 export const selectUserName = (state: AuthState): string | null => state.user?.name ?? null;
 export const selectAuthStatus = (state: AuthState): AuthStatus => state.status;
+export const selectTermsAgreed = (state: AuthState): boolean | null => state.termsAgreed;

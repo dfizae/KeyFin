@@ -11,6 +11,7 @@ import { Platform } from "react-native";
 const ACCESS_KEY = "keyfin.accessToken";
 const REFRESH_KEY = "keyfin.refreshToken";
 const USER_KEY = "keyfin.user";
+const TERMS_KEY_PREFIX = "keyfin.terms.";
 
 const isWeb = Platform.OS === "web";
 
@@ -82,4 +83,16 @@ export async function loadSessionUser(): Promise<{ id: number; name: string } | 
   } catch {
     return null;
   }
+}
+
+/**
+ * 약관 동의 여부 (PAGE-03). 서버 API 가 없어 기기에만 남기고, 기기를 같이 쓰는 다른 계정과 섞이지 않도록 사용자별로 둔다.
+ * 로그아웃해도 지우지 않는다 — 같은 사용자가 다시 로그인하면 약관을 또 보여줄 이유가 없다.
+ */
+export async function loadTermsAgreed(userId: number): Promise<boolean> {
+  return (await read(`${TERMS_KEY_PREFIX}${userId}`)) === "1";
+}
+
+export async function saveTermsAgreed(userId: number): Promise<void> {
+  await write(`${TERMS_KEY_PREFIX}${userId}`, "1");
 }

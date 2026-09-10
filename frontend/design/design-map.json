@@ -70,7 +70,7 @@
     "budget": { "route": "app/(tabs)/budget.tsx", "pencil": "budget (kvc1e, 2026-09-09 명세 기준 시안) · budget/proposed (ZOmXC, status=PROPOSED 미승인 상태). 킷 원본: 예산관리 (K8MODs)", "note": "PAGE-12 예산 탭. 헤더(제목 + 햄버거, $card·하단 보더·아래 방향 그림자)와 하단 탭바(홈 확정 탭바 NaYk9 복사, 예산 활성)는 프로젝트 톤. budget = status=CONFIRMED: 이번 달 총예산 카드(총액·사용·잔액) + 봉투 7종 행(카테고리 lucide 아이콘 타일·이름·금액·사용률 바). budget/proposed = status=PROPOSED: total·잔액이 null 이라 총예산 카드를 빼고 승인 유도 배너(BudgetUnsetBanner P0 sihjf 복사) + 봉투별 제안 금액만, 사용률 바 없음. TBD: 헤더 햄버거 동작 미정, BUDGET_ALERT 푸시 진입 시 refId 봉투 강조 동작 미정, 봉투 수정 진입점은 명세상 PAGE-07 에만 있음" },
     "report": { "route": "app/(tabs)/report.tsx", "pencil": "월간 리포트 조회 (r3Nmq)", "note": "시안 있음 — 구현 전 EmptyState 플레이스홀더" },
     "my": { "route": "app/(tabs)/my.tsx", "pencil": "마이페이지 (n374g)", "note": "시안 있음 — 구현 전 EmptyState 플레이스홀더" },
-    "terms": { "route": "app/(auth)/terms.tsx", "pencil": "약관 동의 (F7eWgz)" },
+    "terms": { "route": "app/(auth)/terms.tsx", "pencil": "terms (R2GYj). 킷 원본: 약관 동의 (F7eWgz) — 다른 브랜드 문구가 섞여 있어 참고만 한다", "note": "PAGE-03 약관 동의. 서버 호출 없음(로컬). 약관 요약 박스 + 전체 동의 행($accent) + 필수 2·선택 1 체크 + CTA. 필수 2개를 모두 체크해야 CTA 활성. TBD: 동의 결과 저장 위치와 다음 화면(PAGE-04 계좌 연결 미구현)" },
     "asset-select": { "route": "app/onboarding/asset-select.tsx", "pencil": "내 자산 선택 (xEhNa)" },
     "asset-import-result": { "route": "app/onboarding/asset-import-result.tsx", "pencil": "자산 불러오기 결과 (oL0th)" },
     "character-moving-in": { "route": "app/character/moving-in.tsx", "pencil": "캐릭터 입주중 (PGyNo)" },

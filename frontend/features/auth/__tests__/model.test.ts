@@ -1,10 +1,12 @@
 import { ApiError } from "@/api/error";
-import { loginMock, MOCK_PASSWORD, MOCK_TAKEN_EMAIL, signupMock } from "@/api/mocks/auth";
+import { loginMock, MOCK_PASSWORD, MOCK_TAKEN_EMAIL, resetAuthMocks, signupMock } from "@/api/mocks/auth";
 import { authErrorMessage } from "@/features/auth/errors";
-import { canSubmitLogin, canSubmitSignup, isValidEmail, toAuthSession } from "@/features/auth/model";
+import { canAgreeToTerms, canSubmitLogin, canSubmitSignup, isValidEmail, TERMS_ITEMS, toAuthSession } from "@/features/auth/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 const EMAIL = "qwer@qwer.com";
+
+beforeEach(resetAuthMocks);
 
 describe("toAuthSession", () => {
   it("로그인 응답을 토큰과 사용자로 나눈다", () => {
@@ -73,13 +75,40 @@ describe("signupMock · canSubmitSignup", () => {
     }
   });
 
-  it("새 이메일이면 userId 를 돌려준다", () => {
-    expect(signupMock({ email: "new@keyfin.com", password: MOCK_PASSWORD, name: "김싸피" })).toEqual({ userId: 2 });
+  it("새 이메일이면 userId 를 돌려주고, 그 계정으로 바로 로그인할 수 있다", () => {
+    expect(signupMock({ email: "new@keyfin.com", password: "mypw123!", name: "이싸피" })).toEqual({ userId: 2 });
+
+    const session = toAuthSession(loginMock({ email: "new@keyfin.com", password: "mypw123!" }));
+    expect(session.user).toEqual({ id: 2, name: "이싸피" });
+    expect(() => loginMock({ email: "new@keyfin.com", password: "틀린비번" })).toThrow(ApiError);
+  });
+
+  it("같은 이메일로 다시 가입하면 USER_002 다", () => {
+    signupMock({ email: "new@keyfin.com", password: "mypw123!", name: "이싸피" });
+    expect(() => signupMock({ email: "NEW@keyfin.com", password: "mypw123!", name: "이싸피" })).toThrow(ApiError);
   });
 
   it("이름이 공백뿐이면 제출할 수 없다", () => {
     expect(canSubmitSignup("new@keyfin.com", "pw", "김싸피")).toBe(true);
     expect(canSubmitSignup("new@keyfin.com", "pw", "   ")).toBe(false);
     expect(canSubmitSignup("new", "pw", "김싸피")).toBe(false);
+  });
+});
+
+describe("canAgreeToTerms", () => {
+  it("필수 두 개를 모두 체크해야 계속할 수 있다", () => {
+    expect(canAgreeToTerms([])).toBe(false);
+    expect(canAgreeToTerms(["service"])).toBe(false);
+    expect(canAgreeToTerms(["service", "privacy"])).toBe(true);
+  });
+
+  it("선택 항목은 계속하기에 영향을 주지 않는다", () => {
+    expect(canAgreeToTerms(["marketing"])).toBe(false);
+    expect(canAgreeToTerms(["service", "privacy", "marketing"])).toBe(true);
+  });
+
+  it("필수는 2개, 선택은 1개다", () => {
+    expect(TERMS_ITEMS.filter((item) => item.required)).toHaveLength(2);
+    expect(TERMS_ITEMS.filter((item) => !item.required)).toHaveLength(1);
   });
 });

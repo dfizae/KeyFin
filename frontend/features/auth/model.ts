@@ -55,3 +55,17 @@ export function canSubmitLogin(email: string, password: string): boolean {
 export function canSubmitSignup(email: string, password: string, name: string): boolean {
   return canSubmitLogin(email, password) && name.trim().length > 0;
 }
+
+/** PAGE-03 약관 항목. 서버 API 가 없어 목록은 클라이언트 상수다 (docs/frontend-spec.md PAGE-03) */
+export type TermsItem = { id: string; label: string; required: boolean };
+
+export const TERMS_ITEMS: readonly TermsItem[] = [
+  { id: "service", label: "(필수) 서비스 이용약관 동의", required: true },
+  { id: "privacy", label: "(필수) 개인정보 수집 및 이용 동의", required: true },
+  { id: "marketing", label: "(선택) 마케팅 정보 수신 동의", required: false },
+];
+
+/** 필수 항목을 모두 체크해야 다음으로 갈 수 있다 */
+export function canAgreeToTerms(checkedIds: readonly string[]): boolean {
+  return TERMS_ITEMS.filter((item) => item.required).every((item) => checkedIds.includes(item.id));
+}

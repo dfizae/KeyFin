@@ -11,28 +11,51 @@ import type {
 export const authUserMock: AuthUser = { id: 1, name: "김재영" };
 
 /**
- * 목 모드 로그인 규칙: 백엔드 예시 계정의 비밀번호(`qwer1234@`)만 통과하고 나머지는 AUTH_001 이다.
+ * 목 모드의 기본 계정. 백엔드 예시 계정과 같은 비밀번호를 쓴다.
  * 서버 없이도 성공·실패 두 화면(login, login/error)을 모두 확인하려고 둔 값이다.
  */
 export const MOCK_PASSWORD = "qwer1234@";
+export const MOCK_TAKEN_EMAIL = "qwer@qwer.com";
 
-export function loginMock({ password }: LoginRequest): LoginResponseDto {
-  if (password !== MOCK_PASSWORD) {
+type MockAccount = { email: string; password: string; user: AuthUser };
+
+/** 앱이 도는 동안만 유지되는 가입 계정. 목으로도 가입 → 로그인 흐름을 이어서 볼 수 있게 한다. */
+const accounts = new Map<string, MockAccount>();
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function findAccount(email: string, password: string): MockAccount | null {
+  const account = accounts.get(normalizeEmail(email));
+  if (account !== undefined) return account.password === password ? account : null;
+  return password === MOCK_PASSWORD ? { email, password, user: authUserMock } : null;
+}
+
+export function loginMock({ email, password }: LoginRequest): LoginResponseDto {
+  const account = findAccount(email, password);
+  if (account === null) {
     throw new ApiError(401, "AUTH_001", "이메일 또는 비밀번호가 올바르지 않습니다.");
   }
   return {
     accessToken: "mock.access.token",
     refreshToken: "mock.refresh.token",
-    user: authUserMock,
+    user: account.user,
   };
 }
 
-/** 목에서 이미 가입돼 있다고 보는 이메일. 이 값으로 가입하면 서버와 같은 USER_002 가 난다. */
-export const MOCK_TAKEN_EMAIL = "qwer@qwer.com";
+/** 테스트·개발 재시작용: 가입 기록을 비운다 */
+export function resetAuthMocks(): void {
+  accounts.clear();
+}
 
-export function signupMock({ email }: SignupRequest): SignupResponseDto {
-  if (email.trim().toLowerCase() === MOCK_TAKEN_EMAIL) {
+/** 기본 계정 이메일이나 이미 가입한 이메일이면 서버와 같은 USER_002 가 난다. */
+export function signupMock({ email, password, name }: SignupRequest): SignupResponseDto {
+  const key = normalizeEmail(email);
+  if (key === MOCK_TAKEN_EMAIL || accounts.has(key)) {
     throw new ApiError(409, "USER_002", "이미 사용 중인 이메일입니다.");
   }
-  return { userId: 2 };
+  const userId = accounts.size + 2;
+  accounts.set(key, { email: key, password, user: { id: userId, name } });
+  return { userId };
 }
