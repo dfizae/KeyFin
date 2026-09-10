@@ -2,7 +2,9 @@ package com.finset.key_fin.link.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
+import com.finset.key_fin.link.dto.request.LinkAssetsRequest;
 import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.LinkAssetsResponse;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -160,4 +162,86 @@ public interface LinkControllerDocs {
 			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	})
 	BaseResponse<LinkCandidatesResponse> getCandidates(@Parameter(hidden = true) Long userId);
+
+	@Operation(
+			summary = "선택 계좌·카드 연결",
+			description = "후보 목록에서 선택한 금융망 계좌·카드를 KeyFin 관리 대상으로 저장합니다. "
+					+ "후보 목록에 없는 자산은 404로 거절하고, 이미 연결된 항목은 건너뛰어 응답 수에 포함하지 않습니다(멱등). "
+					+ "카드의 청구 출금 계좌는 같은 요청 또는 이전에 연결된 계좌에서 매칭합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "201",
+					description = "연결 성공 — 새로 연결된 계좌·카드 수",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"accounts\":2,\"cards\":1}}")
+					)
+			),
+			@ApiResponse(
+					responseCode = "400",
+					description = "입력값 오류 또는 선택 항목 없음",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = {
+									@ExampleObject(name = "입력값 오류", value = "{\"success\":false,\"code\":\"COMMON_001\",\"message\":\"입력값이 올바르지 않습니다.\",\"data\":null}"),
+									@ExampleObject(name = "선택 항목 없음", value = "{\"success\":false,\"code\":\"LINK_003\",\"message\":\"연결할 계좌 또는 카드를 하나 이상 선택해 주세요.\",\"data\":null}")
+							}
+					)
+			),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(
+					responseCode = "404",
+					description = "KeyFin 사용자 없음 또는 금융망 후보 목록에 없는 자산",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(value = "{\"success\":false,\"code\":\"LINK_004\",\"message\":\"금융망에서 선택한 계좌 또는 카드를 찾을 수 없습니다.\",\"data\":null}")
+					)
+			),
+			@ApiResponse(responseCode = "409", description = "금융망 회원 미연결(LINK_002) 또는 연결 무효(FINANCE_005)", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "502", description = "금융망 응답 또는 연동 설정 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "503", description = "일시 장애 재시도 후 금융망 서비스 이용 불가", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<LinkAssetsResponse> link(
+			@Parameter(hidden = true) Long userId,
+			@io.swagger.v3.oas.annotations.parameters.RequestBody(description = "연결할 계좌번호·카드번호 목록", required = true)
+			LinkAssetsRequest request
+	);
+
+	@Operation(
+			summary = "계좌 연결 해제",
+			description = "연결 계좌를 관리 대상에서 제외합니다(is_managed=false). 거래 이력은 보존되며, 다시 연결하려면 선택 연결 API를 사용합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "연결 해제 성공", content = @Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = BaseResponse.class), examples = @ExampleObject(value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":null}"))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "사용자 없음 또는 본인 계좌가 아님(LINK_005)", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<Void> unlinkAccount(
+			@Parameter(hidden = true) Long userId,
+			@Parameter(description = "KeyFin 계좌 ID", example = "3") long accountId
+	);
+
+	@Operation(
+			summary = "카드 연결 해제",
+			description = "연결 카드를 관리 대상에서 제외합니다(is_managed=false). 거래 이력은 보존됩니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "연결 해제 성공", content = @Content(mediaType = APPLICATION_JSON_VALUE, schema = @Schema(implementation = BaseResponse.class), examples = @ExampleObject(value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":null}"))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "사용자 없음 또는 본인 카드가 아님(LINK_006)", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<Void> unlinkCard(
+			@Parameter(hidden = true) Long userId,
+			@Parameter(description = "KeyFin 카드 ID", example = "2") long cardId
+	);
 }

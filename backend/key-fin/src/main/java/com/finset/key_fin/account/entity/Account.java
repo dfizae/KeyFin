@@ -62,6 +62,19 @@ public class Account {
 		return new Account(user, finAccountNo, bankCode);
 	}
 
+	public boolean relink() {
+		if (managed) {
+			return false;
+		}
+		managed = true;
+		return true;
+	}
+
+	public void unlink() {
+		managed = false;
+		income = false;
+	}
+
 	private static String requireText(String value, String name) {
 		if (value == null || value.isBlank()) {
 			throw new IllegalArgumentException(name + " must not be blank");

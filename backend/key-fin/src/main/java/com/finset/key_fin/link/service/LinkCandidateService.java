@@ -44,9 +44,11 @@ public class LinkCandidateService {
 		List<FinanceCard> financeCards = financeCardClient.findCards(user.getFinUserKey());
 
 		Set<String> linkedAccountNos = accountRepository.findAllByUserId(userId).stream()
+				.filter(Account::isManaged)
 				.map(Account::getFinAccountNo)
 				.collect(Collectors.toSet());
 		Set<String> linkedCardNos = cardRepository.findAllByUserId(userId).stream()
+				.filter(Card::isManaged)
 				.map(Card::getFinCardNo)
 				.collect(Collectors.toSet());
 

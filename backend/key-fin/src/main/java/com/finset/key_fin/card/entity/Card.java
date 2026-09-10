@@ -84,6 +84,21 @@ public class Card {
 		return new Card(user, finCardNo, cvc, issuerCode, cardName, withdrawalAccount);
 	}
 
+	public boolean relink(Account withdrawalAccount) {
+		if (withdrawalAccount != null) {
+			this.withdrawalAccount = withdrawalAccount;
+		}
+		if (managed) {
+			return false;
+		}
+		managed = true;
+		return true;
+	}
+
+	public void unlink() {
+		managed = false;
+	}
+
 	private static String requireText(String value, String name) {
 		if (value == null || value.isBlank()) {
 			throw new IllegalArgumentException(name + " must not be blank");
