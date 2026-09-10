@@ -6,6 +6,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -16,6 +17,42 @@ class SwaggerDocumentationTest {
 
 	@Autowired
 	private MockMvc mockMvc;
+
+	@Test
+	void documentsFinCoinQueryParametersAndActualResponseTypes() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/v1/coins']").doesNotExist())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.summary").value("코인 잔액 및 이력 조회"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[*].name")
+						.value(containsInAnyOrder("cursor", "size")))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'cursor')].required")
+						.value(containsInAnyOrder(false)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'cursor')].schema.format")
+						.value(containsInAnyOrder("int64")))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'size')].schema.default")
+						.value(containsInAnyOrder(20)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'size')].schema.minimum")
+						.value(containsInAnyOrder(1)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'size')].schema.maximum")
+						.value(containsInAnyOrder(100)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['200'].content['application/json'].schema['$ref']")
+						.value("#/components/schemas/BaseResponseFinCoinResponse"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['400']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['401']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['404']").exists())
+				.andExpect(jsonPath("$.components.schemas.BaseResponseFinCoinResponse.properties.data['$ref']")
+						.value("#/components/schemas/FinCoinResponse"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.balance.format").value("int32"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.nextCursor.type")
+						.value(containsInAnyOrder("integer", "null")))
+				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.nextCursor.format").value("int64"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.id.format").value("int64"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.delta.format").value("int32"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.balanceAfter.format").value("int32"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.grantDate.format").value("date"));
+	}
 
 	@Test
 	void exposesOpenApiDocumentWithBearerSchemeAndAuthOperations() throws Exception {
