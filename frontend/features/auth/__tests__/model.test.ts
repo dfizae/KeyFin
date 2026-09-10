@@ -1,7 +1,7 @@
 import { ApiError } from "@/api/error";
-import { loginMock, MOCK_PASSWORD } from "@/api/mocks/auth";
+import { loginMock, MOCK_PASSWORD, MOCK_TAKEN_EMAIL, signupMock } from "@/api/mocks/auth";
 import { authErrorMessage } from "@/features/auth/errors";
-import { canSubmitLogin, isValidEmail, toAuthSession } from "@/features/auth/model";
+import { canSubmitLogin, canSubmitSignup, isValidEmail, toAuthSession } from "@/features/auth/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 const EMAIL = "qwer@qwer.com";
@@ -59,5 +59,27 @@ describe("authErrorMessage", () => {
 
   it("ApiError 가 아니면 기본 문구를 쓴다", () => {
     expect(authErrorMessage(new Error("boom"))).toBe("로그인하지 못했어요. 잠시 후 다시 시도해 주세요.");
+  });
+});
+
+describe("signupMock · canSubmitSignup", () => {
+  it("이미 쓰는 이메일이면 서버와 같은 USER_002 로 실패한다", () => {
+    expect(() => signupMock({ email: MOCK_TAKEN_EMAIL, password: MOCK_PASSWORD, name: "김싸피" })).toThrow(ApiError);
+    try {
+      signupMock({ email: MOCK_TAKEN_EMAIL.toUpperCase(), password: MOCK_PASSWORD, name: "김싸피" });
+    } catch (error) {
+      expect((error as ApiError).code).toBe("USER_002");
+      expect((error as ApiError).status).toBe(409);
+    }
+  });
+
+  it("새 이메일이면 userId 를 돌려준다", () => {
+    expect(signupMock({ email: "new@keyfin.com", password: MOCK_PASSWORD, name: "김싸피" })).toEqual({ userId: 2 });
+  });
+
+  it("이름이 공백뿐이면 제출할 수 없다", () => {
+    expect(canSubmitSignup("new@keyfin.com", "pw", "김싸피")).toBe(true);
+    expect(canSubmitSignup("new@keyfin.com", "pw", "   ")).toBe(false);
+    expect(canSubmitSignup("new", "pw", "김싸피")).toBe(false);
   });
 });

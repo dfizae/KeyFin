@@ -1,5 +1,11 @@
 import { ApiError } from "@/api/error";
-import type { AuthUser, LoginRequest, LoginResponseDto } from "@/features/auth/model";
+import type {
+  AuthUser,
+  LoginRequest,
+  LoginResponseDto,
+  SignupRequest,
+  SignupResponseDto,
+} from "@/features/auth/model";
 
 /** 로그인 응답(docs/api-contract.md AUTH)의 user. 이름은 Pencil 홈 시안(EWfx2)의 인사말과 같다. */
 export const authUserMock: AuthUser = { id: 1, name: "김재영" };
@@ -19,4 +25,14 @@ export function loginMock({ password }: LoginRequest): LoginResponseDto {
     refreshToken: "mock.refresh.token",
     user: authUserMock,
   };
+}
+
+/** 목에서 이미 가입돼 있다고 보는 이메일. 이 값으로 가입하면 서버와 같은 USER_002 가 난다. */
+export const MOCK_TAKEN_EMAIL = "qwer@qwer.com";
+
+export function signupMock({ email }: SignupRequest): SignupResponseDto {
+  if (email.trim().toLowerCase() === MOCK_TAKEN_EMAIL) {
+    throw new ApiError(409, "USER_002", "이미 사용 중인 이메일입니다.");
+  }
+  return { userId: 2 };
 }

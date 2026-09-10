@@ -8,6 +8,10 @@ export type AuthUser = { id: number; name: string };
 
 export type LoginRequest = { email: string; password: string };
 
+export type SignupRequest = { email: string; password: string; name: string };
+
+export type SignupResponseDto = { userId: number };
+
 export type LoginResponseDto = {
   accessToken: string;
   refreshToken: string;
@@ -45,4 +49,9 @@ export function isValidEmail(email: string): boolean {
 
 export function canSubmitLogin(email: string, password: string): boolean {
   return isValidEmail(email) && password.length > 0;
+}
+
+/** 가입도 같은 기준이다. 이름은 공백만 있으면 안 된다 */
+export function canSubmitSignup(email: string, password: string, name: string): boolean {
+  return canSubmitLogin(email, password) && name.trim().length > 0;
 }

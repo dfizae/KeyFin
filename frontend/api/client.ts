@@ -1,5 +1,6 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
+import { unwrapEnvelope } from "@/api/envelope";
 import { NETWORK_ERROR_CODE, TIMEOUT_ERROR_CODE, toApiError } from "@/api/error";
 import { clearTokens, getAccessTokenSync, getRefreshToken, saveTokens } from "@/lib/session-storage";
 
@@ -36,20 +37,6 @@ const refreshClient = axios.create({
   timeout: TIMEOUT_QUERY_MS,
   headers: { Accept: "application/json", "Content-Type": "application/json" },
 });
-
-type Envelope = { success: unknown; data: unknown };
-
-function isEnvelope(body: unknown): body is Envelope {
-  return typeof body === "object" && body !== null && "success" in body && "data" in body;
-}
-
-/**
- * 공통 봉투 `{ success, code, message, data }` 를 벗겨 본문만 남긴다 (2026-09-10 백엔드 AUTH 구현본 확인).
- * 봉투를 아는 곳은 여기뿐이고 도메인 함수·model 은 데이터만 본다.
- */
-export function unwrapEnvelope(body: unknown): unknown {
-  return isEnvelope(body) ? body.data : body;
-}
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
 

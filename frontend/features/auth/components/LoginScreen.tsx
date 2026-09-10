@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
 import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
@@ -13,13 +13,16 @@ import { canSubmitLogin } from "@/features/auth/model";
 import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
+const SIGNUP_ROUTE = "/(auth)/signup";
 
 // Pencil login (HUL5i) · login/error (JF0Db) · login/pending (bG1FL).
 function LoginScreen() {
   const router = useRouter();
   const login = useLogin();
 
-  const [email, setEmail] = React.useState("");
+  // 가입 직후 돌아오면 방금 만든 이메일을 채워 두고 안내를 한 줄 보여준다.
+  const { signedUpEmail } = useLocalSearchParams<{ signedUpEmail?: string }>();
+  const [email, setEmail] = React.useState(signedUpEmail ?? "");
   const [password, setPassword] = React.useState("");
 
   const errorMessage = login.isError ? authErrorMessage(login.error) : null;
@@ -41,6 +44,12 @@ function LoginScreen() {
             </Text>
             <Text className="text-body-sm text-muted-foreground">봉투로 관리하는 우리 집 생활비</Text>
           </View>
+
+          {signedUpEmail === undefined ? null : (
+            <View className="rounded-lg bg-positive-muted px-4 py-3" accessibilityLiveRegion="polite">
+              <Text className="text-body-sm text-foreground">가입이 완료됐어요. 로그인해 주세요.</Text>
+            </View>
+          )}
 
           <View className="gap-4">
             <Field label="이메일">
@@ -97,15 +106,13 @@ function LoginScreen() {
             <Text>{login.isPending ? "로그인 중…" : "로그인"}</Text>
           </Button>
 
-          {/* 회원가입 화면(PAGE-02)이 생기면 여기로 연결한다. 그전까지는 자리만 둔다. (TBD) */}
           <View className="flex-row items-center justify-center gap-1.5">
             <Text className="text-body-sm text-muted-foreground">계정이 없으신가요?</Text>
             <Pressable
               accessibilityRole="link"
               accessibilityLabel="회원가입"
-              accessibilityState={{ disabled: true }}
-              disabled
               hitSlop={10}
+              onPress={() => router.push(SIGNUP_ROUTE)}
             >
               <Text className="text-label text-primary">회원가입</Text>
             </Pressable>
