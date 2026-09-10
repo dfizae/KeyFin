@@ -58,7 +58,11 @@ final class FinanceHttpSupport {
 	}
 
 	static String headerResponseCode(JsonNode root) {
-		return textOrNull(root.path("Header").path("responseCode"));
+		String responseCode = textOrNull(root.path("Header").path("responseCode"));
+		if (responseCode == null) {
+			responseCode = textOrNull(root.path("responseCode"));
+		}
+		return responseCode;
 	}
 
 	static Duration parseRetryAfter(String value) {

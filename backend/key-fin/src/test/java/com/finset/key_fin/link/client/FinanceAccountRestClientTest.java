@@ -145,6 +145,19 @@ class FinanceAccountRestClientTest {
 	}
 
 	@Test
+	void Header_없이_최상위로_내려오는_오류_코드도_매핑한다() {
+		server.expect(ExpectedCount.once(), requestTo(ACCOUNT_LIST_URL))
+				.andRespond(withStatus(HttpStatus.BAD_REQUEST)
+						.contentType(MediaType.APPLICATION_JSON)
+						.body("""
+								{"responseCode": "H1008", "responseMessage": "API_KEY가 유효하지 않습니다."}
+								"""));
+
+		assertFinanceError(FinanceErrorCode.CONFIGURATION_ERROR, () -> client.findAccounts(USER_KEY));
+		server.verify();
+	}
+
+	@Test
 	void 기관거래고유번호_중복_응답은_새_Header로_재시도한다() {
 		server.expect(requestTo(ACCOUNT_LIST_URL))
 				.andRespond(withStatus(HttpStatus.BAD_REQUEST)
