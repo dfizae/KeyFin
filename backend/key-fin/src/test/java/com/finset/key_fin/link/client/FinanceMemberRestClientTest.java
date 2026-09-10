@@ -14,6 +14,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.time.Duration;
 
@@ -23,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 
 class FinanceMemberRestClientTest {
@@ -140,6 +142,82 @@ class FinanceMemberRestClientTest {
 		FinanceMember member = client.findByEmail(EMAIL);
 
 		assertThat(member.userKey()).isEqualTo(USER_KEY);
+		server.verify();
+	}
+
+	@Test
+	void 네트워크_타임아웃_후_재시도하여_금융망_회원_조회에_성공한다() {
+		server.expect(requestTo(BASE_URL + "/member/search"))
+				.andRespond(withException(new SocketTimeoutException("read timed out")));
+		server.expect(requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.OK)
+						.contentType(MediaType.APPLICATION_JSON)
+						.body("""
+								{"userId":"qwer@qwer.com","userKey":"test-user-key"}
+								"""));
+
+		FinanceMember member = client.findByEmail(EMAIL);
+
+		assertThat(member.userKey()).isEqualTo(USER_KEY);
+		server.verify();
+	}
+
+	@Test
+	void Retry_After_헤더_값만큼_대기한_뒤_재시도한다() {
+		RestClient.Builder builder = RestClient.builder().baseUrl(BASE_URL);
+		MockRestServiceServer retryAfterServer = MockRestServiceServer.bindTo(builder).build();
+		FinanceProperties properties = new FinanceProperties(
+				URI.create(BASE_URL),
+				API_KEY,
+				Duration.ofSeconds(3),
+				Duration.ofSeconds(5),
+				2,
+				Duration.ZERO,
+				Duration.ofSeconds(2),
+				Duration.ofSeconds(5)
+		);
+		FinanceMemberRestClient retryAfterClient =
+				new FinanceMemberRestClient(builder.build(), properties, JsonMapper.builder().build());
+
+		retryAfterServer.expect(requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+						.header("Retry-After", "1"));
+		retryAfterServer.expect(requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.OK)
+						.contentType(MediaType.APPLICATION_JSON)
+						.body("""
+								{"userId":"qwer@qwer.com","userKey":"test-user-key"}
+								"""));
+
+		long startedAt = System.nanoTime();
+		FinanceMember member = retryAfterClient.findByEmail(EMAIL);
+		Duration elapsed = Duration.ofNanos(System.nanoTime() - startedAt);
+
+		assertThat(member.userKey()).isEqualTo(USER_KEY);
+		assertThat(elapsed).isGreaterThanOrEqualTo(Duration.ofMillis(900));
+		retryAfterServer.verify();
+	}
+
+	@Test
+	void Retry_After가_최대_대기_시간을_넘으면_재시도하지_않는다() {
+		server.expect(ExpectedCount.once(), requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+						.header("Retry-After", "30"));
+
+		assertFinanceError(FinanceErrorCode.SERVICE_UNAVAILABLE, () -> client.findByEmail(EMAIL));
+		server.verify();
+	}
+
+	@Test
+	void 업무_오류는_재시도하지_않고_한_번만_호출한다() {
+		server.expect(ExpectedCount.once(), requestTo(BASE_URL + "/member/search"))
+				.andRespond(withStatus(HttpStatus.BAD_REQUEST)
+						.contentType(MediaType.APPLICATION_JSON)
+						.body("""
+								{"responseCode":"E4003","responseMessage":"존재하지 않는 사용자입니다."}
+								"""));
+
+		assertFinanceError(FinanceErrorCode.MEMBER_NOT_FOUND, () -> client.findByEmail(EMAIL));
 		server.verify();
 	}
 
