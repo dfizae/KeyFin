@@ -8,6 +8,7 @@
 | --- | --- |
 | 무엇을 실행하고 어떻게 호출하는가 | [서비스 시작하기](coaching/README.md) |
 | FDT와 LLM이 각각 무엇을 하는가 | [구조와 기간 계약](coaching/docs/architecture.md) |
+| 거래 입력으로 기존 KeyFin 차트를 생성하려면 | [차트 API와 프런트엔드 연결](coaching/docs/charts.md) |
 | 어떤 성능을 실제로 확인했는가 | [검증 결과와 한계](coaching/docs/validation.md) |
 | 추론 서버와 인증은 어떻게 설정하는가 | [운영 설정](coaching/docs/operations.md) |
 | 같은 실험을 다시 실행하려면 | [벤치마크 안내](coaching/benchmarks/README.md) |
@@ -18,6 +19,7 @@ ai/
 └── coaching/
     ├── src/coaching_service/ # 운영 API와 코칭 로직
     ├── vendor/fdt/           # 팀 FDT 엔진의 고정 버전
+    ├── vendor/keyfin_chart/  # 팀 차트 렌더러의 고정 실행 자산
     ├── tests/                # API·금융 처리·오류 복구 회귀시험
     ├── scripts/              # 추론 서버와 HTTP 스모크 실행기
     ├── examples/             # 최소 API 요청 예시

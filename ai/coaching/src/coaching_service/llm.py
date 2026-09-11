@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Final, assert_never, cast
 import anyio
 import httpx2
 
+from coaching_service.chart_wording import ChartSelection, selected_chart_wording
 from coaching_service.evidence import context_limited, operation_evidence
 from coaching_service.llm_contract import (
     CompletionEnvelope,
@@ -118,6 +119,16 @@ class OpenAICompatibleCoachModel:
 
     async def write(self, evidence: EvidenceInput) -> Wording:
         result = await self._infer(evidence, "write")
+        if evidence.purpose == "chart":
+            if isinstance(result, InferenceFailure):
+                return selected_chart_wording(evidence, None, self._config.model, result.reason)
+            try:
+                raw = structured_json(result.text)
+            except (ValueError, RecursionError):
+                return selected_chart_wording(
+                    evidence, None, self._config.model, "invalid_chart_fact_selection"
+                )
+            return selected_chart_wording(evidence, raw, self._config.model)
         match result:
             case InferenceFailure(reason=reason):
                 return self._fallback(reason)
@@ -189,7 +200,7 @@ class OpenAICompatibleCoachModel:
         payload: dict[str, JsonValue] = {
             "model": self._config.model,
             "messages": [
-                {"role": "system", "content": system_prompt(operation)},
+                {"role": "system", "content": system_prompt(operation, chart=evidence.purpose == "chart")},
                 {"role": "user", "content": user_payload(evidence)},
             ],
             "temperature": 0,
@@ -198,7 +209,15 @@ class OpenAICompatibleCoachModel:
         }
         match operation:
             case "write":
-                pass
+                if evidence.purpose == "chart":
+                    payload["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "chart_facts",
+                            "strict": True,
+                            "schema": ChartSelection.model_json_schema(),
+                        },
+                    }
             case "judge" | "route":
                 schema: type[BaseModel] = JudgmentDraft if operation == "judge" else RoutingDraft
                 payload["response_format"] = {
@@ -238,7 +257,9 @@ class OpenAICompatibleCoachModel:
             return transport_failure(error)
 
     async def _send(
-        self, client: httpx2.AsyncClient, request: httpx2.Request,
+        self,
+        client: httpx2.AsyncClient,
+        request: httpx2.Request,
     ) -> InferenceText | InferenceFailure:
         if self._config.token_preflight:
             budget = await check_token_budget(client, request, self._config.max_tokens)

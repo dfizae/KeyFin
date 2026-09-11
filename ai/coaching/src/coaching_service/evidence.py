@@ -57,12 +57,18 @@ def operation_evidence(evidence: EvidenceInput, operation: Operation) -> Evidenc
             case unreachable:
                 assert_never(unreachable)
         return EvidenceInput(
+            purpose=evidence.purpose,
             question=evidence.question,
             history=evidence.history,
             facts_json=canonical_json(model_facts.root),
         )
     except (ValidationError, EvidenceEncodingError):
-        return EvidenceInput(question=evidence.question, history=evidence.history, facts_json=LIMITED_CONTEXT)
+        return EvidenceInput(
+            purpose=evidence.purpose,
+            question=evidence.question,
+            history=evidence.history,
+            facts_json=LIMITED_CONTEXT,
+        )
 
 
 def context_limited(evidence: EvidenceInput) -> bool:

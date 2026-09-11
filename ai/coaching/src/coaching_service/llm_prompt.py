@@ -97,7 +97,18 @@ _REQUEST_END: Final = re.compile(
 TEMPLATE_TEXT: Final = "추가로 신경 쓰이는 지출 계획이나 확인할 자료가 있으면 알려 주세요."
 
 
-def system_prompt(operation: Operation) -> str:
+def system_prompt(operation: Operation, *, chart: bool = False) -> str:
+    if operation == "write" and chart:
+        return (
+            _BOUNDARY
+            + _ENCODING
+            + "이미 생성한 차트를 설명할 근거를 선택합니다. 새 질문이나 문장을 만들지 마세요. "
+            "facts의 id만 사용하여 selected_fact_ids 배열이 있는 JSON을 출력하세요. "
+            "첫째는 period, 둘째는 total, 셋째는 질문에 가장 관련 있는 나머지 근거 id입니다. "
+            "일반 차트 요청이면 예산 초과액이 가장 큰 카테고리를 우선 선택하세요. "
+            '예: {"selected_fact_ids":["period","total","category:외식"]}. '
+            "없는 id나 금액을 만들지 마세요."
+        )
     match operation:
         case "write":
             return _BOUNDARY + _ENCODING + _WRITE

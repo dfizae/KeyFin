@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | [`coaching/`](coaching/) | 합성 질문·거래 상황 → 미리 정한 계약 | 코칭 감지·분류·근거 준수·오류 복구 |
 | [`coaching/e2e/`](coaching/e2e/README.md) | 실제 HTTP 흐름과 추론 호출 → 계약·응답 추적 | 연결 오류, 대체 발생, 토큰 선검사 |
+| [`coaching/chart_e2e.py`](coaching/chart_e2e.py) | 거래와 예산 기간 → 실제 추론·차트 JSON·HTML·저장 조회·재시도 | 차트 연결과 결과 일관성; [실행법](../docs/charts.md#재현과-검증-범위) |
 | [`forecast/`](forecast/README.md) | 기준일까지 원장 → 이후 원장 소비 합계 | 관측된 SEED 시계열의 미래 소비 오차 |
 
 `coaching/case_catalog.json`은 회귀시험용 질문 계약입니다. 숨겨진 독립 검증셋이 아닙니다. `forecast/ledger_adapter/`는 거래 원장을 평가 입력으로 읽고 실제 FDT 경계를 호출하는 어댑터입니다.

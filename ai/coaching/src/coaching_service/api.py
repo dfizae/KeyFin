@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from coaching_service.auth import Authenticate
+from coaching_service.chart_routes import register_charts
 from coaching_service.coaching import CoachingCore, LanguageModel
 from coaching_service.engine import ENGINE_COMMIT
 from coaching_service.http_errors import register_errors
@@ -53,6 +54,7 @@ def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAP
     register_twin(app, core, auth)
     register_coaching(app, core, auth)
     register_records(app, core, auth)
+    register_charts(app, core, auth)
     return app
 
 

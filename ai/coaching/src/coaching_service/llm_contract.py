@@ -41,6 +41,7 @@ class ChatMessage(FrozenContract):
 
 
 class EvidenceInput(FrozenContract):
+    purpose: Literal["coaching", "chart"] = "coaching"
     question: Annotated[str, Field(max_length=4000)] = ""
     facts_json: Annotated[str, Field(min_length=2, max_length=64000)]
     history: Annotated[tuple[ChatMessage, ...], Field(max_length=16)] = ()
