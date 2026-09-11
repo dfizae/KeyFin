@@ -37,6 +37,16 @@ export function parseKSTDateKey(key: string): Date {
   return parsed;
 }
 
+/** 시간대 없는 KST 일시. 백엔드 LocalDateTime 은 소수점 초가 붙어 올 수 있다 */
+export const KST_LOCAL_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?$/;
+
+/** 서버의 시간대 없는 일시("YYYY-MM-DDTHH:mm:ss", KST)를 +09:00 을 붙여 읽는다 (규칙 80) */
+export function parseKSTLocalDateTime(value: string): Date {
+  const parsed = KST_LOCAL_DATE_TIME.test(value) ? parseISODate(`${value}+09:00`) : null;
+  if (!parsed) throw new InvalidDateError();
+  return parsed;
+}
+
 function toDate(value: string | Date): Date {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) throw new InvalidDateError();

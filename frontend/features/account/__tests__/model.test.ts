@@ -1,15 +1,18 @@
+import { accountListMock, resetAccountMocks, setIncomeAccountMock } from "@/api/mocks/account";
 import { createLinksMock, linkCandidatesMock, resetLinkMocks } from "@/api/mocks/link";
 import {
+  balanceAsOfLabel,
   canSubmitIncomeAccount,
-  linkedAccounts,
+  incomeAccountIdOf,
   linkedCards,
   totalBalance,
   toAccountSummary,
-  toIncomeAccountOptions,
+  toLinkedAccounts,
   type AccountSummaryDto,
 } from "@/features/account/model";
 import { toLinkCandidates } from "@/features/link/model";
 import { ContractMismatchError } from "@/lib/contract";
+
 
 const accountDto: AccountSummaryDto = {
   accountId: "acc_001",
@@ -32,50 +35,94 @@ describe("toAccountSummary", () => {
   });
 });
 
-describe("toIncomeAccountOptions · canSubmitIncomeAccount", () => {
-  beforeEach(resetLinkMocks);
-
-  it("연결된 계좌만 KeyFin id 를 달고 선택지가 된다", () => {
-    createLinksMock({ accountIds: [3], cardIds: [1] });
-    const options = toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()));
-    expect(options).toHaveLength(1);
-    expect(options[0]).toMatchObject({ accountId: 3, bankCode: "090", bankName: "카카오뱅크" });
+describe("toLinkedAccounts · incomeAccountIdOf · totalBalance (GET /accounts)", () => {
+  beforeEach(() => {
+    resetLinkMocks();
+    resetAccountMocks();
   });
 
-  it("여러 계좌를 연결하면 후보 목록 순서대로 나온다", () => {
-    createLinksMock({ accountIds: [3, 1], cardIds: [] });
-    const options = toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()));
-    expect(options.map((option) => option.bankName)).toEqual(["신한은행", "카카오뱅크"]);
+  it("관리 중인 계좌를 KeyFin id·마스킹 번호·KRW 잔액으로 바꾸고, 총 자산은 잔액 합계다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [] });
+    const accounts = toLinkedAccounts(accountListMock());
+    expect(accounts.map((account) => account.accountId)).toEqual([1, 2]);
+    expect(accounts[0]).toMatchObject({ bankName: "신한은행", maskedNo: "088*********7890", balance: "2450000", alias: null });
+    expect(totalBalance(accounts)).toBe("2768400");
   });
 
-  it("카드만 연결했거나 연결된 계좌가 없으면 빈 목록이다", () => {
-    expect(toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()))).toEqual([]);
-    createLinksMock({ accountIds: [], cardIds: [1] });
-    expect(toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()))).toEqual([]);
+  it("연결 계좌가 없으면 빈 목록이고 총 자산은 0 원이다", () => {
+    const accounts = toLinkedAccounts(accountListMock());
+    expect(accounts).toEqual([]);
+    expect(totalBalance(accounts)).toBe("0");
+  });
+
+  it("isManaged=false 가 섞여 와도 목록에 두지 않는다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [] });
+    const dto = accountListMock();
+    dto.items[1] = { ...dto.items[1], isManaged: false };
+    expect(toLinkedAccounts(dto).map((account) => account.accountId)).toEqual([1]);
+  });
+
+  it("수입 계좌는 사용자당 1개이고, 새로 지정하면 이전 것이 풀린다", () => {
+    createLinksMock({ accountIds: [1, 3], cardIds: [] });
+    expect(incomeAccountIdOf(toLinkedAccounts(accountListMock()))).toBeNull();
+    setIncomeAccountMock(3);
+    expect(incomeAccountIdOf(toLinkedAccounts(accountListMock()))).toBe(3);
+    setIncomeAccountMock(1);
+    const accounts = toLinkedAccounts(accountListMock());
+    expect(accounts.filter((account) => account.isIncome).map((account) => account.accountId)).toEqual([1]);
+  });
+
+  it("관리 중이 아닌 계좌를 수입 계좌로 지정하면 ACCOUNT_001 로 거절한다", () => {
+    expect(() => setIncomeAccountMock(4)).toThrow("계좌를 찾을 수 없습니다.");
+  });
+
+  it("잔액이 정수가 아니거나 갱신 시각 형식이 틀리면 계약 불일치로 막는다", () => {
+    createLinksMock({ accountIds: [1], cardIds: [] });
+    const dto = accountListMock();
+    expect(() => toLinkedAccounts({ items: [{ ...dto.items[0], balance: 100.5 }] })).toThrow(ContractMismatchError);
+    expect(() => toLinkedAccounts({ items: [{ ...dto.items[0], balanceUpdatedAt: "2026-09-11" }] })).toThrow(ContractMismatchError);
+  });
+});
+
+describe("canSubmitIncomeAccount", () => {
+  beforeEach(() => {
+    resetLinkMocks();
+    resetAccountMocks();
   });
 
   it("목록에 있는 계좌를 골랐을 때만 지정할 수 있다", () => {
     createLinksMock({ accountIds: [3], cardIds: [] });
-    const options = toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()));
-    expect(canSubmitIncomeAccount(options, null)).toBe(false);
-    expect(canSubmitIncomeAccount(options, 999)).toBe(false);
-    expect(canSubmitIncomeAccount(options, options[0].accountId)).toBe(true);
+    const accounts = toLinkedAccounts(accountListMock());
+    expect(canSubmitIncomeAccount(accounts, null)).toBe(false);
+    expect(canSubmitIncomeAccount(accounts, 999)).toBe(false);
+    expect(canSubmitIncomeAccount(accounts, 3)).toBe(true);
   });
 });
 
-describe("linkedAccounts · linkedCards · totalBalance", () => {
+describe("linkedCards (카드는 아직 금융망 후보에서)", () => {
   beforeEach(resetLinkMocks);
 
-  it("연결된 계좌·카드만 KeyFin id 를 달고, 총 자산은 연결 계좌 잔액 합계다", () => {
-    createLinksMock({ accountIds: [1, 2], cardIds: [2] });
-    const candidates = toLinkCandidates(linkCandidatesMock());
-    const accounts = linkedAccounts(candidates);
-    expect(accounts.map((account) => account.accountId)).toEqual([1, 2]);
-    expect(linkedCards(candidates)).toEqual([expect.objectContaining({ cardId: 2, cardName: "노리 체크" })]);
-    expect(totalBalance(accounts)).toBe("2768400");
+  it("연결된 카드만 KeyFin id 를 달고 나온다", () => {
+    createLinksMock({ accountIds: [], cardIds: [2] });
+    expect(linkedCards(toLinkCandidates(linkCandidatesMock()))).toEqual([expect.objectContaining({ cardId: 2, cardName: "노리 체크" })]);
+  });
+});
+
+describe("balanceAsOfLabel", () => {
+  beforeEach(() => {
+    resetLinkMocks();
+    resetAccountMocks();
   });
 
-  it("연결 계좌가 없으면 총 자산은 0 원이다", () => {
-    expect(totalBalance(linkedAccounts(toLinkCandidates(linkCandidatesMock())))).toBe("0");
+  it("계좌마다 갱신 시각이 다르면 가장 오래된 시각을 기준으로 쓴다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [] });
+    const dto = accountListMock();
+    dto.items[0] = { ...dto.items[0], balanceUpdatedAt: "2026-09-11T09:05:00" };
+    dto.items[1] = { ...dto.items[1], balanceUpdatedAt: "2026-09-11T14:30:00.500" };
+    expect(balanceAsOfLabel(toLinkedAccounts(dto))).toBe("9월 11일 (금) 09:05 기준");
+  });
+
+  it("계좌가 없으면 문구도 없다", () => {
+    expect(balanceAsOfLabel([])).toBeNull();
   });
 });

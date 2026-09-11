@@ -12,6 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Text } from "@/components/ui/text";
 import { useBudgetProposal, useConfirmBudget } from "@/features/budget/api/queries";
 import { envelopeIcon } from "@/features/budget/catalog";
+import { confirmErrorMessage } from "@/features/budget/errors";
 import { hasSpendingHistory, sumAmounts, type BudgetProposal, type BudgetProposalEnvelope } from "@/features/budget/model";
 import { currentMonthKey, formatMonthKeyLabel } from "@/lib/date";
 import { formatKRW, fromWon, toWon, type KRW } from "@/lib/money";
@@ -153,7 +154,7 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
       <View className="gap-2 px-6 pt-3" style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}>
         {confirm.isError ? (
           <Text className="text-caption text-destructive" accessibilityLiveRegion="polite">
-            예산을 저장하지 못했어요. 잠시 뒤 다시 시도해 주세요.
+            {confirmErrorMessage(confirm.error)}
           </Text>
         ) : null}
         <Button
