@@ -9,8 +9,11 @@ import { fromServerWon, type KRW } from "@/lib/money";
  */
 export type FinanceLinkRequest = { financeEmail: string };
 
-/** GET /links/status. 미연결도 정상 상태라 200 + false 로 온다 */
-export type FinanceStatusDto = { financeConnected: boolean };
+/**
+ * GET /links/status. 미연결도 정상 상태라 200 + false 로 온다.
+ * 백엔드가 연결 응답과 같은 DTO 를 써서 필드가 connected 다 (Notion 의 financeConnected 는 미수정 오기, 2026-09-11 백엔드 확인)
+ */
+export type FinanceStatusDto = { connected: boolean };
 
 export type FinanceLinkResponseDto = { connected: boolean };
 
@@ -24,30 +27,37 @@ export function canSubmitFinanceEmail(email: string): boolean {
   return EMAIL.test(trimmed) && trimmed.length <= FINANCE_EMAIL_MAX_LENGTH;
 }
 
-/** GET /links/candidates 응답 DTO (docs/api-contract.md LINK, FR-USR-02) */
+/**
+ * GET /links/candidates 응답 DTO (docs/api-contract.md LINK, FR-USR-02, 2026-09-11 Swagger).
+ * 조회할 때 서버가 금융망 목록을 KeyFin 에 동기화하므로 모든 항목에 KeyFin id 가 있다(계좌·카드는 id 공간이 따로다).
+ * id 는 POST /links·연결 해제·수입 계좌 지정의 식별자이고, managed 는 관리 대상(연결됨) 여부다.
+ */
 export type LinkCandidateAccountDto = {
+  id: number;
   finAccountNo: string;
   bankCode: string;
   bankName: string;
   balance: number;
-  linked: boolean;
+  managed: boolean;
 };
 
 export type LinkCandidateCardDto = {
+  id: number;
   cardNo: string;
   issuerName: string;
   cardName: string;
   withdrawalAccountNo: string;
-  linked: boolean;
+  managed: boolean;
 };
 
 export type LinkCandidatesDto = { accounts: LinkCandidateAccountDto[]; cards: LinkCandidateCardDto[] };
 
 /**
  * 화면 모델. 금액은 KRW 문자열로, 번호는 마스킹된 표시값으로 바꿔 둔다.
- * 원본 번호는 POST /links 의 식별자라 그대로 들고 있고 화면에는 내보내지 않는다.
+ * 원본 번호는 계좌·카드를 한 집합에서 고르는 선택 키로만 쓰고(id 는 계좌·카드끼리 겹친다) 화면에는 내보내지 않는다.
  */
 export type LinkAccount = {
+  id: number;
   finAccountNo: string;
   bankCode: string;
   bankName: string;
@@ -57,6 +67,7 @@ export type LinkAccount = {
 };
 
 export type LinkCard = {
+  id: number;
   cardNo: string;
   issuerName: string;
   cardName: string;
@@ -67,8 +78,8 @@ export type LinkCard = {
 
 export type LinkCandidates = { accounts: LinkAccount[]; cards: LinkCard[] };
 
-/** POST /links — finAccountNo·cardNo 목록. 이미 연결된 항목은 서버가 무시한다(멱등) */
-export type LinkRequest = { accounts: string[]; cards: string[] };
+/** POST /links — 후보의 KeyFin id 목록(각 최대 50개). 이미 관리 중인 항목은 서버가 건너뛴다(멱등) */
+export type LinkRequest = { accountIds: number[]; cardIds: number[] };
 
 /** 새로 연결된 수 */
 export type LinkResponseDto = { accounts: number; cards: number };
@@ -81,27 +92,35 @@ function won(value: number, field: string): KRW {
   }
 }
 
+/** 서버 id 는 양의 정수(Long)다. POST /links 가 @Positive 로 검증한다 */
+function keyFinId(value: number, field: string): number {
+  if (!Number.isSafeInteger(value) || value <= 0) throw new ContractMismatchError(field);
+  return value;
+}
+
 function toLinkAccount(dto: LinkCandidateAccountDto): LinkAccount {
   if (dto.finAccountNo.length === 0) throw new ContractMismatchError("accounts.finAccountNo");
   return {
+    id: keyFinId(dto.id, "accounts.id"),
     finAccountNo: dto.finAccountNo,
     bankCode: dto.bankCode,
     bankName: dto.bankName,
     maskedNo: maskAccount(dto.finAccountNo),
     balance: won(dto.balance, "accounts.balance"),
-    linked: dto.linked,
+    linked: dto.managed,
   };
 }
 
 function toLinkCard(dto: LinkCandidateCardDto): LinkCard {
   if (dto.cardNo.length === 0) throw new ContractMismatchError("cards.cardNo");
   return {
+    id: keyFinId(dto.id, "cards.id"),
     cardNo: dto.cardNo,
     issuerName: dto.issuerName,
     cardName: dto.cardName,
     maskedNo: maskCardNumber(dto.cardNo),
     maskedWithdrawalNo: maskAccount(dto.withdrawalAccountNo),
-    linked: dto.linked,
+    linked: dto.managed,
   };
 }
 
@@ -122,19 +141,23 @@ export function toggleLinkSelection(selected: ReadonlySet<string>, id: string): 
 }
 
 /**
- * 선택 집합을 POST /links 본문으로 바꾼다.
+ * 선택 집합(계좌번호·카드번호)을 POST /links 본문(KeyFin id 목록)으로 바꾼다.
  * 후보 목록을 근거로 걸러내므로 이미 연결된 항목이나 사라진 후보는 요청에 섞이지 않는다.
  */
 export function toLinkRequest(candidates: LinkCandidates, selected: ReadonlySet<string>): LinkRequest {
   return {
-    accounts: candidates.accounts.filter((a) => isLinkSelectable(a) && selected.has(a.finAccountNo)).map((a) => a.finAccountNo),
-    cards: candidates.cards.filter((c) => isLinkSelectable(c) && selected.has(c.cardNo)).map((c) => c.cardNo),
+    accountIds: candidates.accounts.filter((a) => isLinkSelectable(a) && selected.has(a.finAccountNo)).map((a) => a.id),
+    cardIds: candidates.cards.filter((c) => isLinkSelectable(c) && selected.has(c.cardNo)).map((c) => c.id),
   };
+}
+
+export function countLinkRequest(request: LinkRequest): number {
+  return request.accountIds.length + request.cardIds.length;
 }
 
 /** CTA 활성 조건: 실제로 보낼 것이 하나라도 있어야 한다 */
 export function canSubmitLinks(request: LinkRequest): boolean {
-  return request.accounts.length + request.cards.length > 0;
+  return countLinkRequest(request) > 0;
 }
 
 /** 후보가 아예 없으면 빈 상태 화면으로 간다 (시안 asset-select/empty) */

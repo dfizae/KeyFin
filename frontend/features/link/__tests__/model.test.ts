@@ -14,6 +14,7 @@ import {
   areAllLinksSelected,
   canSubmitFinanceEmail,
   canSubmitLinks,
+  countLinkRequest,
   FINANCE_EMAIL_MAX_LENGTH,
   hasNoLinkCandidates,
   isLinkSelectable,
@@ -79,14 +80,14 @@ describe("financeErrorMessage · isRetryableFinanceError", () => {
 
 describe("financeStatusMock", () => {
   it("연결 전에는 false, 연결에 성공하면 true 다", () => {
-    expect(financeStatusMock()).toEqual({ financeConnected: false });
+    expect(financeStatusMock()).toEqual({ connected: false });
     connectFinanceMock({ financeEmail: MOCK_FINANCE_EMAIL });
-    expect(financeStatusMock()).toEqual({ financeConnected: true });
+    expect(financeStatusMock()).toEqual({ connected: true });
   });
 
   it("연결에 실패하면 상태는 그대로 false 다", () => {
     expect(() => connectFinanceMock({ financeEmail: MOCK_TAKEN_FINANCE_EMAIL })).toThrow();
-    expect(financeStatusMock()).toEqual({ financeConnected: false });
+    expect(financeStatusMock()).toEqual({ connected: false });
   });
 });
 
@@ -116,6 +117,19 @@ describe("toLinkCandidates", () => {
     dto.accounts[0].finAccountNo = "";
     expect(() => toLinkCandidates(dto)).toThrow(ContractMismatchError);
   });
+
+  it("managed 를 linked 로 옮기고, 연결 여부와 무관하게 KeyFin id 를 들고 있다", () => {
+    const { accounts, cards } = toLinkCandidates(linkCandidatesMock());
+    expect(accounts.find((a) => a.linked)).toMatchObject({ id: 3, bankName: "카카오뱅크" });
+    expect(accounts.map((a) => a.id)).toEqual([1, 2, 3, 4]);
+    expect(cards.map((c) => c.id)).toEqual([1, 2]);
+  });
+
+  it("id 가 양의 정수가 아니면 계약 불일치로 막는다", () => {
+    const dto = linkCandidatesMock();
+    dto.cards[0].id = 0;
+    expect(() => toLinkCandidates(dto)).toThrow(ContractMismatchError);
+  });
 });
 
 describe("toggleLinkSelection", () => {
@@ -136,7 +150,8 @@ describe("toLinkRequest · canSubmitLinks", () => {
   it("선택한 계좌·카드를 번호 목록으로 나눠 담는다", () => {
     const candidates = toLinkCandidates(linkCandidatesMock());
     const request = toLinkRequest(candidates, new Set(["0885401234567890", "5310123412341234"]));
-    expect(request).toEqual({ accounts: ["0885401234567890"], cards: ["5310123412341234"] });
+    expect(request).toEqual({ accountIds: [1], cardIds: [1] });
+    expect(countLinkRequest(request)).toBe(2);
     expect(canSubmitLinks(request)).toBe(true);
   });
 
@@ -145,7 +160,7 @@ describe("toLinkRequest · canSubmitLinks", () => {
     const linked = candidates.accounts.find((a) => a.linked);
     expect(linked).toBeDefined();
     const request = toLinkRequest(candidates, new Set([linked!.finAccountNo]));
-    expect(request).toEqual({ accounts: [], cards: [] });
+    expect(request).toEqual({ accountIds: [], cardIds: [] });
     expect(canSubmitLinks(request)).toBe(false);
   });
 
@@ -169,15 +184,15 @@ describe("isLinkSelectable · hasNoLinkCandidates", () => {
 
 describe("createLinksMock", () => {
   it("새로 연결된 수만 센다 — 다시 보내도 0 이다(멱등)", () => {
-    const request = { accounts: ["0885401234567890"], cards: ["5310123412341234"] };
+    const request = { accountIds: [1], cardIds: [1] };
     expect(createLinksMock(request)).toEqual({ accounts: 1, cards: 1 });
     expect(createLinksMock(request)).toEqual({ accounts: 0, cards: 0 });
   });
 
-  it("연결한 항목은 후보 목록에서 linked 로 바뀐다", () => {
-    createLinksMock({ accounts: ["0041202345678901"], cards: [] });
+  it("연결한 항목은 후보 목록에서 managed 로 바뀐다", () => {
+    createLinksMock({ accountIds: [2], cardIds: [] });
     const account = linkCandidatesMock().accounts.find((a) => a.finAccountNo === "0041202345678901");
-    expect(account?.linked).toBe(true);
+    expect(account?.managed).toBe(true);
   });
 });
 
@@ -194,8 +209,8 @@ describe("selectableLinkIds · areAllLinksSelected · toggleSelectAllLinks", () 
     const selected = toggleSelectAllLinks(candidates, new Set());
     expect(areAllLinksSelected(candidates, selected)).toBe(true);
     const request = toLinkRequest(candidates, selected);
-    expect(request.accounts).toHaveLength(candidates.accounts.length - 1);
-    expect(request.cards).toHaveLength(candidates.cards.length);
+    expect(request.accountIds).toHaveLength(candidates.accounts.length - 1);
+    expect(request.cardIds).toHaveLength(candidates.cards.length);
   });
 
   it("일부만 고른 상태에서 누르면 나머지가 채워진다", () => {

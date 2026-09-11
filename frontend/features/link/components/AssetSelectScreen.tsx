@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, Circle, CircleCheckBig, WalletMinimal, WifiOff } from "lucide-react-native";
+import { ChevronLeft, Circle, CircleCheckBig, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
-import { Image, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,13 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useCreateLinks, useLinkCandidates } from "@/features/link/api/queries";
-import { bankInitial, bankLogo, bankLogoByName } from "@/features/link/bank-catalog";
+import { BankLogoTile } from "@/features/link/components/BankLogoTile";
+import { CandidatesErrorState } from "@/features/link/components/CandidatesErrorState";
 import { linkErrorMessage } from "@/features/link/errors";
 import {
   areAllLinksSelected,
   canSubmitLinks,
+  countLinkRequest,
   hasNoLinkCandidates,
   isLinkSelectable,
   toggleLinkSelection,
@@ -27,14 +29,11 @@ import {
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-/** PAGE-05 수입 계좌·PAGE-06 소비 분석이 생기면 그쪽으로 보낸다. 그전까지는 예산 제안(PAGE-07)으로 간다. (TBD) */
-const NEXT_ROUTE = "/onboarding/budget-proposal";
+/** 다음은 수입 계좌 지정(PAGE-05) */
+const NEXT_ROUTE = "/onboarding/income-account";
 
 /** 하단 CTA 가 안전 영역이 없는 기기에서도 띄워지는 최소 여백 (BudgetProposalScreen 과 같은 기준) */
 const MIN_BOTTOM_INSET = 12;
-
-/** 로고 PNG 는 원본 크기 인라인 style 이 className 을 이기므로 감싼 타일을 채우게 둔다 (웹 NativeWind) */
-const LOGO_FILL = { width: "100%", height: "100%" } as const;
 
 const EMPTY_CANDIDATES: LinkCandidates = { accounts: [], cards: [] };
 
@@ -50,7 +49,7 @@ function AssetSelectScreen() {
 
   const data = candidates.data ?? EMPTY_CANDIDATES;
   const request = toLinkRequest(data, selected);
-  const count = request.accounts.length + request.cards.length;
+  const count = countLinkRequest(request);
   const canSubmit = canSubmitLinks(request) && !createLinks.isPending;
   const ctaLabel = count > 0 ? `${count}개 연결하기` : "연결하기";
   const errorMessage = createLinks.isError ? linkErrorMessage(createLinks.error) : null;
@@ -80,11 +79,10 @@ function AssetSelectScreen() {
           <CandidatesSkeleton />
         ) : candidates.isError ? (
           <View className="flex-1 justify-center pb-20">
-            <EmptyState
-              icon={WifiOff}
-              title="자산을 불러오지 못했어요"
-              description="연결 상태를 확인한 뒤 다시 시도해 주세요."
-              action={{ label: "다시 시도", onPress: () => candidates.refetch(), disabled: candidates.isFetching }}
+            <CandidatesErrorState
+              error={candidates.error}
+              retrying={candidates.isFetching}
+              onRetry={() => candidates.refetch()}
             />
           </View>
         ) : hasNoLinkCandidates(data) ? (
@@ -217,8 +215,7 @@ type AccountRowProps = {
 function AccountRow({ account, selected, onToggle }: AccountRowProps) {
   return (
     <LinkRow
-      logo={bankLogo(account.bankCode) ?? bankLogoByName(account.bankName)}
-      initial={bankInitial(account.bankName)}
+      logo={<BankLogoTile bankCode={account.bankCode} name={account.bankName} />}
       title={account.bankName}
       subtitle={account.maskedNo}
       linked={!isLinkSelectable(account)}
@@ -244,8 +241,7 @@ type CardRowProps = {
 function CardRow({ card, selected, onToggle }: CardRowProps) {
   return (
     <LinkRow
-      logo={bankLogoByName(card.issuerName)}
-      initial={bankInitial(card.issuerName)}
+      logo={<BankLogoTile name={card.issuerName} />}
       title={card.cardName}
       subtitle={card.maskedNo}
       linked={!isLinkSelectable(card)}
@@ -259,9 +255,7 @@ function CardRow({ card, selected, onToggle }: CardRowProps) {
 }
 
 type LinkRowProps = {
-  /** 없으면 이름 첫 글자 타일로 대체한다 (카드사·목록에 없는 은행 코드) */
-  logo?: number;
-  initial: string;
+  logo: React.ReactNode;
   title: string;
   subtitle: string;
   right: React.ReactNode;
@@ -272,7 +266,7 @@ type LinkRowProps = {
 
 // Pencil 행(Lb1GR · a9XLX9 · n4oRz7): 체크 + 36 로고 타일 + 이름/마스킹 번호 + 우측 값.
 // 이미 연결된 행은 bg-muted 로 잠기고 '연결됨'만 보여 준다.
-function LinkRow({ logo, initial, title, subtitle, right, linked, selected, onToggle }: LinkRowProps) {
+function LinkRow({ logo, title, subtitle, right, linked, selected, onToggle }: LinkRowProps) {
   return (
     <Pressable
       accessibilityRole="checkbox"
@@ -291,13 +285,7 @@ function LinkRow({ logo, initial, title, subtitle, right, linked, selected, onTo
         className={selected ? "text-primary" : "text-muted-foreground"}
       />
 
-      <View className="h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-accent">
-        {logo === undefined ? (
-          <Text className="text-label text-primary">{initial}</Text>
-        ) : (
-          <Image source={logo} style={LOGO_FILL} resizeMode="contain" accessible={false} />
-        )}
-      </View>
+      {logo}
 
       <View className="flex-1 gap-0.5">
         <Text className={cn("text-label", linked ? "text-muted-foreground" : "text-foreground")} numberOfLines={1}>
