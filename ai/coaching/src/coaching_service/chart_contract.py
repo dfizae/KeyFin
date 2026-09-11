@@ -64,7 +64,15 @@ class ForecastPoint(Quantile):
 
 class DailyPoint(Frozen):
     date: date
-    amounts_krw: tuple[ChartMoney, ...]
+    amounts_krw: tuple[Annotated[ChartMoney, Field(ge=0)], ...] = Field(min_length=7, max_length=7)
+
+
+class DailyForecast(Frozen):
+    version: Literal["keyfin-daily-forecast/1"] = "keyfin-daily-forecast/1"
+    statistic: Literal["empirical_path_mean"] = "empirical_path_mean"
+    rounding: Literal["nearest_krw_ties_to_even_per_cell"] = "nearest_krw_ties_to_even_per_cell"
+    coverage: Literal["classified_variable_consumption"] = "classified_variable_consumption"
+    points: tuple[DailyPoint, ...]
 
 
 class Balance(Frozen):
@@ -82,6 +90,7 @@ class ChartMeta(BudgetPeriod):
     coverage: Literal["variable_consumption_excluding_fixed"] = "variable_consumption_excluding_fixed"
     history_coverage_verified: Literal[False] = False
     daily_note: str = "분류된 변동소비의 관측 기록입니다. 미분류 소비와 미래 일별 구성은 제공하지 않습니다."
+    daily_forecast_statistic: Literal["empirical_path_mean"] | None = None
     aggregation_note: str = (
         "고정비 제외·미분류 포함 구매시점 변동소비입니다. 전체 P50은 봉투별 P50의 합이 아닙니다. "
         "거래가 없는 날은 입력 자료 안에서 0으로 처리하며, 거래 누락 여부는 확인되지 않았습니다."
@@ -122,6 +131,7 @@ class ChartReceipt(Frozen):
     identity: TwinIdentity
     numeric_request: JsonDocument | None
     numeric_result: JsonDocument | None
+    daily_forecast: DailyForecast | None = None
 
 
 class ChartResponse(Frozen):

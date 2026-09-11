@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from coaching_service.chart_contract import BudgetPeriod
+from coaching_service.chart_contract import BudgetPeriod, DailyForecast, DailyPoint
 from coaching_service.chart_projection import ENVELOPES, Budgets, ChartInputs, project_chart
 from coaching_service.chart_rendering import render_chart
 from coaching_service.errors import ServiceError
@@ -62,11 +62,15 @@ def numeric(*, terminal: int = 100) -> JsonDocument:
     )
 
 
+def predicted_daily() -> DailyForecast:
+    return DailyForecast(points=(DailyPoint(date=date(2026, 9, 30), amounts_krw=(3, 0, 2, 0, 0, 0, 0)),))
+
+
 def test_joint_total_preserved_without_double_counting_settlement_or_fixed_expense() -> None:
     # Given independently specified purchase totals and a joint P50 distinct from marginal P50s.
     source = inputs()
     # When the chart is projected.
-    chart = project_chart(source, numeric())
+    chart = project_chart(source, numeric(), predicted_daily())
     # Then current=100+30, joint future=100; settlement/canceled/fixed rows add nothing.
     assert chart.total_current == 130
     assert chart.unallocated_current == 30
@@ -76,6 +80,8 @@ def test_joint_total_preserved_without_double_counting_settlement_or_fixed_expen
     assert sum(row.forecast for row in chart.categories) == 240
     assert chart.balance.history[-1].value_krw == 130
     assert chart.balance.forecast[-1].p50_krw == 230
+    assert chart.balance.daily[-1] == predicted_daily().points[0]
+    assert chart.balance.daily[-2].amounts_krw == (100, 0, 0, 0, 0, 0, 0)
 
 
 def test_terminal_disagreement_is_rejected() -> None:
@@ -89,17 +95,28 @@ def test_missing_budgets_remain_unknown() -> None:
     # Given a missing budget snapshot.
     source = inputs().model_copy(update={"budgets": Budgets()})
     # When projected, then no zero budget or percentage is invented.
-    chart = project_chart(source, numeric())
+    chart = project_chart(source, numeric(), predicted_daily())
     assert chart.total_budget is None
     assert all(row.budget is None for row in chart.categories)
 
 
 def test_html_keeps_question_as_data_and_never_executable_markup() -> None:
     # Given a malicious question string crossing the HTML boundary.
-    chart = project_chart(inputs(), numeric()).model_copy(
+    chart = project_chart(inputs(), numeric(), predicted_daily()).model_copy(
         update={"question": "</script><script>alert(1)</script>"}
     )
     # When rendered, then the script boundary cannot be closed by the data.
     html = render_chart(chart)
     assert "</script><script>alert(1)</script>" not in html
     assert "\\u003c/script>\\u003cscript>alert(1)\\u003c/script>" in html
+
+
+@pytest.mark.parametrize("days", [None, (), (date(2026, 9, 29),), (date(2026, 10, 1),)])
+def test_missing_or_wrong_future_dates_fail_closed(days: tuple[date, ...] | None) -> None:
+    prediction = (
+        None
+        if days is None
+        else DailyForecast(points=tuple(DailyPoint(date=d, amounts_krw=(0,) * 7) for d in days))
+    )
+    with pytest.raises(ServiceError, match="chart_daily_projection_mismatch"):
+        project_chart(inputs(), numeric(), prediction)

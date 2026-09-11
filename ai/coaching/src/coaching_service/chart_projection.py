@@ -12,6 +12,7 @@ from coaching_service.chart_contract import (
     ChartMeta,
     ChartMoney,
     ChartResult,
+    DailyForecast,
     DailyPoint,
     ForecastPoint,
     HistoricalPoint,
@@ -73,7 +74,9 @@ class ChartInputs(EngineFields):
     seed: int
 
 
-def project_chart(inputs: ChartInputs, raw: JsonDocument | None) -> ChartResult:
+def project_chart(
+    inputs: ChartInputs, raw: JsonDocument | None, daily_prediction: DailyForecast | None = None
+) -> ChartResult:
     period = inputs.period
     transactions = tuple(
         t
@@ -116,7 +119,15 @@ def project_chart(inputs: ChartInputs, raw: JsonDocument | None) -> ChartResult:
             raise ServiceError("chart_projection_contract_mismatch", 502)
         if forecast[-1].p50_krw != cumulative + result.metrics.total_expense_p50_krw.value:
             raise ServiceError("chart_terminal_contract_mismatch", 502)
+        if (
+            daily_prediction is None
+            or tuple(point.date for point in daily_prediction.points) != expected_dates[1:]
+        ):
+            raise ServiceError("chart_daily_projection_mismatch", 502)
+        daily.extend(daily_prediction.points)
         status = result.status
+    elif daily_prediction is not None or period.as_of < period.horizon_end:
+        raise ServiceError("chart_daily_projection_mismatch", 502)
     categories = tuple(
         Category(
             id=name,
@@ -146,6 +157,16 @@ def project_chart(inputs: ChartInputs, raw: JsonDocument | None) -> ChartResult:
             paths=inputs.paths,
             seed=inputs.seed,
             status=status,
+            daily_forecast_statistic=daily_prediction.statistic if daily_prediction is not None else None,
+            daily_note=(
+                "기준일까지는 관측 소비, 이후 연한 막대는 "
+                "같은 FDT 시뮬레이션 경로의 일별 평균 예상 소비입니다. "
+                "분류된 변동소비만 포함하며 미분류 소비와 고정비는 제외합니다. "
+                "누적선·기간말 금액은 P50이므로 일별 평균 막대의 합과 다를 수 있으며, "
+                "각 칸은 원 단위로 반올림합니다."
+                if daily_prediction is not None
+                else "분류된 변동소비의 관측 기록입니다. 미분류 소비와 고정비는 제외합니다."
+            ),
         ),
         balance=Balance(
             budget_krw=total_budget,

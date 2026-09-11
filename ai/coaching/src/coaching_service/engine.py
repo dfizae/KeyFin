@@ -7,6 +7,8 @@ from fdt.store import apply_events
 from pydantic import ValidationError
 
 from coaching_service.admission import admit
+from coaching_service.chart_contract import DailyForecast
+from coaching_service.chart_engine import ChartEngine
 from coaching_service.errors import ServiceError
 from coaching_service.provenance import ENGINE_COMMIT
 from coaching_service.schemas import Bootstrap, JsonDocument, TransactionView, TwinIdentity
@@ -71,3 +73,18 @@ class EngineAdapter:
         except ValidationError:
             raise ServiceError("invalid_numeric_request") from None
         return JsonDocument.model_validate(Engine(Twin.from_dict(document.root)).run(request.root))
+
+    def chart_numeric(
+        self, document: JsonDocument, request: JsonDocument
+    ) -> tuple[JsonDocument, DailyForecast]:
+        try:
+            admit(request)
+        except ValidationError:
+            raise ServiceError("invalid_numeric_request") from None
+        if request.root.get("mode") != "forecast":
+            raise ServiceError("chart_requires_forecast")
+        engine = ChartEngine(Twin.from_dict(document.root))
+        numeric = JsonDocument.model_validate(engine.run(request.root))
+        if engine.daily is None:
+            raise ServiceError("chart_daily_forecast_missing", 502)
+        return numeric, engine.daily

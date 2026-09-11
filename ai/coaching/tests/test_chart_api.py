@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -47,6 +47,27 @@ def test_chart_request_calls_model_and_returns_chart_contract(tmp_path: Path) ->
         assert result["wording"]["source"] == "llm"
         assert model.writes == 1
         assert model.seen[0].purpose == "chart"
+
+
+def test_chart_contains_every_future_day_and_preserves_observed_consumption(tmp_path: Path) -> None:
+    # Given a real ledger with repeatable purchases and an unfinished budget period.
+    with TestClient(setup(tmp_path / "daily.sqlite", TestModel())) as client:
+        # When the real chart endpoint is called.
+        response = client.post("/v1/charts/budget-forecast", json=chart_request(), headers=headers("daily"))
+        assert response.status_code == 200, response.text
+        result = response.json()
+        chart = result["chart"]
+        daily = chart["balance"]["daily"]
+        future = [row for row in daily if row["date"] > chart["meta"]["as_of"]]
+        # Then every forecast date has computed category values, including genuine zero days.
+        assert [row["date"] for row in future] == [
+            (date(2026, 9, 10) + timedelta(days=i)).isoformat() for i in range(21)
+        ]
+        assert all(len(row["amounts_krw"]) == 7 for row in future)
+        assert sum(sum(row["amounts_krw"]) for row in future) > 0
+        assert sum(sum(row["amounts_krw"]) for row in daily if row not in future) == 10000
+        assert chart["meta"]["daily_forecast_statistic"] == "empirical_path_mean"
+        assert result["receipt"]["daily_forecast"]["points"] == future
 
 
 @pytest.mark.parametrize(
@@ -128,6 +149,8 @@ def test_closed_budget_period_returns_observed_chart_without_future_invention(tm
         result = response.json()
         assert result["chart"]["totalForecast"] == result["chart"]["totalCurrent"] == 10000
         assert result["receipt"]["numeric_result"] is None
+        assert result["receipt"]["daily_forecast"] is None
+        assert result["chart"]["meta"]["daily_forecast_statistic"] is None
         assert result["wording"]["fallback_reason"] == "period_complete"
         assert model.writes == 0
 

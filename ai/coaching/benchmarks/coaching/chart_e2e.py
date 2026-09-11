@@ -5,6 +5,7 @@ import os
 import sys
 import time
 from collections import Counter
+from datetime import timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -29,6 +30,7 @@ class Outcome(Frozen):
     wording_source: str
     fallback_reason: str | None
     future_days: int
+    future_daily_points: int
     chart_id: str
 
 
@@ -59,6 +61,19 @@ async def run(inputs: Path, output: Path) -> None:
             numeric = result.receipt.numeric_result
             if numeric is None or result.chart.total_forecast != result.chart.balance.terminal.p50_krw:
                 raise RuntimeError("missing_or_inconsistent_forecast")
+            meta = result.chart.meta
+            future = tuple(row for row in result.chart.balance.daily if row.date > meta.as_of)
+            expected_dates = tuple(
+                meta.as_of + timedelta(days=i + 1) for i in range((meta.horizon_end - meta.as_of).days)
+            )
+            daily_receipt = result.receipt.daily_forecast
+            if (
+                tuple(row.date for row in future) != expected_dates
+                or daily_receipt is None
+                or daily_receipt.points != future
+                or meta.daily_forecast_statistic != daily_receipt.statistic
+            ):
+                raise RuntimeError("missing_or_inconsistent_future_daily_forecast")
             artifact = destination / case.id
             await artifact.mkdir()
             await (artifact / "response.json").write_bytes(response.content)
@@ -87,6 +102,7 @@ async def run(inputs: Path, output: Path) -> None:
                     wording_source=result.wording.source,
                     fallback_reason=result.wording.fallback_reason,
                     future_days=(result.chart.meta.horizon_end - result.chart.meta.as_of).days,
+                    future_daily_points=len(future),
                     chart_id=result.id,
                 )
             )
