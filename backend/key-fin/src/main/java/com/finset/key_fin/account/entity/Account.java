@@ -63,7 +63,7 @@ public class Account {
 		return new Account(user, finAccountNo, bankCode);
 	}
 
-	public boolean manage() {
+	public boolean link() {
 		if (managed) {
 			return false;
 		}

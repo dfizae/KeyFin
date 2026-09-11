@@ -14,10 +14,10 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class LinkAssetService {
+public class AssetLinkService {
 
 	private final UserRepository userRepository;
-	private final LinkAssetWriter linkAssetWriter;
+	private final AssetLinkWriter assetLinkWriter;
 
 	public LinkAssetsResponse link(long userId, LinkAssetsRequest request) {
 		if (request.isEmpty()) {
@@ -27,17 +27,17 @@ public class LinkAssetService {
 
 		Set<Long> accountIds = new LinkedHashSet<>(request.accountIdsOrEmpty());
 		Set<Long> cardIds = new LinkedHashSet<>(request.cardIdsOrEmpty());
-		return linkAssetWriter.link(userId, accountIds, cardIds);
+		return assetLinkWriter.link(userId, accountIds, cardIds);
 	}
 
 	public void unlinkAccount(long userId, long accountId) {
 		requireActiveUser(userId);
-		linkAssetWriter.unlinkAccount(userId, accountId);
+		assetLinkWriter.unlinkAccount(userId, accountId);
 	}
 
 	public void unlinkCard(long userId, long cardId) {
 		requireActiveUser(userId);
-		linkAssetWriter.unlinkCard(userId, cardId);
+		assetLinkWriter.unlinkCard(userId, cardId);
 	}
 
 	private void requireActiveUser(long userId) {

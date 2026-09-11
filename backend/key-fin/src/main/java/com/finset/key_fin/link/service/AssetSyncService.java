@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-public class LinkAssetSyncService {
+public class AssetSyncService {
 
 	private final UserRepository userRepository;
 	private final AccountRepository accountRepository;

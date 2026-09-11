@@ -1,9 +1,9 @@
 package com.finset.key_fin.link.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
-import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
+import com.finset.key_fin.link.dto.request.FinanceConnectRequest;
 import com.finset.key_fin.link.dto.request.LinkAssetsRequest;
-import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.FinanceConnectResponse;
 import com.finset.key_fin.link.dto.response.LinkAssetsResponse;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -91,13 +91,13 @@ public interface LinkControllerDocs {
 			@ApiResponse(responseCode = "503", description = "일시 장애 재시도 후 금융망 서비스 이용 불가", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
 			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	})
-	BaseResponse<FinanceLinkResponse> connect(
+	BaseResponse<FinanceConnectResponse> connect(
 			@Parameter(hidden = true) Long userId,
 			@io.swagger.v3.oas.annotations.parameters.RequestBody(
 					description = "금융망 가입 이메일",
 					required = true
 			)
-			FinanceLinkRequest request
+			FinanceConnectRequest request
 	);
 
 	@Operation(
@@ -121,10 +121,10 @@ public interface LinkControllerDocs {
 			@ApiResponse(responseCode = "404", description = "KeyFin 사용자를 찾을 수 없음", content = @Content(schema = @Schema(implementation = BaseResponse.class))),
 			@ApiResponse(responseCode = "500", description = "서버 내부 오류", content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	})
-	BaseResponse<FinanceLinkResponse> getStatus(@Parameter(hidden = true) Long userId);
+	BaseResponse<FinanceConnectResponse> getStatus(@Parameter(hidden = true) Long userId);
 
 	@Operation(
-			summary = "금융망 계좌·카드 후보 목록 조회",
+			summary = "금융망 계좌·카드 후보 목록 조회·동기화",
 			description = "연결된 금융망 회원의 수시입출금 계좌와 카드 목록을 조회해 KeyFin에 동기화하고(신규는 미선택 상태), "
 					+ "각 항목의 KeyFin ID와 관리 대상 여부(managed)를 반환합니다. 잔액은 금융망 실시간 값입니다. "
 					+ "금융망 회원이 연결되지 않은 사용자는 409로 거절됩니다.",

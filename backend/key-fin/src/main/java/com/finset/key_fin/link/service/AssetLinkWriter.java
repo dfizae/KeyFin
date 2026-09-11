@@ -16,7 +16,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class LinkAssetWriter {
+public class AssetLinkWriter {
 
 	private final AccountRepository accountRepository;
 	private final CardRepository cardRepository;
@@ -29,7 +29,7 @@ public class LinkAssetWriter {
 			if (accounts.size() != accountIds.size()) {
 				throw new BusinessException(LinkErrorCode.ACCOUNT_NOT_FOUND);
 			}
-			linkedAccounts = (int) accounts.stream().filter(Account::manage).count();
+			linkedAccounts = (int) accounts.stream().filter(Account::link).count();
 		}
 
 		int linkedCards = 0;
@@ -38,7 +38,7 @@ public class LinkAssetWriter {
 			if (cards.size() != cardIds.size()) {
 				throw new BusinessException(LinkErrorCode.CARD_NOT_FOUND);
 			}
-			linkedCards = (int) cards.stream().filter(Card::manage).count();
+			linkedCards = (int) cards.stream().filter(Card::link).count();
 		}
 
 		return new LinkAssetsResponse(linkedAccounts, linkedCards);

@@ -1,13 +1,13 @@
 package com.finset.key_fin.link.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
-import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
+import com.finset.key_fin.link.dto.request.FinanceConnectRequest;
 import com.finset.key_fin.link.dto.request.LinkAssetsRequest;
-import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.FinanceConnectResponse;
 import com.finset.key_fin.link.dto.response.LinkAssetsResponse;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
-import com.finset.key_fin.link.service.FinanceLinkService;
-import com.finset.key_fin.link.service.LinkAssetService;
+import com.finset.key_fin.link.service.FinanceConnectService;
+import com.finset.key_fin.link.service.AssetLinkService;
 import com.finset.key_fin.link.service.LinkCandidateService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -28,25 +28,25 @@ import static org.springframework.http.HttpStatus.CREATED;
 @RequiredArgsConstructor
 public class LinkController implements LinkControllerDocs {
 
-	private final FinanceLinkService financeLinkService;
+	private final FinanceConnectService financeConnectService;
 	private final LinkCandidateService linkCandidateService;
-	private final LinkAssetService linkAssetService;
+	private final AssetLinkService assetLinkService;
 
 	@PostMapping("/connect")
 	@Override
-	public BaseResponse<FinanceLinkResponse> connect(
+	public BaseResponse<FinanceConnectResponse> connect(
 			@AuthenticationPrincipal Long userId,
-			@Valid @RequestBody FinanceLinkRequest request
+			@Valid @RequestBody FinanceConnectRequest request
 	) {
-		return BaseResponse.ok(financeLinkService.connect(userId, request));
+		return BaseResponse.ok(financeConnectService.connect(userId, request));
 	}
 
 	@GetMapping("/status")
 	@Override
-	public BaseResponse<FinanceLinkResponse> getStatus(
+	public BaseResponse<FinanceConnectResponse> getStatus(
 			@AuthenticationPrincipal Long userId
 	) {
-		return BaseResponse.ok(financeLinkService.getStatus(userId));
+		return BaseResponse.ok(financeConnectService.getStatus(userId));
 	}
 
 	@GetMapping("/candidates")
@@ -64,7 +64,7 @@ public class LinkController implements LinkControllerDocs {
 			@AuthenticationPrincipal Long userId,
 			@Valid @RequestBody LinkAssetsRequest request
 	) {
-		return BaseResponse.ok(linkAssetService.link(userId, request));
+		return BaseResponse.ok(assetLinkService.link(userId, request));
 	}
 
 	@DeleteMapping("/accounts/{accountId}")
@@ -73,7 +73,7 @@ public class LinkController implements LinkControllerDocs {
 			@AuthenticationPrincipal Long userId,
 			@PathVariable long accountId
 	) {
-		linkAssetService.unlinkAccount(userId, accountId);
+		assetLinkService.unlinkAccount(userId, accountId);
 		return BaseResponse.ok();
 	}
 
@@ -83,7 +83,7 @@ public class LinkController implements LinkControllerDocs {
 			@AuthenticationPrincipal Long userId,
 			@PathVariable long cardId
 	) {
-		linkAssetService.unlinkCard(userId, cardId);
+		assetLinkService.unlinkCard(userId, cardId);
 		return BaseResponse.ok();
 	}
 }

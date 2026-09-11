@@ -93,7 +93,7 @@ public class Card {
 		}
 	}
 
-	public boolean manage() {
+	public boolean link() {
 		if (managed) {
 			return false;
 		}

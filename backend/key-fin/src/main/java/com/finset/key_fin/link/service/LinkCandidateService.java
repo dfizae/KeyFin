@@ -11,7 +11,7 @@ import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse.AccountCandidate;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse.CardCandidate;
 import com.finset.key_fin.link.exception.LinkErrorCode;
-import com.finset.key_fin.link.service.LinkAssetSyncService.SyncedAssets;
+import com.finset.key_fin.link.service.AssetSyncService.SyncedAssets;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -27,7 +27,7 @@ public class LinkCandidateService {
 	private final UserRepository userRepository;
 	private final FinanceAccountClient financeAccountClient;
 	private final FinanceCardClient financeCardClient;
-	private final LinkAssetSyncService linkAssetSyncService;
+	private final AssetSyncService assetSyncService;
 
 	public LinkCandidatesResponse getCandidates(long userId) {
 		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
@@ -38,7 +38,7 @@ public class LinkCandidateService {
 
 		List<FinanceAccount> financeAccounts = financeAccountClient.findAccounts(user.getFinUserKey());
 		List<FinanceCard> financeCards = financeCardClient.findCards(user.getFinUserKey());
-		SyncedAssets synced = linkAssetSyncService.sync(userId, financeAccounts, financeCards);
+		SyncedAssets synced = assetSyncService.sync(userId, financeAccounts, financeCards);
 
 		List<AccountCandidate> accounts = financeAccounts.stream()
 				.filter(FinanceAccount::isDemandDeposit)

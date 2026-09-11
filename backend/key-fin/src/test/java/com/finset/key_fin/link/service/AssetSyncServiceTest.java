@@ -7,7 +7,7 @@ import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.link.dto.response.FinanceAccount;
 import com.finset.key_fin.link.dto.response.FinanceCard;
-import com.finset.key_fin.link.service.LinkAssetSyncService.SyncedAssets;
+import com.finset.key_fin.link.service.AssetSyncService.SyncedAssets;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -31,7 +31,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class LinkAssetSyncServiceTest {
+class AssetSyncServiceTest {
 
 	private static final long USER_ID = 1L;
 	private static final FinanceAccount KB_ACCOUNT =
@@ -55,7 +55,7 @@ class LinkAssetSyncServiceTest {
 	private CardRepository cardRepository;
 
 	@InjectMocks
-	private LinkAssetSyncService syncService;
+	private AssetSyncService syncService;
 
 	private User user;
 
@@ -91,9 +91,9 @@ class LinkAssetSyncServiceTest {
 	@Test
 	void 이미_저장된_행은_관리_여부를_유지하고_카드_정보만_최신화한다() {
 		Account existingAccount = Account.sync(user, "0880680068408149", "088");
-		existingAccount.manage();
+		existingAccount.link();
 		Card existingCard = Card.sync(user, "1005872701650761", "000", "1005", "옛 카드명", null);
-		existingCard.manage();
+		existingCard.link();
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of(existingAccount));
 		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of(existingCard));

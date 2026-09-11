@@ -2,14 +2,14 @@ package com.finset.key_fin.link.controller;
 
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
-import com.finset.key_fin.link.dto.request.FinanceLinkRequest;
+import com.finset.key_fin.link.dto.request.FinanceConnectRequest;
 import com.finset.key_fin.link.dto.request.LinkAssetsRequest;
-import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.FinanceConnectResponse;
 import com.finset.key_fin.link.dto.response.LinkAssetsResponse;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
-import com.finset.key_fin.link.service.FinanceLinkService;
-import com.finset.key_fin.link.service.LinkAssetService;
+import com.finset.key_fin.link.service.FinanceConnectService;
+import com.finset.key_fin.link.service.AssetLinkService;
 import com.finset.key_fin.link.service.LinkCandidateService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,17 +39,17 @@ class LinkControllerTest {
 
 	private static final long USER_ID = 1L;
 
-	private FinanceLinkService financeLinkService;
+	private FinanceConnectService financeConnectService;
 	private LinkCandidateService linkCandidateService;
-	private LinkAssetService linkAssetService;
+	private AssetLinkService assetLinkService;
 	private MockMvc mockMvc;
 
 	@BeforeEach
 	void setUp() {
-		financeLinkService = mock(FinanceLinkService.class);
+		financeConnectService = mock(FinanceConnectService.class);
 		linkCandidateService = mock(LinkCandidateService.class);
-		linkAssetService = mock(LinkAssetService.class);
-		mockMvc = standaloneSetup(new LinkController(financeLinkService, linkCandidateService, linkAssetService))
+		assetLinkService = mock(AssetLinkService.class);
+		mockMvc = standaloneSetup(new LinkController(financeConnectService, linkCandidateService, assetLinkService))
 				.setControllerAdvice(new GlobalExceptionHandler())
 				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
 				.build();
@@ -65,9 +65,9 @@ class LinkControllerTest {
 
 	@Test
 	void 입력한_금융망_이메일로_회원을_연결한다() throws Exception {
-		FinanceLinkRequest request = new FinanceLinkRequest("finance@qwer.com");
-		when(financeLinkService.connect(USER_ID, request))
-				.thenReturn(FinanceLinkResponse.of(true));
+		FinanceConnectRequest request = new FinanceConnectRequest("finance@qwer.com");
+		when(financeConnectService.connect(USER_ID, request))
+				.thenReturn(FinanceConnectResponse.of(true));
 
 		mockMvc.perform(post("/api/v1/links/connect")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -78,7 +78,7 @@ class LinkControllerTest {
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.connected").value(true));
 
-		verify(financeLinkService).connect(USER_ID, request);
+		verify(financeConnectService).connect(USER_ID, request);
 	}
 
 	@Test
@@ -95,14 +95,14 @@ class LinkControllerTest {
 
 	@Test
 	void 금융망_연결_상태를_조회한다() throws Exception {
-		when(financeLinkService.getStatus(USER_ID)).thenReturn(FinanceLinkResponse.of(false));
+		when(financeConnectService.getStatus(USER_ID)).thenReturn(FinanceConnectResponse.of(false));
 
 		mockMvc.perform(get("/api/v1/links/status"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.connected").value(false));
 
-		verify(financeLinkService).getStatus(USER_ID);
+		verify(financeConnectService).getStatus(USER_ID);
 	}
 
 	@Test
@@ -131,7 +131,7 @@ class LinkControllerTest {
 	@Test
 	void 선택한_계좌와_카드를_연결하고_201을_반환한다() throws Exception {
 		LinkAssetsRequest request = new LinkAssetsRequest(List.of(3L), List.of(7L));
-		when(linkAssetService.link(USER_ID, request)).thenReturn(new LinkAssetsResponse(1, 1));
+		when(assetLinkService.link(USER_ID, request)).thenReturn(new LinkAssetsResponse(1, 1));
 
 		mockMvc.perform(post("/api/v1/links")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -143,7 +143,7 @@ class LinkControllerTest {
 				.andExpect(jsonPath("$.data.accounts").value(1))
 				.andExpect(jsonPath("$.data.cards").value(1));
 
-		verify(linkAssetService).link(USER_ID, request);
+		verify(assetLinkService).link(USER_ID, request);
 	}
 
 	@Test
@@ -159,7 +159,7 @@ class LinkControllerTest {
 
 	@Test
 	void 본인_소유가_아닌_계좌_ID_연결은_404로_거절한다() throws Exception {
-		when(linkAssetService.link(eq(USER_ID), any(LinkAssetsRequest.class)))
+		when(assetLinkService.link(eq(USER_ID), any(LinkAssetsRequest.class)))
 				.thenThrow(new BusinessException(LinkErrorCode.ACCOUNT_NOT_FOUND));
 
 		mockMvc.perform(post("/api/v1/links")
@@ -177,7 +177,7 @@ class LinkControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true));
 
-		verify(linkAssetService).unlinkAccount(USER_ID, 10L);
+		verify(assetLinkService).unlinkAccount(USER_ID, 10L);
 	}
 
 	@Test
@@ -186,13 +186,13 @@ class LinkControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true));
 
-		verify(linkAssetService).unlinkCard(USER_ID, 20L);
+		verify(assetLinkService).unlinkCard(USER_ID, 20L);
 	}
 
 	@Test
 	void 본인_카드가_아닌_해제_요청은_404로_거절한다() throws Exception {
 		doThrow(new BusinessException(LinkErrorCode.CARD_NOT_FOUND))
-				.when(linkAssetService).unlinkCard(USER_ID, 20L);
+				.when(assetLinkService).unlinkCard(USER_ID, 20L);
 
 		mockMvc.perform(delete("/api/v1/links/cards/20"))
 				.andExpect(status().isNotFound())

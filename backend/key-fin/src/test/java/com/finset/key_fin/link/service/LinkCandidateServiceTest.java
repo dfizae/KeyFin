@@ -10,7 +10,7 @@ import com.finset.key_fin.link.dto.response.FinanceAccount;
 import com.finset.key_fin.link.dto.response.FinanceCard;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
-import com.finset.key_fin.link.service.LinkAssetSyncService.SyncedAssets;
+import com.finset.key_fin.link.service.AssetSyncService.SyncedAssets;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -59,7 +59,7 @@ class LinkCandidateServiceTest {
 	private FinanceCardClient financeCardClient;
 
 	@Mock
-	private LinkAssetSyncService linkAssetSyncService;
+	private AssetSyncService assetSyncService;
 
 	@InjectMocks
 	private LinkCandidateService linkCandidateService;
@@ -81,13 +81,13 @@ class LinkCandidateServiceTest {
 		ReflectionTestUtils.setField(kb, "id", 3L);
 		Account shinhan = Account.sync(user, "0880680068408149", "088");
 		ReflectionTestUtils.setField(shinhan, "id", 4L);
-		shinhan.manage();
+		shinhan.link();
 		Card card = Card.sync(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", shinhan);
 		ReflectionTestUtils.setField(card, "id", 7L);
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(financeAccountClient.findAccounts(FIN_USER_KEY)).willReturn(financeAccounts);
 		given(financeCardClient.findCards(FIN_USER_KEY)).willReturn(financeCards);
-		given(linkAssetSyncService.sync(USER_ID, financeAccounts, financeCards)).willReturn(new SyncedAssets(
+		given(assetSyncService.sync(USER_ID, financeAccounts, financeCards)).willReturn(new SyncedAssets(
 				Map.of("0041456503815897", kb, "0880680068408149", shinhan),
 				Map.of("1005872701650761", card)
 		));
@@ -115,7 +115,7 @@ class LinkCandidateServiceTest {
 						LinkCandidatesResponse.CardCandidate::managed
 				)
 				.containsExactly(Tuple.tuple(7L, "1005872701650761", "신한카드", "0880680068408149", false));
-		verify(linkAssetSyncService).sync(USER_ID, financeAccounts, financeCards);
+		verify(assetSyncService).sync(USER_ID, financeAccounts, financeCards);
 	}
 
 	@Test
@@ -124,7 +124,7 @@ class LinkCandidateServiceTest {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(financeAccountClient.findAccounts(FIN_USER_KEY)).willReturn(List.of());
 		given(financeCardClient.findCards(FIN_USER_KEY)).willReturn(List.of());
-		given(linkAssetSyncService.sync(USER_ID, List.of(), List.of()))
+		given(assetSyncService.sync(USER_ID, List.of(), List.of()))
 				.willReturn(new SyncedAssets(Map.of(), Map.of()));
 
 		LinkCandidatesResponse response = linkCandidateService.getCandidates(USER_ID);
@@ -141,7 +141,7 @@ class LinkCandidateServiceTest {
 				LinkErrorCode.FINANCE_NOT_CONNECTED,
 				() -> linkCandidateService.getCandidates(USER_ID)
 		);
-		verifyNoInteractions(financeAccountClient, financeCardClient, linkAssetSyncService);
+		verifyNoInteractions(financeAccountClient, financeCardClient, assetSyncService);
 	}
 
 	@Test
@@ -152,7 +152,7 @@ class LinkCandidateServiceTest {
 				UserErrorCode.USER_NOT_FOUND,
 				() -> linkCandidateService.getCandidates(USER_ID)
 		);
-		verifyNoInteractions(financeAccountClient, financeCardClient, linkAssetSyncService);
+		verifyNoInteractions(financeAccountClient, financeCardClient, assetSyncService);
 	}
 
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {

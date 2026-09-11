@@ -1,7 +1,7 @@
 package com.finset.key_fin.link.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.FinanceConnectResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
@@ -12,12 +12,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class FinanceLinkWriter {
+public class FinanceConnectWriter {
 
 	private final UserRepository userRepository;
 
 	@Transactional
-	public FinanceLinkResponse connect(long userId, String finUserKey) {
+	public FinanceConnectResponse connect(long userId, String finUserKey) {
 		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 
@@ -26,6 +26,6 @@ public class FinanceLinkWriter {
 		}
 		user.connectFinance(finUserKey);
 
-		return FinanceLinkResponse.of(true);
+		return FinanceConnectResponse.of(true);
 	}
 }

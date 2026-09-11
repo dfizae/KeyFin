@@ -27,7 +27,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class LinkAssetServiceTest {
+class AssetLinkServiceTest {
 
 	private static final long USER_ID = 1L;
 
@@ -35,10 +35,10 @@ class LinkAssetServiceTest {
 	private UserRepository userRepository;
 
 	@Mock
-	private LinkAssetWriter linkAssetWriter;
+	private AssetLinkWriter assetLinkWriter;
 
 	@InjectMocks
-	private LinkAssetService linkAssetService;
+	private AssetLinkService assetLinkService;
 
 	private User user;
 
@@ -51,22 +51,22 @@ class LinkAssetServiceTest {
 	@Test
 	void 중복을_제거한_ID_목록으로_연결을_위임한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(linkAssetWriter.link(USER_ID, Set.of(3L, 4L), Set.of(7L))).willReturn(new LinkAssetsResponse(2, 1));
+		given(assetLinkWriter.link(USER_ID, Set.of(3L, 4L), Set.of(7L))).willReturn(new LinkAssetsResponse(2, 1));
 
-		LinkAssetsResponse response = linkAssetService.link(
+		LinkAssetsResponse response = assetLinkService.link(
 				USER_ID, new LinkAssetsRequest(List.of(3L, 4L, 3L), List.of(7L)));
 
 		assertThat(response.accounts()).isEqualTo(2);
 		assertThat(response.cards()).isEqualTo(1);
-		verify(linkAssetWriter).link(USER_ID, Set.of(3L, 4L), Set.of(7L));
+		verify(assetLinkWriter).link(USER_ID, Set.of(3L, 4L), Set.of(7L));
 	}
 
 	@Test
 	void 카드만_선택하면_계좌_목록은_비어_있는_채로_위임한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(linkAssetWriter.link(USER_ID, Set.of(), Set.of(7L))).willReturn(new LinkAssetsResponse(0, 1));
+		given(assetLinkWriter.link(USER_ID, Set.of(), Set.of(7L))).willReturn(new LinkAssetsResponse(0, 1));
 
-		LinkAssetsResponse response = linkAssetService.link(USER_ID, new LinkAssetsRequest(null, List.of(7L)));
+		LinkAssetsResponse response = assetLinkService.link(USER_ID, new LinkAssetsRequest(null, List.of(7L)));
 
 		assertThat(response.cards()).isEqualTo(1);
 	}
@@ -75,9 +75,9 @@ class LinkAssetServiceTest {
 	void 선택_항목이_없으면_거절한다() {
 		assertBusinessError(
 				LinkErrorCode.EMPTY_LINK_REQUEST,
-				() -> linkAssetService.link(USER_ID, new LinkAssetsRequest(List.of(), null))
+				() -> assetLinkService.link(USER_ID, new LinkAssetsRequest(List.of(), null))
 		);
-		verifyNoInteractions(userRepository, linkAssetWriter);
+		verifyNoInteractions(userRepository, assetLinkWriter);
 	}
 
 	@Test
@@ -86,26 +86,26 @@ class LinkAssetServiceTest {
 
 		assertBusinessError(
 				UserErrorCode.USER_NOT_FOUND,
-				() -> linkAssetService.link(USER_ID, new LinkAssetsRequest(List.of(3L), List.of()))
+				() -> assetLinkService.link(USER_ID, new LinkAssetsRequest(List.of(3L), List.of()))
 		);
-		verifyNoInteractions(linkAssetWriter);
+		verifyNoInteractions(assetLinkWriter);
 	}
 
 	@Test
 	void 계좌_연결_해제는_활성_사용자_확인_후_위임한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 
-		linkAssetService.unlinkAccount(USER_ID, 10L);
+		assetLinkService.unlinkAccount(USER_ID, 10L);
 
-		verify(linkAssetWriter).unlinkAccount(USER_ID, 10L);
+		verify(assetLinkWriter).unlinkAccount(USER_ID, 10L);
 	}
 
 	@Test
 	void 탈퇴한_사용자는_카드_연결을_해제할_수_없다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.empty());
 
-		assertBusinessError(UserErrorCode.USER_NOT_FOUND, () -> linkAssetService.unlinkCard(USER_ID, 20L));
-		verifyNoInteractions(linkAssetWriter);
+		assertBusinessError(UserErrorCode.USER_NOT_FOUND, () -> assetLinkService.unlinkCard(USER_ID, 20L));
+		verifyNoInteractions(assetLinkWriter);
 	}
 
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {

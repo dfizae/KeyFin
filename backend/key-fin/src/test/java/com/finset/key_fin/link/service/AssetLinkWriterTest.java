@@ -28,7 +28,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class LinkAssetWriterTest {
+class AssetLinkWriterTest {
 
 	private static final long USER_ID = 1L;
 
@@ -42,7 +42,7 @@ class LinkAssetWriterTest {
 	private CardRepository cardRepository;
 
 	@InjectMocks
-	private LinkAssetWriter linkAssetWriter;
+	private AssetLinkWriter assetLinkWriter;
 
 	private User user;
 	private Account kbAccount;
@@ -67,7 +67,7 @@ class LinkAssetWriterTest {
 				.willReturn(List.of(kbAccount, shinhanAccount));
 		given(cardRepository.findAllByIdInAndUserId(Set.of(7L), USER_ID)).willReturn(List.of(shinhanCard));
 
-		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, Set.of(3L, 4L), Set.of(7L));
+		LinkAssetsResponse response = assetLinkWriter.link(USER_ID, Set.of(3L, 4L), Set.of(7L));
 
 		assertThat(response.accounts()).isEqualTo(2);
 		assertThat(response.cards()).isEqualTo(1);
@@ -78,11 +78,11 @@ class LinkAssetWriterTest {
 
 	@Test
 	void 이미_관리_중인_항목은_건수에서_제외한다() {
-		kbAccount.manage();
+		kbAccount.link();
 		given(accountRepository.findAllByIdInAndUserId(Set.of(3L, 4L), USER_ID))
 				.willReturn(List.of(kbAccount, shinhanAccount));
 
-		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, Set.of(3L, 4L), Set.of());
+		LinkAssetsResponse response = assetLinkWriter.link(USER_ID, Set.of(3L, 4L), Set.of());
 
 		assertThat(response.accounts()).isEqualTo(1);
 		assertThat(response.cards()).isZero();
@@ -91,11 +91,11 @@ class LinkAssetWriterTest {
 
 	@Test
 	void 연결_해제된_항목을_다시_선택하면_관리_대상으로_복구된다() {
-		shinhanCard.manage();
+		shinhanCard.link();
 		shinhanCard.unlink();
 		given(cardRepository.findAllByIdInAndUserId(Set.of(7L), USER_ID)).willReturn(List.of(shinhanCard));
 
-		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, Set.of(), Set.of(7L));
+		LinkAssetsResponse response = assetLinkWriter.link(USER_ID, Set.of(), Set.of(7L));
 
 		assertThat(response.cards()).isEqualTo(1);
 		assertThat(shinhanCard.isManaged()).isTrue();
@@ -107,7 +107,7 @@ class LinkAssetWriterTest {
 
 		assertBusinessError(
 				LinkErrorCode.ACCOUNT_NOT_FOUND,
-				() -> linkAssetWriter.link(USER_ID, Set.of(3L, 999L), Set.of())
+				() -> assetLinkWriter.link(USER_ID, Set.of(3L, 999L), Set.of())
 		);
 		assertThat(kbAccount.isManaged()).isFalse();
 	}
@@ -118,17 +118,17 @@ class LinkAssetWriterTest {
 
 		assertBusinessError(
 				LinkErrorCode.CARD_NOT_FOUND,
-				() -> linkAssetWriter.link(USER_ID, Set.of(), Set.of(999L))
+				() -> assetLinkWriter.link(USER_ID, Set.of(), Set.of(999L))
 		);
 	}
 
 	@Test
 	void 계좌_연결을_해제하면_관리_대상과_수입_계좌_지정이_함께_풀린다() {
-		kbAccount.manage();
+		kbAccount.link();
 		ReflectionTestUtils.setField(kbAccount, "income", true);
 		given(accountRepository.findByIdAndUserId(3L, USER_ID)).willReturn(Optional.of(kbAccount));
 
-		linkAssetWriter.unlinkAccount(USER_ID, 3L);
+		assetLinkWriter.unlinkAccount(USER_ID, 3L);
 
 		assertThat(kbAccount.isManaged()).isFalse();
 		assertThat(kbAccount.isIncome()).isFalse();
@@ -138,15 +138,15 @@ class LinkAssetWriterTest {
 	void 본인_계좌가_아니면_해제할_수_없다() {
 		given(accountRepository.findByIdAndUserId(10L, USER_ID)).willReturn(Optional.empty());
 
-		assertBusinessError(LinkErrorCode.ACCOUNT_NOT_FOUND, () -> linkAssetWriter.unlinkAccount(USER_ID, 10L));
+		assertBusinessError(LinkErrorCode.ACCOUNT_NOT_FOUND, () -> assetLinkWriter.unlinkAccount(USER_ID, 10L));
 	}
 
 	@Test
 	void 카드_연결을_해제하면_관리_대상에서_제외된다() {
-		shinhanCard.manage();
+		shinhanCard.link();
 		given(cardRepository.findByIdAndUserId(7L, USER_ID)).willReturn(Optional.of(shinhanCard));
 
-		linkAssetWriter.unlinkCard(USER_ID, 7L);
+		assetLinkWriter.unlinkCard(USER_ID, 7L);
 
 		assertThat(shinhanCard.isManaged()).isFalse();
 	}
@@ -155,7 +155,7 @@ class LinkAssetWriterTest {
 	void 본인_카드가_아니면_해제할_수_없다() {
 		given(cardRepository.findByIdAndUserId(20L, USER_ID)).willReturn(Optional.empty());
 
-		assertBusinessError(LinkErrorCode.CARD_NOT_FOUND, () -> linkAssetWriter.unlinkCard(USER_ID, 20L));
+		assertBusinessError(LinkErrorCode.CARD_NOT_FOUND, () -> assetLinkWriter.unlinkCard(USER_ID, 20L));
 	}
 
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {

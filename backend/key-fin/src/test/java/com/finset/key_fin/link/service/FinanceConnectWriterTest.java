@@ -2,7 +2,7 @@ package com.finset.key_fin.link.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.ErrorCode;
-import com.finset.key_fin.link.dto.response.FinanceLinkResponse;
+import com.finset.key_fin.link.dto.response.FinanceConnectResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
@@ -22,7 +22,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
-class FinanceLinkWriterTest {
+class FinanceConnectWriterTest {
 
 	private static final long USER_ID = 1L;
 	private static final String FIN_USER_KEY = "finance-user-key";
@@ -31,7 +31,7 @@ class FinanceLinkWriterTest {
 	private UserRepository userRepository;
 
 	@InjectMocks
-	private FinanceLinkWriter financeLinkWriter;
+	private FinanceConnectWriter financeConnectWriter;
 
 	private User user;
 
@@ -46,7 +46,7 @@ class FinanceLinkWriterTest {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(userRepository.existsByFinUserKeyAndIdNot(FIN_USER_KEY, USER_ID)).willReturn(false);
 
-		FinanceLinkResponse response = financeLinkWriter.connect(USER_ID, FIN_USER_KEY);
+		FinanceConnectResponse response = financeConnectWriter.connect(USER_ID, FIN_USER_KEY);
 
 		assertThat(response.connected()).isTrue();
 		assertThat(user.getFinUserKey()).isEqualTo(FIN_USER_KEY);
@@ -58,7 +58,7 @@ class FinanceLinkWriterTest {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(userRepository.existsByFinUserKeyAndIdNot(FIN_USER_KEY, USER_ID)).willReturn(false);
 
-		FinanceLinkResponse response = financeLinkWriter.connect(USER_ID, FIN_USER_KEY);
+		FinanceConnectResponse response = financeConnectWriter.connect(USER_ID, FIN_USER_KEY);
 
 		assertThat(response.connected()).isTrue();
 		assertThat(user.getFinUserKey()).isEqualTo(FIN_USER_KEY);
@@ -71,7 +71,7 @@ class FinanceLinkWriterTest {
 
 		assertBusinessError(
 				LinkErrorCode.FINANCE_MEMBER_ALREADY_LINKED,
-				() -> financeLinkWriter.connect(USER_ID, FIN_USER_KEY)
+				() -> financeConnectWriter.connect(USER_ID, FIN_USER_KEY)
 		);
 		assertThat(user.isFinanceConnected()).isFalse();
 	}
@@ -84,7 +84,7 @@ class FinanceLinkWriterTest {
 
 		assertBusinessError(
 				UserErrorCode.FINANCE_CONNECTION_CONFLICT,
-				() -> financeLinkWriter.connect(USER_ID, FIN_USER_KEY)
+				() -> financeConnectWriter.connect(USER_ID, FIN_USER_KEY)
 		);
 		assertThat(user.getFinUserKey()).isEqualTo("existing-finance-user-key");
 	}
@@ -95,7 +95,7 @@ class FinanceLinkWriterTest {
 
 		assertBusinessError(
 				UserErrorCode.USER_NOT_FOUND,
-				() -> financeLinkWriter.connect(USER_ID, FIN_USER_KEY)
+				() -> financeConnectWriter.connect(USER_ID, FIN_USER_KEY)
 		);
 	}
 
