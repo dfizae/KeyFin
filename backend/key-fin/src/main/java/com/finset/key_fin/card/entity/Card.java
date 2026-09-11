@@ -85,14 +85,6 @@ public class Card {
 		return new Card(user, finCardNo, cvc, issuerCode, cardName, withdrawalAccount);
 	}
 
-	public void refresh(String cvc, String cardName, Account withdrawalAccount) {
-		this.cvc = requireText(cvc, "cvc");
-		this.cardName = requireText(cardName, "cardName");
-		if (withdrawalAccount != null) {
-			this.withdrawalAccount = withdrawalAccount;
-		}
-	}
-
 	public boolean link() {
 		if (managed) {
 			return false;

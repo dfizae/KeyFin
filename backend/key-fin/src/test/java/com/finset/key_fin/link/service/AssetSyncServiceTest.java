@@ -25,9 +25,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -64,32 +64,42 @@ class AssetSyncServiceTest {
 		user = User.create("qwer@qwer.com", "encoded-password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
 		user.connectFinance("finance-user-key");
+		lenient().when(accountRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
+		lenient().when(cardRepository.saveAll(anyList())).thenAnswer(invocation -> invocation.getArgument(0));
 	}
 
 	@Test
-	void 수시입출금_계좌와_카드를_미선택_상태로_저장하고_카드_출금계좌를_매칭한다() {
+	void 수시입출금_계좌와_카드를_미선택_상태로_한_번에_저장하고_카드_출금계좌를_매칭한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of());
 		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of());
-		given(accountRepository.save(any(Account.class))).willAnswer(invocation -> invocation.getArgument(0));
-		given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 		SyncedAssets synced = syncService.sync(
 				USER_ID, List.of(KB_ACCOUNT, SHINHAN_ACCOUNT, DEPOSIT_ACCOUNT), List.of(SHINHAN_CARD));
 
-		assertThat(synced.accountsByNo()).containsOnlyKeys("0041456503815897", "0880680068408149");
-		assertThat(synced.accountsByNo().values()).allMatch(account -> !account.isManaged());
-		Card card = synced.cardsByNo().get("1005872701650761");
-		assertThat(card.isManaged()).isFalse();
+		ArgumentCaptor<List<Account>> accountCaptor = ArgumentCaptor.forClass(List.class);
+		verify(accountRepository).saveAll(accountCaptor.capture());
+		assertThat(accountCaptor.getValue())
+				.extracting(Account::getFinAccountNo)
+				.containsExactly("0041456503815897", "0880680068408149");
+		assertThat(accountCaptor.getValue()).allMatch(account -> !account.isManaged());
+
+		ArgumentCaptor<List<Card>> cardCaptor = ArgumentCaptor.forClass(List.class);
+		verify(cardRepository).saveAll(cardCaptor.capture());
+		Card card = cardCaptor.getValue().get(0);
+		assertThat(card.getFinCardNo()).isEqualTo("1005872701650761");
 		assertThat(card.getCvc()).isEqualTo("725");
 		assertThat(card.getIssuerCode()).isEqualTo("1005");
+		assertThat(card.isManaged()).isFalse();
 		assertThat(card.getWithdrawalAccount()).isNotNull();
 		assertThat(card.getWithdrawalAccount().getFinAccountNo()).isEqualTo("0880680068408149");
-		verify(accountRepository, never()).save(argThatIsAccount("0204667768182760"));
+
+		assertThat(synced.accountsByNo()).containsOnlyKeys("0041456503815897", "0880680068408149");
+		assertThat(synced.cardsByNo()).containsOnlyKeys("1005872701650761");
 	}
 
 	@Test
-	void 이미_저장된_행은_관리_여부를_유지하고_카드_정보만_최신화한다() {
+	void 이미_저장된_자산은_다시_저장하지_않고_그대로_반환한다() {
 		Account existingAccount = Account.sync(user, "0880680068408149", "088");
 		existingAccount.link();
 		Card existingCard = Card.sync(user, "1005872701650761", "000", "1005", "옛 카드명", null);
@@ -100,14 +110,12 @@ class AssetSyncServiceTest {
 
 		SyncedAssets synced = syncService.sync(USER_ID, List.of(SHINHAN_ACCOUNT), List.of(SHINHAN_CARD));
 
+		verify(accountRepository).saveAll(List.of());
+		verify(cardRepository).saveAll(List.of());
 		assertThat(synced.accountsByNo().get("0880680068408149")).isSameAs(existingAccount);
+		assertThat(synced.cardsByNo().get("1005872701650761")).isSameAs(existingCard);
 		assertThat(existingAccount.isManaged()).isTrue();
 		assertThat(existingCard.isManaged()).isTrue();
-		assertThat(existingCard.getCvc()).isEqualTo("725");
-		assertThat(existingCard.getCardName()).isEqualTo("신한 딥디저트 카드");
-		assertThat(existingCard.getWithdrawalAccount()).isSameAs(existingAccount);
-		verify(accountRepository, never()).save(any());
-		verify(cardRepository, never()).save(any());
 	}
 
 	@Test
@@ -115,13 +123,12 @@ class AssetSyncServiceTest {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of());
 		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of());
-		given(cardRepository.save(any(Card.class))).willAnswer(invocation -> invocation.getArgument(0));
 
 		SyncedAssets synced = syncService.sync(USER_ID, List.of(), List.of(SHINHAN_CARD));
 
-		ArgumentCaptor<Card> captor = ArgumentCaptor.forClass(Card.class);
-		verify(cardRepository).save(captor.capture());
-		assertThat(captor.getValue().getWithdrawalAccount()).isNull();
+		ArgumentCaptor<List<Card>> cardCaptor = ArgumentCaptor.forClass(List.class);
+		verify(cardRepository).saveAll(cardCaptor.capture());
+		assertThat(cardCaptor.getValue().get(0).getWithdrawalAccount()).isNull();
 		assertThat(synced.cardsByNo()).containsKey("1005872701650761");
 	}
 
@@ -133,9 +140,5 @@ class AssetSyncServiceTest {
 				.isInstanceOf(BusinessException.class)
 				.extracting(exception -> ((BusinessException) exception).getErrorCode())
 				.isEqualTo(UserErrorCode.USER_NOT_FOUND);
-	}
-
-	private static Account argThatIsAccount(String finAccountNo) {
-		return org.mockito.ArgumentMatchers.argThat(account -> account != null && finAccountNo.equals(account.getFinAccountNo()));
 	}
 }

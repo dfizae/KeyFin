@@ -20,6 +20,14 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 후보 목록 조회 시 금융망 계좌·카드를 accounts/cards에 처음 한 번 적재한다.
+ * 이미 저장된 자산은 건드리지 않고, 없는 자산만 is_managed=false(미선택)로 saveAll 한다.
+ *
+ * TODO(yr): 가입 이후 금융망에 신설된 계좌·카드는 사용자 호출이 아니라 배치(P1 FR-USR-08, 1시간 주기 + 로그인 시 1회)가
+ *  감지해 is_managed=false로 등록하고 알림을 보낸다. 배치는 이 서비스의 신규 자산 선별·saveAll 로직을 재사용하고,
+ *  기존 카드의 CVC·카드명·출금계좌 변경 반영도 그 배치에서 처리한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class AssetSyncService {
@@ -36,47 +44,32 @@ public class AssetSyncService {
 		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 
-		Map<String, Account> accountsByNo = syncAccounts(user, financeAccounts);
-		Map<String, Card> cardsByNo = syncCards(user, financeCards, accountsByNo);
-		return new SyncedAssets(accountsByNo, cardsByNo);
-	}
-
-	private Map<String, Account> syncAccounts(User user, List<FinanceAccount> financeAccounts) {
-		Map<String, Account> accountsByNo = new HashMap<>(accountRepository.findAllByUserId(user.getId()).stream()
+		Map<String, Account> accountsByNo = new HashMap<>(accountRepository.findAllByUserId(userId).stream()
 				.collect(Collectors.toMap(Account::getFinAccountNo, Function.identity())));
+		List<Account> newAccounts = financeAccounts.stream()
+				.filter(FinanceAccount::isDemandDeposit)
+				.filter(account -> !accountsByNo.containsKey(account.accountNo()))
+				.map(account -> Account.sync(user, account.accountNo(), account.bankCode()))
+				.toList();
+		accountRepository.saveAll(newAccounts)
+				.forEach(account -> accountsByNo.put(account.getFinAccountNo(), account));
 
-		for (FinanceAccount financeAccount : financeAccounts) {
-			if (!financeAccount.isDemandDeposit() || accountsByNo.containsKey(financeAccount.accountNo())) {
-				continue;
-			}
-			Account saved = accountRepository.save(
-					Account.sync(user, financeAccount.accountNo(), financeAccount.bankCode()));
-			accountsByNo.put(saved.getFinAccountNo(), saved);
-		}
-		return accountsByNo;
-	}
-
-	private Map<String, Card> syncCards(User user, List<FinanceCard> financeCards, Map<String, Account> accountsByNo) {
-		Map<String, Card> cardsByNo = new HashMap<>(cardRepository.findAllByUserId(user.getId()).stream()
+		Map<String, Card> cardsByNo = new HashMap<>(cardRepository.findAllByUserId(userId).stream()
 				.collect(Collectors.toMap(Card::getFinCardNo, Function.identity())));
+		List<Card> newCards = financeCards.stream()
+				.filter(card -> !cardsByNo.containsKey(card.cardNo()))
+				.map(card -> Card.sync(
+						user,
+						card.cardNo(),
+						card.cvc(),
+						card.cardIssuerCode(),
+						card.cardName(),
+						accountsByNo.get(card.withdrawalAccountNo())
+				))
+				.toList();
+		cardRepository.saveAll(newCards)
+				.forEach(card -> cardsByNo.put(card.getFinCardNo(), card));
 
-		for (FinanceCard financeCard : financeCards) {
-			Account withdrawalAccount = accountsByNo.get(financeCard.withdrawalAccountNo());
-			Card existing = cardsByNo.get(financeCard.cardNo());
-			if (existing != null) {
-				existing.refresh(financeCard.cvc(), financeCard.cardName(), withdrawalAccount);
-				continue;
-			}
-			Card saved = cardRepository.save(Card.sync(
-					user,
-					financeCard.cardNo(),
-					financeCard.cvc(),
-					financeCard.cardIssuerCode(),
-					financeCard.cardName(),
-					withdrawalAccount
-			));
-			cardsByNo.put(saved.getFinCardNo(), saved);
-		}
-		return cardsByNo;
+		return new SyncedAssets(accountsByNo, cardsByNo);
 	}
 }
