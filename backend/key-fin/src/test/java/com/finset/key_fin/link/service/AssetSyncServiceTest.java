@@ -20,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -82,6 +83,13 @@ class AssetSyncServiceTest {
 		assertThat(accountCaptor.getValue())
 				.extracting(Account::getFinAccountNo)
 				.containsExactly("0041456503815897", "0880680068408149");
+		assertThat(accountCaptor.getValue())
+				.extracting(Account::getBankName, Account::getBalance)
+				.containsExactly(
+						org.assertj.core.groups.Tuple.tuple("국민은행", 3_000_000L),
+						org.assertj.core.groups.Tuple.tuple("신한은행", 125_000L)
+				);
+		assertThat(accountCaptor.getValue()).allMatch(account -> account.getBalanceUpdatedAt() != null);
 		assertThat(accountCaptor.getValue()).allMatch(account -> !account.isManaged());
 
 		ArgumentCaptor<List<Card>> cardCaptor = ArgumentCaptor.forClass(List.class);
@@ -99,8 +107,9 @@ class AssetSyncServiceTest {
 	}
 
 	@Test
-	void 이미_저장된_자산은_다시_저장하지_않고_그대로_반환한다() {
-		Account existingAccount = Account.sync(user, "0880680068408149", "088");
+	void 이미_저장된_자산은_새로_저장하지_않고_계좌_잔액_스냅샷을_갱신한다() {
+		Account existingAccount = Account.sync(
+				user, "0880680068408149", "088", "신한은행", 100_000L, LocalDateTime.now());
 		existingAccount.link();
 		Card existingCard = Card.sync(user, "1005872701650761", "000", "1005", "옛 카드명", null);
 		existingCard.link();
@@ -114,6 +123,8 @@ class AssetSyncServiceTest {
 		verify(cardRepository).saveAll(List.of());
 		assertThat(synced.accountsByNo().get("0880680068408149")).isSameAs(existingAccount);
 		assertThat(synced.cardsByNo().get("1005872701650761")).isSameAs(existingCard);
+		assertThat(existingAccount.getBalance()).isEqualTo(125_000L);
+		assertThat(existingAccount.getBankName()).isEqualTo("신한은행");
 		assertThat(existingAccount.isManaged()).isTrue();
 		assertThat(existingCard.isManaged()).isTrue();
 	}
