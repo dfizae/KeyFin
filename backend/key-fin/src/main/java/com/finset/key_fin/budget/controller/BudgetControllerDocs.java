@@ -4,6 +4,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.global.base.BaseResponse;
 
@@ -59,6 +60,47 @@ public interface BudgetControllerDocs {
 			)
 	})
 	BaseResponse<BudgetProposalResponse> propose(Long userId);
+
+	@Operation(
+			summary = "현재 주기 예산·잔액 조회 (보드)",
+			description = "요청 시점과 사용자 기준일로 정한 현재 주기의 예산을 반환합니다. "
+					+ "예산이 없으면 제안을 생성해 PROPOSED로 응답합니다. "
+					+ "PROPOSED면 봉투별 제안액만(확정 화면 복원용), CONFIRMED면 전체·봉투별 확정액·소비·잔액·잔여율을 반환합니다. "
+					+ "remainingRate는 정수 내림, 초과 시 음수, 확정액 0인 봉투는 null. "
+					+ "periodFrom~periodTo는 주기의 시작일과 마지막 날(포함) — month는 주기 시작일이 속한 월 라벨이라 달력 월과 다를 수 있음.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "조회 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = {
+									@ExampleObject(
+											name = "확정된 예산",
+											value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"budgetId\":11,\"month\":\"202609\",\"periodFrom\":\"2026-09-01\",\"periodTo\":\"2026-09-30\",\"status\":\"CONFIRMED\",\"total\":{\"confirmed\":780000,\"spent\":298000,\"remaining\":482000,\"remainingRate\":61},\"envelopes\":[{\"envelopeId\":1,\"name\":\"외식\",\"proposedAmount\":null,\"confirmedAmount\":280000,\"spent\":148000,\"remaining\":132000,\"remainingRate\":47},{\"envelopeId\":3,\"name\":\"의료·건강\",\"proposedAmount\":null,\"confirmedAmount\":0,\"spent\":30000,\"remaining\":-30000,\"remainingRate\":null}]}}"
+									),
+									@ExampleObject(
+											name = "미확정(제안) 예산",
+											value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"budgetId\":12,\"month\":\"202608\",\"periodFrom\":\"2026-08-23\",\"periodTo\":\"2026-09-22\",\"status\":\"PROPOSED\",\"total\":null,\"envelopes\":[{\"envelopeId\":1,\"name\":\"외식\",\"proposedAmount\":300000,\"confirmedAmount\":null,\"spent\":null,\"remaining\":null,\"remainingRate\":null}]}}"
+									)
+							}
+					)
+			),
+			@ApiResponse(
+					responseCode = "401",
+					description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "500",
+					description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			)
+	})
+	BaseResponse<BudgetCurrentResponse> getCurrent(Long userId);
 
 	@Operation(
 			summary = "예산 승인·조정",

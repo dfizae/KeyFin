@@ -15,13 +15,18 @@ import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest.EnvelopeAmount;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Total;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopeProposal;
 import com.finset.key_fin.budget.entity.Budget;
 import com.finset.key_fin.budget.entity.BudgetEnvelope;
+import com.finset.key_fin.budget.entity.BudgetStatus;
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.budget.repository.BudgetRepository;
+import com.finset.key_fin.budget.service.EnvelopeBalanceService.EnvelopeBalance;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.entity.UserSettings;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -61,6 +66,14 @@ public class BudgetService {
 			WHERE user_id = :userId AND tx_date < :toDate
 			""";
 
+	private static final String PROPOSED_ENVELOPES_SQL = """
+			SELECT be.envelope_id, e.name AS envelope_name, be.proposed_amount
+			FROM budget_envelopes be
+			JOIN envelopes e ON e.id = be.envelope_id
+			WHERE be.budget_id = :budgetId
+			ORDER BY be.envelope_id
+			""";
+
 	private static final int WINDOW_MONTHS = 3;
 	private static final int MIN_COVERED_DAYS = 30;
 	private static final int DAYS_PER_MONTH = 30;
@@ -79,6 +92,7 @@ public class BudgetService {
 
 	private final JdbcClient jdbc;
 	private final Clock clock;
+	private final EnvelopeBalanceService envelopeBalanceService;
 	private final BudgetRepository budgetRepository;
 	private final BudgetEnvelopeRepository budgetEnvelopeRepository;
 	private final UserRepository userRepository;
@@ -157,6 +171,55 @@ public class BudgetService {
 		rows.forEach(row -> row.confirm(amounts.get(row.getEnvelopeId())));
 		budget.confirm();
 		return new BudgetConfirmResponse(budget.getId(), budget.getBudgetMonth(), budget.getStatus().name());
+	}
+
+	@Transactional
+	public BudgetCurrentResponse getCurrent(long userId) {
+		BudgetPeriod period = BudgetPeriod.current(LocalDate.now(clock), anchorDayOf(userId));
+		String month = period.month();
+		LocalDate periodTo = period.to().minusDays(1);
+		Budget budget = budgetRepository.findByUserIdAndBudgetMonth(userId, month)
+				.orElseGet(() -> budgetRepository.getReferenceById(propose(userId).budgetId()));
+
+		if (!budget.isConfirmed()) {
+			List<EnvelopeBoard> envelopes = jdbc.sql(PROPOSED_ENVELOPES_SQL)
+					.param("budgetId", budget.getId())
+					.query((rs, rowNum) -> EnvelopeBoard.proposed(
+							rs.getInt("envelope_id"),
+							rs.getString("envelope_name"),
+							rs.getLong("proposed_amount")))
+					.list();
+			return new BudgetCurrentResponse(
+					budget.getId(), month, period.from(), periodTo, BudgetStatus.PROPOSED.name(), null, envelopes);
+		}
+
+		long confirmed = 0;
+		long spent = 0;
+		List<EnvelopeBoard> envelopes = new ArrayList<>();
+		for (EnvelopeBalance balance : envelopeBalanceService.getMonthlyBalances(userId, month)) {
+			confirmed += balance.confirmedAmount();
+			spent += balance.spent();
+			envelopes.add(EnvelopeBoard.confirmed(
+					balance.envelopeId(),
+					balance.envelopeName(),
+					balance.confirmedAmount(),
+					balance.spent(),
+					balance.remaining(),
+					remainingRate(balance.remaining(), balance.confirmedAmount())));
+		}
+		long remaining = confirmed - spent;
+		return new BudgetCurrentResponse(
+				budget.getId(),
+				month,
+				period.from(),
+				periodTo,
+				BudgetStatus.CONFIRMED.name(),
+				new Total(confirmed, spent, remaining, remainingRate(remaining, confirmed)),
+				envelopes);
+	}
+
+	private static Integer remainingRate(long remaining, long confirmed) {
+		return confirmed == 0 ? null : (int) Math.floorDiv(remaining * 100, confirmed);
 	}
 
 	private int anchorDayOf(long userId) {

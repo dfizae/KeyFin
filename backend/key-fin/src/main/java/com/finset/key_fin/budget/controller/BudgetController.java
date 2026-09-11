@@ -1,6 +1,7 @@
 package com.finset.key_fin.budget.controller;
 
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.budget.service.BudgetService;
 import com.finset.key_fin.global.base.BaseResponse;
@@ -28,6 +30,12 @@ public class BudgetController implements BudgetControllerDocs {
 	@Override
 	public BaseResponse<BudgetProposalResponse> propose(@AuthenticationPrincipal Long userId) {
 		return BaseResponse.ok(budgetService.propose(userId));
+	}
+
+	@GetMapping("/current")
+	@Override
+	public BaseResponse<BudgetCurrentResponse> getCurrent(@AuthenticationPrincipal Long userId) {
+		return BaseResponse.ok(budgetService.getCurrent(userId));
 	}
 
 	@PutMapping("/{budgetId}/confirm")

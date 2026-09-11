@@ -4,12 +4,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +25,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Total;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopeProposal;
 import com.finset.key_fin.budget.service.BudgetService;
@@ -64,6 +69,22 @@ class BudgetControllerTest {
 				.andExpect(jsonPath("$.data.status").value("PROPOSED"))
 				.andExpect(jsonPath("$.data.envelopes[0].envelopeId").value(1))
 				.andExpect(jsonPath("$.data.envelopes[0].proposedAmount").value(121000));
+	}
+
+	@Test
+	void returnsCurrentBudgetForAuthenticatedUser() throws Exception {
+		when(budgetService.getCurrent(1L)).thenReturn(new BudgetCurrentResponse(
+				11L, "202609", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "CONFIRMED",
+				new Total(780000, 298000, 482000, 61),
+				List.of(EnvelopeBoard.confirmed(3, "의료·건강", 0, 30000, -30000, null))));
+
+		mockMvc.perform(get("/api/v1/budgets/current"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.status").value("CONFIRMED"))
+				.andExpect(jsonPath("$.data.periodTo").value("2026-09-30"))
+				.andExpect(jsonPath("$.data.total.remainingRate").value(61))
+				.andExpect(jsonPath("$.data.envelopes[0].remaining").value(-30000))
+				.andExpect(jsonPath("$.data.envelopes[0].remainingRate").value((Object) null));
 	}
 
 	@Test

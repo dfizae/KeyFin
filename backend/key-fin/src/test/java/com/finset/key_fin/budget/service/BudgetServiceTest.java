@@ -3,17 +3,11 @@ package com.finset.key_fin.budget.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,9 +16,11 @@ import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopePro
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.support.FixedClockConfig;
 
 @SpringBootTest
 @Transactional
+@Import(FixedClockConfig.class)
 @Sql("/sql/budget-proposal-fixture.sql")
 class BudgetServiceTest {
 
@@ -32,16 +28,6 @@ class BudgetServiceTest {
 	private static final long USER_WITHOUT_HISTORY = 996L;
 	private static final long USER_WITH_SHORT_HISTORY = 995L;
 	private static final long USER_WITH_ANCHOR_25 = 994L;
-
-	@TestConfiguration
-	static class FixedClockConfig {
-
-		@Bean
-		@Primary
-		Clock fixedClock() {
-			return Clock.fixed(Instant.parse("2026-09-10T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		}
-	}
 
 	@Autowired
 	private BudgetService budgetService;
