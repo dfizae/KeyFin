@@ -64,6 +64,9 @@ class EngineAdapter:
             for row in Twin.from_dict(document.root).transactions
         )
 
+    def observation_audit(self, document: JsonDocument) -> JsonDocument:
+        return JsonDocument.model_validate(Twin.from_dict(document.root).model["audit"])
+
     def review(self, document: JsonDocument, request: JsonDocument) -> JsonDocument:
         return JsonDocument.model_validate(Coach(Twin.from_dict(document.root)).review(request.root))
 

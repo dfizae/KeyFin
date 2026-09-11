@@ -16,6 +16,7 @@ class ChartFact(FrozenContract):
 class ChartFacts(FrozenContract):
     required_ids: tuple[str, str] = ("period", "total")
     facts: tuple[ChartFact, ...]
+    context_notes: tuple[str, ...] = ()
 
 
 class ChartSelection(FrozenContract):
@@ -27,16 +28,14 @@ def chart_evidence(chart: ChartResult) -> EvidenceInput:
     facts = [
         ChartFact(
             id="period",
-            text=(
-                f"예산 기간은 {period.period_start}부터 {period.horizon_end}까지이며, "
-                f"기준일은 {period.as_of}입니다."
-            ),
+            text=(f"예산 기간 {period.period_start}~{period.horizon_end}, 기준일 {period.as_of}입니다."),
         ),
         ChartFact(
             id="total",
             text=(
-                f"현재까지 변동소비는 {chart.total_current:,}원이고, "
-                f"기간 말 예상 총소비(P50)는 {chart.total_forecast:,}원입니다."
+                f"입력에서 확인된 현재 변동소비 {chart.total_current:,}원, "
+                f"기간 말 예상 총소비(P50) {chart.total_forecast:,}원입니다."
+                + (" " + period.quality.summary if period.quality and period.quality.summary else "")
             ),
         ),
     ]
@@ -62,7 +61,12 @@ def chart_evidence(chart: ChartResult) -> EvidenceInput:
             ChartFact(id="missing_budget", text="예산 정보가 없어 예산 초과 여부는 비교할 수 없습니다.")
         )
     return EvidenceInput(
-        purpose="chart", question=chart.question, facts_json=ChartFacts(facts=tuple(facts)).model_dump_json()
+        purpose="chart",
+        question=chart.question,
+        facts_json=ChartFacts(
+            facts=tuple(facts),
+            context_notes=period.quality.notices if period.quality else (),
+        ).model_dump_json(),
     )
 
 

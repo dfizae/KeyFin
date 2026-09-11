@@ -85,6 +85,15 @@ class Balance(Frozen):
     daily: tuple[DailyPoint, ...]
 
 
+class ChartQuality(Frozen):
+    version: Literal["keyfin-chart-quality/1"] = "keyfin-chart-quality/1"
+    historical_days: int | None = Field(default=None, ge=0)
+    warning_codes: tuple[str, ...] = ()
+    pending_forecast_p50_krw: ChartMoney | None = Field(default=None, ge=0)
+    notices: tuple[str, ...]
+    summary: str
+
+
 class ChartMeta(BudgetPeriod):
     source_label: str = "입력 거래 기반 FDT 계산 · AI 설명 · 실제 예측 정확도 미검증"
     coverage: Literal["variable_consumption_excluding_fixed"] = "variable_consumption_excluding_fixed"
@@ -99,6 +108,8 @@ class ChartMeta(BudgetPeriod):
     paths: int
     seed: int
     status: str
+    quality: ChartQuality | None = None
+    observation_start: date | None = None
 
 
 class ChartResult(Frozen):
@@ -132,6 +143,7 @@ class ChartReceipt(Frozen):
     numeric_request: JsonDocument | None
     numeric_result: JsonDocument | None
     daily_forecast: DailyForecast | None = None
+    observation_audit: JsonDocument | None = None
 
 
 class ChartResponse(Frozen):

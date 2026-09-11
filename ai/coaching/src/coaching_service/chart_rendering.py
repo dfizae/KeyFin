@@ -17,11 +17,29 @@ h1,.intro,.helper,.result-note,.flow-range,.bottom-note,.day-detail,.source{
  word-break:keep-all;overflow-wrap:break-word}
 .chart-brief{font-size:14px;line-height:1.8;word-break:keep-all;margin:16px 0}
 .chart-date{white-space:nowrap}
+.chart-quality{margin:16px 0;padding:14px 18px;border:1px solid #e6e1f3;
+ border-radius:12px;background:#faf9fd;font-size:12px;line-height:1.8;word-break:keep-all;
+ overflow-wrap:break-word}
+.chart-quality p{margin:0;font-weight:600}.chart-quality ul{margin:6px 0 0;padding-left:18px}
 @media(max-width:360px){h1{font-size:21px}}
 </style><script>
 (()=>{
  const brief=document.createElement('p');brief.id='chart-explanation';brief.className='chart-brief';
  brief.setAttribute('aria-label','차트 해설');document.querySelector('#as-of').after(brief);
+ const quality=document.createElement('section');quality.id='chart-quality';
+ quality.className='chart-quality';quality.setAttribute('aria-label','계산에 사용한 자료');
+ brief.after(quality);
+ function showQuality(d){
+  quality.replaceChildren();
+  const notices=d.meta.quality?.notices||[
+   '이 저장 결과에는 자료 점검 요약이 없습니다. 새 요청으로 다시 계산해 주세요.'];
+  quality.hidden=!notices.length;
+  if(!notices.length)return;
+  const title=document.createElement('p');title.textContent='계산에 사용한 자료';quality.append(title);
+  const list=document.createElement('ul');
+  for(const text of notices){const item=document.createElement('li');item.textContent=text;list.append(item);}
+  quality.append(list);
+ }
  function explain(text){
   brief.replaceChildren();
   for(const part of text.split(/(\d{4}-\d{2}-\d{2})/)){
@@ -32,10 +50,10 @@ h1,.intro,.helper,.result-note,.flow-range,.bottom-note,.day-detail,.source{
   }
  }
  function observedLabel(text){
-  return text.replaceAll('예산 기간 예상 소비','예산 기간 실제 소비')
+  return text.replaceAll('예산 기간 예상 소비','예산 기간 기록 소비')
    .replaceAll('기간 말 예상 총소비','기간 총소비').replaceAll('기간 말 예측','기간 총소비')
    .replaceAll('기간 말 예상','기간 총소비').replaceAll('종료일 예측','종료일 기록')
-   .replaceAll('예상 사용률','실제 사용률').replace(/^예상 /,'기간 총소비 ');
+   .replaceAll('예상 사용률','기록 기준 사용률').replace(/^예상 /,'기간 총소비 ');
  }
  function selected(){
   if(window.PREVIEW_DATA.meta.status==='observed_period_complete'){
@@ -56,8 +74,24 @@ h1,.intro,.helper,.result-note,.flow-range,.bottom-note,.day-detail,.source{
  }
  function update(){
   brief.hidden=!document.querySelector('#error').classList.contains('hidden');
+  quality.hidden=brief.hidden;
   if(brief.hidden)return;
-  const d=window.PREVIEW_DATA;explain(d.answer);spaceTicks();
+  const d=window.PREVIEW_DATA;explain(d.answer);spaceTicks();showQuality(d);
+  if(d.meta.observation_start){
+   const short=value=>value.slice(5).replace('-','/');
+   document.querySelector('#actual-range').textContent=
+    '입력 기록 '+short(d.meta.observation_start)+' ~ '+short(d.meta.as_of);
+  }
+  if(d.unallocatedCurrent>0){
+   const row=document.createElement('tr');row.id='unallocated-row';
+   const terminal=d.meta.status==='observed_period_complete'?KeyFinChart.fmt(d.unallocatedCurrent):'—';
+   const values=['미분류 (전체에 포함)','—',KeyFinChart.fmt(d.unallocatedCurrent),
+    terminal,'—','항목별 막대에서 제외'];
+   for(const value of values){
+    const cell=document.createElement('td');cell.textContent=value;row.append(cell);
+   }
+   document.querySelector('#total').prepend(row);
+  }
   const over=d.categories.filter(r=>r.forecast!=null&&r.budget!=null&&r.forecast>r.budget);
   if(over.length)document.querySelector('#result-note').textContent=over.map(
    r=>r.label+': '+KeyFinChart.money(r.forecast-r.budget)+' 초과 예상').join(' · ');
@@ -73,7 +107,7 @@ h1,.intro,.helper,.result-note,.flow-range,.bottom-note,.day-detail,.source{
    document.querySelector('#budget-legend span:last-child').textContent='기간 동안 기록된 총금액';
    document.querySelector('.preview .helper').textContent=
     '기간이 종료되어 두 막대는 같은 관측 금액입니다. '+
-    '막대 오른쪽 숫자는 실제 사용률 · 흰 점선은 예산 100%';
+    '막대 오른쪽 숫자는 기록 기준 사용률 · 흰 점선은 예산 100%';
    document.querySelector('.table-section h2').textContent='카테고리별 소비 기록';
    document.querySelector('.bottom-note').lastChild.textContent=
     '현재 소비와 기간 총소비는 모두 위 예산 기간에 속한 관측 금액입니다.';
@@ -88,6 +122,14 @@ h1,.intro,.helper,.result-note,.flow-range,.bottom-note,.day-detail,.source{
     (remain==null?'남은 예산 정보 없음':KeyFinChart.money(Math.abs(remain))+(remain<0?' 초과':' 남음'));
    if(over.length)document.querySelector('#result-note').textContent=over.map(
     r=>r.label+': '+KeyFinChart.money(r.forecast-r.budget)+' 초과').join(' · ');
+  }
+  if(d.totalBudget==null&&d.categories.some(row=>row.budget!=null)){
+   document.querySelectorAll('#budget text').forEach(node=>{
+    node.textContent=node.textContent.replace('예산 정보 없음 대비 —','전체 예산 확인 필요');
+   });
+   const range=document.querySelector('#flow-range');
+   range.textContent=range.textContent.replace('기간 예산 정보 없음',
+    '일부 항목만 예산 입력 · 전체 합계 확인 필요');
   }
  }
  document.querySelector('#budget').addEventListener('click',selected);
@@ -136,7 +178,7 @@ def render_chart(chart: ChartResult) -> str:
     for token, name in (("CSS", "demo.css"), ("CHART", "keyfin-chart.js"), ("FLOW", "keyfin-flow.js")):
         page = page.replace("/*" + token + "*/", asset(name))
     style = json.dumps(json.loads(asset("design-tokens.json")), ensure_ascii=False).replace("<", "\\u003c")
-    payload = chart.model_dump_json(by_alias=True).replace("<", "\\u003c")
+    payload = chart.model_dump_json(by_alias=True, exclude_unset=True).replace("<", "\\u003c")
     return page.replace(
         "/*DATA*/", "window.KEYFIN_STYLE=" + style + ";window.KEYFIN_CASES=[" + payload + "];"
     ).replace("</body>", _PRESENTATION + "</body>")

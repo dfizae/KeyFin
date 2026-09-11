@@ -37,6 +37,19 @@ def register_charts(app: FastAPI, core: CoachingCore, auth: Authenticate) -> Non
             },
         )
 
-    app.add_api_route("/v1/charts/budget-forecast", forecast, methods=["POST"], response_model=ChartResponse)
-    app.add_api_route("/v1/charts/{chart_id}", saved, methods=["GET"], response_model=ChartResponse)
+    # Reading/retrying a prior receipt must not add newly introduced default metadata.
+    app.add_api_route(
+        "/v1/charts/budget-forecast",
+        forecast,
+        methods=["POST"],
+        response_model=ChartResponse,
+        response_model_exclude_unset=True,
+    )
+    app.add_api_route(
+        "/v1/charts/{chart_id}",
+        saved,
+        methods=["GET"],
+        response_model=ChartResponse,
+        response_model_exclude_unset=True,
+    )
     app.add_api_route("/v1/charts/{chart_id}/html", html, methods=["GET"], response_class=HTMLResponse)

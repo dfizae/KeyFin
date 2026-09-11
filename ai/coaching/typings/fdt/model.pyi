@@ -2,6 +2,7 @@ from pydantic import JsonValue
 from .ingest import Transaction
 
 class Twin:
+    model: dict[str, JsonValue]
     transactions: list[Transaction]
     user_id: str
     twin_id: str

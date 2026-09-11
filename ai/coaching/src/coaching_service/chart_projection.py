@@ -18,6 +18,7 @@ from coaching_service.chart_contract import (
     HistoricalPoint,
     Quantile,
 )
+from coaching_service.chart_quality import chart_quality
 from coaching_service.errors import ServiceError
 from coaching_service.schemas import JsonDocument, TransactionView
 
@@ -72,6 +73,7 @@ class ChartInputs(EngineFields):
     budgets: Budgets
     paths: int
     seed: int
+    observation_audit: JsonDocument | None = None
 
 
 def project_chart(
@@ -88,8 +90,11 @@ def project_chart(
     daily: list[DailyPoint] = []
     history: list[HistoricalPoint] = []
     cumulative = 0
-    for offset in range((period.as_of - period.period_start).days + 1):
-        day = period.period_start + timedelta(days=offset)
+    # This matches the engine's input window; it does not assert feed completeness.
+    first_input = min((date.fromisoformat(t.date) for t in inputs.transactions), default=period.as_of)
+    observation_start = max(period.period_start, first_input)
+    for offset in range((period.as_of - observation_start).days + 1):
+        day = observation_start + timedelta(days=offset)
         rows = tuple(t for t in transactions if t.date == day.isoformat())
         amounts = tuple(
             sum(t.amount_krw for t in rows if not t.pending and t.envelope == name) for name in ENVELOPES
@@ -157,6 +162,14 @@ def project_chart(
             paths=inputs.paths,
             seed=inputs.seed,
             status=status,
+            quality=chart_quality(
+                raw if raw is not None else inputs.observation_audit,
+                cumulative - sum(current),
+                period,
+                observation_start,
+                sum(row.budget is not None for row in categories),
+            ),
+            observation_start=observation_start,
             daily_forecast_statistic=daily_prediction.statistic if daily_prediction is not None else None,
             daily_note=(
                 "기준일까지는 관측 소비, 이후 연한 막대는 "

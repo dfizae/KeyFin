@@ -39,6 +39,7 @@ class Charts:
             numeric_request = None
             numeric_result = None
             daily_prediction = None
+            observation_audit = None
             if period.as_of < period.horizon_end:
                 numeric_request = JsonDocument(
                     {
@@ -54,6 +55,10 @@ class Charts:
                     numeric_request,
                     limiter=self.core.engine_limit,
                 )
+            else:
+                observation_audit = await anyio.to_thread.run_sync(
+                    self.core.engine.observation_audit, twin, limiter=self.core.engine_limit
+                )
             inputs = ChartInputs(
                 id=uuid4().hex,
                 question=request.question,
@@ -62,11 +67,17 @@ class Charts:
                 budgets=budgets,
                 paths=request.paths,
                 seed=request.seed,
+                observation_audit=observation_audit,
             )
             chart = project_chart(inputs, numeric_result, daily_prediction)
             if numeric_result is None:
                 wording = Wording(
-                    text="예산 기간이 종료되어 관측된 소비를 표시합니다.",
+                    text="예산 기간이 종료되어 입력에 기록된 소비를 표시합니다."
+                    + (
+                        " " + chart.meta.quality.summary
+                        if chart.meta.quality and chart.meta.quality.summary
+                        else ""
+                    ),
                     source="template",
                     model="not_called",
                     fallback_reason="period_complete",
@@ -97,6 +108,7 @@ class Charts:
                     numeric_request=numeric_request,
                     numeric_result=numeric_result,
                     daily_forecast=daily_prediction,
+                    observation_audit=observation_audit,
                 ),
             )
             return Mutation(
