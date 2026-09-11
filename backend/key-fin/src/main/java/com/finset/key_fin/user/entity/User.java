@@ -35,7 +35,7 @@ public class User extends BaseEntity {
 	@Column(nullable = false, length = 30)
 	private String name;
 
-	@Column(name = "fin_user_key", length = 60)
+	@Column(name = "fin_user_key", unique = true, length = 60)
 	private String finUserKey;
 
 	@Column(name = "deleted_at")
