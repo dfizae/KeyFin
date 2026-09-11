@@ -40,8 +40,18 @@ export function useBudgetProposal(month: string) {
   return useQuery(budgetProposalQueryOptions(month));
 }
 
+/**
+ * 소비 분석 결과(PAGE-06 A·B)는 분석 중 화면이 만든 제안을 캐시에서만 읽는다.
+ * 제안 생성은 멱등이 아니라(같은 달 두 번째 호출은 409 BUDGET_001) 여기서 다시 부르지 않고, 캐시가 없으면 화면이 분석 중으로 돌려보낸다.
+ */
+export function useCachedBudgetProposal(month: string) {
+  return useQuery({ ...budgetProposalQueryOptions(month), enabled: false });
+}
+
 export type ConfirmBudgetVariables = {
-  /** "YYYYMM" */
+  /** 제안 응답의 budgetId — 승인 API 의 경로 값 */
+  budgetId: number;
+  /** "YYYYMM". 무효화할 예산 캐시 키 */
   month: string;
   entries: { envelopeId: number; amount: KRW }[];
 };
@@ -50,7 +60,7 @@ export type ConfirmBudgetVariables = {
 export function useConfirmBudget() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ month, entries }: ConfirmBudgetVariables) => confirmBudget(month, entries),
+    mutationFn: ({ budgetId, entries }: ConfirmBudgetVariables) => confirmBudget(budgetId, entries),
     onSuccess: (_result, { month }) => {
       void queryClient.invalidateQueries({ queryKey: budgetKeys.month(month) });
       void queryClient.invalidateQueries({ queryKey: roomKeys.all });

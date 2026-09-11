@@ -18,8 +18,8 @@ import { CandidatesErrorState } from "@/features/link/components/CandidatesError
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-/** 소비 분석 결과(PAGE-06)가 생기면 그쪽으로 보낸다. 그전까지는 예산 제안(PAGE-07)으로 간다. (TBD) */
-const NEXT_ROUTE = "/onboarding/budget-proposal";
+/** 다음은 소비 분석(PAGE-06 분석 중) */
+const NEXT_ROUTE = "/onboarding/spending-analysis";
 
 const ASSET_SELECT_ROUTE = "/onboarding/asset-select";
 
