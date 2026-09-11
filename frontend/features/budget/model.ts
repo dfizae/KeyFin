@@ -200,12 +200,12 @@ export function toBudgetProposal(dto: BudgetProposalDto): BudgetProposal {
   };
 }
 
-/** PUT /budgets/{month}/confirm 요청. 봉투 7개를 전부 보낸다 */
+/** PUT /budgets/{budgetId}/confirm 요청. 봉투 7개를 전부 보낸다(구성이 다르면 400 BUDGET_004) */
 export type ConfirmBudgetRequest = {
   envelopes: { envelopeId: number; amount: number }[];
 };
 
-export type ConfirmBudgetResponseDto = { status: string };
+export type ConfirmBudgetResponseDto = { budgetId: number; month: string; status: string };
 
 /** 화면의 KRW 문자열 금액을 서버가 받는 원 정수로 되돌린다 */
 export function toConfirmRequest(entries: { envelopeId: number; amount: KRW }[]): ConfirmBudgetRequest {

@@ -99,7 +99,7 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
       envelopeId: envelope.envelopeId,
       amount: amountOf(envelope.envelopeId),
     }));
-    confirm.mutate({ month, entries }, { onSuccess: () => router.replace(MOVING_IN_ROUTE) });
+    confirm.mutate({ budgetId: proposal.budgetId, month, entries }, { onSuccess: () => router.replace(MOVING_IN_ROUTE) });
   };
 
   return (

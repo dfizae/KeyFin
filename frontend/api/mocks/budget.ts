@@ -1,4 +1,5 @@
 import type { BudgetDto, BudgetEnvelopeDto, BudgetProposalDto, ConfirmBudgetResponseDto } from "@/features/budget/model";
+import { currentMonthKey } from "@/lib/date";
 
 /**
  * GET /budgets/{month} 응답 예시 (docs/api-contract.md BUDGET).
@@ -72,7 +73,7 @@ export function budgetProposalMock(month: string): BudgetProposalDto {
   };
 }
 
-/** PUT /budgets/{month}/confirm 응답 */
-export function confirmBudgetMock(): ConfirmBudgetResponseDto {
-  return { status: "CONFIRMED" };
+/** PUT /budgets/{budgetId}/confirm 응답 */
+export function confirmBudgetMock(budgetId: number): ConfirmBudgetResponseDto {
+  return { budgetId, month: currentMonthKey(), status: "CONFIRMED" };
 }

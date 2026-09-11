@@ -41,7 +41,9 @@ export function useBudgetProposal(month: string) {
 }
 
 export type ConfirmBudgetVariables = {
-  /** "YYYYMM" */
+  /** 제안 응답의 budgetId — 승인 API 의 경로 값 */
+  budgetId: number;
+  /** "YYYYMM". 무효화할 예산 캐시 키 */
   month: string;
   entries: { envelopeId: number; amount: KRW }[];
 };
@@ -50,7 +52,7 @@ export type ConfirmBudgetVariables = {
 export function useConfirmBudget() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ month, entries }: ConfirmBudgetVariables) => confirmBudget(month, entries),
+    mutationFn: ({ budgetId, entries }: ConfirmBudgetVariables) => confirmBudget(budgetId, entries),
     onSuccess: (_result, { month }) => {
       void queryClient.invalidateQueries({ queryKey: budgetKeys.month(month) });
       void queryClient.invalidateQueries({ queryKey: roomKeys.all });
