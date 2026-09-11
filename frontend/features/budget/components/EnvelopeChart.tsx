@@ -2,7 +2,7 @@ import { View } from "react-native";
 
 import { Text } from "@/components/ui/text";
 import { envelopeShortName } from "@/features/budget/catalog";
-import { envelopeHealth, usedPercent, type BudgetEnvelope, type EnvelopeHealth } from "@/features/budget/model";
+import { envelopeHealth, usedBarPercent, usedPercent, type BudgetEnvelope, type EnvelopeHealth } from "@/features/budget/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -34,11 +34,12 @@ function EnvelopeChart({ envelopes }: EnvelopeChartProps) {
   );
 }
 
+// 확정액 0 인 봉투는 잔여율이 없어 빈 막대다. 쓴 돈이 있으면(over) 사용률 대신 "초과" 라고 적는다(사용자 결정 2026-09-12).
 function EnvelopeBar({ envelope }: { envelope: BudgetEnvelope }) {
   const health = envelopeHealth(envelope);
   const used = envelope.remainingRate === null ? null : usedPercent(envelope.remainingRate);
-  const barPercent = used === null ? 0 : Math.min(100, used);
-  const usedText = used === null ? "-" : `${used}%`;
+  const barPercent = usedBarPercent(envelope.remainingRate);
+  const usedText = used === null ? (health === "over" ? "초과" : "-") : `${used}%`;
   const remainingText = envelope.remaining === null ? "" : `, 남은 ${formatKRW(envelope.remaining)}`;
 
   return (

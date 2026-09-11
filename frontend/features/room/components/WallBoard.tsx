@@ -23,15 +23,17 @@ const TONE_CLASS: Record<BoardTone, string> = {
 type WallBoardProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
   width: number;
-  /** "9월" */
-  monthLabel: string;
+  /** 보드에 적는 기간. 좁아서 "9.1~9.30" 처럼 줄인다 */
+  periodLabel: string;
+  /** 스크린리더가 읽는 기간 "9월 1일~30일" */
+  periodAccessibilityLabel: string;
   /** 전체 잔여율(%). 승인 전이면 null */
   remainingRate: number | null;
   chips: BoardTone[];
   onPress: () => void;
 };
 
-function WallBoard({ width, monthLabel, remainingRate, chips, onPress }: WallBoardProps) {
+function WallBoard({ width, periodLabel, periodAccessibilityLabel, remainingRate, chips, onPress }: WallBoardProps) {
   const scale = getSceneScale(width);
   const status = remainingRate === null ? "예산 미설정" : `${remainingRate}% 남음`;
   const fillPercent = remainingRate === null ? 0 : Math.min(100, Math.max(0, remainingRate));
@@ -39,7 +41,7 @@ function WallBoard({ width, monthLabel, remainingRate, chips, onPress }: WallBoa
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`예산 보드, ${monthLabel} ${status}`}
+      accessibilityLabel={`예산 보드, ${periodAccessibilityLabel} ${status}`}
       accessibilityHint="봉투별 잔액을 엽니다"
       onPress={onPress}
       hitSlop={8}
@@ -47,7 +49,9 @@ function WallBoard({ width, monthLabel, remainingRate, chips, onPress }: WallBoa
       style={{ left: WALL_BOARD_SCENE_RECT.x * scale, top: WALL_BOARD_SCENE_RECT.y * scale, width: WALL_BOARD_SCENE_RECT.width * scale }}
     >
       <View className="flex-row items-center justify-between">
-        <Text className="text-caption text-foreground">{monthLabel} 예산</Text>
+        <Text className="shrink text-caption tabular-nums text-foreground" numberOfLines={1}>
+          {periodLabel}
+        </Text>
         <Icon as={Pin} size={10} className="text-muted-foreground" />
       </View>
       <Text className={cn("text-label tabular-nums", remainingRate === null ? "text-muted-foreground" : "text-primary")}>{status}</Text>

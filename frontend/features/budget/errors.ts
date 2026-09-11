@@ -26,3 +26,13 @@ export function confirmErrorMessage(error: unknown): string {
   if (!isApiError(error)) return CONFIRM_UNKNOWN_MESSAGE;
   return CONFIRM_MESSAGES[error.code] ?? (error.message !== "" ? error.message : CONFIRM_UNKNOWN_MESSAGE);
 }
+
+/** 이미 확정된 예산(BUDGET_003). 확정은 주기당 1회라 서버에선 끝난 상태다 — 다음 단계로 넘긴다(사용자 결정 2026-09-12) */
+export function isAlreadyConfirmedError(error: unknown): boolean {
+  return isApiError(error) && error.code === "BUDGET_003";
+}
+
+/** 이번 주기 예산이 이미 있음(BUDGET_001). 제안을 다시 만들 수 없으니 GET /budgets/current 로 받는다 */
+export function isBudgetExistsError(error: unknown): boolean {
+  return isApiError(error) && error.code === "BUDGET_001";
+}

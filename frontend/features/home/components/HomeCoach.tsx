@@ -26,7 +26,7 @@ function HomeCoach({ width }: HomeCoachProps) {
   const submit = (request: ClassifyRequest) => {
     if (!transaction) return;
     classify.mutate(
-      { transactionId: transaction.id, request, monthKey: transaction.monthKey },
+      { transactionId: transaction.id, request, txDate: transaction.txDate },
       { onSuccess: () => setSheetOpen(false) }
     );
   };

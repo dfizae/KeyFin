@@ -1,7 +1,7 @@
 import { infiniteQueryOptions, queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { budgetKeys } from "@/features/budget/api/queries";
-import type { Budget } from "@/features/budget/model";
+import { isWithinPeriod, type Budget } from "@/features/budget/model";
 import { roomKeys } from "@/features/room/api/queries";
 import {
   classifyTransaction,
@@ -79,21 +79,24 @@ export function useSubcategories(enabled = true) {
 }
 
 export type ClassifyVariables = ClassifyInput & {
-  /** 거래가 속한 "YYYYMM" — 예산 캐시 갱신용 */
-  monthKey: string;
+  /** 거래일 "YYYY-MM-DD" — 현재 주기 예산 캐시에 바로 반영해도 되는지 가른다 */
+  txDate: string;
 };
 
-/** 확정 후: 미확정 목록에서 빼고, 응답 봉투 잔액을 예산 캐시에 바로 쓴 뒤 관련 조회를 무효화한다 (docs/api-guide.md §5) */
+/**
+ * 확정 후: 미확정 목록에서 빼고, 거래가 현재 주기 안이면 응답 봉투 잔액을 예산 캐시에 바로 쓴 뒤 관련 조회를 무효화한다
+ * (docs/api-guide.md §5). 지난 주기 거래면 현재 주기 잔액과 무관하니 캐시를 건드리지 않는다.
+ */
 export function useClassifyTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ transactionId, request }: ClassifyVariables) => classifyTransaction({ transactionId, request }),
-    onSuccess: (result, { transactionId, monthKey }) => {
+    onSuccess: (result, { transactionId, txDate }) => {
       queryClient.setQueryData<PendingTransactions>(transactionKeys.pending(), (old) =>
         old ? { ...old, items: old.items.filter((item) => item.id !== transactionId) } : old
       );
-      queryClient.setQueryData<Budget>(budgetKeys.month(monthKey), (old) =>
-        old
+      queryClient.setQueryData<Budget>(budgetKeys.current(), (old) =>
+        old && isWithinPeriod(old, txDate)
           ? {
               ...old,
               envelopes: old.envelopes.map((envelope) =>
@@ -103,7 +106,7 @@ export function useClassifyTransaction() {
           : old
       );
       void queryClient.invalidateQueries({ queryKey: transactionKeys.all });
-      void queryClient.invalidateQueries({ queryKey: budgetKeys.month(monthKey) });
+      void queryClient.invalidateQueries({ queryKey: budgetKeys.current() });
       void queryClient.invalidateQueries({ queryKey: roomKeys.all });
     },
   });

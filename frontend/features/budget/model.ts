@@ -2,41 +2,53 @@ import { ContractMismatchError } from "@/lib/contract";
 import { addKRW, compareKRW, fromServerWon, toWon, type KRW } from "@/lib/money";
 
 /**
- * GET /budgets/{month} 계약 (docs/api-contract.md BUDGET).
- * 잔액·잔여율은 서버 파생값이라 검증만 하고 다시 계산하지 않는다. 미승인 월은 status=PROPOSED 이고 total·확정 필드가 null 이다.
+ * GET /budgets/current 계약 (노션 "예산·잔액 조회" · 백엔드 develop 코드, 2026-09-12 대조).
+ * 서버가 요청 시점과 사용자 기준일로 현재 주기를 정한다. 이번 주기 예산이 없으면 서버가 제안을 만들어 PROPOSED 로 준다.
+ * - PROPOSED: total=null, 봉투는 proposedAmount 만(나머지 null)
+ * - CONFIRMED: 봉투 proposedAmount=null, 확정액·지출·잔액·잔여율. 확정액 0 인 봉투는 remainingRate=null
+ * 잔액·잔여율은 서버 파생값이라 검증만 하고 다시 계산하지 않는다.
  */
 export type BudgetStatus = "PROPOSED" | "CONFIRMED" | "UNKNOWN";
 
 export type BudgetEnvelopeDto = {
   envelopeId: number;
   name: string;
-  proposedAmount: number;
+  proposedAmount: number | null;
   confirmedAmount: number | null;
   spent: number | null;
   remaining: number | null;
-  /** 정수 % */
+  /** 정수 %, 내림, 초과면 음수. 확정액 0 이면 null */
   remainingRate: number | null;
 };
 
 export type BudgetTotalDto = {
-  confirmed: number | null;
-  spent: number | null;
-  remaining: number | null;
+  confirmed: number;
+  /** 확정액 0 봉투의 지출도 포함한다 */
+  spent: number;
+  remaining: number;
   remainingRate: number | null;
 };
 
 export type BudgetDto = {
+  /** 승인 API(PUT /budgets/{budgetId}/confirm) 경로 값 */
+  budgetId: number;
+  /** 주기 시작일이 속한 달 라벨. 기준일 사용자는 달력 월과 달라 화면에 "N월"로 쓰지 않는다 */
   month: string;
+  /** "YYYY-MM-DD" 주기 시작일(= 기준일) */
+  periodFrom: string;
+  /** "YYYY-MM-DD" 주기 마지막 날(포함) */
+  periodTo: string;
   status: string;
-  total: BudgetTotalDto;
+  total: BudgetTotalDto | null;
   envelopes: BudgetEnvelopeDto[];
-  emergency?: { amount: number; spent: number; remaining: number };
+  emergency?: { amount: number; spent: number; remaining: number } | null;
 };
 
 export type BudgetEnvelope = {
   envelopeId: number;
   name: string;
-  proposed: KRW;
+  /** PROPOSED 에서만 있다 */
+  proposed: KRW | null;
   confirmed: KRW | null;
   spent: KRW | null;
   remaining: KRW | null;
@@ -47,11 +59,15 @@ export type BudgetTotal = {
   confirmed: KRW;
   spent: KRW;
   remaining: KRW;
-  remainingRate: number;
+  /** 전체 확정액이 0 이면 null */
+  remainingRate: number | null;
 };
 
 export type Budget = {
+  budgetId: number;
   month: string;
+  periodFrom: string;
+  periodTo: string;
   status: BudgetStatus;
   isConfirmed: boolean;
   /** 승인 전이면 null */
@@ -91,51 +107,95 @@ function toStatus(raw: string): BudgetStatus {
   return raw === "PROPOSED" || raw === "CONFIRMED" ? raw : "UNKNOWN";
 }
 
-function toTotal(dto: BudgetTotalDto): BudgetTotal | null {
-  if (dto.confirmed === null || dto.spent === null || dto.remaining === null || dto.remainingRate === null) return null;
+function toTotal(dto: BudgetTotalDto | null): BudgetTotal | null {
+  if (dto === null) return null;
   return {
     confirmed: won(dto.confirmed, "total.confirmed"),
     spent: won(dto.spent, "total.spent"),
     remaining: won(dto.remaining, "total.remaining"),
-    remainingRate: requiredRate(dto.remainingRate, "total.remainingRate"),
+    remainingRate: optionalRate(dto.remainingRate, "total.remainingRate"),
   };
 }
 
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
 export function toBudget(dto: BudgetDto): Budget {
+  if (!Number.isSafeInteger(dto.budgetId) || dto.budgetId <= 0) throw new ContractMismatchError("budgetId");
   if (!MONTH_KEY.test(dto.month)) throw new ContractMismatchError("month");
+  if (!DATE_KEY.test(dto.periodFrom)) throw new ContractMismatchError("periodFrom");
+  if (!DATE_KEY.test(dto.periodTo) || dto.periodTo < dto.periodFrom) throw new ContractMismatchError("periodTo");
   const status = toStatus(dto.status);
   const total = toTotal(dto.total);
   if (status === "CONFIRMED" && total === null) throw new ContractMismatchError("total");
 
   return {
+    budgetId: dto.budgetId,
     month: dto.month,
+    periodFrom: dto.periodFrom,
+    periodTo: dto.periodTo,
     status,
     isConfirmed: status === "CONFIRMED",
     total,
-    envelopes: dto.envelopes.map((envelope) => ({
-      envelopeId: envelope.envelopeId,
-      name: envelope.name,
-      proposed: won(envelope.proposedAmount, "envelopes.proposedAmount"),
-      confirmed: optionalWon(envelope.confirmedAmount, "envelopes.confirmedAmount"),
-      spent: optionalWon(envelope.spent, "envelopes.spent"),
-      remaining: optionalWon(envelope.remaining, "envelopes.remaining"),
-      remainingRate: optionalRate(envelope.remainingRate, "envelopes.remainingRate"),
-    })),
+    envelopes: dto.envelopes.map((envelope) => {
+      if (status === "PROPOSED" && envelope.proposedAmount === null) throw new ContractMismatchError("envelopes.proposedAmount");
+      return {
+        envelopeId: envelope.envelopeId,
+        name: envelope.name,
+        proposed: optionalWon(envelope.proposedAmount, "envelopes.proposedAmount"),
+        confirmed: optionalWon(envelope.confirmedAmount, "envelopes.confirmedAmount"),
+        spent: optionalWon(envelope.spent, "envelopes.spent"),
+        remaining: optionalWon(envelope.remaining, "envelopes.remaining"),
+        remainingRate: optionalRate(envelope.remainingRate, "envelopes.remainingRate"),
+      };
+    }),
   };
+}
+
+function monthDayOf(dateKey: string): { month: number; day: number } {
+  return { month: Number(dateKey.slice(5, 7)), day: Number(dateKey.slice(8, 10)) };
+}
+
+/**
+ * 주기를 "9월 1일~30일"(같은 달) · "8월 23일~9월 22일"(달이 넘어갈 때)로 쓴다.
+ * 주기 라벨(month)은 기준일 사용자에게 달력 월과 달라 "8월"처럼 쓰지 않는다 (노션 예산·잔액 조회).
+ */
+export function budgetPeriodLabel(budget: Pick<Budget, "periodFrom" | "periodTo">): string {
+  const from = monthDayOf(budget.periodFrom);
+  const to = monthDayOf(budget.periodTo);
+  return from.month === to.month
+    ? `${from.month}월 ${from.day}일~${to.day}일`
+    : `${from.month}월 ${from.day}일~${to.month}월 ${to.day}일`;
+}
+
+/** 좁은 자리(방 벽 보드)용 "9.1~9.30" */
+export function budgetPeriodShortLabel(budget: Pick<Budget, "periodFrom" | "periodTo">): string {
+  const from = monthDayOf(budget.periodFrom);
+  const to = monthDayOf(budget.periodTo);
+  return `${from.month}.${from.day}~${to.month}.${to.day}`;
+}
+
+/** 거래일("YYYY-MM-DD")이 이 주기 안인지. 분류 확정 응답의 봉투 잔액을 현재 주기 캐시에 바로 써도 되는지 가른다 */
+export function isWithinPeriod(budget: Pick<Budget, "periodFrom" | "periodTo">, dateKey: string): boolean {
+  return dateKey >= budget.periodFrom && dateKey <= budget.periodTo;
 }
 
 export function budgetHealth(total: BudgetTotal): BudgetHealth {
   if (compareKRW(total.remaining, "0") < 0) return "over";
-  if (total.remainingRate < WARNING_REMAINING_RATE) return "warning";
+  if (total.remainingRate !== null && total.remainingRate < WARNING_REMAINING_RATE) return "warning";
   return "good";
 }
 
-/** 봉투별 상태. 승인 전(잔액 null)은 unset */
+/** 봉투별 상태. 승인 전(확정액·잔액 null)은 unset */
 export type EnvelopeHealth = BudgetHealth | "unset";
 
+/**
+ * 확정액 0 인 봉투는 잔여율이 null 이다(노션 제안, 사용자 결정 2026-09-12): 막대는 빈 트랙으로 두고,
+ * 지출이 있으면 잔액이 음수라 over(초과 색·금액 텍스트), 지출도 없으면 경고할 게 없어 good 이다.
+ */
 export function envelopeHealth(envelope: BudgetEnvelope): EnvelopeHealth {
-  if (envelope.remaining === null || envelope.remainingRate === null) return "unset";
+  if (envelope.confirmed === null || envelope.remaining === null) return "unset";
   if (compareKRW(envelope.remaining, "0") < 0) return "over";
+  if (envelope.remainingRate === null) return "good";
   if (envelope.remainingRate < WARNING_REMAINING_RATE) return "warning";
   return "good";
 }
@@ -143,6 +203,11 @@ export function envelopeHealth(envelope: BudgetEnvelope): EnvelopeHealth {
 /** 서버 잔여율(%)을 사용률(%)로 바꾼다. 초과면 100 을 넘는다 — 막대 길이는 호출부가 100 으로 자른다. */
 export function usedPercent(remainingRate: number): number {
   return Math.max(0, 100 - remainingRate);
+}
+
+/** 막대 길이(0~100). 잔여율이 없으면(확정액 0) 빈 트랙이다 */
+export function usedBarPercent(remainingRate: number | null): number {
+  return remainingRate === null ? 0 : Math.min(100, usedPercent(remainingRate));
 }
 
 /**
@@ -206,6 +271,34 @@ export function toBudgetProposal(dto: BudgetProposalDto): BudgetProposal {
  */
 export function hasSpendingHistory(proposal: BudgetProposal): boolean {
   return proposal.envelopes.some((envelope) => compareKRW(envelope.monthlyAvg, "0") > 0);
+}
+
+/**
+ * 예산 확정 화면의 안내 문구 종류. history = 지난 소비를 분석한 제안, template = 이력이 없어 기본 예산,
+ * unknown = 분석 결과가 캐시에 없다(홈에서 강제로 왔거나 앱을 다시 켰다) — 제안액만 있다.
+ */
+export type ProposalBasisKind = "history" | "template" | "unknown";
+
+export function proposalBasisKind(budget: Budget, analysis: BudgetProposal | undefined): ProposalBasisKind {
+  if (analysis === undefined || analysis.budgetId !== budget.budgetId) return "unknown";
+  return hasSpendingHistory(analysis) ? "history" : "template";
+}
+
+/** 예산 확정 화면(PAGE-07)의 봉투 행. 금액은 현재 주기 예산(PROPOSED)의 제안액, 월평균은 같은 예산의 분석 결과가 있을 때만 */
+export type ProposalRow = { envelopeId: number; name: string; proposed: KRW; monthlyAvg: KRW | null };
+
+/**
+ * 제안액은 GET /budgets/current 에서, 근거(월평균)는 온보딩 분석(POST /budgets/proposals) 캐시에서 온다.
+ * 분석 캐시가 다른 예산 것이면(budgetId 가 다르면) 섞지 않는다.
+ */
+export function toProposalRows(budget: Budget, analysis: BudgetProposal | undefined): ProposalRow[] {
+  const sameBudget = analysis !== undefined && analysis.budgetId === budget.budgetId ? analysis : undefined;
+  return budget.envelopes.map((envelope) => ({
+    envelopeId: envelope.envelopeId,
+    name: envelope.name,
+    proposed: envelope.proposed ?? "0",
+    monthlyAvg: sameBudget?.envelopes.find((row) => row.envelopeId === envelope.envelopeId)?.monthlyAvg ?? null,
+  }));
 }
 
 /** 월평균이 큰 순. 같으면 원래 봉투 순서를 지킨다(정렬이 안정적이다) */
