@@ -1,6 +1,6 @@
-import type { LinkAccount, LinkCandidates } from "@/features/link/model";
+import type { LinkAccount, LinkCandidates, LinkCard } from "@/features/link/model";
 import { ContractMismatchError } from "@/lib/contract";
-import { isKRW, type KRW } from "@/lib/money";
+import { addKRW, isKRW, type KRW } from "@/lib/money";
 import { maskAccount } from "@/lib/mask";
 
 export type AccountSummaryDto = {
@@ -31,17 +31,38 @@ export function toAccountSummary(dto: AccountSummaryDto): AccountSummary {
 }
 
 /**
- * 수입 계좌 지정(PAGE-05) 선택지. ACCOUNT 명세(GET /accounts)가 아직 없어 금융망 후보 중 연결된 계좌로 만든다.
- * 후보의 id 가 KeyFin 계좌 id 라 PUT /accounts/{id}/income 에 그대로 쓴다 (docs/api-contract.md LINK).
+ * 연결된(관리 중) 계좌. ACCOUNT 명세(GET /accounts)가 아직 없어 금융망 후보 중 managed 계좌로 만든다.
+ * 후보의 id 가 KeyFin 계좌 id 라 PUT /accounts/{id}/income·거래 필터(accountId)에 그대로 쓴다 (docs/api-contract.md LINK).
  */
-export type IncomeAccountOption = Pick<LinkAccount, "bankCode" | "bankName" | "maskedNo" | "balance"> & {
+export type LinkedAccount = Pick<LinkAccount, "bankCode" | "bankName" | "maskedNo" | "balance"> & {
   accountId: number;
 };
 
-export function toIncomeAccountOptions(candidates: LinkCandidates): IncomeAccountOption[] {
+export function linkedAccounts(candidates: LinkCandidates): LinkedAccount[] {
   return candidates.accounts
     .filter((account) => account.linked)
     .map(({ id, bankCode, bankName, maskedNo, balance }) => ({ accountId: id, bankCode, bankName, maskedNo, balance }));
+}
+
+/** 수입 계좌 지정(PAGE-05) 선택지 = 연결된 계좌 */
+export type IncomeAccountOption = LinkedAccount;
+
+export function toIncomeAccountOptions(candidates: LinkCandidates): IncomeAccountOption[] {
+  return linkedAccounts(candidates);
+}
+
+/** 연결된 카드. 후보의 id 가 KeyFin 카드 id 라 거래 필터(cardId)에 그대로 쓴다 */
+export type LinkedCard = Pick<LinkCard, "issuerName" | "cardName" | "maskedNo"> & { cardId: number };
+
+export function linkedCards(candidates: LinkCandidates): LinkedCard[] {
+  return candidates.cards
+    .filter((card) => card.linked)
+    .map(({ id, issuerName, cardName, maskedNo }) => ({ cardId: id, issuerName, cardName, maskedNo }));
+}
+
+/** 자산 탭 "내 총 자산" = 연결 계좌 잔액 합계. 카드는 잔액이 없어 뺀다. 잔액은 금융망 실시간 값이다 */
+export function totalBalance(accounts: readonly LinkedAccount[]): KRW {
+  return accounts.length === 0 ? "0" : addKRW(...accounts.map((account) => account.balance));
 }
 
 /** 지금 목록에 있는 계좌를 골랐을 때만 지정할 수 있다. 목록을 다시 받아 사라진 계좌는 무효다 */

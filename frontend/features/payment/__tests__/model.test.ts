@@ -1,5 +1,5 @@
 import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payment";
-import { toPaymentCalendar, upcomingEntry } from "@/features/payment/model";
+import { toPaymentCalendar, upcomingEntries, upcomingEntry } from "@/features/payment/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 const MONTH = "202609";
@@ -75,5 +75,16 @@ describe("upcomingEntry", () => {
   it("이번 달 출금이 다 지났으면 마지막 건을, 예정이 없으면 null 을 준다", () => {
     expect(upcomingEntry(calendar, "2026-09-30")?.name).toBe("통신비");
     expect(upcomingEntry(toPaymentCalendar(paymentCalendarEmptyMock), "2026-09-08")).toBeNull();
+  });
+});
+
+describe("upcomingEntries", () => {
+  it("오늘 포함 이후 건을 날짜순으로 limit 건까지 준다", () => {
+    const calendar = toPaymentCalendar(paymentCalendarMock(MONTH));
+    const today = calendar.entries[1].date;
+    const upcoming = upcomingEntries(calendar, today, 2);
+    expect(upcoming.length).toBeLessThanOrEqual(2);
+    expect(upcoming.every((entry) => entry.date >= today)).toBe(true);
+    expect(upcomingEntries(calendar, "2026-12-31", 3)).toEqual([]);
   });
 });

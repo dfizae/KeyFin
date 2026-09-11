@@ -103,6 +103,95 @@ export function toPendingTransactions(dto: PendingTransactionsDto): PendingTrans
   return { items: dto.items.map(toTransaction), nextCursor: dto.nextCursor };
 }
 
+/**
+ * GET /transactions 필터 (FR-TXN-09). month 는 필수고 계좌·카드는 둘 중 하나만 건다.
+ * 값이 없는 필터는 키를 빼서 둔다 — 쿼리 키가 같은 필터에서 늘 같아야 캐시가 겹친다.
+ */
+export type TransactionFilter = {
+  /** "YYYYMM" */
+  month: string;
+  envelopeId?: number;
+  accountId?: number;
+  cardId?: number;
+};
+
+export type TransactionListDto = { items: TransactionDto[]; nextCursor: number | null };
+export type TransactionPage = { items: Transaction[]; nextCursor: number | null };
+
+export function toTransactionPage(dto: TransactionListDto): TransactionPage {
+  return { items: dto.items.map(toTransaction), nextCursor: dto.nextCursor };
+}
+
+/** 들어온 돈은 입금뿐이다. 이체(TRANSFER)는 방향이 계약에 없어 나간 돈으로 둔다 (TBD) */
+export function isIncoming(transaction: Transaction): boolean {
+  return transaction.txType === "DEPOSIT";
+}
+
+/** 목록의 "날짜 · 분류" 자리. 입금은 세분류 대신 "입금" 이라고 쓴다 */
+export function transactionCategoryLabel(transaction: Transaction): string {
+  return isIncoming(transaction) ? "입금" : transaction.subcategoryName;
+}
+
+const EXCLUDE_TAG_LABELS: Partial<Record<ExcludeTag, string>> = {
+  DUTCH: "더치페이",
+  SELF_TRANSFER: "내 계좌 이동",
+  EMERGENCY: "비상금",
+  CARRYOVER: "이월",
+};
+
+/** 취소·예산 제외 거래도 숨기지 않고 뱃지로 알린다(FR-TXN-09). 취소가 먼저다 */
+export function transactionBadge(transaction: Transaction): string | null {
+  if (transaction.status === "CANCELED") return "취소";
+  return EXCLUDE_TAG_LABELS[transaction.excludeTag] ?? null;
+}
+
+const MONTH_KEY = /^(\d{4})(0[1-9]|1[0-2])$/;
+const POSITIVE_ID = /^[1-9]\d*$/;
+const MONTHS_PER_YEAR = 12;
+
+/** "202609" 을 delta 달만큼 옮긴다. 형식이 틀린 키는 그대로 돌려준다 */
+export function shiftMonthKey(key: string, delta: number): string {
+  const matched = MONTH_KEY.exec(key);
+  if (!matched) return key;
+  const index = Number(matched[1]) * MONTHS_PER_YEAR + Number(matched[2]) - 1 + delta;
+  return `${Math.floor(index / MONTHS_PER_YEAR)}${String((index % MONTHS_PER_YEAR) + 1).padStart(2, "0")}`;
+}
+
+/** "202609" → "2026년 9월" */
+export function monthFilterLabel(key: string): string {
+  const matched = MONTH_KEY.exec(key);
+  return matched ? `${matched[1]}년 ${Number(matched[2])}월` : key;
+}
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function idParam(value: string | string[] | undefined): number | undefined {
+  const raw = firstParam(value);
+  return raw !== undefined && POSITIVE_ID.test(raw) ? Number(raw) : undefined;
+}
+
+/**
+ * 거래 내역 화면의 검색 파라미터를 필터로 바꾼다. 라우트 파라미터는 믿지 않고 형식이 틀리면 버린다.
+ * 달이 없거나 틀리거나 미래면 이번 달로, 계좌와 카드가 둘 다 오면 계좌만 쓴다.
+ */
+export function parseTransactionFilter(params: SearchParams, currentMonth: string): TransactionFilter {
+  const month = firstParam(params.month);
+  const filter: TransactionFilter = {
+    month: month !== undefined && MONTH_KEY.test(month) && month <= currentMonth ? month : currentMonth,
+  };
+  const envelopeId = idParam(params.envelopeId);
+  const accountId = idParam(params.accountId);
+  const cardId = accountId === undefined ? idParam(params.cardId) : undefined;
+  if (envelopeId !== undefined) filter.envelopeId = envelopeId;
+  if (accountId !== undefined) filter.accountId = accountId;
+  if (cardId !== undefined) filter.cardId = cardId;
+  return filter;
+}
+
 export function toSubcategories(dto: SubcategoryListDto): Subcategory[] {
   return dto.items.map((item) => ({ id: item.id, name: item.name, envelopeId: item.envelopeId, envelopeName: item.envelopeName }));
 }
