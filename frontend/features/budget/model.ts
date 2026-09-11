@@ -200,6 +200,26 @@ export function toBudgetProposal(dto: BudgetProposalDto): BudgetProposal {
   };
 }
 
+/**
+ * 지난 소비를 분석한 제안인지. 이력이 없으면 서버가 기본 템플릿 금액으로 채우고 월평균은 전부 0 이다.
+ * basis 문구로 가르지 않고 값으로 판단한다. false 면 소비 분석 결과(PAGE-06 A·B)를 건너뛰고 예산 제안으로 간다.
+ */
+export function hasSpendingHistory(proposal: BudgetProposal): boolean {
+  return proposal.envelopes.some((envelope) => compareKRW(envelope.monthlyAvg, "0") > 0);
+}
+
+/** 월평균이 큰 순. 같으면 원래 봉투 순서를 지킨다(정렬이 안정적이다) */
+export function sortByMonthlyAvg(envelopes: readonly BudgetProposalEnvelope[]): BudgetProposalEnvelope[] {
+  return [...envelopes].sort((a, b) => compareKRW(b.monthlyAvg, a.monthlyAvg));
+}
+
+/** 막대 길이(0~100 정수). 가장 많이 쓴 봉투를 100 으로 본다 */
+export function monthlyAvgPercent(value: KRW, max: KRW): number {
+  const maxWon = toWon(max);
+  if (maxWon <= 0n) return 0;
+  return Number((toWon(value) * 100n) / maxWon);
+}
+
 /** PUT /budgets/{budgetId}/confirm 요청. 봉투 7개를 전부 보낸다(구성이 다르면 400 BUDGET_004) */
 export type ConfirmBudgetRequest = {
   envelopes: { envelopeId: number; amount: number }[];

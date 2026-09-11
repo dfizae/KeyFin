@@ -3,6 +3,9 @@ import { envelopeShortName } from "@/features/budget/catalog";
 import {
   WARNING_REMAINING_RATE,
   budgetHealth,
+  hasSpendingHistory,
+  monthlyAvgPercent,
+  sortByMonthlyAvg,
   envelopeHealth,
   sumAmounts,
   toBudget,
@@ -83,7 +86,7 @@ describe("toBudgetProposal · sumAmounts · toConfirmRequest", () => {
     const proposal = toBudgetProposal(budgetProposalMock(MONTH));
     expect(proposal.month).toBe(MONTH);
     expect(proposal.status).toBe("PROPOSED");
-    expect(proposal.basis).toBe("최근 3개월 카드·계좌 내역");
+    expect(proposal.basis).toBe("최근 3개월 평균");
     expect(proposal.envelopes).toHaveLength(7);
     expect(proposal.envelopes[0]).toEqual({ envelopeId: 1, name: "외식", proposed: "100000", monthlyAvg: "112000" });
   });
@@ -119,5 +122,30 @@ describe("budgetHealth", () => {
     expect(budgetHealth({ ...base, remaining: "100000", remainingRate: WARNING_REMAINING_RATE })).toBe("good");
     expect(budgetHealth({ ...base, remaining: "50000", remainingRate: WARNING_REMAINING_RATE - 1 })).toBe("warning");
     expect(budgetHealth({ ...base, remaining: "-1000", remainingRate: 0 })).toBe("over");
+  });
+});
+
+describe("hasSpendingHistory · sortByMonthlyAvg · monthlyAvgPercent", () => {
+  it("월평균이 하나라도 있으면 분석한 제안이고, 전부 0 이면 기본 템플릿 제안이다", () => {
+    const dto = budgetProposalMock(MONTH);
+    expect(hasSpendingHistory(toBudgetProposal(dto))).toBe(true);
+    const template = { ...dto, basis: "기본 템플릿", envelopes: dto.envelopes.map((e) => ({ ...e, monthlyAvg: 0 })) };
+    expect(hasSpendingHistory(toBudgetProposal(template))).toBe(false);
+  });
+
+  it("월평균이 큰 순으로 줄 세우고, 같으면 원래 봉투 순서를 지킨다", () => {
+    const envelopes = [
+      { envelopeId: 1, name: "외식", proposed: "0", monthlyAvg: "50000" },
+      { envelopeId: 2, name: "교통비", proposed: "0", monthlyAvg: "90000" },
+      { envelopeId: 3, name: "기타", proposed: "0", monthlyAvg: "50000" },
+    ];
+    expect(sortByMonthlyAvg(envelopes).map((e) => e.envelopeId)).toEqual([2, 1, 3]);
+    expect(envelopes.map((e) => e.envelopeId)).toEqual([1, 2, 3]);
+  });
+
+  it("막대 길이는 가장 큰 값을 100 으로 본 정수 비율이고, 최댓값이 0 이면 0 이다", () => {
+    expect(monthlyAvgPercent("120650", "120650")).toBe(100);
+    expect(monthlyAvgPercent("84300", "120650")).toBe(69);
+    expect(monthlyAvgPercent("0", "0")).toBe(0);
   });
 });

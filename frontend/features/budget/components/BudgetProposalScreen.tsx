@@ -12,7 +12,7 @@ import { Slider } from "@/components/ui/slider";
 import { Text } from "@/components/ui/text";
 import { useBudgetProposal, useConfirmBudget } from "@/features/budget/api/queries";
 import { envelopeIcon } from "@/features/budget/catalog";
-import { sumAmounts, type BudgetProposal, type BudgetProposalEnvelope } from "@/features/budget/model";
+import { hasSpendingHistory, sumAmounts, type BudgetProposal, type BudgetProposalEnvelope } from "@/features/budget/model";
 import { currentMonthKey, formatMonthKeyLabel } from "@/lib/date";
 import { formatKRW, fromWon, toWon, type KRW } from "@/lib/money";
 
@@ -93,6 +93,8 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
 
   const total = sumAmounts(proposal.envelopes.map((envelope) => amountOf(envelope.envelopeId)));
   const monthlyAvgTotal = sumAmounts(proposal.envelopes.map((envelope) => envelope.monthlyAvg));
+  // 이력이 없으면 서버가 기본 예산을 채우고 월평균은 전부 0 이라 근거 문구를 바꾸고 월평균은 숨긴다.
+  const analyzed = hasSpendingHistory(proposal);
 
   const handleConfirm = () => {
     const entries = proposal.envelopes.map((envelope) => ({
@@ -110,7 +112,9 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
             이번 달 예산을 정해요
           </Text>
           <Text className="text-body-sm text-muted-foreground">
-            지난 3개월 소비를 분석해 봉투별 금액을 제안했어요. 필요하면 바꿀 수 있어요.
+            {analyzed
+              ? "지난 소비를 분석해 봉투별 금액을 제안했어요. 필요하면 바꿀 수 있어요."
+              : "아직 분석할 소비가 없어 기본 예산으로 준비했어요. 필요하면 바꿀 수 있어요."}
           </Text>
         </View>
 
@@ -120,7 +124,9 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
             {formatKRW(total)}
           </Text>
           <Text className="text-caption tabular-nums text-muted-foreground">
-            봉투 {proposal.envelopes.length}개 · 지난 3개월 월평균 {formatKRW(monthlyAvgTotal)}
+            {analyzed
+              ? `봉투 ${proposal.envelopes.length}개 · ${proposal.basis} ${formatKRW(monthlyAvgTotal)}`
+              : `봉투 ${proposal.envelopes.length}개 · ${proposal.basis}`}
           </Text>
         </View>
 
@@ -137,6 +143,7 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
               key={envelope.envelopeId}
               envelope={envelope}
               amount={amountOf(envelope.envelopeId)}
+              showMonthlyAvg={analyzed}
               onChange={(next) => setEdited((prev) => ({ ...prev, [envelope.envelopeId]: next }))}
             />
           ))}
@@ -166,11 +173,12 @@ function ProposalForm({ proposal, month }: ProposalFormProps) {
 type EnvelopeAmountRowProps = {
   envelope: BudgetProposalEnvelope;
   amount: KRW;
+  showMonthlyAvg: boolean;
   onChange: (amount: KRW) => void;
 };
 
 // Pencil 행(I3tEno): 28pt accent 타일 + 이름 / 우측 금액칸 · 슬라이더 · 월평균 근거.
-function EnvelopeAmountRow({ envelope, amount, onChange }: EnvelopeAmountRowProps) {
+function EnvelopeAmountRow({ envelope, amount, showMonthlyAvg, onChange }: EnvelopeAmountRowProps) {
   const current = Number(toWon(amount));
   const max = Math.max(SLIDER_BASE_MAX, Math.ceil(Number(toWon(envelope.proposed)) / SLIDER_STEP) * SLIDER_STEP);
 
@@ -194,7 +202,9 @@ function EnvelopeAmountRow({ envelope, amount, onChange }: EnvelopeAmountRowProp
         onValueChange={(next) => onChange(fromWon(BigInt(next)))}
         accessibilityLabel={`${envelope.name} 금액`}
       />
-      <Text className="text-caption tabular-nums text-muted-foreground">월평균 {formatKRW(envelope.monthlyAvg)}</Text>
+      {showMonthlyAvg ? (
+        <Text className="text-caption tabular-nums text-muted-foreground">월평균 {formatKRW(envelope.monthlyAvg)}</Text>
+      ) : null}
     </View>
   );
 }

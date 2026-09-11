@@ -63,7 +63,7 @@ export function budgetProposalMock(month: string): BudgetProposalDto {
     budgetId: 1,
     month,
     status: "PROPOSED",
-    basis: "최근 3개월 카드·계좌 내역",
+    basis: "최근 3개월 평균",
     envelopes: ENVELOPES.map(({ envelopeId, name, proposedAmount }) => ({
       envelopeId,
       name,

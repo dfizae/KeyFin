@@ -40,6 +40,14 @@ export function useBudgetProposal(month: string) {
   return useQuery(budgetProposalQueryOptions(month));
 }
 
+/**
+ * 소비 분석 결과(PAGE-06 A·B)는 분석 중 화면이 만든 제안을 캐시에서만 읽는다.
+ * 제안 생성은 멱등이 아니라(같은 달 두 번째 호출은 409 BUDGET_001) 여기서 다시 부르지 않고, 캐시가 없으면 화면이 분석 중으로 돌려보낸다.
+ */
+export function useCachedBudgetProposal(month: string) {
+  return useQuery({ ...budgetProposalQueryOptions(month), enabled: false });
+}
+
 export type ConfirmBudgetVariables = {
   /** 제안 응답의 budgetId — 승인 API 의 경로 값 */
   budgetId: number;
