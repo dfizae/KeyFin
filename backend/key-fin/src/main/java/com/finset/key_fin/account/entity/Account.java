@@ -39,8 +39,17 @@ public class Account {
 	@Column(name = "bank_code", nullable = false, length = 3)
 	private String bankCode;
 
+	@Column(name = "bank_name", nullable = false, length = 20)
+	private String bankName;
+
 	@Column(length = 30)
 	private String alias;
+
+	@Column(nullable = false)
+	private long balance;
+
+	@Column(name = "balance_updated_at", nullable = false)
+	private LocalDateTime balanceUpdatedAt;
 
 	@Column(name = "is_managed", nullable = false)
 	private boolean managed;
@@ -52,15 +61,38 @@ public class Account {
 	@Column(name = "linked_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime linkedAt;
 
-	private Account(User user, String finAccountNo, String bankCode) {
+	private Account(
+			User user,
+			String finAccountNo,
+			String bankCode,
+			String bankName,
+			long balance,
+			LocalDateTime balanceUpdatedAt
+	) {
 		this.user = Objects.requireNonNull(user, "user must not be null");
 		this.finAccountNo = requireText(finAccountNo, "finAccountNo");
 		this.bankCode = requireText(bankCode, "bankCode");
+		this.bankName = requireText(bankName, "bankName");
+		this.balance = balance;
+		this.balanceUpdatedAt = Objects.requireNonNull(balanceUpdatedAt, "balanceUpdatedAt must not be null");
 		this.managed = false;
 	}
 
-	public static Account sync(User user, String finAccountNo, String bankCode) {
-		return new Account(user, finAccountNo, bankCode);
+	public static Account sync(
+			User user,
+			String finAccountNo,
+			String bankCode,
+			String bankName,
+			long balance,
+			LocalDateTime balanceUpdatedAt
+	) {
+		return new Account(user, finAccountNo, bankCode, bankName, balance, balanceUpdatedAt);
+	}
+
+	public void updateBalanceSnapshot(String bankName, long balance, LocalDateTime balanceUpdatedAt) {
+		this.bankName = requireText(bankName, "bankName");
+		this.balance = balance;
+		this.balanceUpdatedAt = Objects.requireNonNull(balanceUpdatedAt, "balanceUpdatedAt must not be null");
 	}
 
 	public boolean link() {
@@ -73,6 +105,14 @@ public class Account {
 
 	public void unlink() {
 		managed = false;
+		income = false;
+	}
+
+	public void designateAsIncome() {
+		income = true;
+	}
+
+	public void removeIncomeDesignation() {
 		income = false;
 	}
 

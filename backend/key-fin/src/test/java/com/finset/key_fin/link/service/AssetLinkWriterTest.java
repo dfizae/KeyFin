@@ -18,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -53,9 +54,9 @@ class AssetLinkWriterTest {
 	void setUp() {
 		user = User.create("qwer@qwer.com", "encoded-password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
-		kbAccount = Account.sync(user, "0041456503815897", "004");
+		kbAccount = Account.sync(user, "0041456503815897", "004", "국민은행", 3_000_000L, LocalDateTime.now());
 		ReflectionTestUtils.setField(kbAccount, "id", 3L);
-		shinhanAccount = Account.sync(user, "0880680068408149", "088");
+		shinhanAccount = Account.sync(user, "0880680068408149", "088", "신한은행", 125_000L, LocalDateTime.now());
 		ReflectionTestUtils.setField(shinhanAccount, "id", 4L);
 		shinhanCard = Card.sync(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", shinhanAccount);
 		ReflectionTestUtils.setField(shinhanCard, "id", 7L);

@@ -23,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -77,9 +78,9 @@ class LinkCandidateServiceTest {
 		user.connectFinance(FIN_USER_KEY);
 		List<FinanceAccount> financeAccounts = List.of(KB_ACCOUNT, DEPOSIT_ACCOUNT, SHINHAN_ACCOUNT);
 		List<FinanceCard> financeCards = List.of(SHINHAN_CARD);
-		Account kb = Account.sync(user, "0041456503815897", "004");
+		Account kb = Account.sync(user, "0041456503815897", "004", "국민은행", 3_000_000L, LocalDateTime.now());
 		ReflectionTestUtils.setField(kb, "id", 3L);
-		Account shinhan = Account.sync(user, "0880680068408149", "088");
+		Account shinhan = Account.sync(user, "0880680068408149", "088", "신한은행", 125_000L, LocalDateTime.now());
 		ReflectionTestUtils.setField(shinhan, "id", 4L);
 		shinhan.link();
 		Card card = Card.sync(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", shinhan);

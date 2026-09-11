@@ -86,7 +86,9 @@ public class FinanceAccountRestClient implements FinanceAccountClient {
 
 	private void validateAccount(FinanceAccount account) {
 		if (account.accountNo() == null || account.accountNo().isBlank()
-				|| account.bankCode() == null || account.bankCode().isBlank()) {
+				|| account.bankCode() == null || account.bankCode().isBlank()
+				|| account.bankName() == null || account.bankName().isBlank()
+				|| account.accountBalance() == null) {
 			throw new BusinessException(FinanceErrorCode.INVALID_RESPONSE);
 		}
 	}

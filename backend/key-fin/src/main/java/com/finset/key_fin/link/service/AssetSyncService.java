@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,13 +44,26 @@ public class AssetSyncService {
 	public SyncedAssets sync(long userId, List<FinanceAccount> financeAccounts, List<FinanceCard> financeCards) {
 		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+		LocalDateTime balanceUpdatedAt = LocalDateTime.now();
 
 		Map<String, Account> accountsByNo = new HashMap<>(accountRepository.findAllByUserId(userId).stream()
 				.collect(Collectors.toMap(Account::getFinAccountNo, Function.identity())));
+		financeAccounts.stream()
+				.filter(FinanceAccount::isDemandDeposit)
+				.filter(account -> accountsByNo.containsKey(account.accountNo()))
+				.forEach(account -> accountsByNo.get(account.accountNo())
+						.updateBalanceSnapshot(account.bankName(), account.accountBalance(), balanceUpdatedAt));
 		List<Account> newAccounts = financeAccounts.stream()
 				.filter(FinanceAccount::isDemandDeposit)
 				.filter(account -> !accountsByNo.containsKey(account.accountNo()))
-				.map(account -> Account.sync(user, account.accountNo(), account.bankCode()))
+				.map(account -> Account.sync(
+						user,
+						account.accountNo(),
+						account.bankCode(),
+						account.bankName(),
+						account.accountBalance(),
+						balanceUpdatedAt
+				))
 				.toList();
 		accountRepository.saveAll(newAccounts)
 				.forEach(account -> accountsByNo.put(account.getFinAccountNo(), account));
