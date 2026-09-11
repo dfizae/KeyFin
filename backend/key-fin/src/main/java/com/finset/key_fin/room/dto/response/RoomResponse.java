@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 public record RoomResponse(
-		String theme,
 		AvatarResponse avatar,
 		List<FurnitureResponse> furnitures,
 		CoinResponse coin,
