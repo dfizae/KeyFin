@@ -51,7 +51,7 @@ class RoomControllerTest {
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.success").value(true))
 					.andExpect(jsonPath("$.code").value("SUCCESS"))
-					.andExpect(jsonPath("$.data.theme").value("AUTUMN_2026"))
+					.andExpect(jsonPath("$.data.theme").doesNotHaveJsonPath())
 					.andExpect(jsonPath("$.data.avatar.equipped[0].slotType").value("HEAD"))
 					.andExpect(jsonPath("$.data.avatar.equipped[0].itemId").value(1))
 					.andExpect(jsonPath("$.data.avatar.reaction").doesNotExist())
@@ -72,7 +72,6 @@ class RoomControllerTest {
 
 	private RoomResponse roomResponse() {
 		return new RoomResponse(
-				"AUTUMN_2026",
 				new RoomResponse.AvatarResponse(
 						List.of(
 								new RoomResponse.EquippedItemResponse(ItemSlotType.HEAD, 1L, "hair_default"),

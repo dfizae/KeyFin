@@ -8,6 +8,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -28,6 +29,10 @@ class SwaggerDocumentationTest {
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.security[0].bearerAuth").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['200'].content['application/json'].schema['$ref']")
 						.value("#/components/schemas/BaseResponseFinCoinBalanceResponse"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['200'].content['application/json'].example.data")
+						.value(aMapWithSize(1)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['200'].content['application/json'].example.data.balance")
+						.value(1250))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['401']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['403']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins/balance'].get.responses['404']").exists())
@@ -44,7 +49,7 @@ class SwaggerDocumentationTest {
 		mockMvc.perform(get("/v3/api-docs"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.paths['/api/v1/coins']").doesNotExist())
-				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.summary").value("코인 잔액 및 이력 조회"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.summary").value("코인 이력 조회"))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.security[0].bearerAuth").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[*].name")
 						.value(containsInAnyOrder("cursor", "size")))
@@ -52,6 +57,10 @@ class SwaggerDocumentationTest {
 						.value(containsInAnyOrder(false)))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'cursor')].schema.format")
 						.value(containsInAnyOrder("int64")))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'cursor')].schema.minimum")
+						.value(containsInAnyOrder(1)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'size')].required")
+						.value(containsInAnyOrder(false)))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'size')].schema.default")
 						.value(containsInAnyOrder(20)))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.parameters[?(@.name == 'size')].schema.minimum")
@@ -60,18 +69,33 @@ class SwaggerDocumentationTest {
 						.value(containsInAnyOrder(100)))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['200'].content['application/json'].schema['$ref']")
 						.value("#/components/schemas/BaseResponseFinCoinResponse"))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['200'].content['application/json'].example.data")
+						.value(aMapWithSize(2)))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['200'].content['application/json'].example.data.balance")
+						.doesNotHaveJsonPath())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['200'].content['application/json'].example.data.items[0].balanceAfter")
+						.value(1250))
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['200'].content['application/json'].example.data.nextCursor")
+						.value(nullValue()))
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['400']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['401']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['403']").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/fin-coins'].get.responses['404']").exists())
 				.andExpect(jsonPath("$.components.schemas.BaseResponseFinCoinResponse.properties.data['$ref']")
 						.value("#/components/schemas/FinCoinResponse"))
-				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.balance.format").value("int32"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties").value(aMapWithSize(2)))
+				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.balance").doesNotHaveJsonPath())
+				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.required").value(containsInAnyOrder("items", "nextCursor")))
 				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.nextCursor.type")
 						.value(containsInAnyOrder("integer", "null")))
 				.andExpect(jsonPath("$.components.schemas.FinCoinResponse.properties.nextCursor.format").value("int64"))
 				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.id.format").value("int64"))
 				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.delta.format").value("int32"))
 				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.balanceAfter.format").value("int32"))
+				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.required")
+						.value(containsInAnyOrder("id", "delta", "balanceAfter", "reasonCode", "reasonText", "grantDate")))
+				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.reasonCode.enum")
+						.value(containsInAnyOrder("ATTEND", "CONFIRM_ALL", "WEEKLY", "MONTHLY", "PURCHASE")))
 				.andExpect(jsonPath("$.components.schemas.FinCoinHistoryResponse.properties.grantDate.format").value("date"));
 	}
 

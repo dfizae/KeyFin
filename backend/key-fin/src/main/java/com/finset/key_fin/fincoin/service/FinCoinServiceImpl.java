@@ -9,7 +9,7 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,12 +25,12 @@ public class FinCoinServiceImpl implements FinCoinService {
 	@Transactional(readOnly = true)
 	@Override
 	public FinCoinResponse getFinCoins(long userId, Long cursor, int size) {
-		int balance = findCurrentBalance(userId);
+		validateActiveUser(userId);
 
-		PageRequest pageRequest = PageRequest.of(0, size + 1);
+		Limit limit = Limit.of(size + 1);
 		List<FinCoin> finCoins = cursor == null
-				? finCoinRepository.findByUserIdOrderByIdDesc(userId, pageRequest)
-				: finCoinRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursor, pageRequest);
+				? finCoinRepository.findByUserIdOrderByIdDesc(userId, limit)
+				: finCoinRepository.findByUserIdAndIdLessThanOrderByIdDesc(userId, cursor, limit);
 
 		boolean hasNext = finCoins.size() > size;
 		List<FinCoinHistoryResponse> items = finCoins.stream()
@@ -38,19 +38,22 @@ public class FinCoinServiceImpl implements FinCoinService {
 				.map(FinCoinHistoryResponse::from)
 				.toList();
 		Long nextCursor = hasNext ? items.getLast().id() : null;
-		return new FinCoinResponse(balance, items, nextCursor);
+		return new FinCoinResponse(items, nextCursor);
 	}
 
 	@Transactional(readOnly = true)
 	@Override
 	public FinCoinBalanceResponse getFinCoinBalance(long userId) {
+		validateActiveUser(userId);
 		return new FinCoinBalanceResponse(findCurrentBalance(userId));
 	}
 
-	private int findCurrentBalance(long userId) {
+	private void validateActiveUser(long userId) {
 		userRepository.findByIdAndDeletedAtIsNull(userId)
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+	}
 
+	private int findCurrentBalance(long userId) {
 		return finCoinRepository.findFirstByUserIdOrderByIdDesc(userId)
 				.map(FinCoin::getBalanceAfter)
 				.orElse(0);

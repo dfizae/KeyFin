@@ -22,23 +22,23 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 public interface FinCoinControllerDocs {
 
 	@Operation(
-			summary = "코인 잔액 및 이력 조회",
+			summary = "코인 이력 조회",
 			description = "이력을 ID 내림차순으로 조회합니다. cursor를 생략하면 최신 이력부터, "
 					+ "전달하면 해당 ID 미만의 이력부터 조회합니다. cursor는 이력의 존재 여부와 관계없이 조회 경계로 사용합니다. "
-					+ "balance는 커서와 무관한 현재 잔액이며, 마지막 페이지의 nextCursor는 null입니다. "
-					+ "이력이 없으면 balance는 0, items는 빈 배열입니다.",
+					+ "마지막 페이지의 nextCursor는 null입니다. "
+					+ "조회할 이력이 없으면 items는 빈 배열, nextCursor는 null입니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
 	@ApiResponses({
 			@ApiResponse(
 					responseCode = "200",
-					description = "코인 조회 성공",
+					description = "코인 이력 조회 성공",
 					useReturnTypeSchema = true,
 					content = @Content(
 							mediaType = APPLICATION_JSON_VALUE,
 							examples = @ExampleObject(value = """
 								{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
-								 "data":{"balance":1250,"items":[{"id":42,"delta":-100,"balanceAfter":1250,
+								 "data":{"items":[{"id":42,"delta":-100,"balanceAfter":1250,
 								 "reasonCode":"PURCHASE","reasonText":"아이템 구매","grantDate":"2026-09-10"}],
 								 "nextCursor":null}}
 								""")

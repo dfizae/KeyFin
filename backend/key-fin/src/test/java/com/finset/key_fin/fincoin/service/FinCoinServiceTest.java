@@ -3,6 +3,8 @@ package com.finset.key_fin.fincoin.service;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse.FinCoinHistoryResponse;
 import com.finset.key_fin.fincoin.entity.FinCoinReason;
+import com.finset.key_fin.fincoin.entity.FinCoin;
+import com.finset.key_fin.fincoin.repository.FinCoinRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
@@ -11,6 +13,7 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Limit;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +35,21 @@ class FinCoinServiceTest {
 	private FinCoinService finCoinService;
 
 	@Autowired
+	private FinCoinRepository finCoinRepository;
+
+	@Autowired
 	private JdbcClient jdbcClient;
+
+	@Test
+	void limitsDatabaseResultsBeforeResponseTrimming() {
+		assertThat(finCoinRepository.findByUserIdOrderByIdDesc(USER, Limit.of(2)))
+				.extracting(FinCoin::getId)
+				.containsExactly(8_100_000_009L, 8_100_000_007L);
+		assertThat(finCoinRepository.findByUserIdAndIdLessThanOrderByIdDesc(
+				USER, 8_100_000_007L, Limit.of(2)))
+				.extracting(FinCoin::getId)
+				.containsExactly(8_100_000_005L, 8_100_000_003L);
+	}
 
 	@ParameterizedTest
 	@CsvSource({"981, 700", "982, 2000"})
@@ -64,7 +81,7 @@ class FinCoinServiceTest {
 	}
 
 	@Test
-	void pagesByDescendingIdWithLatestBalanceOnEveryPage() {
+	void pagesByDescendingId() {
 		FinCoinResponse first = finCoinService.getFinCoins(USER, null, 2);
 		assertThat(first.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_009L, 8_100_000_007L);
@@ -116,7 +133,7 @@ class FinCoinServiceTest {
 	}
 
 	@Test
-	void isolatesOtherUsersBalanceAndHistory() {
+	void isolatesOtherUsersHistory() {
 		FinCoinResponse result = finCoinService.getFinCoins(982L, null, 20);
 		assertThat(result.items()).extracting(FinCoinHistoryResponse::id)
 				.containsExactly(8_100_000_010L, 8_100_000_006L);
@@ -124,7 +141,7 @@ class FinCoinServiceTest {
 	}
 
 	@Test
-	void returnsZeroBalanceAndEmptyItemsForNewUser() {
+	void returnsEmptyItemsForNewUser() {
 		FinCoinResponse result = finCoinService.getFinCoins(983L, null, 20);
 		assertThat(result.items()).isEmpty();
 		assertThat(result.nextCursor()).isNull();
@@ -132,7 +149,7 @@ class FinCoinServiceTest {
 
 	@ParameterizedTest
 	@ValueSource(longs = {1, 8_100_000_001L})
-	void retainsLatestBalanceWhenCursorIsPastAllItems(long cursor) {
+	void returnsEmptyItemsWhenCursorIsPastAllItems(long cursor) {
 		FinCoinResponse result = finCoinService.getFinCoins(USER, cursor, 20);
 		assertThat(result.items()).isEmpty();
 		assertThat(result.nextCursor()).isNull();
@@ -163,7 +180,7 @@ class FinCoinServiceTest {
 	}
 
 	@Test
-	void newHistoryBetweenPagesDoesNotRepeatItemsAndUpdatesCurrentBalance() {
+	void newHistoryBetweenPagesDoesNotRepeatItems() {
 		FinCoinResponse first = finCoinService.getFinCoins(USER, null, 2);
 		jdbcClient.sql("""
 				INSERT INTO fin_coin (id, user_id, delta, balance_after, reason_code, grant_date)

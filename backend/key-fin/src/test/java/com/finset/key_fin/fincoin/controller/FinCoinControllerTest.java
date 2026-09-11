@@ -56,7 +56,7 @@ class FinCoinControllerTest {
 	@Test
 	void returnsFinCoinsWithDefaultPageSizeForTokenOwner() throws Exception {
 		when(finCoinService.getFinCoins(981L, null, 20)).thenReturn(new FinCoinResponse(
-				700, List.of(new FinCoinHistoryResponse(
+				List.of(new FinCoinHistoryResponse(
 						8_100_000_009L, -150, 700, FinCoinReason.PURCHASE, "아이템 구매", LocalDate.of(2026, 9, 2)
 				)), null
 		));
@@ -65,7 +65,8 @@ class FinCoinControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.code").value("SUCCESS"))
-				.andExpect(jsonPath("$.data.balance").value(700))
+				.andExpect(jsonPath("$.data").value(aMapWithSize(2)))
+				.andExpect(jsonPath("$.data.balance").doesNotHaveJsonPath())
 				.andExpect(jsonPath("$.data.items[0].id").value(8_100_000_009L))
 				.andExpect(jsonPath("$.data.items[0].delta").value(-150))
 				.andExpect(jsonPath("$.data.items[0].balanceAfter").value(700))
@@ -81,7 +82,7 @@ class FinCoinControllerTest {
 	@Test
 	void bindsCursorAndReturnsNextCursor() throws Exception {
 		when(finCoinService.getFinCoins(981L, 8_100_000_009L, 1)).thenReturn(new FinCoinResponse(
-				700, List.of(new FinCoinHistoryResponse(
+				List.of(new FinCoinHistoryResponse(
 						8_100_000_007L, 500, 850, FinCoinReason.MONTHLY, "월간 보상", LocalDate.of(2026, 9, 4)
 				)), 8_100_000_007L
 		));
@@ -96,11 +97,12 @@ class FinCoinControllerTest {
 	@ParameterizedTest
 	@ValueSource(ints = {1, 100})
 	void acceptsPageSizeBoundaries(int size) throws Exception {
-		when(finCoinService.getFinCoins(981L, null, size)).thenReturn(new FinCoinResponse(0, List.of(), null));
+		when(finCoinService.getFinCoins(981L, null, size)).thenReturn(new FinCoinResponse(List.of(), null));
 
 		mockMvc.perform(authenticatedRequest().param("size", Integer.toString(size)))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.balance").value(0))
+				.andExpect(jsonPath("$.data").value(aMapWithSize(2)))
+				.andExpect(jsonPath("$.data.balance").doesNotHaveJsonPath())
 				.andExpect(jsonPath("$.data.items").isEmpty())
 				.andExpect(jsonPath("$.data.nextCursor").hasJsonPath())
 				.andExpect(jsonPath("$.data.nextCursor").value(nullValue()));
@@ -111,7 +113,7 @@ class FinCoinControllerTest {
 	@ParameterizedTest
 	@ValueSource(longs = {1, Long.MAX_VALUE})
 	void acceptsPositiveLongCursorBoundaries(long cursor) throws Exception {
-		when(finCoinService.getFinCoins(981L, cursor, 20)).thenReturn(new FinCoinResponse(700, List.of(), null));
+		when(finCoinService.getFinCoins(981L, cursor, 20)).thenReturn(new FinCoinResponse(List.of(), null));
 
 		mockMvc.perform(authenticatedRequest().param("cursor", Long.toString(cursor)))
 				.andExpect(status().isOk());

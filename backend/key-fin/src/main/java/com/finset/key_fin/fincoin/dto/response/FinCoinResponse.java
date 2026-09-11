@@ -9,7 +9,7 @@ import java.util.List;
 
 import static io.swagger.v3.oas.annotations.media.Schema.RequiredMode.REQUIRED;
 
-@Schema(name = "FinCoinResponse", description = "현재 코인 잔액과 ID 내림차순 이력")
+@Schema(name = "FinCoinResponse", description = "ID 내림차순 코인 이력과 다음 페이지 커서")
 public record FinCoinResponse(
 		@Schema(description = "코인 이력 목록. 이력이 없으면 빈 배열", requiredMode = REQUIRED)
 		List<FinCoinHistoryResponse> items,
