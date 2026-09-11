@@ -51,6 +51,25 @@ export function bankLogo(bankCode: string): number | undefined {
   return BY_CODE.get(bankCode)?.logo;
 }
 
+/**
+ * 이름으로 로고를 찾는다. 카드 후보에는 은행 코드가 없고 발급사 이름만 오기 때문이다
+ * ("신한카드" → 신한은행 로고). 계좌도 모르는 코드일 때 이름으로 한 번 더 찾는다.
+ */
+export function bankLogoByName(name: string): number | undefined {
+  const key = brandKey(name);
+  if (key.length === 0) return undefined;
+
+  return BANK_CATALOG.find((bank) => {
+    const catalogKey = brandKey(bank.name);
+    return catalogKey.length > 0 && (key.includes(catalogKey) || catalogKey.includes(key));
+  })?.logo;
+}
+
+/** 업권 접미사를 떼어 "신한카드"·"KEB하나은행" 처럼 다르게 적힌 같은 브랜드를 맞춘다 */
+function brandKey(name: string): string {
+  return name.replace(/[\s()]/g, "").replace(/(카드|은행|뱅크|금고|저축)/g, "");
+}
+
 /** 로고가 없는 은행(한국은행·싸피은행·목록에 없는 코드)의 폴백 타일 글자 */
 export function bankInitial(bankName: string): string {
   return bankName.trim().charAt(0) || "은";

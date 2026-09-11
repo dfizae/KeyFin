@@ -1,4 +1,4 @@
-import { BANK_CATALOG, bankInitial, bankLogo } from "@/features/link/bank-catalog";
+import { BANK_CATALOG, bankInitial, bankLogo, bankLogoByName } from "@/features/link/bank-catalog";
 
 describe("BANK_CATALOG", () => {
   it("금융망 은행 코드 18개를 담는다", () => {
@@ -22,5 +22,19 @@ describe("bankLogo · bankInitial", () => {
     expect(bankLogo("777")).toBeUndefined();
     expect(bankInitial("싸피은행")).toBe("싸");
     expect(bankInitial("  ")).toBe("은");
+  });
+});
+
+describe("bankLogoByName", () => {
+  it("카드사 이름을 같은 브랜드의 은행 로고로 잇는다", () => {
+    expect(bankLogoByName("신한카드")).toBe(bankLogo("088"));
+    expect(bankLogoByName("국민카드")).toBe(bankLogo("004"));
+    expect(bankLogoByName("KB국민카드")).toBe(bankLogo("004"));
+    expect(bankLogoByName("하나카드")).toBe(bankLogo("081"));
+  });
+
+  it("모르는 발급사와 로고 없는 은행은 폴백 타일로 둔다", () => {
+    expect(bankLogoByName("싸피카드")).toBeUndefined();
+    expect(bankLogoByName("")).toBeUndefined();
   });
 });
