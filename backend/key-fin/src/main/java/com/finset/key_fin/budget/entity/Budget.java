@@ -50,4 +50,12 @@ public class Budget extends BaseEntity {
 		budget.budgetMonth = budgetMonth;
 		return budget;
 	}
+
+	public boolean isConfirmed() {
+		return status == BudgetStatus.CONFIRMED;
+	}
+
+	public void confirm() {
+		this.status = BudgetStatus.CONFIRMED;
+	}
 }
