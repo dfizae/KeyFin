@@ -2,6 +2,7 @@ package com.finset.key_fin.account.controller;
 
 import com.finset.key_fin.account.dto.response.AccountListResponse;
 import com.finset.key_fin.account.dto.response.AccountListResponse.AccountItem;
+import com.finset.key_fin.account.exception.AccountErrorCode;
 import com.finset.key_fin.account.service.AccountService;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
@@ -17,10 +18,12 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
@@ -76,5 +79,25 @@ class AccountControllerTest {
 		mockMvc.perform(get("/api/v1/accounts"))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("USER_001"));
+	}
+
+	@Test
+	void 수입_계좌를_지정한다() throws Exception {
+		mockMvc.perform(put("/api/v1/accounts/3/income"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data").doesNotExist());
+
+		verify(accountService).designateIncomeAccount(USER_ID, 3L);
+	}
+
+	@Test
+	void 본인_소유_계좌가_아니면_404를_반환한다() throws Exception {
+		doThrow(new BusinessException(AccountErrorCode.ACCOUNT_NOT_FOUND))
+				.when(accountService).designateIncomeAccount(USER_ID, 99L);
+
+		mockMvc.perform(put("/api/v1/accounts/99/income"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("ACCOUNT_001"));
 	}
 }

@@ -108,6 +108,14 @@ public class Account {
 		income = false;
 	}
 
+	public void designateAsIncome() {
+		income = true;
+	}
+
+	public void removeIncomeDesignation() {
+		income = false;
+	}
+
 	private static String requireText(String value, String name) {
 		if (value == null || value.isBlank()) {
 			throw new IllegalArgumentException(name + " must not be blank");

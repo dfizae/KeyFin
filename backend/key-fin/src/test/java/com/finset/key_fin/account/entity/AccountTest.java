@@ -43,4 +43,16 @@ class AccountTest {
 		assertThatNullPointerException().isThrownBy(() -> Account.sync(
 				USER, "0041456503815897", "004", "국민은행", 3_000_000L, null));
 	}
+
+	@Test
+	void 수입_계좌로_지정하고_해제한다() {
+		Account account = Account.sync(
+				USER, "0041456503815897", "004", "국민은행", 3_000_000L, LocalDateTime.now());
+
+		account.designateAsIncome();
+		assertThat(account.isIncome()).isTrue();
+
+		account.removeIncomeDesignation();
+		assertThat(account.isIncome()).isFalse();
+	}
 }
