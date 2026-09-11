@@ -43,4 +43,8 @@ public class BudgetEnvelope {
 		budgetEnvelope.proposedAmount = proposedAmount;
 		return budgetEnvelope;
 	}
+
+	public void confirm(long confirmedAmount) {
+		this.confirmedAmount = confirmedAmount;
+	}
 }

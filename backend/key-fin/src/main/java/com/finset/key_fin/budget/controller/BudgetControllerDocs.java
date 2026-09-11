@@ -2,6 +2,8 @@ package com.finset.key_fin.budget.controller;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
+import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
+import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.global.base.BaseResponse;
 
@@ -57,4 +59,52 @@ public interface BudgetControllerDocs {
 			)
 	})
 	BaseResponse<BudgetProposalResponse> propose(Long userId);
+
+	@Operation(
+			summary = "예산 승인·조정",
+			description = "제안(PROPOSED) 상태인 예산의 봉투 7종 전부에 확정 금액을 기록하고 CONFIRMED로 전환합니다. "
+					+ "금액은 0 이상 1,000원 단위. 제안액(proposedAmount)은 보존됩니다. "
+					+ "확정은 주기당 1회 — 이미 CONFIRMED면 409를 반환합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "예산 확정 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "확정 성공",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"budgetId\":11,\"month\":\"202609\",\"status\":\"CONFIRMED\"}}"
+							)
+					)
+			),
+			@ApiResponse(
+					responseCode = "400",
+					description = "봉투 목록이 예산 구성과 불일치, 금액이 음수 또는 1,000원 단위 아님",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "401",
+					description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "404",
+					description = "본인 소유의 예산이 아니거나 존재하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "409",
+					description = "이미 확정된 예산",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "500",
+					description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			)
+	})
+	BaseResponse<BudgetConfirmResponse> confirm(Long userId, Long budgetId, BudgetConfirmRequest request);
 }

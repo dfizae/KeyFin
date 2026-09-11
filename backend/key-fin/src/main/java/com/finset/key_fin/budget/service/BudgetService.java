@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -11,6 +12,9 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
+import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest.EnvelopeAmount;
+import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopeProposal;
 import com.finset.key_fin.budget.entity.Budget;
@@ -61,6 +65,7 @@ public class BudgetService {
 	private static final int MIN_COVERED_DAYS = 30;
 	private static final int DAYS_PER_MONTH = 30;
 	private static final int DEFAULT_ANCHOR_DAY = 1;
+	private static final long AMOUNT_UNIT = 1_000L;
 	private static final String BASIS_RECENT_AVERAGE = "최근 %d개월 평균";
 	private static final String BASIS_DEFAULT_TEMPLATE = "기본 템플릿";
 	private static final Map<Integer, Long> DEFAULT_TEMPLATE = Map.of(
@@ -122,6 +127,36 @@ public class BudgetService {
 				budget.getStatus().name(),
 				noHistory ? BASIS_DEFAULT_TEMPLATE : BASIS_RECENT_AVERAGE.formatted(coveredMonthsLabel),
 				proposals);
+	}
+
+	@Transactional
+	public BudgetConfirmResponse confirm(long userId, long budgetId, BudgetConfirmRequest request) {
+		Budget budget = budgetRepository.findByIdAndUserId(budgetId, userId)
+				.orElseThrow(() -> new BusinessException(BudgetErrorCode.BUDGET_NOT_FOUND));
+		if (budget.isConfirmed()) {
+			throw new BusinessException(BudgetErrorCode.BUDGET_ALREADY_CONFIRMED);
+		}
+
+		Map<Integer, Long> amounts = new HashMap<>();
+		for (EnvelopeAmount envelope : request.envelopes()) {
+			if (envelope.amount() % AMOUNT_UNIT != 0) {
+				throw new BusinessException(BudgetErrorCode.AMOUNT_NOT_THOUSAND_UNIT);
+			}
+			if (amounts.put(envelope.envelopeId(), envelope.amount()) != null) {
+				throw new BusinessException(BudgetErrorCode.ENVELOPE_MISMATCH);
+			}
+		}
+
+		List<BudgetEnvelope> rows = budgetEnvelopeRepository.findByBudgetId(budgetId);
+		boolean sameEnvelopes = rows.size() == amounts.size()
+				&& rows.stream().allMatch(row -> amounts.containsKey(row.getEnvelopeId()));
+		if (!sameEnvelopes) {
+			throw new BusinessException(BudgetErrorCode.ENVELOPE_MISMATCH);
+		}
+
+		rows.forEach(row -> row.confirm(amounts.get(row.getEnvelopeId())));
+		budget.confirm();
+		return new BudgetConfirmResponse(budget.getId(), budget.getBudgetMonth(), budget.getStatus().name());
 	}
 
 	private int anchorDayOf(long userId) {

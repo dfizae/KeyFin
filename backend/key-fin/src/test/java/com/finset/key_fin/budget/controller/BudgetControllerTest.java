@@ -2,7 +2,10 @@ package com.finset.key_fin.budget.controller;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
@@ -14,9 +17,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.http.MediaType;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
+import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopeProposal;
 import com.finset.key_fin.budget.service.BudgetService;
@@ -58,5 +64,29 @@ class BudgetControllerTest {
 				.andExpect(jsonPath("$.data.status").value("PROPOSED"))
 				.andExpect(jsonPath("$.data.envelopes[0].envelopeId").value(1))
 				.andExpect(jsonPath("$.data.envelopes[0].proposedAmount").value(121000));
+	}
+
+	@Test
+	void confirmsBudgetForAuthenticatedUser() throws Exception {
+		when(budgetService.confirm(eq(1L), eq(11L), any(BudgetConfirmRequest.class)))
+				.thenReturn(new BudgetConfirmResponse(11L, "202609", "CONFIRMED"));
+
+		mockMvc.perform(put("/api/v1/budgets/11/confirm")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"envelopes\":[{\"envelopeId\":1,\"amount\":280000}]}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.budgetId").value(11))
+				.andExpect(jsonPath("$.data.status").value("CONFIRMED"));
+	}
+
+	@Test
+	void rejectsConfirmWithoutEnvelopes() throws Exception {
+		mockMvc.perform(put("/api/v1/budgets/11/confirm")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"envelopes\":[]}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.success").value(false))
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 }
