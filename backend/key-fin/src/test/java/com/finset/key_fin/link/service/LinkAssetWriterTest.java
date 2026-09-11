@@ -6,17 +6,13 @@ import com.finset.key_fin.card.entity.Card;
 import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.ErrorCode;
-import com.finset.key_fin.link.dto.response.FinanceAccount;
-import com.finset.key_fin.link.dto.response.FinanceCard;
 import com.finset.key_fin.link.dto.response.LinkAssetsResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.user.entity.User;
-import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,26 +20,17 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class LinkAssetWriterTest {
 
 	private static final long USER_ID = 1L;
-	private static final FinanceAccount KB_ACCOUNT =
-			new FinanceAccount("004", "국민은행", "0041456503815897", "국민 수시입출금", "1", 3_000_000L, "KRW");
-	private static final FinanceAccount SHINHAN_ACCOUNT =
-			new FinanceAccount("088", "신한은행", "0880680068408149", "신한 수시입출금", "1", 125_000L, "KRW");
-	private static final FinanceCard SHINHAN_CARD = new FinanceCard(
-			"1005872701650761", "725", "1005-x", "1005", "신한카드", "신한 딥디저트 카드",
-			"20310910", "0880680068408149", "1"
-	);
 
 	@Mock
 	private UserRepository userRepository;
@@ -58,98 +45,93 @@ class LinkAssetWriterTest {
 	private LinkAssetWriter linkAssetWriter;
 
 	private User user;
+	private Account kbAccount;
+	private Account shinhanAccount;
+	private Card shinhanCard;
 
 	@BeforeEach
 	void setUp() {
 		user = User.create("qwer@qwer.com", "encoded-password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
-		user.connectFinance("finance-user-key");
+		kbAccount = Account.sync(user, "0041456503815897", "004");
+		ReflectionTestUtils.setField(kbAccount, "id", 3L);
+		shinhanAccount = Account.sync(user, "0880680068408149", "088");
+		ReflectionTestUtils.setField(shinhanAccount, "id", 4L);
+		shinhanCard = Card.sync(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", shinhanAccount);
+		ReflectionTestUtils.setField(shinhanCard, "id", 7L);
 	}
 
 	@Test
-	void 계좌를_먼저_저장하고_카드의_출금_계좌를_같은_요청의_계좌로_매칭한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of());
-		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of());
-		given(accountRepository.save(any(Account.class))).willAnswer(invocation -> invocation.getArgument(0));
+	void 선택한_계좌와_카드를_관리_대상으로_전환하고_건수를_반환한다() {
+		given(accountRepository.findAllByIdInAndUserId(Set.of(3L, 4L), USER_ID))
+				.willReturn(List.of(kbAccount, shinhanAccount));
+		given(cardRepository.findAllByIdInAndUserId(Set.of(7L), USER_ID)).willReturn(List.of(shinhanCard));
 
-		LinkAssetsResponse response = linkAssetWriter.link(
-				USER_ID, List.of(KB_ACCOUNT, SHINHAN_ACCOUNT), List.of(SHINHAN_CARD));
+		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, Set.of(3L, 4L), Set.of(7L));
 
 		assertThat(response.accounts()).isEqualTo(2);
 		assertThat(response.cards()).isEqualTo(1);
-		ArgumentCaptor<Card> cardCaptor = ArgumentCaptor.forClass(Card.class);
-		verify(cardRepository).save(cardCaptor.capture());
-		Card savedCard = cardCaptor.getValue();
-		assertThat(savedCard.getFinCardNo()).isEqualTo("1005872701650761");
-		assertThat(savedCard.getCvc()).isEqualTo("725");
-		assertThat(savedCard.getIssuerCode()).isEqualTo("1005");
-		assertThat(savedCard.getCardName()).isEqualTo("신한 딥디저트 카드");
-		assertThat(savedCard.getWithdrawalAccount()).isNotNull();
-		assertThat(savedCard.getWithdrawalAccount().getFinAccountNo()).isEqualTo("0880680068408149");
-		assertThat(savedCard.isManaged()).isTrue();
+		assertThat(kbAccount.isManaged()).isTrue();
+		assertThat(shinhanAccount.isManaged()).isTrue();
+		assertThat(shinhanCard.isManaged()).isTrue();
 	}
 
 	@Test
-	void 출금_계좌가_연결되지_않은_카드는_출금_계좌_없이_저장한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of());
-		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of());
+	void 이미_관리_중인_항목은_건수에서_제외한다() {
+		kbAccount.manage();
+		given(accountRepository.findAllByIdInAndUserId(Set.of(3L, 4L), USER_ID))
+				.willReturn(List.of(kbAccount, shinhanAccount));
 
-		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, List.of(), List.of(SHINHAN_CARD));
-
-		assertThat(response.cards()).isEqualTo(1);
-		ArgumentCaptor<Card> cardCaptor = ArgumentCaptor.forClass(Card.class);
-		verify(cardRepository).save(cardCaptor.capture());
-		assertThat(cardCaptor.getValue().getWithdrawalAccount()).isNull();
-	}
-
-	@Test
-	void 이미_연결된_항목은_저장하지_않고_응답_수에서_제외한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(accountRepository.findAllByUserId(USER_ID))
-				.willReturn(List.of(Account.link(user, "0041456503815897", "004")));
-		given(cardRepository.findAllByUserId(USER_ID))
-				.willReturn(List.of(Card.link(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", null)));
-
-		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, List.of(KB_ACCOUNT), List.of(SHINHAN_CARD));
-
-		assertThat(response.accounts()).isZero();
-		assertThat(response.cards()).isZero();
-		verify(accountRepository, never()).save(any());
-		verify(cardRepository, never()).save(any());
-	}
-
-	@Test
-	void 연결_해제된_항목을_다시_선택하면_관리_대상으로_되돌리고_응답_수에_포함한다() {
-		Account unlinkedAccount = Account.link(user, "0041456503815897", "004");
-		unlinkedAccount.unlink();
-		Card unlinkedCard = Card.link(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", null);
-		unlinkedCard.unlink();
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of(unlinkedAccount));
-		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of(unlinkedCard));
-
-		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, List.of(KB_ACCOUNT), List.of(SHINHAN_CARD));
+		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, Set.of(3L, 4L), Set.of());
 
 		assertThat(response.accounts()).isEqualTo(1);
+		assertThat(response.cards()).isZero();
+		verifyNoInteractions(cardRepository);
+	}
+
+	@Test
+	void 연결_해제된_항목을_다시_선택하면_관리_대상으로_복구된다() {
+		shinhanCard.manage();
+		shinhanCard.unlink();
+		given(cardRepository.findAllByIdInAndUserId(Set.of(7L), USER_ID)).willReturn(List.of(shinhanCard));
+
+		LinkAssetsResponse response = linkAssetWriter.link(USER_ID, Set.of(), Set.of(7L));
+
 		assertThat(response.cards()).isEqualTo(1);
-		assertThat(unlinkedAccount.isManaged()).isTrue();
-		assertThat(unlinkedCard.isManaged()).isTrue();
-		verify(accountRepository, never()).save(any());
-		verify(cardRepository, never()).save(any());
+		assertThat(shinhanCard.isManaged()).isTrue();
+	}
+
+	@Test
+	void 본인_소유가_아닌_계좌_ID가_섞이면_전체를_거절한다() {
+		given(accountRepository.findAllByIdInAndUserId(Set.of(3L, 999L), USER_ID)).willReturn(List.of(kbAccount));
+
+		assertBusinessError(
+				LinkErrorCode.ACCOUNT_NOT_FOUND,
+				() -> linkAssetWriter.link(USER_ID, Set.of(3L, 999L), Set.of())
+		);
+		assertThat(kbAccount.isManaged()).isFalse();
+	}
+
+	@Test
+	void 본인_소유가_아닌_카드_ID는_거절한다() {
+		given(cardRepository.findAllByIdInAndUserId(Set.of(999L), USER_ID)).willReturn(List.of());
+
+		assertBusinessError(
+				LinkErrorCode.CARD_NOT_FOUND,
+				() -> linkAssetWriter.link(USER_ID, Set.of(), Set.of(999L))
+		);
 	}
 
 	@Test
 	void 계좌_연결을_해제하면_관리_대상과_수입_계좌_지정이_함께_풀린다() {
-		Account account = Account.link(user, "0041456503815897", "004");
-		ReflectionTestUtils.setField(account, "income", true);
-		given(accountRepository.findByIdAndUserId(10L, USER_ID)).willReturn(Optional.of(account));
+		kbAccount.manage();
+		ReflectionTestUtils.setField(kbAccount, "income", true);
+		given(accountRepository.findByIdAndUserId(3L, USER_ID)).willReturn(Optional.of(kbAccount));
 
-		linkAssetWriter.unlinkAccount(USER_ID, 10L);
+		linkAssetWriter.unlinkAccount(USER_ID, 3L);
 
-		assertThat(account.isManaged()).isFalse();
-		assertThat(account.isIncome()).isFalse();
+		assertThat(kbAccount.isManaged()).isFalse();
+		assertThat(kbAccount.isIncome()).isFalse();
 	}
 
 	@Test
@@ -161,12 +143,12 @@ class LinkAssetWriterTest {
 
 	@Test
 	void 카드_연결을_해제하면_관리_대상에서_제외된다() {
-		Card card = Card.link(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", null);
-		given(cardRepository.findByIdAndUserId(20L, USER_ID)).willReturn(Optional.of(card));
+		shinhanCard.manage();
+		given(cardRepository.findByIdAndUserId(7L, USER_ID)).willReturn(Optional.of(shinhanCard));
 
-		linkAssetWriter.unlinkCard(USER_ID, 20L);
+		linkAssetWriter.unlinkCard(USER_ID, 7L);
 
-		assertThat(card.isManaged()).isFalse();
+		assertThat(shinhanCard.isManaged()).isFalse();
 	}
 
 	@Test
@@ -174,16 +156,6 @@ class LinkAssetWriterTest {
 		given(cardRepository.findByIdAndUserId(20L, USER_ID)).willReturn(Optional.empty());
 
 		assertBusinessError(LinkErrorCode.CARD_NOT_FOUND, () -> linkAssetWriter.unlinkCard(USER_ID, 20L));
-	}
-
-	@Test
-	void 저장_시점에_사용자가_없으면_연결할_수_없다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.empty());
-
-		assertBusinessError(
-				UserErrorCode.USER_NOT_FOUND,
-				() -> linkAssetWriter.link(USER_ID, List.of(KB_ACCOUNT), List.of())
-		);
 	}
 
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {

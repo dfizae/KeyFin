@@ -108,35 +108,35 @@ class LinkControllerTest {
 	@Test
 	void 계좌_카드_후보_목록을_조회한다() throws Exception {
 		when(linkCandidateService.getCandidates(USER_ID)).thenReturn(new LinkCandidatesResponse(
-				List.of(new LinkCandidatesResponse.AccountCandidate("0010011073486799", "001", "한국은행", 1_500_000L, false, null)),
-				List.of(new LinkCandidatesResponse.CardCandidate("1003198565339181", "롯데카드", "디지로카 SEOUL", "0323555042323510", true, 7L))
+				List.of(new LinkCandidatesResponse.AccountCandidate(3L, "0010011073486799", "001", "한국은행", 1_500_000L, false)),
+				List.of(new LinkCandidatesResponse.CardCandidate(7L, "1003198565339181", "롯데카드", "디지로카 SEOUL", "0323555042323510", true))
 		));
 
 		mockMvc.perform(get("/api/v1/links/candidates"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.accounts[0].id").value(3))
 				.andExpect(jsonPath("$.data.accounts[0].finAccountNo").value("0010011073486799"))
 				.andExpect(jsonPath("$.data.accounts[0].bankName").value("한국은행"))
 				.andExpect(jsonPath("$.data.accounts[0].balance").value(1_500_000))
-				.andExpect(jsonPath("$.data.accounts[0].linked").value(false))
-				.andExpect(jsonPath("$.data.accounts[0].linkedId").isEmpty())
+				.andExpect(jsonPath("$.data.accounts[0].managed").value(false))
+				.andExpect(jsonPath("$.data.cards[0].id").value(7))
 				.andExpect(jsonPath("$.data.cards[0].cardNo").value("1003198565339181"))
 				.andExpect(jsonPath("$.data.cards[0].issuerName").value("롯데카드"))
-				.andExpect(jsonPath("$.data.cards[0].linked").value(true))
-				.andExpect(jsonPath("$.data.cards[0].linkedId").value(7));
+				.andExpect(jsonPath("$.data.cards[0].managed").value(true));
 
 		verify(linkCandidateService).getCandidates(USER_ID);
 	}
 
 	@Test
 	void 선택한_계좌와_카드를_연결하고_201을_반환한다() throws Exception {
-		LinkAssetsRequest request = new LinkAssetsRequest(List.of("0041456503815897"), List.of("1005872701650761"));
+		LinkAssetsRequest request = new LinkAssetsRequest(List.of(3L), List.of(7L));
 		when(linkAssetService.link(USER_ID, request)).thenReturn(new LinkAssetsResponse(1, 1));
 
 		mockMvc.perform(post("/api/v1/links")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"accounts":["0041456503815897"],"cards":["1005872701650761"]}
+								{"accountIds":[3],"cardIds":[7]}
 								"""))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.success").value(true))
@@ -147,25 +147,25 @@ class LinkControllerTest {
 	}
 
 	@Test
-	void 빈_문자열_계좌번호는_400으로_거절한다() throws Exception {
+	void 양수가_아닌_계좌_ID는_400으로_거절한다() throws Exception {
 		mockMvc.perform(post("/api/v1/links")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"accounts":[" "],"cards":[]}
+								{"accountIds":[0],"cardIds":[]}
 								"""))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 
 	@Test
-	void 후보에_없는_자산_연결은_404로_거절한다() throws Exception {
+	void 본인_소유가_아닌_계좌_ID_연결은_404로_거절한다() throws Exception {
 		when(linkAssetService.link(eq(USER_ID), any(LinkAssetsRequest.class)))
-				.thenThrow(new BusinessException(LinkErrorCode.FINANCE_ASSET_NOT_FOUND));
+				.thenThrow(new BusinessException(LinkErrorCode.ACCOUNT_NOT_FOUND));
 
 		mockMvc.perform(post("/api/v1/links")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"accounts":["9999999999999999"]}
+								{"accountIds":[999]}
 								"""))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPath("$.code").value("LINK_004"));
@@ -196,7 +196,7 @@ class LinkControllerTest {
 
 		mockMvc.perform(delete("/api/v1/links/cards/20"))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.code").value("LINK_006"));
+				.andExpect(jsonPath("$.code").value("LINK_005"));
 	}
 
 	@Test

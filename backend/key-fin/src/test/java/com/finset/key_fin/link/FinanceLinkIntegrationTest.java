@@ -86,66 +86,71 @@ class FinanceLinkIntegrationTest extends IntegrationTestSupport {
 				.andExpect(jsonPathValue("$.data.connected", true));
 
 		expectAccountAndCardLists();
-		mockMvc.perform(authed(get("/api/v1/links/candidates")))
+		MvcResult candidates = mockMvc.perform(authed(get("/api/v1/links/candidates")))
 				.andExpect(status().isOk())
 				.andExpect(jsonPathValue("$.data.accounts.length()", 2))
-				.andExpect(jsonPathValue("$.data.accounts[0].linked", false))
+				.andExpect(jsonPathValue("$.data.accounts[0].finAccountNo", KB_ACCOUNT_NO))
+				.andExpect(jsonPathValue("$.data.accounts[0].managed", false))
+				.andExpect(jsonPathValue("$.data.accounts[1].managed", false))
 				.andExpect(jsonPathValue("$.data.cards[0].cardNo", SHINHAN_CARD_NO))
-				.andExpect(jsonPathValue("$.data.cards[0].linked", false));
+				.andExpect(jsonPathValue("$.data.cards[0].managed", false))
+				.andReturn();
+		String body = candidates.getResponse().getContentAsString();
+		Number kbAccountId = JsonPath.read(body, "$.data.accounts[0].id");
+		Number shinhanAccountId = JsonPath.read(body, "$.data.accounts[1].id");
+		Number cardId = JsonPath.read(body, "$.data.cards[0].id");
+		assertThat(kbAccountId).isNotNull();
+		assertThat(shinhanAccountId).isNotNull();
+		assertThat(cardId).isNotNull();
 
-		expectAccountAndCardLists();
+		resetFinanceServer();
 		mockMvc.perform(authed(post("/api/v1/links"))
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"accounts\":[\"" + KB_ACCOUNT_NO + "\",\"" + SHINHAN_ACCOUNT_NO + "\"],\"cards\":[\"" + SHINHAN_CARD_NO + "\"]}"))
+						.content("{\"accountIds\":[" + kbAccountId + "," + shinhanAccountId + "],\"cardIds\":[" + cardId + "]}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPathValue("$.data.accounts", 2))
 				.andExpect(jsonPathValue("$.data.cards", 1));
 
-		expectAccountAndCardLists();
 		mockMvc.perform(authed(post("/api/v1/links"))
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"accounts\":[\"" + KB_ACCOUNT_NO + "\"],\"cards\":[\"" + SHINHAN_CARD_NO + "\"]}"))
+						.content("{\"accountIds\":[" + kbAccountId + "],\"cardIds\":[" + cardId + "]}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPathValue("$.data.accounts", 0))
 				.andExpect(jsonPathValue("$.data.cards", 0));
 
 		expectAccountAndCardLists();
-		MvcResult linked = mockMvc.perform(authed(get("/api/v1/links/candidates")))
+		mockMvc.perform(authed(get("/api/v1/links/candidates")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPathValue("$.data.accounts[0].linked", true))
-				.andExpect(jsonPathValue("$.data.accounts[1].linked", true))
-				.andExpect(jsonPathValue("$.data.cards[0].linked", true))
-				.andReturn();
-		String body = linked.getResponse().getContentAsString();
-		Number cardLinkedId = JsonPath.read(body, "$.data.cards[0].linkedId");
-		Number accountLinkedId = JsonPath.read(body, "$.data.accounts[0].linkedId");
-		assertThat(cardLinkedId).isNotNull();
-		assertThat(accountLinkedId).isNotNull();
+				.andExpect(jsonPathValue("$.data.accounts[0].id", kbAccountId.intValue()))
+				.andExpect(jsonPathValue("$.data.accounts[0].managed", true))
+				.andExpect(jsonPathValue("$.data.accounts[1].managed", true))
+				.andExpect(jsonPathValue("$.data.cards[0].id", cardId.intValue()))
+				.andExpect(jsonPathValue("$.data.cards[0].managed", true));
 
-		mockMvc.perform(authed(delete("/api/v1/links/cards/" + cardLinkedId)))
+		resetFinanceServer();
+		mockMvc.perform(authed(delete("/api/v1/links/cards/" + cardId)))
 				.andExpect(status().isOk())
 				.andExpect(jsonPathValue("$.success", true));
 
 		expectAccountAndCardLists();
 		mockMvc.perform(authed(get("/api/v1/links/candidates")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPathValue("$.data.accounts[0].linked", true))
-				.andExpect(jsonPathValue("$.data.cards[0].linked", false))
-				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
-						.jsonPath("$.data.cards[0].linkedId").isEmpty());
+				.andExpect(jsonPathValue("$.data.accounts[0].managed", true))
+				.andExpect(jsonPathValue("$.data.cards[0].id", cardId.intValue()))
+				.andExpect(jsonPathValue("$.data.cards[0].managed", false));
 
-		expectCardListOnly();
+		resetFinanceServer();
 		mockMvc.perform(authed(post("/api/v1/links"))
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"cards\":[\"" + SHINHAN_CARD_NO + "\"]}"))
+						.content("{\"cardIds\":[" + cardId + "]}"))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPathValue("$.data.cards", 1));
 
 		expectAccountAndCardLists();
 		mockMvc.perform(authed(get("/api/v1/links/candidates")))
 				.andExpect(status().isOk())
-				.andExpect(jsonPathValue("$.data.cards[0].linked", true))
-				.andExpect(jsonPathValue("$.data.cards[0].linkedId", cardLinkedId.intValue()));
+				.andExpect(jsonPathValue("$.data.cards[0].id", cardId.intValue()))
+				.andExpect(jsonPathValue("$.data.cards[0].managed", true));
 	}
 
 	@Test
@@ -167,24 +172,37 @@ class FinanceLinkIntegrationTest extends IntegrationTestSupport {
 	}
 
 	@Test
-	void 후보_목록에_없는_자산은_연결할_수_없다() throws Exception {
-		connectFinance();
-		resetFinanceServer();
-		financeServer.expect(ExpectedCount.once(), requestTo(ACCOUNT_LIST_URL))
-				.andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(accountListBody()));
-
+	void 본인_소유가_아닌_계좌_ID는_연결할_수_없다() throws Exception {
 		mockMvc.perform(authed(post("/api/v1/links"))
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"accounts\":[\"9999999999999999\"]}"))
+						.content("{\"accountIds\":[999999]}"))
 				.andExpect(status().isNotFound())
 				.andExpect(jsonPathValue("$.code", "LINK_004"));
+	}
+
+	@Test
+	void 후보_목록_조회만_해도_자산이_미선택_상태로_저장된다() throws Exception {
+		connectFinance();
+		expectAccountAndCardLists();
+		mockMvc.perform(authed(get("/api/v1/links/candidates")))
+				.andExpect(status().isOk());
+
+		expectAccountAndCardLists();
+		MvcResult again = mockMvc.perform(authed(get("/api/v1/links/candidates")))
+				.andExpect(status().isOk())
+				.andExpect(jsonPathValue("$.data.accounts.length()", 2))
+				.andExpect(jsonPathValue("$.data.accounts[0].managed", false))
+				.andExpect(jsonPathValue("$.data.cards[0].managed", false))
+				.andReturn();
+		Number firstId = JsonPath.read(again.getResponse().getContentAsString(), "$.data.accounts[0].id");
+		assertThat(firstId).isNotNull();
 	}
 
 	@Test
 	void 다른_사용자의_카드는_해제할_수_없다() throws Exception {
 		mockMvc.perform(authed(delete("/api/v1/links/cards/999999")))
 				.andExpect(status().isNotFound())
-				.andExpect(jsonPathValue("$.code", "LINK_006"));
+				.andExpect(jsonPathValue("$.code", "LINK_005"));
 	}
 
 	@Test
@@ -246,11 +264,6 @@ class FinanceLinkIntegrationTest extends IntegrationTestSupport {
 				.andExpect(jsonPath("$.Header.apiKey").value(FINANCE_API_KEY))
 				.andExpect(jsonPath("$.Header.userKey").value(finUserKey))
 				.andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(accountListBody()));
-		expectCardList();
-	}
-
-	private void expectCardListOnly() {
-		resetFinanceServer();
 		expectCardList();
 	}
 

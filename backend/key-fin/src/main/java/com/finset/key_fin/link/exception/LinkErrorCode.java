@@ -24,20 +24,15 @@ public enum LinkErrorCode implements ErrorCode {
 			"LINK_003",
 			"연결할 계좌 또는 카드를 하나 이상 선택해 주세요."
 	),
-	FINANCE_ASSET_NOT_FOUND(
-			HttpStatus.NOT_FOUND,
-			"LINK_004",
-			"금융망에서 선택한 계좌 또는 카드를 찾을 수 없습니다."
-	),
 	ACCOUNT_NOT_FOUND(
 			HttpStatus.NOT_FOUND,
-			"LINK_005",
-			"연결된 계좌를 찾을 수 없습니다."
+			"LINK_004",
+			"계좌를 찾을 수 없습니다. 후보 목록을 다시 조회해 주세요."
 	),
 	CARD_NOT_FOUND(
 			HttpStatus.NOT_FOUND,
-			"LINK_006",
-			"연결된 카드를 찾을 수 없습니다."
+			"LINK_005",
+			"카드를 찾을 수 없습니다. 후보 목록을 다시 조회해 주세요."
 	);
 
 	private final HttpStatus httpStatus;

@@ -5,70 +5,40 @@ import com.finset.key_fin.account.repository.AccountRepository;
 import com.finset.key_fin.card.entity.Card;
 import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.link.dto.response.FinanceAccount;
-import com.finset.key_fin.link.dto.response.FinanceCard;
 import com.finset.key_fin.link.dto.response.LinkAssetsResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
-import com.finset.key_fin.user.entity.User;
-import com.finset.key_fin.user.exception.UserErrorCode;
-import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class LinkAssetWriter {
 
-	private final UserRepository userRepository;
 	private final AccountRepository accountRepository;
 	private final CardRepository cardRepository;
 
 	@Transactional
-	public LinkAssetsResponse link(long userId, List<FinanceAccount> accounts, List<FinanceCard> cards) {
-		User user = userRepository.findByIdAndDeletedAtIsNull(userId)
-				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
-
-		Map<String, Account> accountsByNo = new HashMap<>(accountRepository.findAllByUserId(userId).stream()
-				.collect(Collectors.toMap(Account::getFinAccountNo, Function.identity())));
+	public LinkAssetsResponse link(long userId, Set<Long> accountIds, Set<Long> cardIds) {
 		int linkedAccounts = 0;
-		for (FinanceAccount financeAccount : accounts) {
-			Account existing = accountsByNo.get(financeAccount.accountNo());
-			if (existing == null) {
-				Account saved = accountRepository.save(
-						Account.link(user, financeAccount.accountNo(), financeAccount.bankCode()));
-				accountsByNo.put(saved.getFinAccountNo(), saved);
-				linkedAccounts++;
-			} else if (existing.relink()) {
-				linkedAccounts++;
+		if (!accountIds.isEmpty()) {
+			List<Account> accounts = accountRepository.findAllByIdInAndUserId(accountIds, userId);
+			if (accounts.size() != accountIds.size()) {
+				throw new BusinessException(LinkErrorCode.ACCOUNT_NOT_FOUND);
 			}
+			linkedAccounts = (int) accounts.stream().filter(Account::manage).count();
 		}
 
-		Map<String, Card> cardsByNo = cardRepository.findAllByUserId(userId).stream()
-				.collect(Collectors.toMap(Card::getFinCardNo, Function.identity()));
 		int linkedCards = 0;
-		for (FinanceCard financeCard : cards) {
-			Account withdrawalAccount = accountsByNo.get(financeCard.withdrawalAccountNo());
-			Card existing = cardsByNo.get(financeCard.cardNo());
-			if (existing == null) {
-				cardRepository.save(Card.link(
-						user,
-						financeCard.cardNo(),
-						financeCard.cvc(),
-						financeCard.cardIssuerCode(),
-						financeCard.cardName(),
-						withdrawalAccount
-				));
-				linkedCards++;
-			} else if (existing.relink(withdrawalAccount)) {
-				linkedCards++;
+		if (!cardIds.isEmpty()) {
+			List<Card> cards = cardRepository.findAllByIdInAndUserId(cardIds, userId);
+			if (cards.size() != cardIds.size()) {
+				throw new BusinessException(LinkErrorCode.CARD_NOT_FOUND);
 			}
+			linkedCards = (int) cards.stream().filter(Card::manage).count();
 		}
 
 		return new LinkAssetsResponse(linkedAccounts, linkedCards);

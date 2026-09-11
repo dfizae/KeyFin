@@ -51,7 +51,7 @@ public class Card {
 	private Account withdrawalAccount;
 
 	@Column(name = "is_managed", nullable = false)
-	private boolean managed = true;
+	private boolean managed;
 
 	@Generated(event = EventType.INSERT)
 	@Column(name = "linked_at", nullable = false, insertable = false, updatable = false)
@@ -71,9 +71,10 @@ public class Card {
 		this.issuerCode = requireText(issuerCode, "issuerCode");
 		this.cardName = requireText(cardName, "cardName");
 		this.withdrawalAccount = withdrawalAccount;
+		this.managed = false;
 	}
 
-	public static Card link(
+	public static Card sync(
 			User user,
 			String finCardNo,
 			String cvc,
@@ -84,10 +85,15 @@ public class Card {
 		return new Card(user, finCardNo, cvc, issuerCode, cardName, withdrawalAccount);
 	}
 
-	public boolean relink(Account withdrawalAccount) {
+	public void refresh(String cvc, String cardName, Account withdrawalAccount) {
+		this.cvc = requireText(cvc, "cvc");
+		this.cardName = requireText(cardName, "cardName");
 		if (withdrawalAccount != null) {
 			this.withdrawalAccount = withdrawalAccount;
 		}
+	}
+
+	public boolean manage() {
 		if (managed) {
 			return false;
 		}

@@ -43,7 +43,7 @@ public class Account {
 	private String alias;
 
 	@Column(name = "is_managed", nullable = false)
-	private boolean managed = true;
+	private boolean managed;
 
 	@Column(name = "is_income", nullable = false)
 	private boolean income = false;
@@ -56,13 +56,14 @@ public class Account {
 		this.user = Objects.requireNonNull(user, "user must not be null");
 		this.finAccountNo = requireText(finAccountNo, "finAccountNo");
 		this.bankCode = requireText(bankCode, "bankCode");
+		this.managed = false;
 	}
 
-	public static Account link(User user, String finAccountNo, String bankCode) {
+	public static Account sync(User user, String finAccountNo, String bankCode) {
 		return new Account(user, finAccountNo, bankCode);
 	}
 
-	public boolean relink() {
+	public boolean manage() {
 		if (managed) {
 			return false;
 		}

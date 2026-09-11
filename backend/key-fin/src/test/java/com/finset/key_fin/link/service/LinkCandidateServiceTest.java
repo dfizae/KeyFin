@@ -1,9 +1,7 @@
 package com.finset.key_fin.link.service;
 
 import com.finset.key_fin.account.entity.Account;
-import com.finset.key_fin.account.repository.AccountRepository;
 import com.finset.key_fin.card.entity.Card;
-import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.ErrorCode;
 import com.finset.key_fin.link.client.FinanceAccountClient;
@@ -12,9 +10,11 @@ import com.finset.key_fin.link.dto.response.FinanceAccount;
 import com.finset.key_fin.link.dto.response.FinanceCard;
 import com.finset.key_fin.link.dto.response.LinkCandidatesResponse;
 import com.finset.key_fin.link.exception.LinkErrorCode;
+import com.finset.key_fin.link.service.LinkAssetSyncService.SyncedAssets;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -24,11 +24,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,21 +38,28 @@ class LinkCandidateServiceTest {
 
 	private static final long USER_ID = 1L;
 	private static final String FIN_USER_KEY = "finance-user-key";
+	private static final FinanceAccount KB_ACCOUNT =
+			new FinanceAccount("004", "국민은행", "0041456503815897", "국민 수시입출금", "1", 3_000_000L, "KRW");
+	private static final FinanceAccount DEPOSIT_ACCOUNT =
+			new FinanceAccount("020", "우리은행", "0204667768182760", "우리 정기예금", "2", 8_003_477L, "KRW");
+	private static final FinanceAccount SHINHAN_ACCOUNT =
+			new FinanceAccount("088", "신한은행", "0880680068408149", "신한 수시입출금", "1", 125_000L, "KRW");
+	private static final FinanceCard SHINHAN_CARD = new FinanceCard(
+			"1005872701650761", "725", "1005-x", "1005", "신한카드", "신한 딥디저트 카드",
+			"20310910", "0880680068408149", "1"
+	);
 
 	@Mock
 	private UserRepository userRepository;
-
-	@Mock
-	private AccountRepository accountRepository;
-
-	@Mock
-	private CardRepository cardRepository;
 
 	@Mock
 	private FinanceAccountClient financeAccountClient;
 
 	@Mock
 	private FinanceCardClient financeCardClient;
+
+	@Mock
+	private LinkAssetSyncService linkAssetSyncService;
 
 	@InjectMocks
 	private LinkCandidateService linkCandidateService;
@@ -64,54 +73,49 @@ class LinkCandidateServiceTest {
 	}
 
 	@Test
-	void 수시입출금_계좌와_카드_후보를_연결_여부와_함께_반환한다() {
+	void 금융망_목록을_동기화한_뒤_KeyFin_ID와_관리_여부를_담아_반환한다() {
 		user.connectFinance(FIN_USER_KEY);
+		List<FinanceAccount> financeAccounts = List.of(KB_ACCOUNT, DEPOSIT_ACCOUNT, SHINHAN_ACCOUNT);
+		List<FinanceCard> financeCards = List.of(SHINHAN_CARD);
+		Account kb = Account.sync(user, "0041456503815897", "004");
+		ReflectionTestUtils.setField(kb, "id", 3L);
+		Account shinhan = Account.sync(user, "0880680068408149", "088");
+		ReflectionTestUtils.setField(shinhan, "id", 4L);
+		shinhan.manage();
+		Card card = Card.sync(user, "1005872701650761", "725", "1005", "신한 딥디저트 카드", shinhan);
+		ReflectionTestUtils.setField(card, "id", 7L);
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(financeAccountClient.findAccounts(FIN_USER_KEY)).willReturn(List.of(
-				new FinanceAccount("001", "한국은행", "0010011073486799", "한국은행 수시입출금", "1", 1_500_000L, "KRW"),
-				new FinanceAccount("020", "우리은행", "0204667768182760", "우리은행 정기예금", "2", 8_003_477L, "KRW"),
-				new FinanceAccount("032", "대구은행", "0323555042323510", "대구은행 수시입출금", "1", 200_000L, "KRW")
+		given(financeAccountClient.findAccounts(FIN_USER_KEY)).willReturn(financeAccounts);
+		given(financeCardClient.findCards(FIN_USER_KEY)).willReturn(financeCards);
+		given(linkAssetSyncService.sync(USER_ID, financeAccounts, financeCards)).willReturn(new SyncedAssets(
+				Map.of("0041456503815897", kb, "0880680068408149", shinhan),
+				Map.of("1005872701650761", card)
 		));
-		given(financeCardClient.findCards(FIN_USER_KEY)).willReturn(List.of(
-				new FinanceCard("1003198565339181", "149", "1003-a", "1003", "롯데카드", "디지로카 SEOUL", "20290409", "0323555042323510", "4"),
-				new FinanceCard("1005518816096479", "725", "1005-b", "1005", "신한카드", "신한 TRAVEL 카드", "20290403", "0323555042323510", "1")
-		));
-		Account linkedAccount = Account.link(user, "0323555042323510", "032");
-		ReflectionTestUtils.setField(linkedAccount, "id", 3L);
-		Card linkedCard = Card.link(user, "1003198565339181", "149", "1003", "디지로카 SEOUL", null);
-		ReflectionTestUtils.setField(linkedCard, "id", 7L);
-		Card unlinkedCard = Card.link(user, "1005518816096479", "725", "1005", "신한 TRAVEL 카드", null);
-		ReflectionTestUtils.setField(unlinkedCard, "id", 8L);
-		unlinkedCard.unlink();
-		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of(linkedAccount));
-		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of(linkedCard, unlinkedCard));
 
 		LinkCandidatesResponse response = linkCandidateService.getCandidates(USER_ID);
 
 		assertThat(response.accounts())
 				.extracting(
+						LinkCandidatesResponse.AccountCandidate::id,
 						LinkCandidatesResponse.AccountCandidate::finAccountNo,
-						LinkCandidatesResponse.AccountCandidate::linked,
-						LinkCandidatesResponse.AccountCandidate::linkedId
+						LinkCandidatesResponse.AccountCandidate::balance,
+						LinkCandidatesResponse.AccountCandidate::managed
 				)
 				.containsExactly(
-						org.assertj.core.groups.Tuple.tuple("0010011073486799", false, null),
-						org.assertj.core.groups.Tuple.tuple("0323555042323510", true, 3L)
+						Tuple.tuple(3L, "0041456503815897", 3_000_000L, false),
+						Tuple.tuple(4L, "0880680068408149", 125_000L, true)
 				);
-		assertThat(response.accounts().get(0).bankName()).isEqualTo("한국은행");
-		assertThat(response.accounts().get(0).balance()).isEqualTo(1_500_000L);
+		assertThat(response.accounts().get(0).bankName()).isEqualTo("국민은행");
 		assertThat(response.cards())
 				.extracting(
+						LinkCandidatesResponse.CardCandidate::id,
 						LinkCandidatesResponse.CardCandidate::cardNo,
-						LinkCandidatesResponse.CardCandidate::linked,
-						LinkCandidatesResponse.CardCandidate::linkedId
+						LinkCandidatesResponse.CardCandidate::issuerName,
+						LinkCandidatesResponse.CardCandidate::withdrawalAccountNo,
+						LinkCandidatesResponse.CardCandidate::managed
 				)
-				.containsExactly(
-						org.assertj.core.groups.Tuple.tuple("1003198565339181", true, 7L),
-						org.assertj.core.groups.Tuple.tuple("1005518816096479", false, null)
-				);
-		assertThat(response.cards().get(1).issuerName()).isEqualTo("신한카드");
-		assertThat(response.cards().get(1).withdrawalAccountNo()).isEqualTo("0323555042323510");
+				.containsExactly(Tuple.tuple(7L, "1005872701650761", "신한카드", "0880680068408149", false));
+		verify(linkAssetSyncService).sync(USER_ID, financeAccounts, financeCards);
 	}
 
 	@Test
@@ -120,8 +124,8 @@ class LinkCandidateServiceTest {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(financeAccountClient.findAccounts(FIN_USER_KEY)).willReturn(List.of());
 		given(financeCardClient.findCards(FIN_USER_KEY)).willReturn(List.of());
-		given(accountRepository.findAllByUserId(USER_ID)).willReturn(List.of());
-		given(cardRepository.findAllByUserId(USER_ID)).willReturn(List.of());
+		given(linkAssetSyncService.sync(USER_ID, List.of(), List.of()))
+				.willReturn(new SyncedAssets(Map.of(), Map.of()));
 
 		LinkCandidatesResponse response = linkCandidateService.getCandidates(USER_ID);
 
@@ -137,7 +141,7 @@ class LinkCandidateServiceTest {
 				LinkErrorCode.FINANCE_NOT_CONNECTED,
 				() -> linkCandidateService.getCandidates(USER_ID)
 		);
-		verifyNoInteractions(financeAccountClient, financeCardClient, accountRepository, cardRepository);
+		verifyNoInteractions(financeAccountClient, financeCardClient, linkAssetSyncService);
 	}
 
 	@Test
@@ -148,7 +152,7 @@ class LinkCandidateServiceTest {
 				UserErrorCode.USER_NOT_FOUND,
 				() -> linkCandidateService.getCandidates(USER_ID)
 		);
-		verifyNoInteractions(financeAccountClient, financeCardClient);
+		verifyNoInteractions(financeAccountClient, financeCardClient, linkAssetSyncService);
 	}
 
 	private void assertBusinessError(ErrorCode expectedErrorCode, Runnable action) {
