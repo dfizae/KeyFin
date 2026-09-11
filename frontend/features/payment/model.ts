@@ -85,6 +85,11 @@ export function toPaymentCalendar(dto: PaymentCalendarDto): PaymentCalendar {
   return { entries, shortageCount: entries.filter((entry) => !entry.prepared).length };
 }
 
+/** 자산 탭 "이번 달 정기결제 예정": 오늘 포함 이후 건을 날짜순으로 limit 건까지 */
+export function upcomingEntries(calendar: PaymentCalendar, todayKey: string, limit: number): CalendarEntry[] {
+  return calendar.entries.filter((entry) => entry.date >= todayKey).slice(0, limit);
+}
+
 /** 방 캘린더 에셋에 한 건만 띄우기 위한 선택. 오늘 이후 첫 건, 이번 달이 다 지났으면 마지막 건. */
 export function upcomingEntry(calendar: PaymentCalendar, todayKey: string): CalendarEntry | null {
   if (calendar.entries.length === 0) return null;

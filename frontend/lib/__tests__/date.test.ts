@@ -7,6 +7,7 @@ import {
   formatTime,
   getKSTParts,
   parseISODate,
+  parseKSTDateKey,
   toKSTDateKey,
 } from "@/lib/date";
 
@@ -48,6 +49,13 @@ describe("KST 변환", () => {
 
   it("Date 객체도 받는다", () => {
     expect(formatDate(new Date(UTC_NIGHT))).toBe("2026.08.30");
+  });
+
+  it("서버의 날짜만 있는 값(YYYY-MM-DD)은 KST 자정으로 읽는다", () => {
+    expect(formatMonthDay(parseKSTDateKey("2026-09-08"))).toBe("9월 8일 (화)");
+    expect(toKSTDateKey(parseKSTDateKey("2026-09-01"))).toBe("2026-09-01");
+    expect(() => parseKSTDateKey("2026-09-08T00:00:00")).toThrow(InvalidDateError);
+    expect(() => parseKSTDateKey("9월 8일")).toThrow(InvalidDateError);
   });
 
   it("잘못된 값이면 InvalidDateError를 던진다", () => {

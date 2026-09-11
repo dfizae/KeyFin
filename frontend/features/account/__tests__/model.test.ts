@@ -1,6 +1,9 @@
 import { createLinksMock, linkCandidatesMock, resetLinkMocks } from "@/api/mocks/link";
 import {
   canSubmitIncomeAccount,
+  linkedAccounts,
+  linkedCards,
+  totalBalance,
   toAccountSummary,
   toIncomeAccountOptions,
   type AccountSummaryDto,
@@ -57,5 +60,22 @@ describe("toIncomeAccountOptions · canSubmitIncomeAccount", () => {
     expect(canSubmitIncomeAccount(options, null)).toBe(false);
     expect(canSubmitIncomeAccount(options, 999)).toBe(false);
     expect(canSubmitIncomeAccount(options, options[0].accountId)).toBe(true);
+  });
+});
+
+describe("linkedAccounts · linkedCards · totalBalance", () => {
+  beforeEach(resetLinkMocks);
+
+  it("연결된 계좌·카드만 KeyFin id 를 달고, 총 자산은 연결 계좌 잔액 합계다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [2] });
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    const accounts = linkedAccounts(candidates);
+    expect(accounts.map((account) => account.accountId)).toEqual([1, 2]);
+    expect(linkedCards(candidates)).toEqual([expect.objectContaining({ cardId: 2, cardName: "노리 체크" })]);
+    expect(totalBalance(accounts)).toBe("2768400");
+  });
+
+  it("연결 계좌가 없으면 총 자산은 0 원이다", () => {
+    expect(totalBalance(linkedAccounts(toLinkCandidates(linkCandidatesMock())))).toBe("0");
   });
 });

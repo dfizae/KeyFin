@@ -25,6 +25,18 @@ export function parseISODate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 서버의 날짜 필드("YYYY-MM-DD" — txDate, 결제 캘린더 date)는 시간대가 없는 KST 날짜다.
+ * KST 자정(+09:00)을 붙여 읽어 formatMonthDay 등에 넘긴다 (규칙 80: 시간대 없는 값은 +09:00 을 붙여 파싱).
+ */
+export function parseKSTDateKey(key: string): Date {
+  const parsed = DATE_KEY.test(key) ? parseISODate(`${key}T00:00:00+09:00`) : null;
+  if (!parsed) throw new InvalidDateError();
+  return parsed;
+}
+
 function toDate(value: string | Date): Date {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) throw new InvalidDateError();
