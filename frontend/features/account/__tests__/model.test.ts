@@ -33,24 +33,26 @@ describe("toIncomeAccountOptions · canSubmitIncomeAccount", () => {
   beforeEach(resetLinkMocks);
 
   it("연결된 계좌만 KeyFin id 를 달고 선택지가 된다", () => {
+    createLinksMock({ accountIds: [3], cardIds: [1] });
     const options = toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()));
     expect(options).toHaveLength(1);
     expect(options[0]).toMatchObject({ accountId: 3, bankCode: "090", bankName: "카카오뱅크" });
   });
 
-  it("방금 연결한 계좌도 선택지에 들어온다", () => {
-    createLinksMock({ accountIds: [1], cardIds: [] });
+  it("여러 계좌를 연결하면 후보 목록 순서대로 나온다", () => {
+    createLinksMock({ accountIds: [3, 1], cardIds: [] });
     const options = toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()));
     expect(options.map((option) => option.bankName)).toEqual(["신한은행", "카카오뱅크"]);
   });
 
   it("카드만 연결했거나 연결된 계좌가 없으면 빈 목록이다", () => {
-    const candidates = toLinkCandidates(linkCandidatesMock());
-    const noLinkedAccounts = { ...candidates, accounts: candidates.accounts.filter((account) => !account.linked) };
-    expect(toIncomeAccountOptions(noLinkedAccounts)).toEqual([]);
+    expect(toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()))).toEqual([]);
+    createLinksMock({ accountIds: [], cardIds: [1] });
+    expect(toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()))).toEqual([]);
   });
 
   it("목록에 있는 계좌를 골랐을 때만 지정할 수 있다", () => {
+    createLinksMock({ accountIds: [3], cardIds: [] });
     const options = toIncomeAccountOptions(toLinkCandidates(linkCandidatesMock()));
     expect(canSubmitIncomeAccount(options, null)).toBe(false);
     expect(canSubmitIncomeAccount(options, 999)).toBe(false);

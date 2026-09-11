@@ -29,7 +29,6 @@ export function financeStatusMock(): FinanceStatusDto {
 export function resetLinkMocks(): void {
   connected = false;
   managedAccounts.clear();
-  managedAccounts.add(INITIAL_MANAGED_ACCOUNT_ID);
   managedCards.clear();
 }
 
@@ -48,7 +47,7 @@ export function connectFinanceMock({ financeEmail }: FinanceLinkRequest): Financ
 /**
  * 연결 후보 목록. 서버는 조회할 때 금융망 목록을 KeyFin 에 동기화해 id 를 붙인다 — 목은 고정 id 로 둔다(계좌·카드는 id 공간이 따로다).
  * 로고 있는 은행(088·004·090)과 로고 없는 폴백 타일(999)을 섞어 두 경우를 다 보이게 했다.
- * 카카오뱅크 계좌는 처음부터 managed=true 라 '연결됨'으로 잠긴 행을 확인할 수 있다.
+ * 서버처럼 처음에는 전부 미선택(managed=false)이고, 연결한 뒤 다시 들어오면 '연결됨'으로 잠긴다.
  */
 const CANDIDATE_ACCOUNTS: readonly Omit<LinkCandidateAccountDto, "managed">[] = [
   { id: 1, finAccountNo: "0885401234567890", bankCode: "088", bankName: "신한은행", balance: 2_450_000 },
@@ -62,10 +61,8 @@ const CANDIDATE_CARDS: readonly Omit<LinkCandidateCardDto, "managed">[] = [
   { id: 2, cardNo: "9410432143214321", issuerName: "국민카드", cardName: "노리 체크", withdrawalAccountNo: "0041202345678901" },
 ];
 
-const INITIAL_MANAGED_ACCOUNT_ID = 3;
-
 /** 앱이 도는 동안만 유지되는 관리 대상(is_managed=true) id. 서버의 accounts·cards 테이블 자리를 대신한다 */
-const managedAccounts = new Set<number>([INITIAL_MANAGED_ACCOUNT_ID]);
+const managedAccounts = new Set<number>();
 const managedCards = new Set<number>();
 
 export function linkCandidatesMock(): LinkCandidatesDto {

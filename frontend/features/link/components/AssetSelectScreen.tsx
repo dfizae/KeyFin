@@ -15,16 +15,17 @@ import { CandidatesErrorState } from "@/features/link/components/CandidatesError
 import { linkErrorMessage } from "@/features/link/errors";
 import {
   areAllLinksSelected,
-  canSubmitLinks,
   countLinkRequest,
   hasNoLinkCandidates,
   isLinkSelectable,
+  linkCtaAction,
   toggleLinkSelection,
   toggleSelectAllLinks,
   toLinkRequest,
   type LinkAccount,
   type LinkCandidates,
   type LinkCard,
+  type LinkCtaAction,
 } from "@/features/link/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,12 @@ const NEXT_ROUTE = "/onboarding/income-account";
 const MIN_BOTTOM_INSET = 12;
 
 const EMPTY_CANDIDATES: LinkCandidates = { accounts: [], cards: [] };
+
+function ctaLabel(action: LinkCtaAction, count: number): string {
+  if (action === "link") return `${count}개 연결하기`;
+  if (action === "next") return "다음";
+  return "연결하기";
+}
 
 // Pencil asset-select (WVh9e) · loading (WjG6u) · empty (V4e93x) · error (U9gpA).
 // 온보딩 화면이라 탭바가 없고 CTA 가 하단에 고정된다.
@@ -49,13 +56,17 @@ function AssetSelectScreen() {
 
   const data = candidates.data ?? EMPTY_CANDIDATES;
   const request = toLinkRequest(data, selected);
-  const count = countLinkRequest(request);
-  const canSubmit = canSubmitLinks(request) && !createLinks.isPending;
-  const ctaLabel = count > 0 ? `${count}개 연결하기` : "연결하기";
+  const action = linkCtaAction(data, request);
+  const canPress = action !== "none" && !createLinks.isPending;
+  const label = ctaLabel(action, countLinkRequest(request));
   const errorMessage = createLinks.isError ? linkErrorMessage(createLinks.error) : null;
 
-  const handleSubmit = () => {
-    if (!canSubmit) return;
+  const handlePress = () => {
+    if (!canPress) return;
+    if (action === "next") {
+      router.replace(NEXT_ROUTE);
+      return;
+    }
     createLinks.mutate(request, { onSuccess: () => router.replace(NEXT_ROUTE) });
   };
 
@@ -133,11 +144,11 @@ function AssetSelectScreen() {
         <Button
           size="lg"
           className="h-button-lg rounded-lg"
-          onPress={handleSubmit}
-          disabled={!canSubmit}
-          accessibilityLabel={ctaLabel}
+          onPress={handlePress}
+          disabled={!canPress}
+          accessibilityLabel={label}
         >
-          <Text>{createLinks.isPending ? "연결하는 중…" : ctaLabel}</Text>
+          <Text>{createLinks.isPending ? "연결하는 중…" : label}</Text>
         </Button>
       </View>
     </View>

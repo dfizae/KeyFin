@@ -155,9 +155,21 @@ export function countLinkRequest(request: LinkRequest): number {
   return request.accountIds.length + request.cardIds.length;
 }
 
-/** CTA 활성 조건: 실제로 보낼 것이 하나라도 있어야 한다 */
+/** 실제로 보낼 것이 하나라도 있어야 연결 요청을 한다 */
 export function canSubmitLinks(request: LinkRequest): boolean {
   return countLinkRequest(request) > 0;
+}
+
+/**
+ * 하단 버튼이 할 일. 새로 고른 항목이 있으면 연결하고, 없어도 이미 연결된 항목이 있으면 요청 없이 다음 단계로 간다.
+ * 온보딩을 다시 시작한 사용자가 전부 연결해 둔 상태로 들어와도 막히지 않게 하려는 것이다.
+ */
+export type LinkCtaAction = "link" | "next" | "none";
+
+export function linkCtaAction(candidates: LinkCandidates, request: LinkRequest): LinkCtaAction {
+  if (canSubmitLinks(request)) return "link";
+  const hasLinked = candidates.accounts.some((a) => a.linked) || candidates.cards.some((c) => c.linked);
+  return hasLinked ? "next" : "none";
 }
 
 /** 후보가 아예 없으면 빈 상태 화면으로 간다 (시안 asset-select/empty) */

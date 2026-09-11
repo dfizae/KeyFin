@@ -15,6 +15,7 @@ import {
   canSubmitFinanceEmail,
   canSubmitLinks,
   countLinkRequest,
+  linkCtaAction,
   FINANCE_EMAIL_MAX_LENGTH,
   hasNoLinkCandidates,
   isLinkSelectable,
@@ -118,11 +119,17 @@ describe("toLinkCandidates", () => {
     expect(() => toLinkCandidates(dto)).toThrow(ContractMismatchError);
   });
 
-  it("managed 를 linked 로 옮기고, 연결 여부와 무관하게 KeyFin id 를 들고 있다", () => {
+  it("처음에는 전부 미선택이고, 연결 여부와 무관하게 KeyFin id 를 들고 있다", () => {
     const { accounts, cards } = toLinkCandidates(linkCandidatesMock());
-    expect(accounts.find((a) => a.linked)).toMatchObject({ id: 3, bankName: "카카오뱅크" });
+    expect([...accounts, ...cards].some((item) => item.linked)).toBe(false);
     expect(accounts.map((a) => a.id)).toEqual([1, 2, 3, 4]);
     expect(cards.map((c) => c.id)).toEqual([1, 2]);
+  });
+
+  it("managed 를 linked 로 옮긴다", () => {
+    createLinksMock({ accountIds: [3], cardIds: [] });
+    const { accounts } = toLinkCandidates(linkCandidatesMock());
+    expect(accounts.filter((a) => a.linked)).toEqual([expect.objectContaining({ id: 3, bankName: "카카오뱅크" })]);
   });
 
   it("id 가 양의 정수가 아니면 계약 불일치로 막는다", () => {
@@ -147,7 +154,7 @@ describe("toggleLinkSelection", () => {
 });
 
 describe("toLinkRequest · canSubmitLinks", () => {
-  it("선택한 계좌·카드를 번호 목록으로 나눠 담는다", () => {
+  it("선택한 계좌·카드를 KeyFin id 목록으로 나눠 담는다", () => {
     const candidates = toLinkCandidates(linkCandidatesMock());
     const request = toLinkRequest(candidates, new Set(["0885401234567890", "5310123412341234"]));
     expect(request).toEqual({ accountIds: [1], cardIds: [1] });
@@ -156,6 +163,7 @@ describe("toLinkRequest · canSubmitLinks", () => {
   });
 
   it("이미 연결된 항목은 골라도 요청에 넣지 않는다", () => {
+    createLinksMock({ accountIds: [3], cardIds: [] });
     const candidates = toLinkCandidates(linkCandidatesMock());
     const linked = candidates.accounts.find((a) => a.linked);
     expect(linked).toBeDefined();
@@ -198,6 +206,7 @@ describe("createLinksMock", () => {
 
 describe("selectableLinkIds · areAllLinksSelected · toggleSelectAllLinks", () => {
   it("전체 선택은 이미 연결된 항목을 빼고 고른다", () => {
+    createLinksMock({ accountIds: [3], cardIds: [] });
     const candidates = toLinkCandidates(linkCandidatesMock());
     const linked = candidates.accounts.find((account) => account.linked);
     expect(linked).toBeDefined();
@@ -228,5 +237,29 @@ describe("selectableLinkIds · areAllLinksSelected · toggleSelectAllLinks", () 
 
   it("고를 수 있는 항목이 없으면 전체 선택된 상태로 보지 않는다", () => {
     expect(areAllLinksSelected({ accounts: [], cards: [] }, new Set())).toBe(false);
+  });
+});
+
+describe("linkCtaAction", () => {
+  it("연결된 것도 고른 것도 없으면 누를 수 없다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    expect(linkCtaAction(candidates, toLinkRequest(candidates, new Set()))).toBe("none");
+  });
+
+  it("새로 고른 항목이 있으면 연결한다", () => {
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    expect(linkCtaAction(candidates, toLinkRequest(candidates, new Set(["0885401234567890"])))).toBe("link");
+  });
+
+  it("이미 연결된 항목이 있고 새로 고른 게 없으면 그대로 다음 단계로 간다", () => {
+    createLinksMock({ accountIds: [], cardIds: [2] });
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    expect(linkCtaAction(candidates, toLinkRequest(candidates, new Set()))).toBe("next");
+  });
+
+  it("이미 연결된 항목이 있어도 새로 고르면 연결이 먼저다", () => {
+    createLinksMock({ accountIds: [3], cardIds: [] });
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    expect(linkCtaAction(candidates, toLinkRequest(candidates, new Set(["5310123412341234"])))).toBe("link");
   });
 });
