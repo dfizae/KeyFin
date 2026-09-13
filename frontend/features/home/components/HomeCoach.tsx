@@ -3,9 +3,8 @@ import * as React from "react";
 import { CoachBubble } from "@/features/home/components/CoachBubble";
 import { useClassifyTransaction, usePendingTransactions, useSubcategories } from "@/features/transaction/api/queries";
 import { SubcategorySheet } from "@/features/transaction/components/SubcategorySheet";
+import { classifyErrorMessage } from "@/features/transaction/errors";
 import type { ClassifyRequest } from "@/features/transaction/model";
-
-export const CLASSIFY_ERROR_MESSAGE = "분류를 저장하지 못했어요. 다시 시도해 주세요.";
 
 type HomeCoachProps = {
   /** 캔버스 폭(pt) */
@@ -37,7 +36,7 @@ function HomeCoach({ width }: HomeCoachProps) {
         width={width}
         transaction={transaction}
         isPending={classify.isPending}
-        errorMessage={classify.isError ? CLASSIFY_ERROR_MESSAGE : null}
+        errorMessage={classify.isError ? classifyErrorMessage(classify.error) : null}
         onConfirm={() => transaction && submit({ subcategoryId: transaction.subcategoryId })}
         onOther={() => setSheetOpen(true)}
       />

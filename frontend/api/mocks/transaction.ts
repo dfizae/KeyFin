@@ -39,15 +39,30 @@ const PENDING: TransactionDto[] = [
   },
 ];
 
-const classifiedIds = new Set<number>();
+/** 확정 기록. 서버처럼 목도 상태를 들고 있어야 다시 조회할 때 바뀐 분류가 보인다 */
+const classifications = new Map<number, ClassifyRequest>();
+
+/** 확정한 거래는 목록에서도 바뀐 분류·상태로 나온다 (PENDING 목록에서는 빠진다) */
+function applyClassification(dto: TransactionDto): TransactionDto {
+  const classification = classifications.get(dto.id);
+  if (classification === undefined) return dto;
+  if ("excludeTag" in classification) return { ...dto, confirmStatus: "CONFIRMED", excludeTag: classification.excludeTag };
+  return {
+    ...dto,
+    confirmStatus: "CONFIRMED",
+    envelopeId: Math.floor(classification.subcategoryId / 100),
+    subcategoryId: classification.subcategoryId,
+    subcategoryName: subcategoryName(classification.subcategoryId),
+  };
+}
 
 export function pendingTransactionsMock(): PendingTransactionsDto {
-  return { items: PENDING.filter((item) => !classifiedIds.has(item.id)), nextCursor: null };
+  return { items: PENDING.filter((item) => !classifications.has(item.id)), nextCursor: null };
 }
 
 /** 확정 응답 예시. 외식 봉투 잔액 132,000 (계약 사본 예시 값) */
 export function classifyTransactionMock(transactionId: number, request: ClassifyRequest): ClassifyResponseDto {
-  classifiedIds.add(transactionId);
+  classifications.set(transactionId, request);
   const item = PENDING.find((candidate) => candidate.id === transactionId);
   return {
     confirmStatus: "CONFIRMED",
@@ -85,7 +100,7 @@ export const subcategoriesMock: SubcategoryListDto = {
 
 /** 테스트·개발 재시작용: 확정 기록을 비운다 */
 export function resetTransactionMocks(): void {
-  classifiedIds.clear();
+  classifications.clear();
 }
 
 /**
@@ -164,6 +179,7 @@ export type TransactionListMockQuery = {
 
 export function transactionListMock(query: TransactionListMockQuery, todayKey: string): TransactionListDto {
   const matched = monthTransactions(query.month, todayKey)
+    .map(({ dto, source }) => ({ dto: applyClassification(dto), source }))
     .filter(
       ({ dto, source }) =>
         (query.envelopeId === undefined || dto.envelopeId === query.envelopeId) &&

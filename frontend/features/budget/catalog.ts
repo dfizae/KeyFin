@@ -24,3 +24,8 @@ export function envelopeShortName(envelopeId: number, fallback: string): string 
 export function envelopeIcon(envelopeId: number): LucideIcon {
   return ENVELOPE_CATALOG.find((envelope) => envelope.id === envelopeId)?.icon ?? Ellipsis;
 }
+
+/** 봉투 이름. 거래처럼 서버가 봉투 이름을 주지 않는 응답에서 쓴다. 카탈로그에 없는 id 는 "기타" */
+export function envelopeName(envelopeId: number): string {
+  return ENVELOPE_CATALOG.find((envelope) => envelope.id === envelopeId)?.name ?? "기타";
+}

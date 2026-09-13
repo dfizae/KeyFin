@@ -22,7 +22,7 @@ const ASSETS_ROUTE = "/assets";
 type FilterParams = { month?: string; envelopeId?: string; accountId?: string; cardId?: string };
 
 // 거래 내역 전체보기 (자산 탭 "전체보기", FR-TXN-09). Pencil 시안 없음 — 자산 탭 행 모양을 따른다.
-// 필터는 검색 파라미터로 둔다(규칙 10: 딥링크로 복원되는 필터). 행 탭(거래 상세 PAGE-21)은 아직 없다.
+// 필터는 검색 파라미터로 둔다(규칙 10: 딥링크로 복원되는 필터). 행을 탭하면 거래 상세(PAGE-21)로 간다.
 function TransactionListScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -70,7 +70,9 @@ function TransactionListScreen() {
         <FlatList
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
-          renderItem={({ item }) => <TransactionRow transaction={item} />}
+          renderItem={({ item }) => (
+            <TransactionRow transaction={item} onPress={() => router.push(`/transaction/${item.id}`)} />
+          )}
           contentContainerClassName="px-6 pb-8"
           onEndReachedThreshold={0.4}
           onEndReached={() => {

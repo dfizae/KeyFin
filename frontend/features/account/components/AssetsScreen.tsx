@@ -275,7 +275,11 @@ function RecentTransactions() {
       ) : (
         <View>
           {recent.data.items.map((transaction) => (
-            <TransactionRow key={transaction.id} transaction={transaction} />
+            <TransactionRow
+              key={transaction.id}
+              transaction={transaction}
+              onPress={() => router.push(`${TRANSACTIONS_ROUTE}/${transaction.id}`)}
+            />
           ))}
         </View>
       )}
