@@ -1,10 +1,14 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  approveTransfer,
   createFixedExpense,
   deleteFixedExpense,
   getPaymentCalendar,
+  getTransfers,
+  postponeTransfer,
   updateFixedExpense,
+  type TransferListParams,
 } from "@/features/payment/api/payment.api";
 import type { CalendarEntry, PaymentCalendar } from "@/features/payment/model";
 import { roomKeys } from "@/features/room/api/queries";
@@ -14,6 +18,9 @@ export const paymentKeys = {
   /** 고정지출·이체 변경 시 달 구분 없이 무효화하는 키 (docs/api-guide.md §무효화) */
   calendar: () => [...paymentKeys.all, "calendar"] as const,
   calendarMonth: (month: string) => [...paymentKeys.calendar(), month] as const,
+  /** 이체 제안·이력. 승인·연기 뒤 달 구분 없이 무효화한다 */
+  transfers: () => [...paymentKeys.all, "transfers"] as const,
+  transferList: (params: TransferListParams) => [...paymentKeys.transfers(), params] as const,
 };
 
 export function paymentCalendarQueryOptions(month: string) {
@@ -70,4 +77,41 @@ export function useCachedFixedExpense(fixedExpenseId: number | null): CalendarEn
     if (found !== undefined) return found;
   }
   return null;
+}
+
+export function transferListQueryOptions(params: TransferListParams) {
+  return queryOptions({
+    queryKey: paymentKeys.transferList(params),
+    queryFn: ({ signal }) => getTransfers(params, signal),
+    staleTime: 30_000,
+  });
+}
+
+/** 이체 승인 화면(PAGE-25)이 쓰는 제안 목록. 단건 조회가 없어 목록에서 id 를 찾는다 */
+export function useTransfers(params: TransferListParams) {
+  return useQuery(transferListQueryOptions(params));
+}
+
+/**
+ * 승인은 돈이 실제로 움직인다 (규칙 80): 자동 재시도를 끄고, 성공하면 제안 목록과 결제 캘린더(준비 상태)를 다시 받는다.
+ * 네트워크 오류로 결과를 모를 때도 목록을 다시 받아 서버 상태로 확정한다.
+ */
+export function useApproveTransfer() {
+  const queryClient = useQueryClient();
+  const invalidate = () => {
+    void queryClient.invalidateQueries({ queryKey: paymentKeys.transfers() });
+    void queryClient.invalidateQueries({ queryKey: paymentKeys.calendar() });
+    void queryClient.invalidateQueries({ queryKey: roomKeys.all });
+  };
+  return useMutation({ mutationFn: approveTransfer, retry: false, onSuccess: invalidate, onError: invalidate });
+}
+
+/** 연기는 제안을 PROPOSED 로 남긴다. 목록만 다시 받는다 */
+export function usePostponeTransfer() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: postponeTransfer,
+    retry: false,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: paymentKeys.transfers() }),
+  });
 }

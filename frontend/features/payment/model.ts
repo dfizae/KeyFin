@@ -197,3 +197,96 @@ export function parseCalendarMonth(value: string | string[] | undefined, current
   const raw = Array.isArray(value) ? value[0] : value;
   return raw !== undefined && MONTH_KEY.test(raw) ? raw : currentMonth;
 }
+
+/**
+ * GET /transfers 계약 (docs/api-contract.md PAYMENT, FR-PAY-03·08).
+ * 상태는 PROPOSED → APPROVED → EXECUTED / FAILED / CANCELED 이고 모르는 값은 UNKNOWN 으로 흡수한다 (규칙 80).
+ */
+export const TRANSFER_STATUSES = ["PROPOSED", "APPROVED", "EXECUTED", "FAILED", "CANCELED"] as const;
+export type TransferStatus = (typeof TRANSFER_STATUSES)[number] | "UNKNOWN";
+
+export type TransferDto = {
+  id: number;
+  status: string;
+  /** "2026-09-15" */
+  scheduledDate: string;
+  requiredAmount: number;
+  fromAccountId: number;
+  toAccountId: number;
+  /** 실행된 이체만 "2026-09-14T07:12:00" */
+  executedAt?: string | null;
+  /** 실패한 이체만 */
+  failReason?: string | null;
+  purpose: { type: string; name: string };
+};
+
+export type TransferListDto = { items: TransferDto[] };
+
+export type Transfer = {
+  id: number;
+  status: TransferStatus;
+  scheduledDate: string;
+  requiredAmount: KRW;
+  fromAccountId: number;
+  toAccountId: number;
+  executedAt: string | null;
+  failReason: string | null;
+  purposeName: string;
+  purposeType: string;
+};
+
+export type ApproveTransferDto = { status: string; executedAt: string };
+
+const TRANSFER_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function toTransferStatus(raw: string): TransferStatus {
+  return (TRANSFER_STATUSES as readonly string[]).includes(raw) ? (raw as TransferStatus) : "UNKNOWN";
+}
+
+export function toTransfer(dto: TransferDto): Transfer {
+  if (!TRANSFER_DATE.test(dto.scheduledDate)) throw new ContractMismatchError("scheduledDate");
+  return {
+    id: dto.id,
+    status: toTransferStatus(dto.status),
+    scheduledDate: dto.scheduledDate,
+    requiredAmount: won(dto.requiredAmount, "requiredAmount"),
+    fromAccountId: dto.fromAccountId,
+    toAccountId: dto.toAccountId,
+    executedAt: dto.executedAt ?? null,
+    failReason: dto.failReason ?? null,
+    purposeName: dto.purpose.name,
+    purposeType: dto.purpose.type,
+  };
+}
+
+export function toTransfers(dto: TransferListDto): Transfer[] {
+  return dto.items.map(toTransfer);
+}
+
+export function findTransfer(transfers: Transfer[], id: number): Transfer | null {
+  return transfers.find((transfer) => transfer.id === id) ?? null;
+}
+
+/** 승인·연기를 보낼 수 있는 상태는 제안뿐이다. 나머지는 서버가 이미 끝냈거나 진행 중이다 */
+export function canApproveTransfer(transfer: Transfer): boolean {
+  return transfer.status === "PROPOSED";
+}
+
+const TRANSFER_STATUS_LABELS: Record<TransferStatus, string> = {
+  PROPOSED: "승인 대기",
+  APPROVED: "처리 중",
+  EXECUTED: "이체 완료",
+  FAILED: "이체 실패",
+  CANCELED: "취소됨",
+  UNKNOWN: "확인 중",
+};
+
+export function transferStatusLabel(status: TransferStatus): string {
+  return TRANSFER_STATUS_LABELS[status];
+}
+
+/** 이체 승인 라우트(`/payment/transfer/[id]`)의 id. 양의 정수가 아니면 null — 푸시·딥링크 값은 믿지 않는다 (규칙 80) */
+export function parseTransferId(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== undefined && /^[1-9]\d*$/.test(raw) ? Number(raw) : null;
+}

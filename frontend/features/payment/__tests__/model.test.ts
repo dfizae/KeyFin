@@ -6,13 +6,19 @@ import {
   resetPaymentMocks,
   updateFixedExpenseMock,
 } from "@/api/mocks/payment";
+import { approveTransferMock, resetTransferMocks, transferListMock } from "@/api/mocks/transfer";
 import {
+  canApproveTransfer,
+  findTransfer,
   fixedExpenseFormError,
   groupEntriesByDate,
   parseCalendarMonth,
   parseFixedExpenseRoute,
+  parseTransferId,
   toFixedExpenseRequest,
   toPaymentCalendar,
+  toTransfers,
+  transferStatusLabel,
   upcomingEntries,
   upcomingEntry,
   type FixedExpenseForm,
@@ -188,5 +194,62 @@ describe("고정지출 목 — 등록·수정·삭제가 캘린더에 반영된�
 
     deleteFixedExpenseMock(11);
     expect(toPaymentCalendar(paymentCalendarMock(MONTH)).entries.some((entry) => entry.fixedExpenseId === 11)).toBe(false);
+  });
+});
+
+describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", () => {
+  afterEach(() => resetTransferMocks());
+
+  it("목록을 화면 모델로 바꾸고 상태를 유니온으로 옮긴다", () => {
+    const transfers = toTransfers(transferListMock(MONTH));
+
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({
+      id: 501,
+      status: "PROPOSED",
+      scheduledDate: "2026-09-15",
+      requiredAmount: "230000",
+      purposeName: "월세",
+      executedAt: null,
+      failReason: null,
+    });
+    expect(transfers[1]).toMatchObject({ status: "FAILED", failReason: "출금 계좌 잔액이 부족해 이체하지 못했어요." });
+  });
+
+  it("모르는 상태는 UNKNOWN 으로 흡수하고 '확인 중' 으로 적는다", () => {
+    const [dto] = transferListMock(MONTH).items;
+    const transfer = toTransfers({ items: [{ ...dto, status: "SETTLING" }] })[0];
+
+    expect(transfer.status).toBe("UNKNOWN");
+    expect(transferStatusLabel(transfer.status)).toBe("확인 중");
+    expect(canApproveTransfer(transfer)).toBe(false);
+  });
+
+  it("승인할 수 있는 상태는 제안뿐이고, 목록에서 id 로 찾는다", () => {
+    const transfers = toTransfers(transferListMock(MONTH));
+
+    expect(canApproveTransfer(transfers[0])).toBe(true);
+    expect(canApproveTransfer(transfers[1])).toBe(false);
+    expect(findTransfer(transfers, 501)?.id).toBe(501);
+    expect(findTransfer(transfers, 999)).toBeNull();
+  });
+
+  it("승인하면 목에서도 EXECUTED 로 남아 다시 조회할 때 결과가 보인다", () => {
+    transferListMock(MONTH);
+    const result = approveTransferMock(501, "2026-09-14T07:12:00");
+
+    expect(result).toEqual({ status: "EXECUTED", executedAt: "2026-09-14T07:12:00" });
+    const after = toTransfers(transferListMock(MONTH)).find((transfer) => transfer.id === 501);
+    expect(after).toMatchObject({ status: "EXECUTED", executedAt: "2026-09-14T07:12:00" });
+  });
+});
+
+describe("parseTransferId", () => {
+  it("양의 정수만 이체 id 로 받는다 (푸시·딥링크 값은 믿지 않는다)", () => {
+    expect(parseTransferId("501")).toBe(501);
+    expect(parseTransferId(["502", "503"])).toBe(502);
+    expect(parseTransferId("0")).toBeNull();
+    expect(parseTransferId("501; DROP")).toBeNull();
+    expect(parseTransferId(undefined)).toBeNull();
   });
 });
