@@ -190,16 +190,6 @@ export function reclassifyBlockedReason(transaction: Transaction): string | null
 
 const MONTH_KEY = /^(\d{4})(0[1-9]|1[0-2])$/;
 const POSITIVE_ID = /^[1-9]\d*$/;
-const MONTHS_PER_YEAR = 12;
-
-/** "202609" 을 delta 달만큼 옮긴다. 형식이 틀린 키는 그대로 돌려준다 */
-export function shiftMonthKey(key: string, delta: number): string {
-  const matched = MONTH_KEY.exec(key);
-  if (!matched) return key;
-  const index = Number(matched[1]) * MONTHS_PER_YEAR + Number(matched[2]) - 1 + delta;
-  return `${Math.floor(index / MONTHS_PER_YEAR)}${String((index % MONTHS_PER_YEAR) + 1).padStart(2, "0")}`;
-}
-
 /** "202609" → "2026년 9월" */
 export function monthFilterLabel(key: string): string {
   const matched = MONTH_KEY.exec(key);

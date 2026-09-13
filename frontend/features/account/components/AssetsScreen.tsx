@@ -22,6 +22,7 @@ import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 const TRANSACTIONS_ROUTE = "/transaction";
+const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
 
 /** 시안(UjYhB)은 2건을 보여 준다. 남은 건이 많아도 가까운 순으로 이만큼만 둔다 */
 const UPCOMING_PAYMENT_LIMIT = 3;
@@ -34,7 +35,7 @@ const ASSET_TABS: { key: AssetTab; label: string }[] = [
 ];
 
 // PAGE-11 자산 (Pencil 자산관리 UjYhB). 사용자 결정(2026-09-11): 대출 탭·송금 버튼은 KeyFin 명세에 없어 빼고,
-// 햄버거는 자리만 두고 비활성, 정기결제 예정은 넣되 '관리'는 결제 캘린더(PAGE-24)가 생기기 전까지 숨긴다.
+// 햄버거는 자리만 두고 비활성, 정기결제 예정의 '관리'는 결제 캘린더(PAGE-24)로 간다.
 // 계좌는 GET /accounts(잔액 스냅샷), 카드는 카드 API 가 없어 금융망 후보에서 온다 — 카드 탭을 열 때만 금융망을 부른다.
 // 섹션마다 따로 불러와 한쪽이 실패해도 나머지는 보인다.
 function AssetsScreen() {
@@ -197,15 +198,22 @@ function CardList({ cards }: { cards: LinkedCard[] }) {
 }
 
 // Pencil RecurringPayments (Csfwz). 데이터는 홈 캘린더와 같은 GET /payments/calendar 캐시를 쓴다.
+// '관리'는 결제 캘린더(PAGE-24)가 생겨 2026-09-13 에 열었다.
 function UpcomingPayments() {
+  const router = useRouter();
   const calendar = usePaymentCalendar(currentMonthKey());
   const entries = calendar.data ? upcomingEntries(calendar.data, currentDateKey(), UPCOMING_PAYMENT_LIMIT) : [];
 
   return (
     <View className="gap-3 p-6">
-      <Text className="text-h2 text-foreground" accessibilityRole="header">
-        이번 달 정기결제 예정
-      </Text>
+      <View className="flex-row items-center justify-between">
+        <Text className="text-h2 text-foreground" accessibilityRole="header">
+          이번 달 정기결제 예정
+        </Text>
+        <Pressable accessibilityRole="link" accessibilityLabel="결제 캘린더 열기" hitSlop={10} onPress={() => router.push(PAYMENT_CALENDAR_ROUTE)}>
+          <Text className="text-caption text-primary">관리</Text>
+        </Pressable>
+      </View>
       {calendar.isPending ? (
         <AssetSkeleton />
       ) : calendar.isError ? (
