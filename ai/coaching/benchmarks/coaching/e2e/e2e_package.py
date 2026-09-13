@@ -55,6 +55,7 @@ def safe_path(name: str) -> PurePosixPath:
 
 
 def write_archive(payloads: dict[str, bytes], output: Path) -> BundleManifest:
+    """검증한 payload와 실제 Report.cases 수를 묶어 재검증 가능한 증거를 작성한다."""
     sidecar = output.with_suffix(".manifest.json")
     if output.exists() or sidecar.exists():
         raise FileExistsError("Evidence archive outputs must be new")
@@ -63,6 +64,7 @@ def write_archive(payloads: dict[str, bytes], output: Path) -> BundleManifest:
         for name, data in sorted(payloads.items())
     )
     validate_entries(entries)
+    case_count = report_case_count(payloads)
     output.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(output, "x", compression=ZIP_DEFLATED, compresslevel=6) as archive:
         for entry in entries:
@@ -71,10 +73,16 @@ def write_archive(payloads: dict[str, bytes], output: Path) -> BundleManifest:
             info.external_attr = 0o644 << 16
             archive.writestr(info, payloads[entry.path])
     manifest = BundleManifest(
-        archive_sha256=hashlib.sha256(output.read_bytes()).hexdigest(), case_count=24, entries=entries
+        archive_sha256=hashlib.sha256(output.read_bytes()).hexdigest(), case_count=case_count, entries=entries
     )
     _ = sidecar.write_bytes(manifest.model_dump_json(indent=2).encode("utf-8"))
     return manifest
+
+
+def report_case_count(payloads: dict[str, bytes]) -> int:
+    """실제 Report.cases 길이를 기록하고 검증한다. 보고서가 없는 일반 증거는 사례 수 0이다."""
+    report = payloads.get("report.json")
+    return len(Report.model_validate_json(report).cases) if report is not None else 0
 
 
 def validate_entries(entries: tuple[BundleEntry, ...]) -> None:
@@ -88,6 +96,7 @@ def validate_entries(entries: tuple[BundleEntry, ...]) -> None:
 
 
 def verified_payloads(path: Path) -> tuple[BundleManifest, dict[str, bytes]]:
+    """파일 해시와 보고서의 실제 사례 수까지 대조해 manifest의 완료 분모를 검증한다."""
     sidecar = path.with_suffix(".manifest.json")
     if path.stat().st_size > _MAX_BYTES or sidecar.stat().st_size > 128 * 1024:
         raise ValueError("Archive or manifest exceeds its byte limit")
@@ -108,6 +117,8 @@ def verified_payloads(path: Path) -> tuple[BundleManifest, dict[str, bytes]]:
             if hashlib.sha256(data).hexdigest() != entry.sha256:
                 raise ValueError("Archived file SHA-256 mismatch")
             payloads[entry.path] = data
+    if manifest.case_count != report_case_count(payloads):
+        raise ValueError("Evidence manifest case count differs from the report")
     return manifest, payloads
 
 

@@ -12,21 +12,16 @@ import sys
 from pathlib import Path
 from typing import Final
 
-from pydantic import JsonValue, TypeAdapter
+from pydantic import TypeAdapter
 
+from .archive import load_archive
 from .contracts import Calibration, Family, Forecast, Frozen, InputBundle, MetricSet, Truth
 from .data import FAMILIES
+from .protocol import TUNED_MODELS, validate_prediction_grid
 from .scoring import expanded, summarize
 from .selection import calibrate, choose
 
 HERE: Final = Path(__file__).resolve().parent
-
-
-class RemoteArchive(Frozen):
-    files: dict[str, JsonValue]
-    sha256: dict[str, str]
-    upload_manifest: dict[str, str]
-    finished: bool
 
 
 class ModelReport(Frozen):
@@ -44,35 +39,29 @@ class Lock(Frozen):
     source_sha256: dict[str, str]
 
 
-def load_archive(remote_path: Path, input_path: Path) -> RemoteArchive:
-    remote = RemoteArchive.model_validate_json(remote_path.read_bytes())
-    if not remote.finished:
-        raise ValueError("Remote execution is incomplete")
-    runtime = remote.files.get("runtime.json")
-    if not isinstance(runtime, dict) or runtime.get("input_sha256") != hashlib.sha256(
-        input_path.read_bytes(),
-    ).hexdigest():
-        raise ValueError("Worker inputs differ from the evaluation inputs")
-    return remote
-
-
 def main() -> None:
+    """원문 무결성과 필수 예측 키를 검증한 뒤 동일한 개발·평가 기간 규약으로 점수를 쓴다.
+
+    같은 값이라도 정답 키 중복은 거절한다. 마지막 행이 앞선 정답을 덮어쓰지 않도록
+    결과 디렉터리를 만들기 전에 입력의 유일성을 확인한다.
+    """
     prepared, remote_path, destination = (Path(value).resolve() for value in sys.argv[1:4])
     remote = load_archive(remote_path, prepared / "model_inputs.json")
-    destination.mkdir(exist_ok=False)
     bundle = InputBundle.model_validate_json((prepared / "model_inputs.json").read_bytes())
     truths = TypeAdapter(list[Truth]).validate_json((prepared / "truth.json").read_bytes())
     truth = {row.case_id: row.actual for row in truths}
+    if len(truth) != len(truths):
+        raise ValueError("Duplicate truth case key")
     forecasts = TypeAdapter(list[Forecast]).validate_json((prepared / "baselines.json").read_bytes())
     for name, value in remote.files.items():
         if name.endswith(".predictions.json"):
             forecasts.extend(TypeAdapter(list[Forecast]).validate_python(value))
-    index = {(row.model, row.fold, row.case_id): row for row in forecasts}
-    if len(index) != len(forecasts):
-        raise ValueError("Duplicate prediction key")
     cases = {case.case_id: case for case in bundle.cases}
     if len(cases) != len(bundle.cases) or set(cases) != set(truth):
         raise ValueError("Case and truth keys disagree")
+    validate_prediction_grid(bundle.cases, forecasts)
+    index = {(row.model, row.fold, row.case_id): row for row in forecasts}
+    destination.mkdir(exist_ok=False)
     models = sorted({row.model for row in forecasts})
     users = sorted({case.user for case in bundle.cases})
     selections: dict[str, str] = {}
@@ -85,7 +74,7 @@ def main() -> None:
         development = [case for case in bundle.cases if case.split == "development" and case.user != user]
         evaluation = [case for case in bundle.cases if case.split == "evaluation" and case.user == user]
         dev_predictions = {
-            name: [index[(name, user if name.startswith("chronos_ft") else "common", case.case_id)]
+            name: [index[(name, user if name in TUNED_MODELS else "common", case.case_id)]
                    for case in development] for name in models
         }
         selections[user] = choose(dev_predictions, truth)
@@ -96,7 +85,7 @@ def main() -> None:
             ) for family in FAMILIES}
             calibrations.extend(corrections.values())
             for case in evaluation:
-                row = index[(name, user if name.startswith("chronos_ft") else "common", case.case_id)]
+                row = index[(name, user if name in TUNED_MODELS else "common", case.case_id)]
                 fixed = expanded(row, case, corrections[case.family].radius)
                 raw[name].append(row)
                 corrected[name].append(fixed)

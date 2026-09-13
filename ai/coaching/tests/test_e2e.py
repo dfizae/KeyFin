@@ -4,6 +4,7 @@
 import hashlib
 import json
 from collections import Counter
+from datetime import date
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -14,7 +15,8 @@ from pydantic import TypeAdapter, ValidationError
 from benchmarks.coaching.e2e.e2e import ROOT, load_cases, run_suite
 from benchmarks.coaching.e2e.e2e_auth import worker_token
 from benchmarks.coaching.e2e.e2e_bundle import build_bundle
-from benchmarks.coaching.e2e.e2e_contracts import E2ECase, Report, RunConfig
+from benchmarks.coaching.e2e.e2e_contracts import CaseOutcome, E2ECase, Report, RunConfig
+from benchmarks.coaching.e2e.e2e_observation import observe_model
 from benchmarks.coaching.e2e.e2e_package import (
     build_evidence,
     restore_archive,
@@ -250,6 +252,9 @@ def test_remote_bundle_has_inputs_without_labels_or_previous_results(tmp_path: P
     }
     with ZipFile(target) as archive:
         names = archive.namelist()
+        assert "CHART_MANIFEST.json" in names
+        assert "vendor/keyfin_chart/forecast-template.html" in names
+        assert "vendor/keyfin_chart/design-tokens.json" in names
         assert not any(
             name.endswith(("labels.jsonl", "inputs.jsonl", "case_catalog.json", "report.json"))
             for name in names
@@ -505,7 +510,7 @@ def test_evidence_archive_rejects_unsafe_or_private_paths(tmp_path: Path, name: 
 
 def test_evidence_archive_checks_payload_hash_before_restoring(tmp_path: Path) -> None:
     archive = tmp_path / "evidence.zip"
-    manifest = write_archive({"report.json": b"original"}, archive)
+    manifest = write_archive({"payload.json": b"original"}, archive)
     corrupt = manifest.model_copy(
         update={"entries": (manifest.entries[0].model_copy(update={"sha256": "0" * 64}),)}
     )
@@ -520,3 +525,37 @@ def test_evidence_archive_rejects_windows_filename_aliases(tmp_path: Path) -> No
     with pytest.raises(ValueError, match="unique"):
         _ = write_archive({"Report.json": b"first", "report.json": b"second"}, tmp_path / "bad.zip")
     assert not (tmp_path / "bad.zip").exists()
+
+
+def report_with_cases(count: int) -> Report:
+    cases = tuple(CaseOutcome(case_id=f"case-{index}", owner=f"owner-{index}", checks=(), generation_calls=0)
+                  for index in range(count))
+    return Report(generation_backend="fake", model="synthetic", as_of=date(2026, 9, 11),
+                  api_base_url="http://127.0.0.1:1", gateway_base_url="http://127.0.0.1:2",
+                  engine_commit="synthetic", gpu_calls=0,
+                  model_observation=observe_model("fake", cases, (), ()), cases=cases,
+                  http=(), generations=(), preflights=())
+
+
+@pytest.mark.parametrize("count", [0, 1, 3])
+def test_evidence_manifest_case_count_comes_from_the_report(tmp_path: Path, count: int) -> None:
+    # Given an actual typed report with a variable number of recorded cases.
+    report = report_with_cases(count)
+    # When archiving its exact bytes.
+    manifest = write_archive(
+        {"report.json": report.model_dump_json().encode("utf-8")}, tmp_path / "evidence.zip",
+    )
+    # Then the metadata reports the case denominator in that report.
+    assert manifest.case_count == count
+
+
+def test_evidence_archive_rejects_manifest_report_case_count_mismatch(tmp_path: Path) -> None:
+    # Given valid archive hashes but a sidecar with an incorrect case count.
+    archive = tmp_path / "evidence.zip"
+    manifest = write_archive({"report.json": report_with_cases(1).model_dump_json().encode("utf-8")}, archive)
+    corrupt = manifest.model_copy(update={"case_count": 99})
+    _ = archive.with_suffix(".manifest.json").write_text(corrupt.model_dump_json(), encoding="utf-8")
+    # When verifying the evidence.
+    # Then content-derived counts are checked in addition to file hashes.
+    with pytest.raises(ValueError, match="case count"):
+        verified_payloads(archive)

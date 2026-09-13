@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Final
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
+from pydantic import Field
+
 from benchmarks.coaching.e2e.e2e import ROOT, load_cases
 from coaching_service.schemas import Frozen, JsonDocument
 
@@ -33,7 +35,7 @@ class BundleEntry(Frozen):
 
 class BundleManifest(Frozen):
     archive_sha256: str
-    case_count: int
+    case_count: int = Field(ge=0)
     entries: tuple[BundleEntry, ...]
 
 
@@ -42,6 +44,11 @@ class BundleOptions(Frozen):
 
 
 def build_bundle(output: Path) -> BundleManifest:
+    """라벨을 제거한 실행 코드를 묶고 wheel 필수 manifest와 차트 자산도 함께 보존한다.
+
+    원격 복원본의 pyproject가 같은 파일을 force-include하므로 차트 API를 호출하지 않는
+    코칭 평가에도 이 파일들이 있어야 환경을 정상 설치할 수 있다.
+    """
     sidecar = output.with_suffix(".manifest.json")
     if output.exists() or sidecar.exists():
         raise FileExistsError("Runtime bundle outputs must be new")
@@ -50,7 +57,11 @@ def build_bundle(output: Path) -> BundleManifest:
     paths = [path for path in paths if path.name not in {"e2e_bundle.py", "e2e_package.py"}]
     paths.extend((service / "src" / "coaching_service").glob("*.py"))
     paths.extend(path for path in (service / "vendor" / "fdt").rglob("*") if path.suffix in {".py", ".json"})
-    paths.extend(service / name for name in ("ENGINE_MANIFEST.json", "pyproject.toml", "uv.lock"))
+    paths.extend(path for path in (service / "vendor" / "keyfin_chart").rglob("*") if path.is_file())
+    paths.extend(
+        service / name
+        for name in ("ENGINE_MANIFEST.json", "CHART_MANIFEST.json", "pyproject.toml", "uv.lock")
+    )
     payloads = {path.relative_to(service).as_posix(): path.read_bytes() for path in paths}
     cases = load_cases()
     rows = [
