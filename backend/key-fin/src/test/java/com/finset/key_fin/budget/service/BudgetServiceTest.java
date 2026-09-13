@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,12 +16,12 @@ import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.support.FixedClockConfig;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
 @Import(FixedClockConfig.class)
 @Sql("/sql/budget-proposal-fixture.sql")
-class BudgetServiceTest {
+class BudgetServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long USER_WITH_HISTORY = 997L;
 	private static final long USER_WITHOUT_HISTORY = 996L;

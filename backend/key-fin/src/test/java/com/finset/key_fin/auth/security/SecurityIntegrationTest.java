@@ -2,9 +2,9 @@ package com.finset.key_fin.auth.security;
 
 import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -17,10 +17,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
 @AutoConfigureMockMvc
 @Import(SecurityIntegrationTest.TestController.class)
-class SecurityIntegrationTest {
+class SecurityIntegrationTest extends SpringIntegrationTestSupport {
 
 	@Autowired
 	private MockMvc mockMvc;

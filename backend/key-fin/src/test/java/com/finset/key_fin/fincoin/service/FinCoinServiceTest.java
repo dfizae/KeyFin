@@ -6,13 +6,13 @@ import com.finset.key_fin.fincoin.entity.FinCoinReason;
 import com.finset.key_fin.fincoin.entity.FinCoin;
 import com.finset.key_fin.fincoin.repository.FinCoinRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.domain.Limit;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.jdbc.Sql;
@@ -24,10 +24,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
-@SpringBootTest
 @Transactional
 @Sql("/sql/fin-coin-history-fixture.sql")
-class FinCoinServiceTest {
+class FinCoinServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long USER = 981L;
 

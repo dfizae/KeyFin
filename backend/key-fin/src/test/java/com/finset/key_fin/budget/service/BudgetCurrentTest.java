@@ -7,7 +7,6 @@ import java.time.LocalDate;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,12 +15,12 @@ import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
 import com.finset.key_fin.budget.repository.BudgetRepository;
 import com.finset.key_fin.support.FixedClockConfig;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
 @Import(FixedClockConfig.class)
 @Sql({"/sql/budget-confirm-fixture.sql", "/sql/budget-current-fixture.sql"})
-class BudgetCurrentTest {
+class BudgetCurrentTest extends SpringIntegrationTestSupport {
 
 	private static final long CONFIRMED_USER = 991L;
 	private static final long PROPOSED_USER = 993L;

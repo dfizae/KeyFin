@@ -9,7 +9,6 @@ import java.util.stream.IntStream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,11 +19,11 @@ import com.finset.key_fin.budget.entity.BudgetEnvelope;
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
 @Sql("/sql/budget-confirm-fixture.sql")
-class BudgetConfirmTest {
+class BudgetConfirmTest extends SpringIntegrationTestSupport {
 
 	private static final long OWNER = 993L;
 	private static final long OTHER_USER = 992L;

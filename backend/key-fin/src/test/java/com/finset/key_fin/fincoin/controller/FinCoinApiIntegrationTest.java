@@ -2,12 +2,12 @@ package com.finset.key_fin.fincoin.controller;
 
 import com.finset.key_fin.auth.config.JwtProperties;
 import com.finset.key_fin.auth.jwt.JwtTokenProvider;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.jdbc.Sql;
@@ -26,11 +26,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
 @Sql("/sql/fin-coin-history-fixture.sql")
-class FinCoinApiIntegrationTest {
+class FinCoinApiIntegrationTest extends SpringIntegrationTestSupport {
 
 	private static final String HISTORY_PATH = "/api/v1/fin-coins";
 	private static final String BALANCE_PATH = "/api/v1/fin-coins/balance";
