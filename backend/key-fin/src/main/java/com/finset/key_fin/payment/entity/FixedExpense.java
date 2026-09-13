@@ -50,7 +50,7 @@ public class FixedExpense {
 	@Column(name = "payment_day", nullable = false)
 	private int paymentDay;
 
-	@Column(name = "withdrawal_account_id", nullable = false)
+	@Column(name = "withdrawal_account_id")
 	private Long withdrawalAccountId;
 
 	@Column(name = "fin_subscription_id", length = 30)
@@ -65,6 +65,23 @@ public class FixedExpense {
 		expense.user = user;
 		expense.update(name, expenseType, amount, variable, paymentDay, withdrawalAccountId);
 		return expense;
+	}
+
+	public static FixedExpense sync(User user, String finSubscriptionId, String name, long amount, int paymentDay) {
+		FixedExpense expense = new FixedExpense();
+		expense.user = user;
+		expense.finSubscriptionId = finSubscriptionId;
+		expense.expenseType = ExpenseType.SUBSCRIPTION;
+		expense.variable = false;
+		expense.syncFrom(name, amount, paymentDay);
+		return expense;
+	}
+
+	public void syncFrom(String name, long amount, int paymentDay) {
+		this.name = name;
+		this.amount = amount;
+		this.paymentDay = paymentDay;
+		this.active = true;
 	}
 
 	public void update(String name, ExpenseType expenseType, long amount, boolean variable, int paymentDay,
