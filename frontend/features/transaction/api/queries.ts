@@ -37,9 +37,12 @@ export function transactionListQueryOptions(filter: TransactionFilter) {
   });
 }
 
-/** 거래 내역(전체보기). 스크롤 끝에서 nextCursor 로 다음 쪽을 받는다 */
-export function useTransactionList(filter: TransactionFilter) {
-  return useInfiniteQuery(transactionListQueryOptions(filter));
+/**
+ * 거래 내역(전체보기·봉투 상세). 스크롤 끝에서 nextCursor 로 다음 쪽을 받는다.
+ * enabled 는 필터 값이 아직 없을 때(봉투 상세가 예산 주기를 기다릴 때) 첫 요청을 미루는 용도다.
+ */
+export function useTransactionList(filter: TransactionFilter, enabled = true) {
+  return useInfiniteQuery({ ...transactionListQueryOptions(filter), enabled });
 }
 
 /** 거래 한 건이 담겨 있을 수 있는 캐시: 목록(커서 페이지)·자산 탭 최근 거래·미확정 목록 */

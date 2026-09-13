@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Redirect, useFocusEffect } from "expo-router";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
@@ -106,8 +106,13 @@ type BudgetSectionProps = {
   budget: UseQueryResult<Budget>;
 };
 
+/** 봉투 막대 탭 → 봉투 상세(PAGE-23) (docs/frontend-spec.md §3 홈 요소) */
+const ENVELOPE_DETAIL_ROUTE = "/budget";
+
 // 예산만 실패해도 방은 그대로 두고 이 영역에서만 재시도한다 (규칙 50 일부 실패 대응).
 function BudgetSection({ budget }: BudgetSectionProps) {
+  const router = useRouter();
+
   if (budget.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
   if (budget.isError) {
     return (
@@ -121,7 +126,14 @@ function BudgetSection({ budget }: BudgetSectionProps) {
   }
   // 확정 전(PROPOSED)은 화면 위에서 확정 화면으로 보낸다. 여기까지 total 이 없는 건 모르는 상태(UNKNOWN)뿐이라 카드를 그리지 않는다.
   if (budget.data.total === null) return null;
-  return <BudgetCard total={budget.data.total} envelopes={budget.data.envelopes} period={budgetPeriodLabel(budget.data)} />;
+  return (
+    <BudgetCard
+      total={budget.data.total}
+      envelopes={budget.data.envelopes}
+      period={budgetPeriodLabel(budget.data)}
+      onSelectEnvelope={(envelopeId) => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelopeId}`)}
+    />
+  );
 }
 
 type HomeHeaderProps = {

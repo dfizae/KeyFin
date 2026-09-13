@@ -16,6 +16,7 @@ import {
   hasSpendingHistory,
   isWithinPeriod,
   monthlyAvgPercent,
+  parseEnvelopeId,
   proposalBasisKind,
   sortByMonthlyAvg,
   envelopeHealth,
@@ -235,5 +236,16 @@ describe("hasSpendingHistory · sortByMonthlyAvg · monthlyAvgPercent", () => {
     expect(monthlyAvgPercent("120650", "120650")).toBe(100);
     expect(monthlyAvgPercent("84300", "120650")).toBe(69);
     expect(monthlyAvgPercent("0", "0")).toBe(0);
+  });
+});
+
+describe("parseEnvelopeId", () => {
+  it("양의 정수만 봉투 id 로 받고 배열이면 첫 값을 쓴다", () => {
+    expect(parseEnvelopeId("1")).toBe(1);
+    expect(parseEnvelopeId(["7", "2"])).toBe(7);
+    expect(parseEnvelopeId("0")).toBeNull();
+    expect(parseEnvelopeId("2.5")).toBeNull();
+    expect(parseEnvelopeId("외식")).toBeNull();
+    expect(parseEnvelopeId(undefined)).toBeNull();
   });
 });
