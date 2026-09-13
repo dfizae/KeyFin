@@ -21,6 +21,8 @@ h1,.intro,.helper,.result-note,.flow-range,.bottom-note,.day-detail,.source{
  border-radius:12px;background:#faf9fd;font-size:12px;line-height:1.8;word-break:keep-all;
  overflow-wrap:break-word}
 .chart-quality p{margin:0;font-weight:600}.chart-quality ul{margin:6px 0 0;padding-left:18px}
+/* 좁은 카드에서도 원 단위 금액을 축약하거나 통화 단위만 다음 줄로 보내지 않는다. */
+.asset-value{font-size:clamp(20px,6vw,30px);white-space:nowrap}
 @media(max-width:360px){h1{font-size:21px}}
 </style><script>
 (()=>{
