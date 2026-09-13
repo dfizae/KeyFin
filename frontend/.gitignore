@@ -49,8 +49,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files — EXPO_PUBLIC_ 변수는 앱 번들에 노출되지만 서버 주소·연동 설정은 개인 환경 값이라 추적하지 않는다.
+# 공유해야 하는 형식과 설명은 .env.example 에만 둔다 (규칙 50).
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo

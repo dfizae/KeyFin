@@ -1,4 +1,4 @@
-import { USE_MOCKS, api } from "@/api/client";
+import { api, isMocked } from "@/api/client";
 import { confirmBudgetMock, createProposalMock, currentBudgetMock } from "@/api/mocks/budget";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
@@ -18,7 +18,7 @@ import type { KRW } from "@/lib/money";
  * 주기는 서버가 정한다. 이번 주기 예산이 없으면 서버가 제안을 만들어 PROPOSED 로 주므로 "예산 없음" 상태는 없다.
  */
 export async function getCurrentBudget(signal?: AbortSignal): Promise<Budget> {
-  if (USE_MOCKS) return toBudget(await withMockLatency(currentBudgetMock(), signal));
+  if (isMocked("budget")) return toBudget(await withMockLatency(currentBudgetMock(), signal));
   const { data } = await api.get<BudgetDto>("/budgets/current", { signal });
   return toBudget(data);
 }
@@ -29,7 +29,7 @@ export async function getCurrentBudget(signal?: AbortSignal): Promise<Budget> {
  * 같은 주기에 예산이 이미 있으면 409 BUDGET_001 이다(노션상 의도된 동작). 그때는 GET /budgets/current 로 이미 있는 제안을 받는다.
  */
 export async function createBudgetProposal(month: string, signal?: AbortSignal): Promise<BudgetProposal> {
-  if (USE_MOCKS) return toBudgetProposal(await withMockLatency(createProposalMock(month), signal));
+  if (isMocked("budget")) return toBudgetProposal(await withMockLatency(createProposalMock(month), signal));
   const { data } = await api.post<BudgetProposalDto>("/budgets/proposals", undefined, { signal });
   return toBudgetProposal(data);
 }
@@ -40,7 +40,7 @@ export async function createBudgetProposal(month: string, signal?: AbortSignal):
  */
 export async function confirmBudget(budgetId: number, entries: { envelopeId: number; amount: KRW }[]): Promise<void> {
   const request = toConfirmRequest(entries);
-  if (USE_MOCKS) {
+  if (isMocked("budget")) {
     await withMockLatency(confirmBudgetMock(budgetId, request));
     return;
   }
