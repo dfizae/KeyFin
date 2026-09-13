@@ -12,5 +12,6 @@ class Transaction:
     kind: str
     active: bool
     pending: bool
+    raw: dict[str, JsonValue]
 
 def normalize(row: dict[str, JsonValue]) -> Transaction: ...

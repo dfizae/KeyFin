@@ -66,6 +66,19 @@ def predicted_daily() -> DailyForecast:
     return DailyForecast(points=(DailyPoint(date=date(2026, 9, 30), amounts_krw=(3, 0, 2, 0, 0, 0, 0)),))
 
 
+@pytest.mark.parametrize("extra", [0, 1])
+def test_combined_observed_and_forecast_respect_safe_integer_limit(extra: int) -> None:
+    limit = 9007199254740991
+    future = limit - 130 + extra
+    result = numeric(terminal=future)
+    result.root["metrics"] = {"total_expense_p50_krw": {"value": future}}
+    if extra:
+        with pytest.raises(ServiceError, match="chart_money_range_limit"):
+            project_chart(inputs(), result, predicted_daily())
+    else:
+        assert project_chart(inputs(), result, predicted_daily()).total_forecast == limit
+
+
 def test_joint_total_preserved_without_double_counting_settlement_or_fixed_expense() -> None:
     # Given independently specified purchase totals and a joint P50 distinct from marginal P50s.
     source = inputs()

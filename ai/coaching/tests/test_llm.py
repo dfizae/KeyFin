@@ -135,6 +135,9 @@ async def test_success_uses_real_http_generation_and_reusable_client() -> None:
         "스물세 번 확인해 주세요.",
         "예산을 조정해 주세요.",
         "Ⅹ원 확인해 주세요.",
+        pytest.param("\u200b" * 500 + "지출 계획을 알려 주세요.", id="hidden-format-overflow"),
+        "외식비가 급등했으니 지출 내역을 확인해 주세요.",
+        "생활비가 변동했으니 거래 내역을 확인해 주세요.",
     ],
 )
 async def test_unsafe_generated_wording_is_explicit_fallback(raw: str) -> None:

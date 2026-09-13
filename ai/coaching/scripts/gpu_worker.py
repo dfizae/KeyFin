@@ -123,15 +123,24 @@ class CompletionResponse(Frozen):
 
 
 def generation_messages(request: CompletionRequest) -> tuple[Message, ...]:
-    """Pass the requested response format through to a runtime without a grammar engine."""
+    """응답 스키마까지 포함한 실제 생성 메시지를 만든다.
+
+    이 런타임은 문법 강제 디코더가 없어 스키마를 지시문에 넣고 클라이언트가 결과를
+    다시 검증한다. 합쳐진 내용도 메시지 한도를 검사해야 Pydantic 오류가 500이 되지 않는다.
+    measure와 complete는 모두 이 함수를 사용해야 토큰 사전 검사가 같은 입력을 센다.
+    """
     if request.response_format is None or request.response_format.type == "text":
         return request.messages
     specification = request.response_format.model_dump(mode="json", by_alias=True, exclude_none=True)
     content = json.dumps({"response_format": specification}, ensure_ascii=False)
     if request.messages[0].role == "system":
-        first = Message(role="system", content=request.messages[0].content + "\n" + content)
-        return (first, *request.messages[1:])
-    return (Message(role="system", content=content), *request.messages)
+        content = request.messages[0].content + "\n" + content
+        remaining = request.messages[1:]
+    else:
+        remaining = request.messages
+    if len(content) > 32000:
+        raise HTTPException(status_code=413, detail="input_character_limit")
+    return (Message(role="system", content=content), *remaining)
 
 
 async def bound_body(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -144,14 +153,25 @@ async def bound_body(request: Request, call_next: RequestResponseEndpoint) -> Re
 
 
 def validate_prompt_count(count: PromptCount, metadata: Metadata, expected: str | None) -> None:
+    """실제 토큰 상한과 사전 검사 때의 프롬프트 지문을 생성 직전에 다시 확인한다.
+
+    글자 수 검사는 토큰 검사를 대신하지 않는다. 지문 변경은 409로 중단하며
+    비 ASCII 헤더는 compare_digest의 예외 대신 명시적인 오류로 처리한다.
+    """
     if count.prompt_tokens > metadata.max_input_tokens:
         raise HTTPException(status_code=413, detail="input_token_limit")
-    if expected is not None and not secrets.compare_digest(expected, count.prompt_sha256):
+    if expected is not None and (
+        not expected.isascii() or not secrets.compare_digest(expected, count.prompt_sha256)
+    ):
         raise HTTPException(status_code=409, detail="tokenizer_preflight_changed")
 
 
 def create_app(backend: Backend, token: str) -> FastAPI:
-    """Allow one GPU generation and one waiting authenticated request."""
+    """토큰 검사 또는 생성 작업 1개와 대기 요청 1개만 허용하고 나머지는 429다.
+
+    슬롯은 토큰 검사·추론 성공/실패 모두에서 해제한다. 이 동시성 정책은 현재
+    단일 backend의 자원 보호용이며 배치 추론 성능을 보장하는 설정은 아니다.
+    """
     if len(token) < 32:
         raise ValueError("token_too_short")
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
@@ -163,11 +183,15 @@ def create_app(backend: Backend, token: str) -> FastAPI:
         return backend.metadata
 
     def admit(request: CompletionRequest, authorization: str | None) -> None:
-        if authorization is None or not secrets.compare_digest(authorization, f"Bearer {token}"):
+        """인증·모델·스키마를 합친 글자 수를 확인한 뒤에만 대기 슬롯을 점유한다."""
+        if (
+            authorization is None or not authorization.isascii()
+            or not secrets.compare_digest(authorization, f"Bearer {token}")
+        ):
             raise HTTPException(status_code=401, detail="unauthorized")
         if request.model not in {backend.metadata.model, backend.metadata.model_id}:
             raise HTTPException(status_code=404, detail="model_not_loaded")
-        if sum(len(message.content) for message in request.messages) > 48000:
+        if sum(len(message.content) for message in generation_messages(request)) > 48000:
             raise HTTPException(status_code=413, detail="input_character_limit")
         try:
             slots.acquire_nowait()
@@ -178,6 +202,11 @@ def create_app(backend: Backend, token: str) -> FastAPI:
         request: CompletionRequest, raw: Request,
         authorization: Annotated[str | None, Header()] = None,
     ) -> TokenBudget:
+        """본문 원본 해시와 chat template 적용 후 토큰 수·지문을 함께 돌려준다.
+
+        클라이언트는 원본 해시로 다른 요청의 검사값 혼용을 막고, 서버는 생성 전에
+        프롬프트 지문을 재확인한다. 이 응답은 모델 답변 생성의 성공 증거가 아니다.
+        """
         admit(request, authorization)
         try:
             async with gpu:

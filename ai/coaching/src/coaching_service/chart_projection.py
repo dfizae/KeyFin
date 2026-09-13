@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 from typing import ClassVar, Final
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from coaching_service.chart_contract import (
     Balance,
@@ -23,7 +23,20 @@ from coaching_service.errors import ServiceError
 from coaching_service.schemas import JsonDocument, TransactionView
 
 ENVELOPES: Final = ("외식", "교통비", "의료·건강", "취미·여가", "쇼핑", "편의점·마트·잡화", "기타")
+# 엔진의 봉투 순서와 KeyFin 표시 이름을 연결하는 계약이며 사용자별 예측값이 아니다.
 LABELS: Final = ("외식", "교통", "의료·건강", "취미·여가", "쇼핑", "마트·편의점", "기타")
+_MONEY: Final = TypeAdapter[int](ChartMoney)
+
+
+def checked_money(value: int) -> int:
+    """중간 합계도 차트의 안전한 정수 범위로 검사한다. 초과분을 잘라내지 않는다.
+
+    각각 유효한 관측액·예측액도 합치면 범위를 넘을 수 있으므로 저장 전에 422다.
+    """
+    try:
+        return _MONEY.validate_python(value)
+    except ValidationError as exc:
+        raise ServiceError("chart_money_range_limit") from exc
 
 
 class EngineFields(BaseModel):
@@ -79,6 +92,12 @@ class ChartInputs(EngineFields):
 def project_chart(
     inputs: ChartInputs, raw: JsonDocument | None, daily_prediction: DailyForecast | None = None
 ) -> ChartResult:
+    """관측 소비와 FDT 예측을 날짜·봉투·기간말 합계 계약에 맞추어 연결한다.
+
+    기준일 마감까지는 관측값, 다음 날부터는 예측값이다. 누적선은 P50이고
+    일별 막대는 경로 평균이다. 미분류 소비는 총액에 포함하지만 봉투 막대에는 없다.
+    날짜 누락이나 합계 불일치는 502로 거부하며 누락된 예측을 0원으로 채우지 않는다.
+    """
     period = inputs.period
     transactions = tuple(
         t
@@ -90,7 +109,8 @@ def project_chart(
     daily: list[DailyPoint] = []
     history: list[HistoricalPoint] = []
     cumulative = 0
-    # This matches the engine's input window; it does not assert feed completeness.
+    # 엔진이 받은 첫 거래일부터 관측값을 그린다. 입력 이전 날짜를 0원으로 꾸미거나
+    # 거래가 없는 날짜만으로 데이터 수집이 완전하다고 판단하지 않는다.
     first_input = min((date.fromisoformat(t.date) for t in inputs.transactions), default=period.as_of)
     observation_start = max(period.period_start, first_input)
     for offset in range((period.as_of - observation_start).days + 1):
@@ -100,7 +120,7 @@ def project_chart(
             sum(t.amount_krw for t in rows if not t.pending and t.envelope == name) for name in ENVELOPES
         )
         daily.append(DailyPoint(date=day, amounts_krw=amounts))
-        cumulative += sum(t.amount_krw for t in rows)
+        cumulative = checked_money(cumulative + sum(t.amount_krw for t in rows))
         history.append(HistoricalPoint(date=day, value_krw=cumulative))
     current = tuple(sum(row.amounts_krw[i] for row in daily) for i in range(len(ENVELOPES)))
     future = dict.fromkeys(ENVELOPES, 0)
@@ -114,7 +134,7 @@ def project_chart(
         if set(future) != set(ENVELOPES) or len(result.datasets.envelopes) != len(ENVELOPES):
             raise ServiceError("chart_envelope_contract_mismatch", 502)
         forecast = tuple(
-            ForecastPoint(date=row.date, p50_krw=cumulative + row.cumulative_expense_p50_krw)
+            ForecastPoint(date=row.date, p50_krw=checked_money(cumulative + row.cumulative_expense_p50_krw))
             for row in result.datasets.projection
         )
         expected_dates = tuple(
@@ -139,12 +159,13 @@ def project_chart(
             label=label,
             budget=inputs.budgets.budgets.get(name),
             current=used,
-            forecast=used + future[name],
+            forecast=checked_money(used + future[name]),
         )
         for name, label, used in zip(ENVELOPES, LABELS, current, strict=True)
     )
     total_budget = (
-        sum(inputs.budgets.budgets.values()) if set(inputs.budgets.budgets) == set(ENVELOPES) else None
+        checked_money(sum(inputs.budgets.budgets.values()))
+        if set(inputs.budgets.budgets) == set(ENVELOPES) else None
     )
     terminal = forecast[-1].p50_krw
     return ChartResult(

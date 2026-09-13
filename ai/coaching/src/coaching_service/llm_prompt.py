@@ -74,9 +74,10 @@ _QUANTITY: Final = re.compile(
     re.IGNORECASE,
 )
 _CLAIM: Final = re.compile(
-    r"때문|탓|원인|덕분|영향|초래|기인|따라서|그러므로|그래서|으므로|이므로|이니|하니"
+    r"때문|탓|원인|덕분|영향|초래|기인|따라서|그러므로|그래서|므로|으니|이니|하니"
     r"|부족|초과|과도|남아|남았|잔여|여유|적자|흑자|손실|수익|증가|감소|줄어|늘어|많아|적어"
     r"|잦아|잦은|높아|낮아|높은|낮은|늦어|늦는|많은|적은|과소|불필요"
+    r"|급등|급락|폭등|폭락|폭증|급증|급감"
     r"|안전|보장|확실|무조건|반드시|틀림없|문제.{0,8}없|걱정.{0,8}없|충분"
 )
 _ACTION: Final = re.compile(
@@ -134,10 +135,14 @@ def user_payload(evidence: EvidenceInput) -> str:
 
 
 def wording_problem(raw: str) -> str | None:
-    """Fail closed on numeric claims, quotation, diagnosis, execution, or assertive prose."""
+    """숫자·진단·실행·단정 표현을 거르는 보수적 보조 문구 검사다.
+
+    정규화는 숨은 문자로 패턴을 우회하는 것을 줄이지만 반환할 원문 길이도 검사해야
+    Wording의 400자 계약을 지킨다. 정규식 통과가 모든 의미 오류의 부재를 증명하지는 않는다.
+    """
     text = unicodedata.normalize("NFKC", raw)
     text = "".join(char for char in text if unicodedata.category(char) != "Cf").strip()
-    if not text or len(text) > 400 or not re.search("[가-힣]", text):
+    if not text or max(len(raw.strip()), len(text)) > 400 or not re.search("[가-힣]", text):
         return "invalid_wording"
     if any(char.isnumeric() for char in raw) or _QUANTITY.search(text) or re.search(r"[%₩$€£]", text):
         return "numeric_output"

@@ -24,6 +24,22 @@ def headers(key: str, token: str = TOKEN) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}", "Idempotency-Key": key}
 
 
+@pytest.mark.parametrize("direction", ["INCOME", "TRANSFER", "EXPENSE", " EXPENSE "])
+def test_incoming_transfer_cannot_be_counted_as_a_purchase(tmp_path: Path, direction: str) -> None:
+    body = chart_request(start="2026-09-01", as_of="2026-09-30")
+    for row in body["data"]["transactions"]:
+        row["transaction_type"] = "TRANSFER_IN"
+        row["direction"] = direction
+    with TestClient(setup(tmp_path / "incoming.sqlite", TestModel())) as client:
+        response = client.post("/v1/charts/budget-forecast", json=body, headers=headers("incoming"))
+    if direction.strip() == "EXPENSE":
+        assert response.status_code == 422, response.text
+        assert response.json()["error"] == "inconsistent_transfer_direction"
+    else:
+        assert response.status_code == 200, response.text
+        assert response.json()["chart"]["totalCurrent"] == 0
+
+
 def test_chart_request_calls_model_and_returns_chart_contract(tmp_path: Path) -> None:
     # Given a real FDT input and a replaceable language-model boundary.
     model = TestModel()

@@ -51,6 +51,63 @@ def cancellation(transaction_id: str, revision: int) -> dict[str, object]:
 
 
 @pytest.mark.anyio
+async def test_inconsistent_transfer_event_preserves_state_and_allows_corrected_retry(tmp_path: Path) -> None:
+    async with api_client(tmp_path / "incoming.sqlite", TestModel()) as client:
+        created = await client.post(
+            "/v1/twin", json=fixture().model_dump(mode="json"), headers={"Idempotency-Key": "init"}
+        )
+        assert created.status_code == 200
+        before = (await client.get("/v1/twin")).content
+        request = event(10000)
+        request["event"]["transaction"].update(transaction_type="TRANSFER_IN", direction="EXPENSE")
+        response = await client.post("/v1/events", json=request, headers={"Idempotency-Key": "incoming"})
+        assert response.status_code == 422, response.text
+        assert (await client.get("/v1/twin")).content == before
+        request["event"]["transaction"]["direction"] = "INCOME"
+        accepted = await client.post("/v1/events", json=request, headers={"Idempotency-Key": "incoming"})
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["detection"] == "not_confirmed_envelope_debit"
+
+
+@pytest.mark.anyio
+async def test_refund_overflow_is_rejected_without_poisoning_ledger_or_consuming_retry(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "refund-limit.sqlite3"
+    async with api_client(database, TestModel()) as client:
+        created = await client.post(
+            "/v1/twin", json=fixture().model_dump(mode="json"), headers={"Idempotency-Key": "init"}
+        )
+        assert created.status_code == 200, created.text
+        for revision, transaction_id in enumerate(("first", "second")):
+            request = event(10000)
+            request["expected_revision"] = revision
+            request["event"]["event_id"] = transaction_id
+            request["event"]["transaction"]["transaction_id"] = transaction_id
+            paid = await client.post("/v1/events", json=request, headers={"Idempotency-Key": transaction_id})
+            assert paid.status_code == 200, paid.text
+        reconciled = cancellation("second", 2)
+        reconciled["cancellation_balance"] = {"envelope": "기타", "balance_krw": 10**12}
+        response = await client.post("/v1/events", json=reconciled, headers={"Idempotency-Key": "reconcile"})
+        assert response.status_code == 200, response.text
+        before = (await client.get("/v1/twin")).content
+        original_ledger = saved_ledger(database)
+        request = cancellation("first", 3)
+        rejected = await client.post("/v1/events", json=request, headers={"Idempotency-Key": "refund"})
+        assert rejected.status_code == 422, rejected.text
+        assert rejected.json() == {"error": "envelope_balance_limit"}
+        assert (await client.get("/v1/twin")).content == before
+        assert saved_ledger(database) == original_ledger
+        request["cancellation_balance"] = {"envelope": "기타", "balance_krw": 10**12}
+        accepted = await client.post("/v1/events", json=request, headers={"Idempotency-Key": "refund"})
+        assert accepted.status_code == 200, accepted.text
+        assert accepted.json()["identity"]["revision"] == 4
+        assert saved_ledger(database).envelopes[0].balance_krw == 10**12
+        repeated = await client.post("/v1/events", json=request, headers={"Idempotency-Key": "refund"})
+        assert repeated.content == accepted.content
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     ("source", "count", "detection", "coaching_created"),
     [("SEED", 1, "below_trigger", False), ("LIVE", 5, "p1_ambiguous", True)],
