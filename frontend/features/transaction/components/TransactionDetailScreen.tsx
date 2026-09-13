@@ -116,7 +116,7 @@ function AmountSummary({ transaction }: AmountSummaryProps) {
     : formatKRW(subtractKRW("0", transaction.amount));
 
   return (
-    <View className="gap-2 rounded-2xl bg-card p-5">
+    <View className="gap-2 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
       <View className="flex-row items-center gap-2">
         <Text className="shrink text-h2 text-foreground" numberOfLines={2}>
           {transaction.merchantName}
@@ -155,7 +155,7 @@ function ClassificationCard({ transaction, isPending, errorMessage, onReclassify
   const disabled = blockedReason !== null || isPending;
 
   return (
-    <View className="gap-4 rounded-2xl bg-card p-5">
+    <View className="gap-4 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
       <View className="flex-row items-center gap-3">
         <View className="h-icon-tile w-icon-tile items-center justify-center rounded-md bg-accent">
           <Icon as={envelopeIcon(transaction.envelopeId)} size={20} className="text-primary" />
