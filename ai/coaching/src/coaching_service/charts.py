@@ -20,10 +20,17 @@ from coaching_service.store import Operation
 
 
 class Charts:
+    """소유자별 입력→FDT 수치→AI 설명→차트·계산 근거 저장을 묶는 호출 흐름."""
+
     def __init__(self, core: CoachingCore) -> None:
         self.core: CoachingCore = core
 
     async def forecast(self, operation: Operation, request: ChartRequest) -> JsonDocument:
+        """인라인 또는 저장된 Twin에서 차트를 만들고 검증 완료 후에만 저장한다.
+
+        종료된 기간은 관측값만 반환하며 엔진 예측·LLM을 호출하지 않는다. 계산·문장·
+        렌더러 출처가 모두 준비되기 전의 422/502는 차트와 완료 응답을 남기지 않는다.
+        """
         async def action() -> Mutation:
             twin = (
                 await anyio.to_thread.run_sync(
@@ -83,7 +90,8 @@ class Charts:
                     fallback_reason="period_complete",
                 )
             else:
-                # The model selects supplied fact IDs; full time series remain in the receipt.
+                # 모델에는 선택 가능한 근거 ID를 보낸다. 원본 시계열은 receipt에 남기고
+                # LLM이 금액·날짜를 새로 작성하거나 화면 수치를 바꾸지 못하게 한다.
                 wording = await self.core.model.write(chart_evidence(chart))
             match wording.source:
                 case "llm":

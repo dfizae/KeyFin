@@ -1,4 +1,5 @@
 from pydantic import JsonValue
+
 from .model import Twin
 
 class Coach:

@@ -25,6 +25,11 @@ class RequestCost(BaseModel):
 
 
 def admit(request: JsonDocument) -> None:
+    """경로 수, 미래 일수, 분기 수를 곱해 엔진의 계산 자원 상한을 검사한다.
+
+    각 모드의 risk 기본 stress 3개·what-if 비교·optimize 격자 분기를 반영한다.
+    2,000,000 상한은 CPU·메모리 보호 정책이며 예측 금액이나 성능 점수가 아니다.
+    """
     cost = RequestCost.model_validate(request.root)
     branches = 1 + len(cost.stress_scenarios)
     if cost.mode == "risk" and "stress_scenarios" not in request.root:

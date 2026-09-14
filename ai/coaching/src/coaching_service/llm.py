@@ -118,6 +118,11 @@ class OpenAICompatibleCoachModel:
         self._limiter: anyio.CapacityLimiter = anyio.CapacityLimiter(config.max_concurrency)
 
     async def write(self, evidence: EvidenceInput) -> Wording:
+        """차트는 주어진 근거 ID만 선택하고 일반 코칭은 제한된 보조 문장을 검증한다.
+
+        모델 오류·형식 위반은 원인이 기록된 정형 문구로 전환한다. 이 성공 여부와
+        FDT의 수치 정확성은 별개이며 LLM 출력으로 금융 수치를 덮어쓰지 않는다.
+        """
         result = await self._infer(evidence, "write")
         if evidence.purpose == "chart":
             if isinstance(result, InferenceFailure):

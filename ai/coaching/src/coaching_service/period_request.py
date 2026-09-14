@@ -40,7 +40,11 @@ _UNSUPPORTED_CALENDAR: Final = re.compile(r"윤달|음력|영업일|공휴일")
 
 
 def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:
-    """Only listed unambiguous forms are supported; structured input resolves other phrasing."""
+    """지원하는 명확한 한국어 기간 하나만 해석한다.
+
+    여러 기간·음력·영업일은 422로 재확인을 요구한다. 그 밖의 모호한 표현은
+    명시적 구조화 기간이 있을 때만 맡기며 임의로 기본 7일로 바꾸지 않는다.
+    """
     if _UNSUPPORTED_CALENDAR.search(question):
         raise ServiceError("period_unsupported_calendar")
     matches = list(_PERIOD.finditer(question))
@@ -70,7 +74,11 @@ def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:
 def turn_period(
     reference: date, question: str, explicit: PeriodSpec | None, analysis: JsonDocument | None
 ) -> ResolvedPeriod:
-    """Require all specified period contracts to resolve to the same future date sequence."""
+    """명시적 기간→질문→추가 분석 순으로 선택하되 서로 다른 종료일은 거부한다.
+
+    7일은 기간 정보가 전혀 없을 때의 기본 정책이다. 출처를 응답에 남기며,
+    분석 horizon_days까지 같은 미래 구간을 가리켜야 계산을 시작한다.
+    """
     recognized = question_period(question, explicit=explicit is not None)
     source: PeriodSource = "default"
     spec: PeriodSpec = RollingDays(days=7)

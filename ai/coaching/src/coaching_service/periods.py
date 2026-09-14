@@ -11,7 +11,7 @@ from coaching_service.errors import ServiceError
 
 
 def date_only(value: JsonValue | date) -> date:
-    """Reject timestamps rather than silently discarding their time zone or time of day."""
+    """날짜를 담은 date 객체 또는 YYYY-MM-DD 문자열만 받으며 datetime의 시각을 버리지 않는다."""
     match value:
         case datetime():
             raise PydanticCustomError("date_only", "Use a YYYY-MM-DD date, not a timestamp")
@@ -83,7 +83,11 @@ class ResolvedPeriod(PeriodContract):
 
 
 def resolve_period(reference: date, spec: PeriodSpec, source: PeriodSource) -> ResolvedPeriod:
-    """Keep the observed closing row out of simulation and include the end date."""
+    """기준일은 관측 마감값이며 시뮬레이션은 다음 날부터 종료일 포함이다.
+
+    요청 구간에 기준일을 포함해도 그 날을 다시 예측하지 않는다. 미래 0일·과거·
+    90일 초과·날짜 범위 초과는 422로 거부하고, 윤년은 양력 달력으로 계산한다.
+    """
     month_start = reference.replace(day=1)
     month_end = reference.replace(day=calendar.monthrange(reference.year, reference.month)[1])
     try:
@@ -126,7 +130,7 @@ def resolve_period(reference: date, spec: PeriodSpec, source: PeriodSource) -> R
 
 
 def period_text(period: ResolvedPeriod, observed_on: date) -> str:
-    """Render verified dates outside the LLM so words and financial endpoints agree."""
+    """검증된 날짜를 직접 표시한다. LLM이 기간을 바꾸거나 오래된 자료를 숨기지 않는다."""
     if observed_on != period.reference_date:
         return (
             f"자료 기준일은 {observed_on.isoformat()} 마감입니다. "

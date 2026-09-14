@@ -23,6 +23,7 @@ class Registry(BaseModel):
 
 
 def validate_device(environment: Mapping[str, str]) -> None:
+    """운영자가 허용한 장치 중 하나를 명시한 경우만 기동한다. 장치를 자동 선택하지 않는다."""
     selected = environment.get("CUDA_VISIBLE_DEVICES", "").strip()
     allowed = environment.get("COACH_GPU_ALLOWED_DEVICES", "").split(",")
     if not selected or "," in selected or selected not in {item.strip() for item in allowed if item.strip()}:
@@ -30,6 +31,11 @@ def validate_device(environment: Mapping[str, str]) -> None:
 
 
 def load_entry(path: Path, tag: str) -> ModelEntry:
+    """허용된 태그의 체크포인트·revision·설정 해시를 개인 설정에서 한 건만 읽는다.
+
+    태그는 지원 런타임의 계약이고 모델 경로·물리 자원은 저장소의 상수가 아니다.
+    중복 태그는 첫 항목을 임의 선택하지 않고 기동 오류로 처리한다.
+    """
     registry = Registry.model_validate_json(path.read_bytes())
     if len({entry.tag for entry in registry.models}) != len(registry.models):
         raise ValueError("duplicate_model_tag")

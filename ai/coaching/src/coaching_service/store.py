@@ -59,6 +59,11 @@ class Store:
             yield conn
 
     def reserve(self, operation: Operation) -> Reservation:
+        """소유자당 진행 중 변경은 하나로 제한하고 동시 요청은 409로 거절한다.
+
+        완료된 동일 요청은 재사용하되 본문 digest가 다르면 409다. 예약은 180초 후 만료되지만
+        계산 제한은 Repository의 150초이며 완료 시에도 lease 소유권을 재검사한다.
+        """
         with self.connection() as conn:
             _ = conn.execute("BEGIN IMMEDIATE")
             row = TypeAdapter[tuple[str, str] | None](tuple[str, str] | None).validate_python(
@@ -100,6 +105,7 @@ class Store:
         return tuple(row[0] for row in TypeAdapter(list[tuple[str]]).validate_python(rows))
 
     def commit(self, lease: Lease, changes: tuple[Write, ...], result: JsonDocument) -> None:
+        """유효한 예약만 상태와 완료 응답을 같은 SQLite 트랜잭션에 반영한다."""
         with self.connection() as conn:
             _ = conn.execute("BEGIN IMMEDIATE")
             row = TypeAdapter[tuple[str] | None](tuple[str] | None).validate_python(
@@ -135,6 +141,7 @@ class Store:
             )
 
     def erase(self, owner: str) -> None:
+        """상태·완료 응답·진행 예약을 함께 지워 늦은 작업의 재생성을 막는다."""
         with self.connection() as conn:
             _ = conn.execute("BEGIN IMMEDIATE")
             _ = conn.execute("DELETE FROM items WHERE owner=?", (owner,))

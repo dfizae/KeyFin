@@ -33,6 +33,11 @@ class Events:
         return await self.core.repository.mutate(op, action)
 
     async def apply(self, op: Operation, request: EventRequest) -> JsonDocument:
+        """revision을 확인하고 Twin·원장·코칭·outbox 변경을 검증한 뒤 한 번에 저장한다.
+
+        중간 단계는 메모리의 Mutation만 만든다. 결제·취소 처리 중 예외가 발생하면
+        일부 원장이나 완료 키를 남기지 않도록 Repository가 마지막 commit을 맡는다.
+        """
         async def action() -> Mutation:
             before = await self.core.twin(op.owner)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, before)
@@ -63,6 +68,8 @@ class Events:
                     else await self.core.model.judge(evidence)
                 )
                 result = result.model_copy(update={"judgment": document(judgment)})
+                # 0.8은 알림 채택 정책이다. 모델의 자체 confidence를 실제 정확도나
+                # 교정된 확률로 해석하지 않으며 fallback 판단으로 알림을 만들지 않는다.
                 if judgment.decision != "coach" or judgment.confidence < 0.8 or judgment.source != "llm":
                     return Mutation(result=document(result), writes=changes)
                 receipt = receipt.model_copy(update={"trigger": "p1_context_concern"})

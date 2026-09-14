@@ -23,6 +23,7 @@ from coaching_service.transport import BodyLimit
 
 
 def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAPI:
+    """고정 엔진 원본을 검증한 뒤 저장소·추론 클라이언트·인증 경계를 연결한다."""
     verified_files = verify_engine()
     client = create_http_client(settings.model)
     core = CoachingCore(
@@ -40,6 +41,7 @@ def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAP
     app.add_middleware(BodyLimit)
 
     async def health() -> JsonDocument:
+        """API의 기동 상태다. model_configured는 설정 유무이며 추론 성공을 뜻하지 않는다."""
         return JsonDocument.model_validate(
             {
                 "status": "ok",
@@ -50,6 +52,7 @@ def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAP
         )
 
     register_errors(app)
+    # /healthz는 의도한 상태 점검 경로다. GPU 준비·실제 추론 성공은 별도 요청으로 확인한다.
     app.add_api_route("/healthz", health, methods=["GET"])
     register_twin(app, core, auth)
     register_coaching(app, core, auth)

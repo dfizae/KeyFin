@@ -27,6 +27,11 @@ class BudgetFailure:
 
 
 def validate_budget(body: bytearray, request: httpx2.Request, max_tokens: int) -> TokenBudget | BudgetFailure:
+    """사전 검사 응답이 이번 요청의 원본 바이트와 입출력 한도에 대응하는지 확인한다.
+
+    request_sha256은 전송 본문, prompt_sha256은 서버가 적용한 템플릿 이후의 지문이다.
+    서로 역할이 다르므로 한 해시로 대신하거나 글자 수에서 토큰 수를 추정하지 않는다.
+    """
     try:
         budget = TokenBudget.model_validate_json(body)
     except ValueError:
@@ -43,7 +48,7 @@ def validate_budget(body: bytearray, request: httpx2.Request, max_tokens: int) -
 async def check_token_budget(
     client: httpx2.AsyncClient, request: httpx2.Request, max_tokens: int,
 ) -> TokenBudget | BudgetFailure:
-    """Keep auth scoped, read bounded metadata, and never estimate tokens from characters."""
+    """생성과 같은 본문·인증으로 사전 검사한다. 리다이렉트와 큰 응답은 허용하지 않는다."""
     preflight = httpx2.Request(
         "POST", request.url.copy_with(path="/v1/tokenize"),
         headers=request.headers, content=request.content, extensions=request.extensions,

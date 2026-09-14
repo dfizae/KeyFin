@@ -12,6 +12,7 @@ from coaching_service.llm_contract import Wording
 from coaching_service.periods import DateOnly
 from coaching_service.schemas import Bootstrap, Frozen, JsonDocument, TwinIdentity
 
+# 원 단위 정수. 브라우저 Number가 정확히 표현하는 -(2^53-1)~2^53-1로 범위를 고정한다.
 ChartMoney = Annotated[int, Field(strict=True, ge=-9007199254740991, le=9007199254740991)]
 
 
@@ -30,6 +31,11 @@ class BudgetPeriod(Frozen):
 
 
 def budget_period(start: date, as_of: date) -> BudgetPeriod:
+    """시작일 포함, 다음 달 같은 일자 직전까지인 예산 주기를 계산한다.
+
+    다음 달에 같은 일자가 없으면 그 달 말일을 경계로 삼는다. 고정 30일이 아니며
+    기준일이 이 주기 밖이면 다른 주기로 추정하지 않고 422로 거부한다.
+    """
     try:
         year, month = (start.year + 1, 1) if start.month == 12 else (start.year, start.month + 1)
         boundary = date(year, month, min(start.day, calendar.monthrange(year, month)[1]))
@@ -68,6 +74,8 @@ class DailyPoint(Frozen):
 
 
 class DailyForecast(Frozen):
+    """일별·봉투별 경로 평균. 누적 P50과 합계가 같다는 계약은 아니다."""
+
     version: Literal["keyfin-daily-forecast/1"] = "keyfin-daily-forecast/1"
     statistic: Literal["empirical_path_mean"] = "empirical_path_mean"
     rounding: Literal["nearest_krw_ties_to_even_per_cell"] = "nearest_krw_ties_to_even_per_cell"

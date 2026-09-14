@@ -15,7 +15,9 @@ $env:COACHING_DATABASE = 'state/coaching.sqlite3'
 uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 --port 8000
 ```
 
-`http://127.0.0.1:8000/healthz`에서 상태를, `/docs`에서 요청·응답 스키마를 확인합니다. 위 셸을 유지한 채 다른 터미널을 사용한다면 같은 개인 테스트 토큰을 안전하게 전달해야 합니다. 인증 헤더는 `Authorization: Bearer <테스트 토큰>`입니다. 토큰을 문서나 커밋에 복사하지 않습니다.
+`http://127.0.0.1:8000/healthz`에서 상태를, `/docs`에서 요청·응답 스키마를 확인합니다. `/healthz`는 오타가 아니라 API 상태 확인용으로 지정한 경로입니다. 응답의 `model_configured`는 모델 주소 설정 여부이며 GPU 추론 성공을 뜻하지 않습니다. 추론까지 확인하려면 [실제 HTTP 검증](benchmarks/coaching/e2e/README.md)을 실행합니다.
+
+위 셸을 유지한 채 다른 터미널을 사용한다면 같은 개인 테스트 토큰을 안전하게 전달해야 합니다. 인증 헤더는 `Authorization: Bearer <테스트 토큰>`입니다. 토큰을 문서나 커밋에 복사하지 않습니다.
 
 모델 연결을 생략하면 FDT 계산과 템플릿 설명으로 실행합니다. 실제 LLM을 사용하려면 [운영 설정](docs/operations.md)의 추론 서버를 연결합니다. HTTP 200만으로 모델이 답했다고 판단하지 말고 응답의 설명 출처와 대체 사유를 함께 확인합니다.
 
@@ -48,7 +50,7 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 | `benchmarks/` | 코칭·소비 예측 성능 실험을 실행하는 코드와 고정 시나리오 입력 |
 | `artifacts/` | 실행해서 만들어진 로그·결과·예측값·빌드 패키지; Git 업로드 제외 |
 
-[구조와 기간 계약](docs/architecture.md), [검증 결과](docs/validation.md), [운영 설정](docs/operations.md)을 함께 참고합니다. `benchmarks/`는 API의 런타임 의존성이 아닙니다.
+[코드 리뷰 안내](docs/code-review.md)에서 읽을 순서·호출 흐름·고정값의 이유·관련 테스트를 확인할 수 있습니다. [코드 재점검 결과](docs/code-audit.md), [구조와 기간 계약](docs/architecture.md), [검증 결과](docs/validation.md), [운영 설정](docs/operations.md)도 함께 참고합니다. `benchmarks/`는 API의 런타임 의존성이 아닙니다.
 
 ## 검증 실행
 

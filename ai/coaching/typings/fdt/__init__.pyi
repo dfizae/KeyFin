@@ -1,4 +1,5 @@
 from pydantic import JsonValue
+
 from .model import Twin as Twin
 from .simulation import RandomBundle, Simulation
 

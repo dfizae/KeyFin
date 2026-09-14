@@ -65,6 +65,11 @@ class CoachingCore:
         return receipt.model_copy(update={"payment": facts})
 
     async def compose(self, receipt: Receipt, evidence: EvidenceInput) -> Coaching:
+        """금액·날짜는 검증된 receipt로 작성하고 LLM은 보조 안내만 덧붙인다.
+
+        근거가 한도를 넘거나 문장을 채택하지 못해도 금융 결과를 바꾸지 않는다.
+        대체 문구의 출처·원인은 응답에 남겨 실제 모델 성공과 구분한다.
+        """
         wording = (
             Wording(
                 text=TEMPLATE_TEXT, source="template", model="not_called", fallback_reason="context_limit"

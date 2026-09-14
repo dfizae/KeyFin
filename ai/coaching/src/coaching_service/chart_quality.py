@@ -59,6 +59,11 @@ def chart_quality(
     observation_start: date,
     known_budget_count: int,
 ) -> ChartQuality:
+    """입력 이력·미분류·예산 누락·FDT 경고를 표시 문구로 전달한다.
+
+    수치를 보정하거나 미관측 기간을 채우지 않는다. 모르는 경고 코드도 일반 안내와
+    원본 코드로 남겨 새 엔진 경고가 화면에서 조용히 사라지지 않게 한다.
+    """
     source = QualitySource.model_validate(evidence.root) if evidence is not None else QualitySource()
     codes = tuple(warning.code for warning in source.warnings)
     pending_forecast = source.metrics.pending_expense_p50_krw.value

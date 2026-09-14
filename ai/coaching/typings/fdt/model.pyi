@@ -1,4 +1,5 @@
 from pydantic import JsonValue
+
 from .ingest import Transaction
 
 class Twin:

@@ -35,7 +35,11 @@ class PinnedBackend:
         )
 
     def measure(self, request: CompletionRequest) -> PromptCount:
-        """Use the same schema, chat template, and special tokens as generation."""
+        """생성과 같은 스키마·chat template·특수 토큰으로 센다.
+
+        모델 ID·revision·token_ids로 지문을 만들어 사전 검사와 생성 사이의 입력
+        변경을 감지한다. 단순 JSON 글자 수나 본문 해시로 이 지문을 대신하지 않는다.
+        """
         chat = [
             {"role": message.role, "content": message.content} for message in generation_messages(request)
         ]
@@ -52,7 +56,7 @@ class PinnedBackend:
         )
 
     def complete(self, request: CompletionRequest) -> Generated:
-        """Use deterministic decoding and reject input beyond the token budget."""
+        """결정적 디코딩을 사용하고 실제 생성의 입력 토큰 수도 사전 검사와 대조한다."""
         count = self.measure(request)
         if count.prompt_tokens > self.metadata.max_input_tokens:
             raise HTTPException(status_code=413, detail="input_token_limit")
