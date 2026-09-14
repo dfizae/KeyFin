@@ -55,4 +55,15 @@ class TransactionHistoryIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(second.items()).extracting("id").containsExactly(8202L, 8201L);
 		assertThat(second.nextCursor()).isNull();
 	}
+
+	@Test
+	@Sql({"/sql/transaction-history-fixture.sql", "/sql/transaction-pending-fixture.sql"})
+	void 미확정_정상_출금_거래만_조회한다() {
+		TransactionListResponse response = transactionService.getPendingTransactions(USER_ID, null, 20);
+
+		assertThat(response.items()).extracting("id").containsExactly(8210L);
+		assertThat(response.items().getFirst().confirmStatus().name()).isEqualTo("PENDING");
+		assertThat(response.items().getFirst().status().name()).isEqualTo("NORMAL");
+		assertThat(response.items().getFirst().txType().name()).isEqualTo("CARD");
+	}
 }

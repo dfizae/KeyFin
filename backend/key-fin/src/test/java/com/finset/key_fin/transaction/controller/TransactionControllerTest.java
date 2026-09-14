@@ -90,4 +90,19 @@ class TransactionControllerTest {
 				.andExpect(jsonPath("$.data.items").isEmpty())
 				.andExpect(jsonPath("$.data.nextCursor").doesNotExist());
 	}
+
+	@Test
+	void 미확정_거래를_조회한다() throws Exception {
+		when(transactionService.getPendingTransactions(USER_ID, 501L, 20))
+				.thenReturn(new TransactionListResponse(List.of(), null));
+
+		mockMvc.perform(get("/api/v1/transactions/pending")
+						.param("cursor", "501")
+						.param("size", "20"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.success").value(true))
+				.andExpect(jsonPath("$.data.items").isEmpty());
+
+		verify(transactionService).getPendingTransactions(USER_ID, 501L, 20);
+	}
 }

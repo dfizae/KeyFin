@@ -102,6 +102,20 @@ class TransactionServiceTest {
 	}
 
 	@Test
+	void 미확정_거래를_전체_기간에서_조회한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		given(transactionQueryRepository.findPendingTransactions(USER_ID, null, 3))
+				.willReturn(List.of(row(10L), row(9L), row(8L)));
+
+		TransactionListResponse response = transactionService.getPendingTransactions(USER_ID, null, 2);
+
+		assertThat(response.items()).extracting("id").containsExactly(10L, 9L);
+		assertThat(response.nextCursor()).isEqualTo(9L);
+		verify(transactionQueryRepository).findPendingTransactions(USER_ID, null, 3);
+	}
+
+	@Test
 	void 잘못된_월은_거절한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
 				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));

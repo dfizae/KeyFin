@@ -35,4 +35,14 @@ public class TransactionController implements TransactionControllerDocs {
 				userId, month, envelopeId, subcategoryId, accountId, cardId, cursor, size
 		));
 	}
+
+	@GetMapping(value = "/pending", produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<TransactionListResponse> getPendingTransactions(
+			@AuthenticationPrincipal Long userId,
+			@RequestParam(required = false) Long cursor,
+			@RequestParam(required = false) Integer size
+	) {
+		return BaseResponse.ok(transactionService.getPendingTransactions(userId, cursor, size));
+	}
 }

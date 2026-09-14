@@ -73,6 +73,26 @@ public class TransactionService {
 		return new TransactionListResponse(page.stream().map(TransactionItem::from).toList(), nextCursor);
 	}
 
+	@Transactional(readOnly = true)
+	public TransactionListResponse getPendingTransactions(long userId, Long cursor, Integer size) {
+		validateActiveUser(userId);
+		int pageSize = validateSize(size);
+		validatePositiveFilter(cursor);
+
+		List<TransactionQueryRow> rows = transactionQueryRepository.findPendingTransactions(
+				userId, cursor, pageSize + 1
+		);
+
+		return toListResponse(rows, pageSize);
+	}
+
+	private TransactionListResponse toListResponse(List<TransactionQueryRow> rows, int pageSize) {
+		boolean hasNext = rows.size() > pageSize;
+		List<TransactionQueryRow> page = hasNext ? rows.subList(0, pageSize) : rows;
+		Long nextCursor = hasNext ? page.getLast().id() : null;
+		return new TransactionListResponse(page.stream().map(TransactionItem::from).toList(), nextCursor);
+	}
+
 	private YearMonth parseMonth(String month) {
 		if (month == null || month.isBlank()) {
 			return YearMonth.now(clock.withZone(KST));

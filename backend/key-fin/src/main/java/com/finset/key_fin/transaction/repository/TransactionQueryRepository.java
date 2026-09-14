@@ -84,6 +84,56 @@ public class TransactionQueryRepository {
 		return rows.stream().map(this::mapRow).toList();
 	}
 
+	public List<TransactionQueryRow> findPendingTransactions(long userId, Long cursor, int limit) {
+		StringBuilder sql = new StringBuilder("""
+				SELECT t.id,
+				       t.tx_type,
+				       COALESCE(m.name, t.merchant_name_raw) AS merchant_name,
+				       t.amount,
+				       t.tx_date,
+				       t.tx_time,
+				       s.envelope_id,
+				       t.subcategory_id,
+				       s.name AS subcategory_name,
+				       t.confirm_status,
+				       t.exclude_tag,
+				       t.status,
+				       t.memo,
+				       t.account_id,
+				       t.card_id,
+				       t.adjusted_amount
+				  FROM transactions t
+				  LEFT JOIN merchants m ON m.id = t.merchant_id
+				  LEFT JOIN subcategories s ON s.id = t.subcategory_id
+				 WHERE t.user_id = :userId
+				   AND t.confirm_status = 'PENDING'
+				   AND t.status = 'NORMAL'
+				   AND t.tx_type <> 'DEPOSIT'
+				""");
+		if (cursor != null) {
+			sql.append("""
+					 AND (t.tx_date, t.tx_time, t.id) < (
+					       SELECT cursor_tx.tx_date, cursor_tx.tx_time, cursor_tx.id
+					         FROM transactions cursor_tx
+					        WHERE cursor_tx.id = :cursor
+					          AND cursor_tx.user_id = :userId
+					 )
+					""");
+		}
+		sql.append(" ORDER BY t.tx_date DESC, t.tx_time DESC, t.id DESC");
+
+		Query query = entityManager.createNativeQuery(sql.toString());
+		query.setParameter("userId", userId);
+		if (cursor != null) {
+			query.setParameter("cursor", cursor);
+		}
+		query.setMaxResults(limit);
+
+		@SuppressWarnings("unchecked")
+		List<Object[]> rows = query.getResultList();
+		return rows.stream().map(this::mapRow).toList();
+	}
+
 	private void setOptionalParameters(Query query, TransactionSearchCondition condition) {
 		if (condition.envelopeId() != null) {
 			query.setParameter("envelopeId", condition.envelopeId());
