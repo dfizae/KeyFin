@@ -26,6 +26,14 @@ export function useCurrentBudget() {
 }
 
 /**
+ * 확정 화면으로 보내야 하는지. 승인 직후에는 캐시가 아직 PROPOSED 인 채로 새로 받는 중이라,
+ * 그때 보내면 확정 화면이 잠깐 떴다가 다시 돌아오는 깜빡임이 생긴다(2026-09-14). 새로 받는 동안은 기다린다.
+ */
+export function needsConfirmation(budget: ReturnType<typeof useCurrentBudget>): boolean {
+  return budget.data?.status === "PROPOSED" && !budget.isFetching;
+}
+
+/**
  * 제안은 주기에 한 번 만들어지는 값이라 화면에 머무는 동안 다시 부르지 않는다.
  * 조회가 아니라 생성(POST)이라 재시도도 하지 않는다 — 실패하면 사용자가 [다시 시도] 를 누른다.
  */

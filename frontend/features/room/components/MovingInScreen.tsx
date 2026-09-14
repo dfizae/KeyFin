@@ -4,6 +4,7 @@ import { Image, View } from "react-native";
 
 import { LottieLoop } from "@/components/ui/lottie-loop";
 import { Text } from "@/components/ui/text";
+import { useCurrentBudget } from "@/features/budget/api/queries";
 import { CHARACTER_CELEBRATE } from "@/features/room/assets";
 import { useRoom } from "@/features/room/api/queries";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,9 @@ const SPARKLES_STYLE = { width: 240, height: 240 } as const;
 function MovingInScreen() {
   const router = useRouter();
   const room = useRoom();
+  // 예산 승인 직후라 현재 예산 캐시가 새로 받는 중이다. 여기서 구독해 두면 홈에 들어갈 때 이미 CONFIRMED 라
+  // 홈이 확정 화면으로 되돌려 보내는 깜빡임이 없다(2026-09-14).
+  const budget = useCurrentBudget();
   const [waited, setWaited] = React.useState(false);
 
   React.useEffect(() => {
@@ -34,8 +38,8 @@ function MovingInScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  // 방을 못 받아도 홈이 스스로 오류·재시도를 보여주므로 여기서 붙잡지 않는다.
-  const settled = !room.isPending;
+  // 방·예산을 못 받아도 홈이 스스로 오류·재시도를 보여주므로 여기서 붙잡지 않는다. 받는 중일 때만 기다린다.
+  const settled = !room.isPending && !budget.isFetching;
 
   React.useEffect(() => {
     if (waited && settled) router.replace(HOME_ROUTE);

@@ -9,7 +9,7 @@ import { FillBar } from "@/components/ui/fill-bar";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useCurrentBudget } from "@/features/budget/api/queries";
+import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
@@ -33,7 +33,7 @@ const ENVELOPE_DETAIL_ROUTE = "/budget";
 function BudgetScreen() {
   const budget = useCurrentBudget();
 
-  if (budget.data?.status === "PROPOSED") return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
+  if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <View className="flex-1 bg-background">
