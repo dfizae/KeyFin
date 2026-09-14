@@ -5,6 +5,7 @@ import com.finset.key_fin.transaction.dto.request.TransactionClassificationReque
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse.TransactionItem;
+import com.finset.key_fin.transaction.entity.ExcludeTag;
 import com.finset.key_fin.transaction.exception.TransactionErrorCode;
 import com.finset.key_fin.transaction.repository.TransactionQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionQueryRow;
@@ -105,6 +106,17 @@ public class TransactionService {
 				.orElseThrow(() -> new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND));
 		boolean hasSubcategory = request.subcategoryId() != null;
 		boolean hasExcludeTag = request.excludeTag() != null;
+		boolean isRestore = request.excludeTag() == ExcludeTag.RESTORE;
+
+		if (isRestore) {
+			if (!hasSubcategory || request.adjustedAmount() != null) {
+				throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+			}
+			validateSubcategory(request.subcategoryId());
+			transaction.confirmRestore(request.subcategoryId());
+			return TransactionClassificationResponse.from(transaction);
+		}
+
 		if (hasSubcategory == hasExcludeTag) {
 			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
 		}
@@ -113,15 +125,19 @@ public class TransactionService {
 			if (request.adjustedAmount() != null) {
 				throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
 			}
-			if (request.subcategoryId() <= 0 || !transactionQueryRepository.existsSubcategory(request.subcategoryId())) {
-				throw new BusinessException(TransactionErrorCode.SUBCATEGORY_NOT_FOUND);
-			}
+			validateSubcategory(request.subcategoryId());
 			transaction.confirmSubcategory(request.subcategoryId());
 		} else {
 			transaction.confirmExclusion(request.excludeTag(), request.adjustedAmount());
 		}
 
 		return TransactionClassificationResponse.from(transaction);
+	}
+
+	private void validateSubcategory(int subcategoryId) {
+		if (subcategoryId <= 0 || !transactionQueryRepository.existsSubcategory(subcategoryId)) {
+			throw new BusinessException(TransactionErrorCode.SUBCATEGORY_NOT_FOUND);
+		}
 	}
 
 	private TransactionListResponse toListResponse(List<TransactionQueryRow> rows, int pageSize) {

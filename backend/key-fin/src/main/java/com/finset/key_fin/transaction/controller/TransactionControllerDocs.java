@@ -84,7 +84,8 @@ public interface TransactionControllerDocs {
 	@Operation(
 			summary = "거래 분류 확정·수정",
 			description = "거래를 세분류로 확정하거나 DUTCH·SELF_TRANSFER로 처리합니다. "
-					+ "subcategoryId와 excludeTag 중 하나만 입력해야 하며, 이미 확정된 거래도 수정할 수 있습니다.",
+					+ "일반 지출은 subcategoryId와 excludeTag 중 하나만 입력하고, 환급 입금은 subcategoryId와 RESTORE를 함께 입력합니다. "
+					+ "이미 확정된 거래도 수정할 수 있습니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
 	@ApiResponses({
@@ -101,7 +102,7 @@ public interface TransactionControllerDocs {
 					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
 			@ApiResponse(responseCode = "404", description = "거래·세분류 또는 활성 사용자를 찾을 수 없음 (TRANSACTION_004~005, USER_001)",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
-			@ApiResponse(responseCode = "409", description = "입금 또는 취소 거래로 분류할 수 없음 (TRANSACTION_007)",
+			@ApiResponse(responseCode = "409", description = "일반 입금, 환급이 아닌 입금 처리 또는 취소 거래로 분류할 수 없음 (TRANSACTION_007)",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
 			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class)))

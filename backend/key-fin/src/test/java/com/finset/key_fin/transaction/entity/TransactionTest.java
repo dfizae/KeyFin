@@ -71,6 +71,29 @@ class TransactionTest {
 								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
 	}
 
+	@Test
+	void 환급_입금은_세분류와_RESTORE로_확정한다() {
+		Transaction transaction = cardTransaction(20_000L);
+		ReflectionTestUtils.setField(transaction, "transactionType", TransactionType.DEPOSIT);
+
+		transaction.confirmRestore(301);
+
+		assertThat(transaction.getSubcategoryId()).isEqualTo(301);
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.RESTORE);
+		assertThat(transaction.getAdjustedAmount()).isNull();
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
+	void 출금_거래는_RESTORE로_확정할_수_없다() {
+		Transaction transaction = cardTransaction(20_000L);
+
+		assertThatThrownBy(() -> transaction.confirmRestore(301))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
+	}
+
 	private Transaction cardTransaction(long amount) {
 		Transaction transaction = new Transaction();
 		ReflectionTestUtils.setField(transaction, "transactionType", TransactionType.CARD);

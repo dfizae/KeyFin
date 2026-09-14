@@ -167,6 +167,23 @@ class TransactionServiceTest {
 	}
 
 	@Test
+	void 환급_입금을_세분류와_RESTORE로_확정한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		Transaction transaction = transaction(502L, TransactionType.DEPOSIT, TransactionStatus.NORMAL, 20_000L);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(transactionRepository.findByIdAndUserId(502L, USER_ID)).willReturn(Optional.of(transaction));
+		given(transactionQueryRepository.existsSubcategory(301)).willReturn(true);
+
+		var response = transactionService.classifyTransaction(
+				USER_ID, 502L, new TransactionClassificationRequest(301, ExcludeTag.RESTORE, null)
+		);
+
+		assertThat(response.subcategoryId()).isEqualTo(301);
+		assertThat(response.excludeTag()).isEqualTo(ExcludeTag.RESTORE);
+		assertThat(response.confirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
 	void 잘못된_월은_거절한다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
 				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));

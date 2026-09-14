@@ -118,6 +118,19 @@ public class Transaction extends BaseEntity {
 		this.confirmStatus = ConfirmStatus.CONFIRMED;
 	}
 
+	public void confirmRestore(int subcategoryId) {
+		if (transactionType != TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+		if (subcategoryId <= 0) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+		this.subcategoryId = subcategoryId;
+		this.excludeTag = ExcludeTag.RESTORE;
+		this.adjustedAmount = null;
+		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
 	private void validateClassifiable() {
 		if (transactionType == TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
 			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);

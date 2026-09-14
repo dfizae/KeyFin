@@ -82,4 +82,16 @@ class TransactionHistoryIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(classified.confirmStatus().name()).isEqualTo("CONFIRMED");
 		assertThat(transactionService.getPendingTransactions(USER_ID, null, 20).items()).isEmpty();
 	}
+
+	@Test
+	@Sql({"/sql/transaction-history-fixture.sql", "/sql/transaction-pending-fixture.sql"})
+	void 환급_입금을_세분류와_RESTORE로_확정한다() {
+		TransactionClassificationResponse classified = transactionService.classifyTransaction(
+				USER_ID, 8211L, new TransactionClassificationRequest(301, ExcludeTag.RESTORE, null)
+		);
+
+		assertThat(classified.subcategoryId()).isEqualTo(301);
+		assertThat(classified.excludeTag()).isEqualTo(ExcludeTag.RESTORE);
+		assertThat(classified.confirmStatus().name()).isEqualTo("CONFIRMED");
+	}
 }
