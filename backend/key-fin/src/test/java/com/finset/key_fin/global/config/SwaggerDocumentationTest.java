@@ -20,6 +20,34 @@ class SwaggerDocumentationTest extends SpringIntegrationTestSupport {
 	private MockMvc mockMvc;
 
 	@Test
+	void documentsItemApisAndSharedEquipmentWithoutRequestBodies() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.parameters[*].name")
+						.value(containsInAnyOrder("slotType")))
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.parameters[0].required").value(false))
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.parameters[0].schema.enum")
+						.value(containsInAnyOrder("HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR")))
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].put.parameters[*].name")
+						.value(containsInAnyOrder("userItemId")))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].put.requestBody").doesNotExist())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].delete.requestBody").doesNotExist())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].put.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].delete.responses['200']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].put.responses['400']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip'].put.responses['404']").exists())
+				.andExpect(jsonPath("$.components.schemas.EquippedItemResponse.properties")
+						.value(aMapWithSize(4)))
+				.andExpect(jsonPath("$.components.schemas.EquippedItemResponse.required")
+						.value(containsInAnyOrder("userItemId", "itemId", "slotType", "assetKey")))
+				.andExpect(jsonPath("$.components.schemas.AvatarEquipmentResponse.properties.equipped.items['$ref']")
+						.value("#/components/schemas/EquippedItemResponse"))
+				.andExpect(jsonPath("$.components.schemas.AvatarResponse.properties.equipped.items['$ref']")
+						.value("#/components/schemas/EquippedItemResponse"));
+	}
+
+	@Test
 	void documentsFinCoinBalanceWithoutQueryParameters() throws Exception {
 		mockMvc.perform(get("/v3/api-docs"))
 				.andExpect(status().isOk())

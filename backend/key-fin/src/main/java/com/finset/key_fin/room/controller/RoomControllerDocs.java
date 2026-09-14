@@ -21,25 +21,31 @@ public interface RoomControllerDocs {
 
 	@Operation(
 			summary = "방 홈 화면 데이터 조회",
-			description = "인증된 사용자의 방 초기 화면 데이터를 한 번에 조회합니다. 현재는 고정된 개발용 데이터를 반환합니다.",
+			description = "인증된 사용자의 방 초기 화면 데이터를 조회합니다. avatar.equipped는 실제 장착 상태이며 "
+					+ "미장착 부위는 모바일에서 기본 에셋을 표시합니다. 착장 외 항목은 개발용 데이터입니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
 	@ApiResponses({
 			@ApiResponse(
 					responseCode = "200",
 					description = "방 홈 화면 데이터 조회 성공",
+					useReturnTypeSchema = true,
 					content = @Content(
 							mediaType = APPLICATION_JSON_VALUE,
-							schema = @Schema(implementation = BaseResponse.class),
 							examples = @ExampleObject(
 									name = "방 조회 성공",
-									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"theme\":\"AUTUMN_2026\",\"avatar\":{\"equipped\":[{\"slotType\":\"HEAD\",\"itemId\":1,\"assetKey\":\"hair_default\"},{\"slotType\":\"FACE\",\"itemId\":2,\"assetKey\":\"face_default\"},{\"slotType\":\"UPPER_BODY\",\"itemId\":3,\"assetKey\":\"outfit_default\"}],\"reaction\":null},\"furnitures\":[{\"itemId\":4,\"slotType\":\"FLOOR\",\"assetKey\":\"sofa_default\",\"placementStatus\":\"FLOOR\",\"placementDirection\":\"FRONT_RIGHT\",\"positionX\":165.000,\"positionY\":280.000,\"layer\":0}],\"coin\":{\"balance\":1250},\"board\":{\"month\":\"202609\",\"totalRemainingRate\":36},\"attendance\":{\"checkedToday\":false}}}"
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"avatar\":{\"equipped\":[{\"userItemId\":101,\"slotType\":\"HEAD\",\"itemId\":1,\"assetKey\":\"hat_blue\"},{\"userItemId\":102,\"slotType\":\"FACE\",\"itemId\":2,\"assetKey\":\"glasses_round\"},{\"userItemId\":103,\"slotType\":\"UPPER_BODY\",\"itemId\":3,\"assetKey\":\"shirt_blue\"}],\"reaction\":null},\"furnitures\":[{\"itemId\":4,\"slotType\":\"FLOOR\",\"assetKey\":\"sofa_default\",\"placementStatus\":\"FLOOR\",\"placementDirection\":\"FRONT_RIGHT\",\"positionX\":165.000,\"positionY\":280.000,\"layer\":0}],\"coin\":{\"balance\":1250},\"board\":{\"month\":\"202609\",\"totalRemainingRate\":36},\"attendance\":{\"checkedToday\":false}}}"
 							)
 					)
 			),
 			@ApiResponse(
 					responseCode = "401",
 					description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "404",
+					description = "활성 사용자를 찾을 수 없음 (USER_001)",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class))
 			),
 			@ApiResponse(

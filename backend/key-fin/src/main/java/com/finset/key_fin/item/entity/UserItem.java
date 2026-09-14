@@ -50,4 +50,16 @@ public class UserItem {
 	@Generated(event = EventType.INSERT)
 	@Column(name = "acquired_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime acquiredAt;
+
+	public void equip() {
+		this.equippedSlot = item.getSlotType();
+	}
+
+	public void unequip() {
+		this.equippedSlot = null;
+	}
+
+	public boolean isEquipped() {
+		return equippedSlot != null;
+	}
 }
