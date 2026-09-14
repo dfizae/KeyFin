@@ -6,6 +6,8 @@
 | --- | --- | --- |
 | [`coaching/`](coaching/) | 합성 질문·거래 상황 → 미리 정한 계약 | 코칭 감지·분류·근거 준수·오류 복구 |
 | [`coaching/e2e/`](coaching/e2e/README.md) | 실제 HTTP 흐름과 추론 호출 → 계약·응답 추적 | 연결 오류, 대체 발생, 토큰 선검사 |
+| [`coaching/flow/`](coaching/flow/README.md) | 결제→알림→동일 세션→추가·취소·잔액→실제 프로세스 재시작 | 현재 원장 반영·과거 코칭 보존·GET/멱등성·모델 채택 |
+| [`coaching/knowledge_response/`](coaching/knowledge_response/README.md) | 공식 개념·개인 조회·자료 부족·연속 질문 → 근거 ID·원금액 | 등록된 주제의 응답 커버리지; 전체 금융 정답률은 아님 |
 | [`coaching/chart_e2e.py`](coaching/chart_e2e.py) | 거래와 예산 기간 → 실제 추론·차트 JSON·HTML·저장 조회·재시도 | 차트 연결과 결과 일관성; [실행법](../docs/charts.md#재현과-검증-범위) |
 | [`forecast/`](forecast/README.md) | 기준일까지 원장 → 이후 원장 소비 합계 | 관측된 SEED 시계열의 미래 소비 오차 |
 
