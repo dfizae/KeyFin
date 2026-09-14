@@ -1,5 +1,7 @@
 package com.finset.key_fin.user.entity;
 
+import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.user.exception.UserErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -57,12 +59,12 @@ public class UserSettings {
 			Long transferLimitOnce,
 			Long transferLimitDaily
 	) {
-		validateTransferLimit(transferLimitOnce, "1회 이체 한도");
-		validateTransferLimit(transferLimitDaily, "1일 이체 한도");
+		validateTransferLimit(transferLimitOnce);
+		validateTransferLimit(transferLimitDaily);
 		if (transferLimitOnce != null
 				&& transferLimitDaily != null
 				&& transferLimitDaily < transferLimitOnce) {
-			throw new IllegalArgumentException("1일 이체 한도는 1회 이체 한도보다 작을 수 없습니다.");
+			throw new BusinessException(UserErrorCode.INVALID_TRANSFER_LIMIT);
 		}
 
 		this.transferConsent = transferConsent;
@@ -70,9 +72,9 @@ public class UserSettings {
 		this.transferLimitDaily = transferLimitDaily;
 	}
 
-	private static void validateTransferLimit(Long transferLimit, String name) {
+	private static void validateTransferLimit(Long transferLimit) {
 		if (transferLimit != null && transferLimit <= 0) {
-			throw new IllegalArgumentException(name + "는 0보다 커야 합니다.");
+			throw new BusinessException(UserErrorCode.INVALID_TRANSFER_LIMIT);
 		}
 	}
 }

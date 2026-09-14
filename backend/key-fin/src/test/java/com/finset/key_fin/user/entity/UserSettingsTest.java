@@ -1,9 +1,11 @@
 package com.finset.key_fin.user.entity;
 
+import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserSettingsTest {
 
@@ -48,9 +50,10 @@ class UserSettingsTest {
 		UserSettings settings = UserSettings.create(
 				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
 
-		assertThatIllegalArgumentException()
-				.isThrownBy(() -> settings.updateTransferSettings(true, 0L, null))
-				.withMessage("1회 이체 한도는 0보다 커야 합니다.");
+		assertThatThrownBy(() -> settings.updateTransferSettings(true, 0L, null))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(UserErrorCode.INVALID_TRANSFER_LIMIT));
 	}
 
 	@Test
@@ -58,8 +61,9 @@ class UserSettingsTest {
 		UserSettings settings = UserSettings.create(
 				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
 
-		assertThatIllegalArgumentException()
-				.isThrownBy(() -> settings.updateTransferSettings(true, 1_000_000L, 500_000L))
-				.withMessage("1일 이체 한도는 1회 이체 한도보다 작을 수 없습니다.");
+		assertThatThrownBy(() -> settings.updateTransferSettings(true, 1_000_000L, 500_000L))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(UserErrorCode.INVALID_TRANSFER_LIMIT));
 	}
 }
