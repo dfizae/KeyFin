@@ -90,10 +90,10 @@ flowchart TB
 | 초기 입력·거래 이벤트 | `Events` → FDT 정규화/갱신 → `Ledger` 결제·취소 처리 | Twin·봉투 원장·revision을 원자적으로 반영 |
 | 결제 후 코칭 | 결제 규칙 감지 → `Coach.review` → 모호한 경우 LLM `judge` → 검증된 설명 | 코칭 발생 시 코칭과 알림 outbox를 원장 변경과 함께 저장 |
 | 코칭 검토 | `Dialogue.review` → `Coach.review` → LLM 보조 설명 | 원본 receipt와 코칭 저장; 알림은 만들지 않음 |
-| 후속 질문 | 기간 해석 → `Coach.review` → LLM `route` → 필요한 `Engine.run` → 설명 검증 | 현재·과거 근거와 수치 결과를 보존하고 세션·코칭 저장 |
+| 후속 질문 | LLM `route` → 일반 개념·확정 소비·FDT 분석 분기; 분석일 때 기간 검사 → `Coach.review` → 필요한 `Engine.run` | 개념·소비는 답변과 세션, FDT 분석은 원본 receipt와 세션·코칭 저장 |
 | 예산 차트 | `Charts.forecast` → `ChartEngine` → 차트 계약 검사 → LLM 근거 ID 선택 | 차트 JSON·원본 receipt 저장, 별도 GET에서 HTML 조립 |
 
-LLM의 자동 라우팅 값은 현재 `review`, `forecast`, `risk`입니다. `what_if`, `goal`, `optimize`도 엔진에 구현되어 있지만, 대화에서는 호출자가 요청의 구조화된 `analysis`에 조건을 제공해야 합니다. 모든 자연어 질문에서 다섯 모드의 조건을 자동으로 완성하는 기능으로 표현하지 않습니다. 일반 기간은 `period_request.py`·`periods.py`가, 차트 주기는 `chart_contract.py`가 검사합니다.
+LLM의 자동 라우팅 값은 현재 `review`, `forecast`, `risk`, `finance`, `history`, `other`입니다. [일반 금융 질문과 소비 조회의 분기 구조](chat.md)는 이전 코칭 없이도 동작합니다. `what_if`, `goal`, `optimize`도 엔진에 구현되어 있지만, 대화에서는 호출자가 요청의 구조화된 `analysis`에 조건을 제공해야 합니다. 모든 자연어 질문에서 다섯 모드의 조건을 자동으로 완성하는 기능으로 표현하지 않습니다. 일반 기간은 `period_request.py`·`periods.py`가, 차트 주기는 `chart_contract.py`가 검사합니다.
 
 ## 차트 한 건이 만들어지는 순서
 

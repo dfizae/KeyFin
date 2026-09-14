@@ -107,7 +107,8 @@ Chronos-2는 공변량과 여러 시계열을 지원하지만 우리 고객 데�
 | [104 예측 성능 진단·개선](https://ssafy.atlassian.net/browse/S15P21A408-104) | 진행 중 | 동일 기간의 편성·예측·실제값 확보 → 원인 분리 → 후보 비교 → 미사용 실제 미래 및 shadow 평가 |
 | [110 코칭 사용 흐름 통합 테스트](https://ssafy.atlassian.net/browse/S15P21A408-110) | 진행 중 | 아래 실제 LLM 연속 흐름 및 산출물 검토 완료 후 판단 |
 | [103 차트 시각화](https://ssafy.atlassian.net/browse/S15P21A408-103) | 다른 담당자의 진행 중 상태 유지 | AI 차트 API·미래 일별 표시 검증은 제공됨. 앱 연결과 해당 담당자의 완료 검토는 별도 |
-| [47 감지](https://ssafy.atlassian.net/browse/S15P21A408-47), [48 멘트](https://ssafy.atlassian.net/browse/S15P21A408-48), [68 애매 상황](https://ssafy.atlassian.net/browse/S15P21A408-68), [69 대화](https://ssafy.atlassian.net/browse/S15P21A408-69) | 다른 담당자의 해야 할 일 상태 유지 | 독립 API 구현을 앱·백엔드 연동, 정책 확정, 실제 푸시 수신, 리뷰·배포 완료로 대신하지 않음 |
+| [69 대화](https://ssafy.atlassian.net/browse/S15P21A408-69) | R13 실행 근거를 반영해 진행 중 | 일반 개념·확정 소비·예측 API와 같은 세션 4회 질문 확인. 앱 응답 형식 연결·BE 통합·공식 근거 확장·오너 리뷰·develop 머지는 별도 |
+| [47 감지](https://ssafy.atlassian.net/browse/S15P21A408-47), [48 멘트](https://ssafy.atlassian.net/browse/S15P21A408-48), [68 애매 상황](https://ssafy.atlassian.net/browse/S15P21A408-68) | 다른 담당자의 해야 할 일 상태 유지 | 독립 API 구현을 앱·백엔드 연동, 정책 확정, 실제 푸시 수신, 리뷰·배포 완료로 대신하지 않음 |
 
 110의 추가 실행은 **Twin 생성 → 결제 → 코칭·알림 조회/ack → 같은 세션의 설명·위험·월말 질문 → 새 거래·취소·잔액 변경 → 같은 세션 재질문 → 서비스 재시작 → 이력 GET**을 한 사용 흐름으로 연결해야 합니다. 자동 기간 선택은 구조화된 `analysis`를 강제로 넣지 않고 확인합니다. 정상 경로의 실제 LLM 채택과 오류 주입에 따른 대체를 따로 집계합니다.
 

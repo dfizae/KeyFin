@@ -17,6 +17,8 @@
 
 함수 주석은 입력 단위, 정책의 이유, 불변 조건, 실패 시점에 집중합니다. 위에서 아래로 읽을 때 계산 도중의 임시 상태와 실제 DB 반영을 구분할 수 있도록 작성했습니다.
 
+R13 대화 변경은 [대화 API 계약](chat.md)을 먼저 읽고 `dialogue.py`의 의도 분기, `chat_answers.py`의 응답 두 형식, `finance_knowledge.py`의 공식 근거·선택 검증, `spending_history.py`의 기간·소비 포함 기준을 확인합니다. `coaching.py`의 `supplementary_evidence`는 표시된 수치를 작성기에 한 번만 전달하며 원본 receipt를 변경하지 않습니다. E2E는 이 새 입력 계약을 독립적으로 재구성하고 원본 엔진 결과 대조를 계속합니다.
+
 ## 차트 요청의 흐름
 
 ```mermaid

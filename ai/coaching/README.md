@@ -8,6 +8,8 @@
 
 [실제 고객 검증 계획](docs/real-customer-validation.md)에서 현재 실험 수치의 의미, 예측 개선 순서와 Jira AI 코칭 잔여 업무를 확인할 수 있습니다.
 
+[금융 질문·소비 조회·예측 대화](docs/chat.md)에서 거래 연결 없이 대화를 시작하는 방법과 새 응답 형식을 확인합니다. [응답 검증 보고서](docs/chat-response-validation.md)는 같은 질문의 수정 전후 GPU 결과를 비교합니다.
+
 ## 빠르게 실행하기
 
 Python 3.11~3.13과 `uv`가 필요합니다. 저장소 루트에서 PowerShell로 실행합니다.
@@ -34,6 +36,8 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 3. 코칭 검토는 `POST /v1/coaching/reviews`, 대화 시작은 `POST /v1/sessions`, 질문은 `POST /v1/sessions/{session_id}/messages`를 사용합니다.
 4. `GET /v1/notifications`로 알림 대기 항목을 읽고 실제 전달 후 `POST /v1/notifications/{event_id}/ack`로 확인합니다.
 
+일반 금융 개념만 질문하려면 Twin 생성 없이 `POST /v1/finance/questions`를 호출하거나, `{}`로 세션을 만든 뒤 메시지를 보냅니다. 현재 공식 근거 9종을 지원하며 미지원·최신 정보는 자료 필요 상태로 구분합니다. 메시지 응답은 `Coaching | ChatAnswer`이므로 앱에서 `receipt`의 존재를 무조건 가정하지 않습니다.
+
 기존 KeyFin 차트는 `POST /v1/charts/budget-forecast`로 생성합니다. 거래를 요청에 담거나 저장된 Twin을 사용할 수 있으며, FDT 계산과 GPU 설명 추론을 거친 차트 JSON 및 원본 계산 근거를 반환합니다. [차트 연결 안내](docs/charts.md)에 요청 예시·HTML 조회·기간 및 금액 기준을 정리했습니다.
 
 예시는 고정된 합성 날짜를 사용합니다. 이벤트 날짜와 분석 기준일을 임의로 섞지 않습니다. 최신 요청 필드와 응답 형식은 실행 중인 `/docs` 및 [`schemas.py`](src/coaching_service/schemas.py)가 기준입니다.
@@ -46,6 +50,7 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 | `store.py`, `repository.py`, `events.py` | SQLite 저장·이벤트 반영·재시도 처리 |
 | `engine.py`, `periods.py` | FDT 호출과 기준일·종료일 계산 |
 | `coaching.py`, `dialogue.py`, `payments.py` | 코칭 발생·대화·결제 흐름 |
+| `finance_knowledge.py`, `spending_history.py`, `chat_answers.py` | 공식 개념 근거, 확정 소비 집계, 예측 없는 답변 계약 |
 | `llm.py`, `evidence_projection.py`, `token_budget.py` | 모델 호출·근거 선택·실제 토큰 한도 검사 |
 | `admission.py`, `rendering.py`, `numeric_rendering.py` | 모델 결과 검사, 원본 수치·기간 검증 후 본문 조립, 설명 대체 |
 | `chart_routes.py`, `charts.py`, `chart_contract.py`, `chart_projection.py`, `chart_rendering.py` | 고정 차트 JSON 변환, 생성·저장·HTML 조회 |
