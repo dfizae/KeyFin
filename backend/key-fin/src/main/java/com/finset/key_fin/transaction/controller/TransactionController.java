@@ -1,11 +1,16 @@
 package com.finset.key_fin.transaction.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.service.TransactionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,5 +49,15 @@ public class TransactionController implements TransactionControllerDocs {
 			@RequestParam(required = false) Integer size
 	) {
 		return BaseResponse.ok(transactionService.getPendingTransactions(userId, cursor, size));
+	}
+
+	@PutMapping(value = "/{id}/classification", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<TransactionClassificationResponse> classifyTransaction(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable("id") Long transactionId,
+			@RequestBody TransactionClassificationRequest request
+	) {
+		return BaseResponse.ok(transactionService.classifyTransaction(userId, transactionId, request));
 	}
 }

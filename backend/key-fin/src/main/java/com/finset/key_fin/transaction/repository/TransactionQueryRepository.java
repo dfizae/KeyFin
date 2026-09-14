@@ -134,6 +134,13 @@ public class TransactionQueryRepository {
 		return rows.stream().map(this::mapRow).toList();
 	}
 
+	public boolean existsSubcategory(int subcategoryId) {
+		Number count = (Number) entityManager.createNativeQuery(
+				"SELECT COUNT(*) FROM subcategories WHERE id = :subcategoryId"
+		).setParameter("subcategoryId", subcategoryId).getSingleResult();
+		return count.longValue() > 0;
+	}
+
 	private void setOptionalParameters(Query query, TransactionSearchCondition condition) {
 		if (condition.envelopeId() != null) {
 			query.setParameter("envelopeId", condition.envelopeId());

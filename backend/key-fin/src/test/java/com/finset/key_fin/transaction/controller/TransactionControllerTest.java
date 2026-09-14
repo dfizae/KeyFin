@@ -1,6 +1,9 @@
 package com.finset.key_fin.transaction.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
+import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse.TransactionItem;
 import com.finset.key_fin.transaction.entity.ConfirmStatus;
@@ -24,6 +27,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
@@ -34,10 +38,12 @@ class TransactionControllerTest {
 
 	private TransactionService transactionService;
 	private MockMvc mockMvc;
+	private ObjectMapper objectMapper;
 
 	@BeforeEach
 	void setUp() {
 		transactionService = mock(TransactionService.class);
+		objectMapper = new ObjectMapper();
 		mockMvc = standaloneSetup(new TransactionController(transactionService))
 				.setControllerAdvice(new GlobalExceptionHandler())
 				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
@@ -104,5 +110,25 @@ class TransactionControllerTest {
 				.andExpect(jsonPath("$.data.items").isEmpty());
 
 		verify(transactionService).getPendingTransactions(USER_ID, 501L, 20);
+	}
+
+	@Test
+	void 거래_분류를_확정한다() throws Exception {
+		TransactionClassificationRequest request = new TransactionClassificationRequest(102, null, null);
+		when(transactionService.classifyTransaction(USER_ID, 501L, request))
+				.thenReturn(new TransactionClassificationResponse(
+						501L, 102, ExcludeTag.NONE, null, ConfirmStatus.CONFIRMED
+				));
+
+		mockMvc.perform(put("/api/v1/transactions/{id}/classification", 501L)
+						.contentType("application/json")
+						.content(objectMapper.writeValueAsString(request)))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.transactionId").value(501))
+				.andExpect(jsonPath("$.data.subcategoryId").value(102))
+				.andExpect(jsonPath("$.data.excludeTag").value("NONE"))
+				.andExpect(jsonPath("$.data.confirmStatus").value("CONFIRMED"));
+
+		verify(transactionService).classifyTransaction(USER_ID, 501L, request);
 	}
 }

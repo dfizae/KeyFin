@@ -1,11 +1,14 @@
 package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse.TransactionItem;
 import com.finset.key_fin.transaction.exception.TransactionErrorCode;
 import com.finset.key_fin.transaction.repository.TransactionQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionQueryRow;
+import com.finset.key_fin.transaction.repository.TransactionRepository;
 import com.finset.key_fin.transaction.repository.TransactionSearchCondition;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -30,6 +33,7 @@ public class TransactionService {
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
 	private final UserRepository userRepository;
+	private final TransactionRepository transactionRepository;
 	private final TransactionQueryRepository transactionQueryRepository;
 	private final Clock clock;
 
@@ -84,6 +88,40 @@ public class TransactionService {
 		);
 
 		return toListResponse(rows, pageSize);
+	}
+
+	@Transactional
+	public TransactionClassificationResponse classifyTransaction(
+			long userId,
+			long transactionId,
+			TransactionClassificationRequest request
+	) {
+		validateActiveUser(userId);
+		if (request == null) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+
+		var transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+				.orElseThrow(() -> new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND));
+		boolean hasSubcategory = request.subcategoryId() != null;
+		boolean hasExcludeTag = request.excludeTag() != null;
+		if (hasSubcategory == hasExcludeTag) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+
+		if (hasSubcategory) {
+			if (request.adjustedAmount() != null) {
+				throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+			}
+			if (request.subcategoryId() <= 0 || !transactionQueryRepository.existsSubcategory(request.subcategoryId())) {
+				throw new BusinessException(TransactionErrorCode.SUBCATEGORY_NOT_FOUND);
+			}
+			transaction.confirmSubcategory(request.subcategoryId());
+		} else {
+			transaction.confirmExclusion(request.excludeTag(), request.adjustedAmount());
+		}
+
+		return TransactionClassificationResponse.from(transaction);
 	}
 
 	private TransactionListResponse toListResponse(List<TransactionQueryRow> rows, int pageSize) {

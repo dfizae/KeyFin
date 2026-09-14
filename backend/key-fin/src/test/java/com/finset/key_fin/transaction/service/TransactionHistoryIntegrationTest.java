@@ -1,7 +1,10 @@
 package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
+import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
+import com.finset.key_fin.transaction.entity.ExcludeTag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.jdbc.Sql;
@@ -65,5 +68,18 @@ class TransactionHistoryIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(response.items().getFirst().confirmStatus().name()).isEqualTo("PENDING");
 		assertThat(response.items().getFirst().status().name()).isEqualTo("NORMAL");
 		assertThat(response.items().getFirst().txType().name()).isEqualTo("CARD");
+	}
+
+	@Test
+	@Sql({"/sql/transaction-history-fixture.sql", "/sql/transaction-pending-fixture.sql"})
+	void 미확정_거래를_세분류로_확정하면_목록에서_제외된다() {
+		TransactionClassificationResponse classified = transactionService.classifyTransaction(
+				USER_ID, 8210L, new TransactionClassificationRequest(102, null, null)
+		);
+
+		assertThat(classified.subcategoryId()).isEqualTo(102);
+		assertThat(classified.excludeTag()).isEqualTo(ExcludeTag.NONE);
+		assertThat(classified.confirmStatus().name()).isEqualTo("CONFIRMED");
+		assertThat(transactionService.getPendingTransactions(USER_ID, null, 20).items()).isEmpty();
 	}
 }
