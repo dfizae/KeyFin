@@ -55,17 +55,9 @@ flowchart TB
 
     subgraph Numeric["Engine.run · 다섯 수치 분석 모드"]
         Sim["simulation.py: simulate<br/>소비 · 고정비 · 계좌 현금 · 카드 미결제액"]
-        Forecast["forecast<br/>미래 경로와 P10/P50/P90"]
-        WhatIf["what_if<br/>같은 표본으로 기준·가정 비교"]
-        Goal["goal<br/>목표 및 현금 부족 조건 계산"]
-        Risk["risk<br/>현금 부족과 요청한 충격 분석"]
-        Optimize["optimize<br/>제약을 만족하는 유한 후보 탐색"]
+        Modes["forecast: 미래 경로와 P10/P50/P90<br/>what_if: 같은 표본으로 기준·가정 비교<br/>goal: 목표 및 현금 부족 조건 계산<br/>risk: 현금 부족과 요청한 충격 분석<br/>optimize: 제약을 만족하는 유한 후보 탐색"]
         NumericResult["원본 결과<br/>metrics · datasets · warnings · decision"]
-        Sim --> Forecast --> NumericResult
-        Sim --> WhatIf --> NumericResult
-        Sim --> Goal --> NumericResult
-        Sim --> Risk --> NumericResult
-        Sim --> Optimize --> NumericResult
+        Sim --> Modes --> NumericResult
     end
 
     subgraph Coaching["Coach.review · 사용자 코칭 계산"]
