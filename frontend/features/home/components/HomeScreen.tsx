@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
+import { CoachingEntry } from "@/features/coaching/components/CoachingEntry";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
 import { useBudget } from "@/features/budget/api/queries";
 import { BudgetUnsetBanner } from "@/features/budget/components/BudgetUnsetBanner";
@@ -50,6 +51,7 @@ function HomeScreen() {
       {room.isSuccess ? (
         <>
           <HomeHeader coinBalance={room.data.coinBalance} />
+          <View className="px-6 pb-3"><CoachingEntry /></View>
           <View className="relative">
             <CharacterRoom
               locked={panel !== null}
