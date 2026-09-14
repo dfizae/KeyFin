@@ -4,6 +4,7 @@ import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
+import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { Text } from "@/components/ui/text";
 import { useCachedBudgetProposal } from "@/features/budget/api/queries";
 import { envelopeTone } from "@/features/budget/catalog";
@@ -44,9 +45,7 @@ function SpendingSummaryScreen() {
 
         <View className="gap-1">
           <Text className="text-label text-card-foreground">한 달 평균 소비</Text>
-          <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
-            {formatKRW(total)}
-          </Text>
+          <CountUpAmount value={total} className="text-amount-lg tabular-nums text-foreground" />
         </View>
 
         <View className="gap-4">

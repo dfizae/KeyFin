@@ -6,6 +6,7 @@ import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
+import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
@@ -165,9 +166,7 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
 
         <View className="gap-1.5">
           <Text className="text-label text-card-foreground">{period} 총 예산</Text>
-          <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
-            {formatKRW(total)}
-          </Text>
+          <CountUpAmount value={total} className="text-amount-lg tabular-nums text-foreground" />
           <Text className="text-caption tabular-nums text-card-foreground">{summary}</Text>
         </View>
 

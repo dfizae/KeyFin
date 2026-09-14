@@ -1,5 +1,6 @@
 import { View } from "react-native";
 
+import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { Text } from "@/components/ui/text";
 import { EnvelopeChart } from "@/features/budget/components/EnvelopeChart";
 import { budgetHealth, usedBarPercent, type BudgetEnvelope, type BudgetHealth, type BudgetTotal } from "@/features/budget/model";
@@ -36,9 +37,7 @@ function BudgetCard({ total, envelopes, period, onSelectEnvelope }: BudgetCardPr
         <Text className={cn("text-caption", health.textClassName)}>{health.label}</Text>
       </View>
       <View className="gap-1">
-        <Text className="text-display tabular-nums text-primary-foreground" maxFontSizeMultiplier={1.3}>
-          {formatKRW(total.remaining)}
-        </Text>
+        <CountUpAmount value={total.remaining} className="text-display tabular-nums text-primary-foreground" />
         <Text className="text-caption text-primary-foreground">
           총 예산 {formatKRW(total.confirmed)} 중 {formatKRW(total.spent)} 사용
         </Text>

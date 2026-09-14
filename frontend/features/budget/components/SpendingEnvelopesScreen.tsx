@@ -4,6 +4,7 @@ import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
+import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { Separator } from "@/components/ui/separator";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
@@ -72,9 +73,7 @@ function SpendingEnvelopesScreen() {
 
         <View className="flex-row items-center justify-between">
           <Text className="text-label text-foreground">합계</Text>
-          <Text className="text-amount-md tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
-            {formatKRW(total)}
-          </Text>
+          <CountUpAmount value={total} className="text-amount-md tabular-nums text-foreground" />
         </View>
       </ScrollView>
 
