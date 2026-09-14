@@ -1,6 +1,8 @@
 package com.finset.key_fin.transaction.entity;
 
 import com.finset.key_fin.global.base.BaseEntity;
+import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.transaction.exception.TransactionErrorCode;
 import com.finset.key_fin.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -86,4 +88,52 @@ public class Transaction extends BaseEntity {
 
 	@Column(length = 255)
 	private String memo;
+
+	public void confirmSubcategory(int subcategoryId) {
+		validateClassifiable();
+		if (subcategoryId <= 0) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+		this.subcategoryId = subcategoryId;
+		this.excludeTag = ExcludeTag.NONE;
+		this.adjustedAmount = null;
+		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
+	public void confirmExclusion(ExcludeTag excludeTag, Long adjustedAmount) {
+		validateClassifiable();
+		if (excludeTag == null || (excludeTag != ExcludeTag.DUTCH && excludeTag != ExcludeTag.SELF_TRANSFER)) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+		if (excludeTag == ExcludeTag.DUTCH) {
+			if (adjustedAmount == null || adjustedAmount <= 0 || adjustedAmount > amount) {
+				throw new BusinessException(TransactionErrorCode.INVALID_ADJUSTED_AMOUNT);
+			}
+		} else if (adjustedAmount != null) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+		this.subcategoryId = null;
+		this.excludeTag = excludeTag;
+		this.adjustedAmount = adjustedAmount;
+		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
+	public void confirmRestore(int subcategoryId) {
+		if (transactionType != TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+		if (subcategoryId <= 0) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+		this.subcategoryId = subcategoryId;
+		this.excludeTag = ExcludeTag.RESTORE;
+		this.adjustedAmount = null;
+		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
+	private void validateClassifiable() {
+		if (transactionType == TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+	}
 }
