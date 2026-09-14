@@ -1,14 +1,15 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, CircleAlert, WifiOff } from "lucide-react-native";
+import { CircleAlert, WifiOff } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Pressable, ScrollView, Switch, View } from "react-native";
+import { ScrollView, Switch, View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useTransferSettings, useUpdateTransferSettings } from "@/features/settings/api/queries";
 import { transferSettingsErrorMessage } from "@/features/settings/errors";
@@ -35,19 +36,7 @@ function SettingsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace(MY_ROUTE))}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          설정
-        </Text>
-      </View>
+      <ScreenHeader title="설정" onBack={() => (router.canGoBack() ? router.back() : router.replace(MY_ROUTE))} />
 
       {settings.isPending ? (
         <SettingsSkeleton />
@@ -89,7 +78,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
   return (
     <>
       <ScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">
-        <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
+        <View className="gap-3 border-b border-border pb-6 pt-2">
           <View className="flex-row items-center justify-between gap-3">
             <Text className="shrink text-h3 text-foreground">결제 준비 이체 동의</Text>
             <Switch
@@ -177,8 +166,11 @@ function LimitField({ label, value, editable, onChange }: LimitFieldProps) {
 
 function SettingsSkeleton() {
   return (
-    <View className="gap-6 px-6" accessible accessibilityLabel="불러오는 중">
-      <Skeleton className="h-32 w-full rounded-2xl" />
+    <View className="gap-6 px-6 pt-2" accessible accessibilityLabel="불러오는 중">
+      <View className="gap-3 border-b border-border pb-6">
+        <Skeleton className="h-7 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </View>
       <Skeleton className="h-6 w-20" />
       <Skeleton className="h-14 w-full rounded-lg" />
       <Skeleton className="h-14 w-full rounded-lg" />

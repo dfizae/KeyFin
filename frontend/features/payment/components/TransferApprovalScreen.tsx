@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ArrowDown, CalendarClock, CircleAlert, CircleCheck, ChevronLeft, ShieldOff, WifiOff } from "lucide-react-native";
+import { ArrowDown, CalendarClock, CircleAlert, CircleCheck, ShieldOff, WifiOff } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
 import type { LinkedAccount } from "@/features/account/model";
@@ -17,6 +18,7 @@ import { canApproveTransfer, findTransfer, transferStatusLabel, type Transfer } 
 import { useTransferSettings } from "@/features/settings/api/queries";
 import { currentMonthKey, formatDateTime, formatMonthDay, parseKSTDateKey, parseKSTLocalDateTime } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 const CALENDAR_ROUTE = "/payment/calendar";
 const SETTINGS_ROUTE = "/my/settings";
@@ -63,14 +65,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={goBack}>
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          이체 승인
-        </Text>
-      </View>
+      <ScreenHeader title="이체 승인" onBack={goBack} />
 
       {settings.isPending || transfers.isPending ? (
         <ApprovalSkeleton />
@@ -187,9 +182,10 @@ type TransferSummaryProps = {
   accounts: LinkedAccount[] | undefined;
 };
 
+// Pencil 이체 승인 · 카드 정리 대안 (o8TlhF): 카드 없이 금액이 본문에 바로 놓인다.
 function TransferSummary({ transfer, accounts }: TransferSummaryProps) {
   return (
-    <View className="gap-4 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
+    <View className="gap-4 pb-1 pt-3">
       <View className="gap-1">
         <Text className="text-caption text-card-foreground">
           {formatMonthDay(parseKSTDateKey(transfer.scheduledDate))} · {transfer.purposeName}
@@ -237,12 +233,18 @@ function LimitNote({ once, daily }: LimitNoteProps) {
 type ResultCardProps = { transfer: Transfer };
 
 // 결과는 서버 상태를 그대로 보여준다. 실패 사유도 서버 문구를 고치지 않는다 (명세 §5).
+// 카드가 아니라 상태 색 띠다(금융망 이메일의 안내 띠와 같은 모양): 성공 positive-muted · 실패 destructive-muted · 그 외 muted.
 function ResultCard({ transfer }: ResultCardProps) {
   const failed = transfer.status === "FAILED";
   const executed = transfer.status === "EXECUTED";
 
   return (
-    <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
+    <View
+      className={cn(
+        "gap-2 rounded-lg p-3.5",
+        failed ? "bg-destructive-muted" : executed ? "bg-positive-muted" : "bg-muted"
+      )}
+    >
       <View className="flex-row items-center gap-2">
         <Icon
           as={failed ? CircleAlert : CircleCheck}
@@ -295,8 +297,12 @@ function ErrorLine({ message, action }: ErrorLineProps) {
 
 function ApprovalSkeleton() {
   return (
-    <View className="gap-4 px-6" accessible accessibilityLabel="불러오는 중">
-      <Skeleton className="h-52 w-full rounded-2xl" />
+    <View className="gap-4 px-6 pt-3" accessible accessibilityLabel="불러오는 중">
+      <Skeleton className="h-4 w-32" />
+      <Skeleton className="h-7 w-28" />
+      <Skeleton className="h-11 w-48" />
+      <Skeleton className="h-5 w-full" />
+      <Skeleton className="h-5 w-full" />
       <Skeleton className="h-5 w-3/4" />
     </View>
   );
