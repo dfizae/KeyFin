@@ -4,6 +4,8 @@
 
 [AI·FDT 구조도](docs/architecture.md)에서 전체 구성, FDT 내부 계산, 차트 생성 순서를 Mermaid로 볼 수 있습니다.
 
+[실제 고객 검증 계획](docs/real-customer-validation.md)에서 현재 실험 수치의 의미, 예측 개선 순서와 Jira AI 코칭 잔여 업무를 확인할 수 있습니다.
+
 ## 빠르게 실행하기
 
 Python 3.11~3.13과 `uv`가 필요합니다. 저장소 루트에서 PowerShell로 실행합니다.
