@@ -44,6 +44,9 @@ def operation_evidence(evidence: EvidenceInput, operation: Operation) -> Evidenc
     """Route uses intent/state; judge keeps P1 evidence; write keeps all structured financial facts."""
     if context_limited(evidence):
         return evidence
+    if evidence.purpose == "finance":
+        # These are already bounded concept facts, not a Twin document to project.
+        return evidence
     requested_text = "\n".join((evidence.question, *(message.content for message in evidence.history)))
     projection = EvidenceProjection(operation, requested_text)
     try:

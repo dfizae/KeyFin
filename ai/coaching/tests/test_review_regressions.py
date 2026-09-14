@@ -289,7 +289,10 @@ async def test_large_receipt_preserves_p0_and_outbox_with_explicit_model_fallbac
         assert follow_up["receipt"]["historical"]["engine_result"] == coaching["receipt"]["result"]
         assert model.writes == 0
         assert model.judgments == 0
-        assert model.routes == 0
+        # Intent-only routing now precedes Twin evidence, but the giant document
+        # must still suppress numeric analysis and supplementary generation.
+        assert model.routes == 1
+        assert account_id not in model.seen[-1].facts_json
 
 
 @pytest.mark.anyio

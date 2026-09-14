@@ -7,6 +7,7 @@ import re
 import unicodedata
 from typing import TYPE_CHECKING, Final, assert_never
 
+from coaching_service.finance_knowledge import FINANCE_PROMPT
 from coaching_service.schemas import JsonDocument
 
 if TYPE_CHECKING:
@@ -50,9 +51,13 @@ _JUDGE: Final = (
     "decision, reason_code, confidence만 포함하는 지정 JSON Schema를 출력하세요."
 )
 _ROUTE: Final = (
-    "질문의 표면적 목적에 따라 확인은 review, 위험 점검은 risk, "
-    "미래 경로 확인은 forecast를 선택하세요. "
-    "불명확하면 review입니다. 엔진 숫자, 시나리오, 기간, 계좌 같은 매개변수를 만들지 마세요. "
+    "질문의 목적을 구분하세요. 일반 금융 개념·용어·상품 방식 설명은 finance, "
+    "개인의 과거 또는 지금까지의 소비·지출 합계 조회는 history, "
+    "코칭 이유·기록 확인은 review, 개인의 미래 위험 점검은 risk, "
+    "개인의 미래 잔액·소비 경로 예측은 forecast입니다. "
+    "개념 질문의 만기·기간·위험 단어만으로 예측하지 마세요. 최신 금융정보 질문도 finance입니다. "
+    "날씨·번역 등 금융과 무관한 질문은 other입니다. 금융 질문의 의도가 불명확하면 review입니다. "
+    "엔진 숫자, 시나리오, 기간, 계좌 같은 매개변수를 만들지 마세요. "
     "mode 키만 포함하는 지정 JSON을 출력하세요."
 )
 _SINO: Final = r"[영공일이삼사오육칠팔구십백천만억조경]+"
@@ -98,7 +103,9 @@ _REQUEST_END: Final = re.compile(
 TEMPLATE_TEXT: Final = "추가로 신경 쓰이는 지출 계획이나 확인할 자료가 있으면 알려 주세요."
 
 
-def system_prompt(operation: Operation, *, chart: bool = False) -> str:
+def system_prompt(operation: Operation, *, chart: bool = False, finance: bool = False) -> str:
+    if operation == "write" and finance:
+        return FINANCE_PROMPT
     if operation == "write" and chart:
         return (
             _BOUNDARY

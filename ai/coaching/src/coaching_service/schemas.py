@@ -123,7 +123,7 @@ class EventResult(Frozen):
 
 
 class SessionRequest(Frozen):
-    coaching_id: Identifier
+    coaching_id: Identifier | None = None
 
 
 class TurnRequest(Frozen):
@@ -139,7 +139,7 @@ class Message(Frozen):
 
 class Session(Frozen):
     id: str
-    coaching_id: str
+    coaching_id: str | None = None
     created_at: float
     expires_at: float
     messages: tuple[Message, ...] = ()

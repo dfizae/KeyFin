@@ -6,9 +6,10 @@ from typing import Protocol
 from uuid import uuid4
 
 import anyio
+from pydantic import ValidationError
 
 from coaching_service.engine import ENGINE_COMMIT, EngineAdapter
-from coaching_service.evidence import bounded_evidence, context_limited
+from coaching_service.evidence import LIMITED_CONTEXT, bounded_evidence, context_limited
 from coaching_service.llm_contract import EvidenceInput, Judgment, Routing, Wording
 from coaching_service.llm_prompt import TEMPLATE_TEXT
 from coaching_service.periods import ThroughDate, resolve_period
@@ -70,16 +71,18 @@ class CoachingCore:
         근거가 한도를 넘거나 문장을 채택하지 못해도 금융 결과를 바꾸지 않는다.
         대체 문구의 출처·원인은 응답에 남겨 실제 모델 성공과 구분한다.
         """
+        answer_text = authoritative_text(receipt)
+        wording_input = supplementary_evidence(evidence, answer_text)
         wording = (
             Wording(
                 text=TEMPLATE_TEXT, source="template", model="not_called", fallback_reason="context_limit"
             )
-            if context_limited(evidence)
-            else await self.model.write(evidence)
+            if context_limited(wording_input)
+            else await self.model.write(wording_input)
         )
         return Coaching(
             id=uuid4().hex,
-            text=authoritative_text(receipt) + "\n\n" + wording.text,
+            text=answer_text + "\n\n" + wording.text,
             wording_source=wording.source,
             model=wording.model,
             fallback_reason=wording.fallback_reason,
@@ -100,3 +103,25 @@ def coaching_writes(coaching: Coaching, *, notify: bool) -> tuple[Write, ...]:
 
 def evidence_for(receipt: Receipt) -> EvidenceInput:
     return bounded_evidence(receipt)
+
+
+def supplementary_evidence(evidence: EvidenceInput, answer_text: str) -> EvidenceInput:
+    """Give the follow-up writer the exact displayed facts once, not both full analyses.
+
+    Financial values have already passed the receipt renderer. The writer cannot
+    recalculate them and needs only the displayed facts and recent conversation.
+    The complete, immutable receipt is still returned and stored by compose().
+    Tokenizer preflight remains mandatory: a character bound is not a token bound.
+    """
+    if context_limited(evidence):
+        return evidence
+    try:
+        return EvidenceInput(
+            question=evidence.question,
+            history=evidence.history[-2:],
+            facts_json=JsonDocument(
+                {"basis": "displayed_receipt", "authoritative_answer": answer_text}
+            ).model_dump_json(),
+        )
+    except ValidationError:
+        return EvidenceInput(question=evidence.question, facts_json=LIMITED_CONTEXT)

@@ -187,7 +187,7 @@ async def test_real_uvicorn_http_runs_all_cases_and_preserves_receipts(tmp_path:
     assert checks["projection_original_receipt_preserved"] == len(report.preflights)
     assert checks["original_engine_review_exact"] >= 20
     assert checks["numeric_engine_result_exact"] >= 7
-    assert checks["dialogue_writer_has_added_numeric_result"] >= 7
+    assert checks["dialogue_writer_has_displayed_numeric_facts"] >= 7
     assert checks["duplicate_no_generation"] >= 2
     assert checks["duplicate_no_tokenization"] == checks["duplicate_no_generation"]
     assert checks["owner_isolation"] >= 3

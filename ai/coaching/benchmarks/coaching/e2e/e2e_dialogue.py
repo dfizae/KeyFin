@@ -2,6 +2,7 @@
 
 from benchmarks.coaching.e2e.e2e_client import ScenarioIO
 from coaching_service.evidence_encoding import decode_facts
+from coaching_service.numeric_rendering import numeric_text
 from coaching_service.schemas import Coaching, JsonDocument, Session
 
 
@@ -53,10 +54,13 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
         if receipt.numeric_result is not None and routes and writers:
             route_facts = decode_facts(JsonDocument.model_validate_json(routes[0].evidence.facts_json))
             writer_facts = decode_facts(JsonDocument.model_validate_json(writers[0].evidence.facts_json))
+            displayed = writer_facts.root.get("authoritative_answer")
             flow.check(
-                "dialogue_writer_has_added_numeric_result",
+                "dialogue_writer_has_displayed_numeric_facts",
                 route_facts.root.get("numeric_result") is None
-                and writer_facts.root.get("numeric_result") is not None,
+                and isinstance(displayed, str)
+                and bool(numeric_text(receipt))
+                and all(line in displayed for line in numeric_text(receipt)),
             )
         stored = Session.model_validate((await flow.request("GET", "/v1/sessions/" + session.id)).root)
         flow.check(

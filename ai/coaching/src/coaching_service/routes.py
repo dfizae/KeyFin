@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import Depends, FastAPI
 
 from coaching_service.auth import Authenticate
+from coaching_service.chat_answers import ChatAnswer, FinanceQuestion
 from coaching_service.coaching import CoachingCore
 from coaching_service.dialogue import Dialogue
 from coaching_service.events import Events
@@ -75,19 +76,34 @@ def register_coaching(app: FastAPI, core: CoachingCore, auth: Authenticate) -> N
 
     async def message(
         session_id: Identifier, body: TurnRequest, key: RequestKey, owner: Annotated[str, Depends(auth.user)]
-    ) -> Coaching:
+    ) -> Coaching | ChatAnswer:
         result = await dialogue.turn(
             operation(owner, "turn/" + session_id, key, document(body)), session_id, body
         )
-        return Coaching.model_validate(result.root)
+        return (
+            ChatAnswer.model_validate(result.root)
+            if "answer_type" in result.root
+            else Coaching.model_validate(result.root)
+        )
+
+    async def finance(
+        body: FinanceQuestion, key: RequestKey, owner: Annotated[str, Depends(auth.user)]
+    ) -> ChatAnswer:
+        result = await dialogue.finance(operation(owner, "finance", key, document(body)), body)
+        return ChatAnswer.model_validate(result.root)
+
+    async def answer(answer_id: Identifier, owner: Annotated[str, Depends(auth.user)]) -> ChatAnswer:
+        return ChatAnswer.model_validate_json(await core.repository.load(owner, "answer/" + answer_id))
 
     app.add_api_route("/v1/coaching/reviews", review, methods=["POST"], response_model=Coaching)
     app.add_api_route("/v1/coaching/{coaching_id}", coaching, methods=["GET"], response_model=Coaching)
     app.add_api_route("/v1/sessions", session, methods=["POST"], response_model=Session)
     app.add_api_route("/v1/sessions/{session_id}", history, methods=["GET"], response_model=Session)
     app.add_api_route(
-        "/v1/sessions/{session_id}/messages", message, methods=["POST"], response_model=Coaching
+        "/v1/sessions/{session_id}/messages", message, methods=["POST"], response_model=Coaching | ChatAnswer
     )
+    app.add_api_route("/v1/finance/questions", finance, methods=["POST"], response_model=ChatAnswer)
+    app.add_api_route("/v1/answers/{answer_id}", answer, methods=["GET"], response_model=ChatAnswer)
 
 
 def register_records(app: FastAPI, core: CoachingCore, auth: Authenticate) -> None:

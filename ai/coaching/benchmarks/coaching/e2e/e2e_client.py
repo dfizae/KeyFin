@@ -120,9 +120,26 @@ class ScenarioIO:
 
     def verify_projection(self, receipt: Receipt, operation: Operation, received: EvidenceInput) -> None:
         before = receipt.model_dump_json()
-        expected = operation_evidence(
-            bounded_evidence(receipt, question=received.question, history=received.history), operation
-        )
+        # Reconstruct the declared wire contract independently of the product projection helper.
+        # The full receipt is still compared against a separate engine call above.
+        match operation:
+            case "write":
+                source = EvidenceInput(
+                    question=received.question,
+                    history=received.history,
+                    facts_json=JsonDocument(
+                        {"basis": "displayed_receipt", "authoritative_answer": authoritative_text(receipt)}
+                    ).model_dump_json(),
+                )
+            case "route":
+                source = EvidenceInput(
+                    question=received.question,
+                    history=received.history,
+                    facts_json='{"operation":"dialogue"}',
+                )
+            case "judge":
+                source = bounded_evidence(receipt, question=received.question, history=received.history)
+        expected = operation_evidence(source, operation)
         name = "writer_projection_exact" if operation == "write" else operation + "_projection_exact"
         self.check(name, received == expected)
         self.check("projection_original_receipt_preserved", receipt.model_dump_json() == before)

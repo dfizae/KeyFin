@@ -19,7 +19,7 @@ from pydantic import (
 from pydantic_core import PydanticCustomError
 
 Source = Literal["llm", "template"]
-Mode = Literal["review", "risk", "forecast"]
+Mode = Literal["review", "risk", "forecast", "finance", "history", "other"]
 Operation = Literal["write", "judge", "route"]
 _FACTS: Final = TypeAdapter(dict[str, JsonValue])
 
@@ -41,7 +41,7 @@ class ChatMessage(FrozenContract):
 
 
 class EvidenceInput(FrozenContract):
-    purpose: Literal["coaching", "chart"] = "coaching"
+    purpose: Literal["coaching", "chart", "finance"] = "coaching"
     question: Annotated[str, Field(max_length=4000)] = ""
     facts_json: Annotated[str, Field(min_length=2, max_length=64000)]
     history: Annotated[tuple[ChatMessage, ...], Field(max_length=16)] = ()
@@ -64,6 +64,16 @@ class Wording(FrozenContract):
     source: Source
     fallback_reason: str | None = None
     model: str
+
+
+class FinanceWording(Wording):
+    """Keep concept metadata out of the existing coaching and chart wire format."""
+
+    text: Annotated[str, Field(min_length=1, max_length=2400)]
+    reference_ids: tuple[str, ...] = ()
+    answer_status: Literal["answered", "needs_source", "needs_data", "out_of_scope", "unavailable"] = (
+        "unavailable"
+    )
 
 
 class JudgmentDraft(FrozenContract):

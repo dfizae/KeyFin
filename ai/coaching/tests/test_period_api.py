@@ -52,11 +52,13 @@ async def test_question_period_reaches_real_engine(
         )
         assert reviewed.status_code == 200, reviewed.text
         session = await client.post(
-            "/v1/sessions", json={"coaching_id": reviewed.json()["id"]},
+            "/v1/sessions",
+            json={"coaching_id": reviewed.json()["id"]},
             headers={"Idempotency-Key": "session"},
         )
         response = await client.post(
-            f"/v1/sessions/{session.json()['id']}/messages", json={"question": question},
+            f"/v1/sessions/{session.json()['id']}/messages",
+            json={"question": question},
             headers={"Idempotency-Key": "turn"},
         )
         assert response.status_code == 200, response.text
@@ -77,30 +79,37 @@ async def test_question_period_reaches_real_engine(
     ("body", "error"),
     [
         (JsonDocument({"question": "한 달 뒤 예측"}), "period_clarification_required"),
-        (JsonDocument({"question": "30일 뒤 예측", "analysis": {"mode": "forecast", "horizon_days": 7}}),
-         "period_conflict"),
+        (
+            JsonDocument({"question": "30일 뒤 예측", "analysis": {"mode": "forecast", "horizon_days": 7}}),
+            "period_conflict",
+        ),
         (JsonDocument({"question": "2026-09-09까지 예측"}), "period_has_no_future_days"),
         (JsonDocument({"question": "2026-09-08까지 예측"}), "period_ends_before_reference"),
     ],
 )
-async def test_invalid_period_is_rejected_before_model_calls_or_session_mutation(
+async def test_invalid_forecast_period_is_rejected_after_intent_before_writer_or_session_mutation(
     tmp_path: Path, body: JsonDocument, error: str
 ) -> None:
     model = ForecastModel()
     async with httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=setup(tmp_path / "invalid-period.sqlite3", model)),
-        base_url="http://test", headers={"Authorization": "Bearer " + TOKEN},
+        base_url="http://test",
+        headers={"Authorization": "Bearer " + TOKEN},
     ) as client:
-        assert (await client.post(
-            "/v1/twin", json=fixture().model_dump(mode="json"), headers={"Idempotency-Key": "init"}
-        )).status_code == 200
+        assert (
+            await client.post(
+                "/v1/twin", json=fixture().model_dump(mode="json"), headers={"Idempotency-Key": "init"}
+            )
+        ).status_code == 200
         reviewed = await client.post(
-            "/v1/coaching/reviews", json={"on_date": "2026-09-09", "through_date": "2026-09-16"},
+            "/v1/coaching/reviews",
+            json={"on_date": "2026-09-09", "through_date": "2026-09-16"},
             headers={"Idempotency-Key": "review"},
         )
         assert reviewed.status_code == 200
         session = await client.post(
-            "/v1/sessions", json={"coaching_id": reviewed.json()["id"]},
+            "/v1/sessions",
+            json={"coaching_id": reviewed.json()["id"]},
             headers={"Idempotency-Key": "session"},
         )
         path = f"/v1/sessions/{session.json()['id']}"
@@ -108,5 +117,11 @@ async def test_invalid_period_is_rejected_before_model_calls_or_session_mutation
         result = await client.post(path + "/messages", json=body.root, headers={"Idempotency-Key": "invalid"})
         assert result.status_code == 422
         assert error in result.text
-        assert (model.writes, model.routes, model.judgments) == seen_before
+        # General questions can mention deposit maturity. Intent is classified first,
+        # but an invalid forecast period must never reach a writer or a saved turn.
+        assert (model.writes, model.routes, model.judgments) == (
+            seen_before[0],
+            seen_before[1] + 1,
+            seen_before[2],
+        )
         assert (await client.get(path)).json() == session.json()

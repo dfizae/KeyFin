@@ -13,6 +13,7 @@ import httpx2
 
 from coaching_service.chart_wording import ChartSelection, selected_chart_wording
 from coaching_service.evidence import context_limited, operation_evidence
+from coaching_service.finance_knowledge import FinanceSelection, selected_finance_wording
 from coaching_service.llm_contract import (
     CompletionEnvelope,
     EvidenceInput,
@@ -61,6 +62,36 @@ class InferenceFailure:
 @dataclass(frozen=True, slots=True)
 class InferenceText:
     text: str
+
+
+def finance_inference_wording(result: InferenceText | InferenceFailure, model: str) -> Wording:
+    match result:
+        case InferenceFailure(reason=reason):
+            return selected_finance_wording(None, model, reason)
+        case InferenceText(text=text):
+            try:
+                raw = structured_json(text)
+            except (ValueError, RecursionError):
+                return selected_finance_wording(None, model)
+            return selected_finance_wording(raw, model)
+        case unreachable:
+            assert_never(unreachable)
+
+
+def chart_inference_wording(
+    evidence: EvidenceInput, result: InferenceText | InferenceFailure, model: str
+) -> Wording:
+    match result:
+        case InferenceFailure(reason=reason):
+            return selected_chart_wording(evidence, None, model, reason)
+        case InferenceText(text=text):
+            try:
+                raw = structured_json(text)
+            except (ValueError, RecursionError):
+                return selected_chart_wording(evidence, None, model, "invalid_chart_fact_selection")
+            return selected_chart_wording(evidence, raw, model)
+        case unreachable:
+            assert_never(unreachable)
 
 
 def request_timeout(config: ModelConfig) -> httpx2.Timeout:
@@ -124,16 +155,15 @@ class OpenAICompatibleCoachModel:
         FDT의 수치 정확성은 별개이며 LLM 출력으로 금융 수치를 덮어쓰지 않는다.
         """
         result = await self._infer(evidence, "write")
-        if evidence.purpose == "chart":
-            if isinstance(result, InferenceFailure):
-                return selected_chart_wording(evidence, None, self._config.model, result.reason)
-            try:
-                raw = structured_json(result.text)
-            except (ValueError, RecursionError):
-                return selected_chart_wording(
-                    evidence, None, self._config.model, "invalid_chart_fact_selection"
-                )
-            return selected_chart_wording(evidence, raw, self._config.model)
+        match evidence.purpose:
+            case "finance":
+                return finance_inference_wording(result, self._config.model)
+            case "chart":
+                return chart_inference_wording(evidence, result, self._config.model)
+            case "coaching":
+                pass
+            case unreachable:
+                assert_never(unreachable)
         match result:
             case InferenceFailure(reason=reason):
                 return self._fallback(reason)
@@ -205,7 +235,12 @@ class OpenAICompatibleCoachModel:
         payload: dict[str, JsonValue] = {
             "model": self._config.model,
             "messages": [
-                {"role": "system", "content": system_prompt(operation, chart=evidence.purpose == "chart")},
+                {
+                    "role": "system",
+                    "content": system_prompt(
+                        operation, chart=evidence.purpose == "chart", finance=evidence.purpose == "finance"
+                    ),
+                },
                 {"role": "user", "content": user_payload(evidence)},
             ],
             "temperature": 0,
@@ -214,6 +249,15 @@ class OpenAICompatibleCoachModel:
         }
         match operation:
             case "write":
+                if evidence.purpose == "finance":
+                    payload["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "finance_facts",
+                            "strict": True,
+                            "schema": FinanceSelection.model_json_schema(),
+                        },
+                    }
                 if evidence.purpose == "chart":
                     payload["response_format"] = {
                         "type": "json_schema",
