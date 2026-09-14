@@ -1,6 +1,6 @@
 # FDT 코칭 API
 
-거래 이벤트를 저장하고 예산 초과 징후를 감지하며, 코칭 카드·대화·수치 분석 결과를 제공하는 Python API입니다. **금액과 예측 구간은 팀 FDT가 계산하고, LLM은 분류와 설명을 담당합니다.** 이 저장소에는 독립 API까지 구현되어 있으며 실제 서비스 백엔드와 알림 전송 시스템 연결은 별도입니다.
+거래 이벤트를 저장하고 예산 초과 징후를 감지하며, 코칭 카드·대화·수치 분석 결과를 제공하는 Python API입니다. **금액과 예측 구간은 팀 FDT가 계산하고, LLM은 분류와 설명을 담당합니다.** 독립 API와 앱·백엔드의 코칭 연결 코드가 있으며, 운영 인증 설정·실제 금융 데이터 동기화·푸시 전송망의 통합 검증은 남아 있습니다.
 
 [AI·FDT 구조도](docs/architecture.md)에서 전체 구성, FDT 내부 계산, 차트 생성 순서를 Mermaid로 볼 수 있습니다.
 
@@ -9,6 +9,8 @@
 [실제 고객 검증 계획](docs/real-customer-validation.md)에서 현재 실험 수치의 의미, 예측 개선 순서와 Jira AI 코칭 잔여 업무를 확인할 수 있습니다.
 
 [금융 질문·소비 조회·예측 대화](docs/chat.md)에서 거래 연결 없이 대화를 시작하는 방법과 새 응답 형식을 확인합니다. [응답 검증 보고서](docs/chat-response-validation.md)는 같은 질문의 수정 전후 GPU 결과를 비교합니다.
+
+[R14 전체 연결 검증](docs/end-to-end-validation.md)에서 공식 자료 검색·개인 현황·앱 연결·예측 사전등록의 구현 범위와 실제 GPU 실행 결과, 남은 운영 조건을 확인합니다.
 
 ## 빠르게 실행하기
 
@@ -36,7 +38,7 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 3. 코칭 검토는 `POST /v1/coaching/reviews`, 대화 시작은 `POST /v1/sessions`, 질문은 `POST /v1/sessions/{session_id}/messages`를 사용합니다.
 4. `GET /v1/notifications`로 알림 대기 항목을 읽고 실제 전달 후 `POST /v1/notifications/{event_id}/ack`로 확인합니다.
 
-일반 금융 개념만 질문하려면 Twin 생성 없이 `POST /v1/finance/questions`를 호출하거나, `{}`로 세션을 만든 뒤 메시지를 보냅니다. 현재 공식 근거 9종을 지원하며 미지원·최신 정보는 자료 필요 상태로 구분합니다. 메시지 응답은 `Coaching | ChatAnswer`이므로 앱에서 `receipt`의 존재를 무조건 가정하지 않습니다.
+일반 금융 개념만 질문하려면 Twin 생성 없이 `POST /v1/finance/questions`를 호출하거나, `{}`로 세션을 만든 뒤 메시지를 보냅니다. 현재 공식 근거 27종을 검색하며 미지원·최신 정보는 자료 필요 상태로 구분합니다. [공식 근거 검색](docs/knowledge-retrieval.md), [개인 현황 조회](docs/personal-context.md), [예측 사전등록·실제값 비교](docs/forecast-validation.md), [앱·백엔드 연결](docs/app-integration.md)에 계약과 지원 범위를 정리했습니다. 메시지 응답은 `Coaching | ChatAnswer`이므로 앱에서 `receipt`의 존재를 무조건 가정하지 않습니다.
 
 기존 KeyFin 차트는 `POST /v1/charts/budget-forecast`로 생성합니다. 거래를 요청에 담거나 저장된 Twin을 사용할 수 있으며, FDT 계산과 GPU 설명 추론을 거친 차트 JSON 및 원본 계산 근거를 반환합니다. [차트 연결 안내](docs/charts.md)에 요청 예시·HTML 조회·기간 및 금액 기준을 정리했습니다.
 
@@ -51,6 +53,9 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 | `engine.py`, `periods.py` | FDT 호출과 기준일·종료일 계산 |
 | `coaching.py`, `dialogue.py`, `payments.py` | 코칭 발생·대화·결제 흐름 |
 | `finance_knowledge.py`, `spending_history.py`, `chat_answers.py` | 공식 개념 근거, 확정 소비 집계, 예측 없는 답변 계약 |
+| `knowledge_catalog.py`, `knowledge_retrieval.py`, `knowledge/` | 버전이 고정된 공식 자료와 질문별 검색 |
+| `personal_*.py` | 기존 Twin과 별도 개인 현황의 권한·완전성·기준일 검사 및 조회 |
+| `forecast_validation*.py` | 예측 발급 시점 저장, 만기 실제값 정산, 독립 원장 합산 및 오차 지표 |
 | `llm.py`, `evidence_projection.py`, `token_budget.py` | 모델 호출·근거 선택·실제 토큰 한도 검사 |
 | `admission.py`, `rendering.py`, `numeric_rendering.py` | 모델 결과 검사, 원본 수치·기간 검증 후 본문 조립, 설명 대체 |
 | `chart_routes.py`, `charts.py`, `chart_contract.py`, `chart_projection.py`, `chart_rendering.py` | 고정 차트 JSON 변환, 생성·저장·HTML 조회 |

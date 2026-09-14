@@ -10,7 +10,10 @@ GitLab에서 첫 로드에 `Syntax error in text`가 보이면 페이지를 새�
 
 ```mermaid
 flowchart TB
-    Caller["호출 주체: 앱·백엔드·검증 클라이언트<br/>실서비스 연동은 별도"]
+    Caller["백엔드 이벤트·검증 클라이언트"]
+    App["앱 /coach<br/>일반 답변 · 개인 현황 · 수치 예측"]
+    Proxy["Spring /api/v1/coaching<br/>인증 사용자별 API 토큰 매핑"]
+    App --> Proxy
 
     subgraph Service["독립 Python API 프로세스 · ai/coaching"]
         API["FastAPI 진입점<br/>api.py · routes.py · chart_routes.py<br/>인증 · 요청 스키마 · 소유자 검사"]
@@ -18,11 +21,18 @@ flowchart TB
         FDT["EngineAdapter → 팀 FDT<br/>Twin · Engine · Coach<br/>금융 수치와 조건부 예측 계산"]
         ModelClient["LLM 호출 및 응답 검증<br/>작업별 근거 · 실제 토큰 검사<br/>llm.py · token_budget.py"]
         Store["Repository → Store<br/>요청 예약 · 재시도 · 원자적 저장"]
+        Knowledge["공식 근거 카드 27개<br/>검색 · 출처 · 재검토 기한 검사"]
+        Personal["개인 현황 조회<br/>FDT snapshot · 별도 등록 현황"]
+        Validation["미래 예측 사전등록<br/>수신 시점 · 원본 고정 · 만기 실제값 정산"]
         Output["결과 조립<br/>numeric_rendering.py 수치·원본·기간 검증<br/>코칭 · 대화 · 차트 JSON 및 HTML"]
         API --> Core
         Core <--> FDT
         Core <--> ModelClient
         Core <--> Store
+        Core --> Knowledge
+        Core --> Personal
+        API --> Validation
+        Validation <--> Store
         Core --> Output
     end
 
@@ -32,11 +42,13 @@ flowchart TB
         Worker <--> Model
     end
 
-    DB[("SQLite<br/>Twin · 봉투 원장 · 코칭 · 세션<br/>차트 · 알림 대기 · 재시도 응답")]
+    DB[("SQLite<br/>Twin · 봉투 원장 · 코칭 · 세션<br/>차트 · 알림 대기 · 개인 현황<br/>예측 등록 · 실제값 정산 · 재시도 응답")]
     Caller -->|"거래·질문·차트 요청"| API
+    Proxy -->|"대화·조회·알림 요청"| API
     Store <--> DB
     ModelClient <-->|"인증된 HTTP"| Worker
     Output -->|"검증된 JSON 또는 HTML"| Caller
+    Output -->|"검증된 JSON"| Proxy
 ```
 
 `CoachingCore`가 FDT 어댑터·모델 클라이언트·저장소를 연결하고, 요청 종류에 따라 `Events`, `Dialogue`, `Charts`가 호출 순서를 정합니다. FDT는 API 프로세스 안에서 스레드 실행 제한을 두고 호출하는 Python 코드입니다. 별도 FDT HTTP 서버를 호출하는 구성이 아닙니다.
@@ -44,6 +56,8 @@ flowchart TB
 대화의 `numeric_result`는 `numeric_rendering.py`에서 원본 Twin과 요청 기간에 일치하는지 검사한 뒤 본문에 들어갑니다. 금액·확률을 LLM이 재작성하지 않습니다. R12에서 수정한 수치 누락과 실제 응답 비교는 [답변·예측 개선 결과](answer-forecast-improvement.md)에 있습니다.
 
 알림은 SQLite의 outbox에 저장한 뒤 조회·ack API로 전달 여부를 관리합니다. 실제 푸시 발송, 금융기관 데이터 자동 동기화, 자동 재시작 운영은 별도 연결이 필요합니다. 엔진이나 LLM이 실제 이체·결제를 실행하지 않습니다.
+
+앱·백엔드 코드는 [연결 계약](app-integration.md), 금융 검색은 [자료 관리](knowledge-retrieval.md), 개인 현황은 [조회 범위](personal-context.md)를 따릅니다. [예측 검증 API](forecast-validation.md)는 생성 시점의 원본 예측을 고정하고 만기가 지난 뒤 동일 기간 원거래를 별도 코드로 합산합니다. 이 기능의 구현·합성 테스트 성공은 실고객 미래 예측 정확도 확보를 의미하지 않습니다.
 
 ## FDT 안에서 예측과 코칭을 계산하는 방법
 
@@ -93,7 +107,7 @@ flowchart TB
 | 후속 질문 | LLM `route` → 일반 개념·확정 소비·FDT 분석 분기; 분석일 때 기간 검사 → `Coach.review` → 필요한 `Engine.run` | 개념·소비는 답변과 세션, FDT 분석은 원본 receipt와 세션·코칭 저장 |
 | 예산 차트 | `Charts.forecast` → `ChartEngine` → 차트 계약 검사 → LLM 근거 ID 선택 | 차트 JSON·원본 receipt 저장, 별도 GET에서 HTML 조립 |
 
-LLM의 자동 라우팅 값은 현재 `review`, `forecast`, `risk`, `finance`, `history`, `other`입니다. [일반 금융 질문과 소비 조회의 분기 구조](chat.md)는 이전 코칭 없이도 동작합니다. `what_if`, `goal`, `optimize`도 엔진에 구현되어 있지만, 대화에서는 호출자가 요청의 구조화된 `analysis`에 조건을 제공해야 합니다. 모든 자연어 질문에서 다섯 모드의 조건을 자동으로 완성하는 기능으로 표현하지 않습니다. 일반 기간은 `period_request.py`·`periods.py`가, 차트 주기는 `chart_contract.py`가 검사합니다.
+LLM의 자동 라우팅 값은 현재 `review`, `forecast`, `risk`, `finance`, `history`, `personal`, `other`입니다. [일반 금융 질문과 소비 조회의 분기 구조](chat.md)는 이전 코칭 없이도 동작합니다. `what_if`, `goal`, `optimize`도 엔진에 구현되어 있지만, 대화에서는 호출자가 요청의 구조화된 `analysis`에 조건을 제공해야 합니다. 모든 자연어 질문에서 다섯 모드의 조건을 자동으로 완성하는 기능으로 표현하지 않습니다. 일반 기간은 `period_request.py`·`periods.py`가, 차트 주기는 `chart_contract.py`가 검사합니다.
 
 ## 차트 한 건이 만들어지는 순서
 
