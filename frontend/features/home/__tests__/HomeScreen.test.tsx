@@ -11,7 +11,7 @@ import { useAuthStore } from "@/features/auth/store";
 import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
-import { CLASSIFY_ERROR_MESSAGE } from "@/features/home/components/HomeCoach";
+import { CLASSIFY_ERROR_MESSAGE } from "@/features/transaction/errors";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";

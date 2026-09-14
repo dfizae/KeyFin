@@ -179,6 +179,14 @@ export function isWithinPeriod(budget: Pick<Budget, "periodFrom" | "periodTo">, 
   return dateKey >= budget.periodFrom && dateKey <= budget.periodTo;
 }
 
+const POSITIVE_ID = /^[1-9]\d*$/;
+
+/** 봉투 상세 라우트(`/budget/[envelopeId]`)의 id. 양의 정수가 아니면 null — 라우트 파라미터는 믿지 않는다 */
+export function parseEnvelopeId(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== undefined && POSITIVE_ID.test(raw) ? Number(raw) : null;
+}
+
 export function budgetHealth(total: BudgetTotal): BudgetHealth {
   if (compareKRW(total.remaining, "0") < 0) return "over";
   if (total.remainingRate !== null && total.remainingRate < WARNING_REMAINING_RATE) return "warning";

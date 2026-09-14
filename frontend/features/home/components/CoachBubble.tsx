@@ -14,6 +14,8 @@ import { formatKRW } from "@/lib/money";
 export const COACH_LABEL = "코치";
 export const COACH_COLLAPSE_MS = 30_000;
 export const OTHER_CATEGORY_LABEL = "다른 카테고리";
+/** 질문 중인 1건 말고도 남아 있을 때만 모아서 정리(PAGE-22)로 보낸다 */
+export const CLEANUP_MIN_COUNT = 2;
 const AVATAR_SCENE = { x: 0, y: 254, size: 32 } as const;
 const BUBBLE_SCENE = { x: 40, y: 262, width: 236 } as const;
 
@@ -26,13 +28,16 @@ type CoachBubbleProps = {
   errorMessage: string | null;
   onConfirm: () => void;
   onOther: () => void;
+  /** 남은 미확정 건수. CLEANUP_MIN_COUNT 이상이면 미확정 정리(PAGE-22) 링크를 함께 보여준다 */
+  pendingCount?: number;
+  onCleanup?: () => void;
 };
 
 export function coachQuestion(transaction: Transaction): string {
   return `『${transaction.merchantName} ${formatKRW(transaction.amount)}』 ${transaction.subcategoryName} 맞나냥?`;
 }
 
-function CoachBubble({ width, transaction, isPending, errorMessage, onConfirm, onOther }: CoachBubbleProps) {
+function CoachBubble({ width, transaction, isPending, errorMessage, onConfirm, onOther, pendingCount = 0, onCleanup }: CoachBubbleProps) {
   const scale = getSceneScale(width);
   const [collapsedId, setCollapsedId] = React.useState<number | null>(null);
   const transactionId = transaction?.id ?? null;
@@ -81,6 +86,11 @@ function CoachBubble({ width, transaction, isPending, errorMessage, onConfirm, o
               <Text>{OTHER_CATEGORY_LABEL}</Text>
             </Button>
           </View>
+          {pendingCount >= CLEANUP_MIN_COUNT && onCleanup ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`${pendingCount}건 모아서 정리`} hitSlop={6} onPress={onCleanup}>
+              <Text className="text-caption text-primary">{pendingCount}건 모아서 정리</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </>

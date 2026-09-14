@@ -17,11 +17,12 @@ const HEALTH_STYLE: Record<BudgetHealth, { label: string; textClassName: string;
 type BudgetCardProps = {
   total: BudgetTotal;
   envelopes: BudgetEnvelope[];
+  onSelectEnvelope?: (envelopeId: number) => void;
   /** 현재 주기 "9월 1일~30일". 주기가 달력 월과 다를 수 있어 "이번 달" 대신 기간을 쓴다 */
   period: string;
 };
 
-function BudgetCard({ total, envelopes, period }: BudgetCardProps) {
+function BudgetCard({ total, envelopes, period, onSelectEnvelope }: BudgetCardProps) {
   const health = HEALTH_STYLE[budgetHealth(total)];
   const usedPercent = usedBarPercent(total.remainingRate);
 
@@ -51,7 +52,7 @@ function BudgetCard({ total, envelopes, period }: BudgetCardProps) {
       >
         <View className={cn("h-full rounded-full", health.barClassName)} style={{ width: `${usedPercent}%` }} />
       </View>
-      <EnvelopeChart envelopes={envelopes} />
+      <EnvelopeChart envelopes={envelopes} onSelect={onSelectEnvelope} />
     </View>
   );
 }
