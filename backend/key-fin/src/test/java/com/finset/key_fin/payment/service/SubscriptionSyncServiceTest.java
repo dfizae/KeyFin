@@ -14,7 +14,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
@@ -25,11 +24,11 @@ import com.finset.key_fin.payment.dto.response.FinanceSubscription;
 import com.finset.key_fin.payment.entity.FixedExpense;
 import com.finset.key_fin.payment.repository.FixedExpenseRepository;
 import com.finset.key_fin.payment.service.SubscriptionSyncService.SyncResult;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
 @Sql(scripts = "/sql/subscription-sync-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
-class SubscriptionSyncServiceTest {
+class SubscriptionSyncServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long CONNECTED_USER = 986L;
 	private static final long UNLINKED_USER = 985L;

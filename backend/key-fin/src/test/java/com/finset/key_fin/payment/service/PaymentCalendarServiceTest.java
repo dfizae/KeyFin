@@ -10,7 +10,6 @@ import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
@@ -24,11 +23,11 @@ import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.CalendarItemType;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Day;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Item;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
 @Sql(scripts = "/sql/subscription-sync-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
-class PaymentCalendarServiceTest {
+class PaymentCalendarServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long USER = 986L;
 	private static final String USER_KEY = "test-user-key-986";
