@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { Redirect } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { Menu, WalletMinimal, WifiOff } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -23,6 +23,9 @@ import {
 } from "@/features/budget/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
+
+/** 봉투 행 탭 → 봉투 상세(PAGE-23) */
+const ENVELOPE_DETAIL_ROUTE = "/budget";
 
 // Pencil budget (kvc1e). 확정 전(PROPOSED) 주기는 이 탭 대신 예산 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12).
 function BudgetScreen() {
@@ -65,6 +68,8 @@ type BudgetContentProps = {
 
 // Pencil Content (U133b / AptUM): 좌우 여백 24 · 블록 간격 20.
 function BudgetContent({ budget }: BudgetContentProps) {
+  const router = useRouter();
+
   if (budget.isPending) return <BudgetSkeleton />;
   if (budget.isError) {
     return (
@@ -88,7 +93,11 @@ function BudgetContent({ budget }: BudgetContentProps) {
       ) : (
         <View className="gap-4">
           {envelopes.map((envelope) => (
-            <EnvelopeRow key={envelope.envelopeId} envelope={envelope} />
+            <EnvelopeRow
+              key={envelope.envelopeId}
+              envelope={envelope}
+              onPress={() => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelope.envelopeId}`)}
+            />
           ))}
         </View>
       )}
@@ -163,13 +172,20 @@ const ENVELOPE_BAR_CLASS: Record<EnvelopeHealth, string> = {
 
 // Pencil EnvelopeList (MhHC7 / uPyCM) 의 행: 28pt accent 타일 + 아이콘 16 · 이름 14/500 · 금액 16/600 · 사용률 바 6pt.
 // 확정액 0 인 봉투는 잔여율이 없어 빈 트랙이고, 쓴 돈이 있으면 over 색으로 초과 금액을 적는다(사용자 결정 2026-09-12).
-function EnvelopeRow({ envelope }: { envelope: BudgetEnvelope }) {
+function EnvelopeRow({ envelope, onPress }: { envelope: BudgetEnvelope; onPress: () => void }) {
   const health = envelopeHealth(envelope);
   const used = usedBarPercent(envelope.remainingRate);
   const amountText = envelopeAmountText(envelope, health);
 
   return (
-    <View className="gap-2" accessible accessibilityLabel={`${envelope.name} ${amountText}`}>
+    <Pressable
+      className="gap-2 active:opacity-70"
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={`${envelope.name} ${amountText}`}
+      accessibilityHint="봉투 상세를 엽니다"
+      onPress={onPress}
+    >
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
           <View className="h-7 w-7 items-center justify-center rounded-md bg-accent">
@@ -189,7 +205,7 @@ function EnvelopeRow({ envelope }: { envelope: BudgetEnvelope }) {
       <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <View className={cn("h-full rounded-full", ENVELOPE_BAR_CLASS[health])} style={{ width: `${used}%` }} />
       </View>
-    </View>
+    </Pressable>
   );
 }
 

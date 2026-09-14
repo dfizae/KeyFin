@@ -1,8 +1,12 @@
+import { useRouter } from "expo-router";
+
 import { usePaymentCalendar } from "@/features/payment/api/queries";
 import { CalendarPopover } from "@/features/payment/components/CalendarPopover";
 import { upcomingEntry } from "@/features/payment/model";
 import { CalendarAsset } from "@/features/room/components/CalendarAsset";
 import { currentDateKey, formatMonthKeyLabel } from "@/lib/date";
+
+const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
 
 type HomeCalendarProps = {
   /** 캔버스 폭(pt) */
@@ -40,10 +44,19 @@ type HomeCalendarPanelProps = {
 
 /** 캘린더를 탭했을 때 열리는 출금 일정 팝오버. 카메라 밖 레이어라 확대 배율과 무관하게 그려진다. */
 function HomeCalendarPanel({ width, month, onClose }: HomeCalendarPanelProps) {
+  const router = useRouter();
   const calendar = usePaymentCalendar(month);
   if (!calendar.data) return null;
 
-  return <CalendarPopover width={width} calendar={calendar.data} monthLabel={formatMonthKeyLabel(month)} onClose={onClose} />;
+  return (
+    <CalendarPopover
+      width={width}
+      calendar={calendar.data}
+      monthLabel={formatMonthKeyLabel(month)}
+      onClose={onClose}
+      onOpenCalendar={() => router.push(PAYMENT_CALENDAR_ROUTE)}
+    />
+  );
 }
 
 export { HomeCalendar, HomeCalendarPanel };

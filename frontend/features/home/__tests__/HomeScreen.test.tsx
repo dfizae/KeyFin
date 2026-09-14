@@ -292,8 +292,10 @@ describe("HomeScreen", () => {
     expect(screen.getByLabelText("15일 월세 550,000원, 부족 230,000원")).toBeTruthy();
     expect(screen.getByLabelText("20일 넷플릭스 17,000원, 준비됨")).toBeTruthy();
     expect(screen.getByLabelText("25일 통신비 (예상) 55,000원, 준비됨")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "캘린더 열기" }).props.accessibilityState).toMatchObject({ disabled: true });
     expect(mockedGetCalendar).toHaveBeenCalledWith(MONTH, expect.anything());
+
+    await fireEvent.press(screen.getByRole("button", { name: "캘린더 열기" }));
+    expect(mockPush).toHaveBeenCalledWith("/payment/calendar");
 
     await fireEvent.press(screen.getByRole("button", { name: "출금 일정 닫기" }));
     expect(screen.queryByText("9월 출금 일정")).toBeNull();

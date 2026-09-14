@@ -98,12 +98,22 @@ export function toKSTDateKey(value: string | Date): string {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
-const MONTH_KEY = /^\d{4}(0[1-9]|1[0-2])$/;
+const MONTH_KEY = /^(\d{4})(0[1-9]|1[0-2])$/;
 
 /** KST 기준 "YYYYMM". 서버 계약의 month 파라미터 형식이다 (docs/api-contract.md §1). */
 export function toMonthKey(value: string | Date): string {
   const { year, month } = getKSTParts(value);
   return `${year}${pad2(month)}`;
+}
+
+const MONTHS_PER_YEAR = 12;
+
+/** "202609" 을 delta 달만큼 옮긴다. 형식이 틀린 키는 그대로 돌려준다 (거래 내역·결제 캘린더의 월 이동) */
+export function shiftMonthKey(key: string, delta: number): string {
+  const matched = MONTH_KEY.exec(key);
+  if (!matched) return key;
+  const index = Number(matched[1]) * MONTHS_PER_YEAR + Number(matched[2]) - 1 + delta;
+  return `${Math.floor(index / MONTHS_PER_YEAR)}${String((index % MONTHS_PER_YEAR) + 1).padStart(2, "0")}`;
 }
 
 /** 서버 시각 보정을 반영한 이번 달 "YYYYMM" */

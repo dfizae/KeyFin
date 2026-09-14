@@ -6,7 +6,6 @@ import {
   parseTransactionFilter,
   parseTransactionId,
   reclassifyBlockedReason,
-  shiftMonthKey,
   toClassifyResult,
   toPendingTransactions,
   toSubcategories,
@@ -18,6 +17,7 @@ import {
   txTypeLabel,
 } from "@/features/transaction/model";
 import { ContractMismatchError } from "@/lib/contract";
+import { shiftMonthKey } from "@/lib/date";
 
 describe("toTransaction", () => {
   const dto = pendingTransactionsMock().items[0];
