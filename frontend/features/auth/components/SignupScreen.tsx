@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, CircleAlert } from "lucide-react-native";
+import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useSignup } from "@/features/auth/api/queries";
 import { authErrorMessage } from "@/features/auth/errors";
@@ -44,14 +45,7 @@ function SignupScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <View className="flex-row items-center gap-3 px-6 pb-2">
-        <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={() => router.back()}>
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h1 text-foreground" accessibilityRole="header">
-          계정 만들기
-        </Text>
-      </View>
+      <ScreenHeader title="회원가입" onBack={() => router.back()} />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-8 px-6 pt-6" keyboardShouldPersistTaps="handled">
         <CoachRow character={CHARACTER_WAVE} message={"이메일과 비밀번호만 있으면 돼요.\n방 열쇠를 만들어 드릴게요!"} />

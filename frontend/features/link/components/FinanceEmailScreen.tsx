@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, CircleAlert, Info } from "lucide-react-native";
+import { CircleAlert, Info } from "lucide-react-native";
 import * as React from "react";
-import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import { KeyboardAvoidingView, Platform, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useConnectFinance } from "@/features/link/api/queries";
 import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/errors";
@@ -35,19 +36,7 @@ function FinanceEmailScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <View className="flex-row items-center gap-3 px-6 pb-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => router.canGoBack() && router.back()}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h1 text-foreground" accessibilityRole="header">
-          금융망 이메일 확인
-        </Text>
-      </View>
+      <ScreenHeader title="금융망 이메일 확인" onBack={() => router.canGoBack() && router.back()} />
 
       <View className="flex-1 justify-between px-6 pb-8">
         <View className="gap-8 pt-6">

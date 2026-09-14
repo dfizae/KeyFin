@@ -1,11 +1,12 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, Circle, CircleCheckBig } from "lucide-react-native";
+import { Circle, CircleCheckBig } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { canAgreeToTerms, TERMS_ITEMS } from "@/features/auth/model";
 import { useAuthStore } from "@/features/auth/store";
@@ -58,19 +59,7 @@ function TermsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => router.canGoBack() && router.back()}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h1 text-foreground" accessibilityRole="header">
-          약관에 동의해 주세요
-        </Text>
-      </View>
+      <ScreenHeader title="약관에 동의해 주세요" onBack={() => router.canGoBack() && router.back()} />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-4">
         <CoachRow

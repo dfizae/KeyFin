@@ -5,6 +5,7 @@ import { FlatList, Pressable, View } from "react-native";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
 import { linkedCards } from "@/features/account/model";
@@ -35,19 +36,10 @@ function TransactionListScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace(ASSETS_ROUTE))}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          거래 내역
-        </Text>
-      </View>
+      <ScreenHeader
+        title="거래 내역"
+        onBack={() => (router.canGoBack() ? router.back() : router.replace(ASSETS_ROUTE))}
+      />
 
       <MonthStepper
         month={filter.month}

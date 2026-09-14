@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { CalendarClock, Check, ChevronLeft, CircleAlert, Trash2 } from "lucide-react-native";
+import { CalendarClock, Check, CircleAlert, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 
@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
 import type { LinkedAccount } from "@/features/account/model";
@@ -251,16 +252,7 @@ type FormHeaderProps = {
 };
 
 function FormHeader({ title, onBack }: FormHeaderProps) {
-  return (
-    <View className="flex-row items-center gap-3 px-6 pb-3">
-      <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={onBack}>
-        <Icon as={ChevronLeft} size={24} className="text-foreground" />
-      </Pressable>
-      <Text className="text-h3 text-foreground" accessibilityRole="header">
-        {title}
-      </Text>
-    </View>
-  );
+  return <ScreenHeader title={title} onBack={onBack} />;
 }
 
 type FieldProps = {

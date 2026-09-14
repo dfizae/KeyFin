@@ -5,6 +5,7 @@ import { FlatList, Pressable, View } from "react-native";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { usePaymentCalendar } from "@/features/payment/api/queries";
 import { CALENDAR_EMPTY_MESSAGE, PREPARED_LABEL } from "@/features/payment/components/CalendarPopover";
@@ -32,30 +33,21 @@ function PaymentCalendarScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between gap-3 px-6 pb-3">
-        <View className="flex-row items-center gap-3">
+      <ScreenHeader
+        title="결제 캘린더"
+        onBack={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
+        right={
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="뒤로"
+            accessibilityLabel="고정지출 등록"
             hitSlop={10}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
+            className="h-touch w-touch items-center justify-center active:opacity-70"
+            onPress={() => router.push(`${FIXED_EXPENSE_ROUTE}/new`)}
           >
-            <Icon as={ChevronLeft} size={24} className="text-foreground" />
+            <Icon as={Plus} size={24} className="text-foreground" />
           </Pressable>
-          <Text className="text-h3 text-foreground" accessibilityRole="header">
-            결제 캘린더
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="고정지출 등록"
-          hitSlop={10}
-          className="h-touch w-touch items-center justify-center active:opacity-70"
-          onPress={() => router.push(`${FIXED_EXPENSE_ROUTE}/new`)}
-        >
-          <Icon as={Plus} size={24} className="text-foreground" />
-        </Pressable>
-      </View>
+        }
+      />
 
       <MonthStepper month={month} onChange={(next) => router.setParams({ month: next })} />
 

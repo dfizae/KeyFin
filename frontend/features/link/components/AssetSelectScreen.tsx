@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, Circle, CircleCheckBig, WalletMinimal } from "lucide-react-native";
+import { Circle, CircleCheckBig, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useCreateLinks, useLinkCandidates } from "@/features/link/api/queries";
 import { BankLogoTile } from "@/features/link/components/BankLogoTile";
@@ -161,34 +162,24 @@ function AssetSelectHeader({ allSelected, disabled, onToggleAll }: AssetSelectHe
   const router = useRouter();
 
   return (
-    <View className="flex-row items-center justify-between gap-3 px-6 pb-3">
-      <View className="flex-1 flex-row items-center gap-3">
+    <ScreenHeader
+      title="연결할 자산 선택"
+      onBack={() => router.canGoBack() && router.back()}
+      right={
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="뒤로"
+          accessibilityLabel={allSelected ? "전체 해제" : "전체 선택"}
+          accessibilityState={{ disabled }}
           hitSlop={10}
-          onPress={() => router.canGoBack() && router.back()}
+          disabled={disabled}
+          onPress={onToggleAll}
         >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
+          <Text className={cn("text-label", disabled ? "text-card-foreground" : "text-primary")}>
+            {allSelected ? "전체 해제" : "전체 선택"}
+          </Text>
         </Pressable>
-        <Text className="flex-1 text-h2 text-foreground" accessibilityRole="header" numberOfLines={1}>
-          연결할 자산을 선택해 주세요
-        </Text>
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={allSelected ? "전체 해제" : "전체 선택"}
-        accessibilityState={{ disabled }}
-        hitSlop={10}
-        disabled={disabled}
-        onPress={onToggleAll}
-      >
-        <Text className={cn("text-label", disabled ? "text-card-foreground" : "text-primary")}>
-          {allSelected ? "전체 해제" : "전체 선택"}
-        </Text>
-      </Pressable>
-    </View>
+      }
+    />
   );
 }
 
