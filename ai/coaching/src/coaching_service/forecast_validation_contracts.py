@@ -1,35 +1,39 @@
 """Frozen contracts for a receipt-based, delayed-outcome forecast audit."""
 
-from typing import Annotated, Literal, Self
+from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
+from coaching_service.forecast_validation_month_contracts import (
+    MonthlyEvaluationRequest,
+    MonthlyRegistration,
+    MonthlySettlement,
+)
+from coaching_service.forecast_validation_values import (
+    Amount,
+    Digest,
+    EnvelopeName,
+    Finite,
+    Origin,
+    Quantiles,
+    Tier,
+)
 from coaching_service.periods import DateOnly
 from coaching_service.schemas import Frozen, Identifier, JsonDocument, TwinIdentity
 
-Amount = Annotated[int, Field(strict=True, ge=0, le=10**14)]
-Finite = Annotated[float, Field(allow_inf_nan=False)]
-Digest = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
-Origin = Literal["synthetic", "historical_real", "backend_attested_real"]
-Tier = Literal["synthetic", "replay", "prospective_attested"]
-
-
-class Quantiles(Frozen):
-    p10: Amount
-    p50: Amount
-    p90: Amount
-
-    @model_validator(mode="after")
-    def ordered(self) -> Self:
-        if not self.p10 <= self.p50 <= self.p90:
-            raise ValueError("unordered_quantiles")
-        return self
+# 기존 호출자의 공용 값 타입 import 경로를 명시적으로 유지한다.
+__all__ = [
+    "Amount", "Baseline", "Digest", "EnvelopeMetric", "Finite", "MetricReport", "MetricRequest",
+    "MetricValues", "ObservationRequest", "Origin", "Quantiles", "Registration", "RegistrationRequest",
+    "Settlement", "Tier",
+]
 
 
 class RegistrationRequest(Frozen):
     coaching_id: Identifier
     data_origin: Origin
     source_reference: str = Field(min_length=1, max_length=200)
+    monthly: MonthlyEvaluationRequest | None = None
 
 
 class ObservationRequest(Frozen):
@@ -74,6 +78,7 @@ class Registration(Frozen):
     source_reference: str
     prediction: Quantiles
     baseline: Baseline
+    monthly: MonthlyRegistration | None = None
     real_accuracy_validated: Literal[False] = False
 
 
@@ -87,6 +92,7 @@ class Settlement(Frozen):
     source_reference: str
     coverage_complete_backend_attested: Literal[True] = True
     independent_human_oracle: Literal[False] = False
+    monthly: MonthlySettlement | None = None
 
 
 class MetricValues(Frozen):
@@ -104,6 +110,12 @@ class MetricValues(Frozen):
 
 class MetricRequest(Frozen):
     registration_ids: tuple[Identifier, ...] = Field(min_length=1, max_length=100)
+
+
+class EnvelopeMetric(Frozen):
+    envelope: EnvelopeName
+    values: MetricValues
+    target: Literal["future_variable_consumption_only"] = "future_variable_consumption_only"
 
 
 class MetricReport(Frozen):
@@ -127,3 +139,7 @@ class MetricReport(Frozen):
         "not_estimated_single_owner_dependent_windows"
     )
     real_accuracy_validated: Literal[False] = False
+    envelopes: tuple[EnvelopeMetric, ...] | None = None
+    # 응답이 검증한 원장 snapshot이다. 반환 뒤 미래 이벤트까지 최신임을 보장하지 않는다.
+    observed_identity: TwinIdentity | None = None
+    observed_checked_at: Finite | None = None

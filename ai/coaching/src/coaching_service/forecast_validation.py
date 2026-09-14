@@ -10,6 +10,7 @@ from pydantic import ValidationError
 
 from coaching_service.coaching import CoachingCore
 from coaching_service.errors import ServiceError
+from coaching_service.forecast_validation_budgets import MonthlyBudgets
 from coaching_service.forecast_validation_contracts import (
     MetricReport,
     MetricRequest,
@@ -19,7 +20,9 @@ from coaching_service.forecast_validation_contracts import (
     Settlement,
 )
 from coaching_service.forecast_validation_ingestion import IngestionStamp, ingestion_key
-from coaching_service.forecast_validation_metrics import calculate_metrics
+from coaching_service.forecast_validation_metrics import calculate_metrics, envelope_metrics
+from coaching_service.forecast_validation_month import freeze_month, require_current_month, settle_month
+from coaching_service.forecast_validation_month_policy import require_month_policy
 from coaching_service.forecast_validation_observations import (
     SEOUL,
     has_future_records,
@@ -29,7 +32,7 @@ from coaching_service.forecast_validation_observations import (
 )
 from coaching_service.forecast_validation_receipts import ForecastSource, freeze_receipt
 from coaching_service.repository import Mutation, document, write
-from coaching_service.schemas import Coaching, JsonDocument
+from coaching_service.schemas import Coaching, JsonDocument, TwinIdentity
 from coaching_service.store import Operation
 
 
@@ -54,11 +57,18 @@ class ForecastValidation:
             )
             stamp = None if stamp_json is None else IngestionStamp.model_validate_json(stamp_json)
             try:
+                source = ForecastSource(coaching=coaching, twin=twin, identity=identity, stamp=stamp)
                 frozen = freeze_receipt(
-                    ForecastSource(coaching=coaching, twin=twin, identity=identity, stamp=stamp),
+                    source,
                     request,
                     self.clock(),
                 )
+                if request.monthly is not None:
+                    plan = None if request.monthly.budget_plan_id is None else await MonthlyBudgets(
+                        repository, self.clock
+                    ).get(op.owner, request.monthly.budget_plan_id)
+                    month = freeze_month(source, frozen, request.monthly, plan, raw_rows(twin, op.owner))
+                    frozen = frozen.model_copy(update={"monthly": month})
             except ValidationError:
                 raise ServiceError("validation_source_contract_invalid") from None
             return Mutation(result=document(frozen), writes=(write(key, frozen),))
@@ -66,14 +76,20 @@ class ForecastValidation:
         return await self.core.repository.mutate(op, action)
 
     async def registration(self, owner: str, registration_id: str) -> Registration:
-        return Registration.model_validate_json(
-            await self.core.repository.load(owner, "forecast-registration/" + registration_id)
-        )
+        try:
+            return Registration.model_validate_json(
+                await self.core.repository.load(owner, "forecast-registration/" + registration_id)
+            )
+        except ValidationError:
+            raise ServiceError("validation_saved_registration_invalid", 409) from None
 
     async def settlement(self, owner: str, registration_id: str) -> Settlement:
-        return Settlement.model_validate_json(
-            await self.core.repository.load(owner, "forecast-settlement/" + registration_id)
-        )
+        try:
+            return Settlement.model_validate_json(
+                await self.core.repository.load(owner, "forecast-settlement/" + registration_id)
+            )
+        except ValidationError:
+            raise ServiceError("validation_saved_settlement_invalid", 409) from None
 
     async def settle(self, op: Operation, registration_id: str, request: ObservationRequest) -> JsonDocument:
         async def action() -> Mutation:
@@ -85,7 +101,8 @@ class ForecastValidation:
             deadline = datetime.combine(frozen.forecast_end + timedelta(days=1), day_time.min, SEOUL)
             if now < deadline.timestamp():
                 raise ServiceError("validation_outcome_not_mature", 409)
-            if request.coverage_start != frozen.forecast_start or request.coverage_end != frozen.forecast_end:
+            coverage_start = frozen.forecast_start if frozen.monthly is None else frozen.monthly.month_start
+            if request.coverage_start != coverage_start or request.coverage_end != frozen.forecast_end:
                 raise ServiceError("validation_coverage_period_mismatch")
             twin = await self.core.twin(op.owner)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, twin)
@@ -107,6 +124,7 @@ class ForecastValidation:
                 ):
                     raise ServiceError("validation_future_observation")
                 actual = observed_total(rows, frozen.forecast_start, frozen.forecast_end)
+                monthly = settle_month(frozen, rows)
             except ValidationError:
                 raise ServiceError("validation_observation_contract_invalid") from None
             settled = Settlement(
@@ -117,12 +135,15 @@ class ForecastValidation:
                 observed_identity=identity,
                 observed_digest=source_digest(twin),
                 source_reference=request.source_reference,
+                monthly=monthly,
             )
             return Mutation(result=document(settled), writes=(write(key, settled),))
 
         return await self.core.repository.mutate(op, action)
 
-    async def require_current_outcomes(self, owner: str, settlements: tuple[Settlement, ...]) -> None:
+    async def require_current_outcomes(
+        self, owner: str, settlements: tuple[Settlement, ...],
+    ) -> tuple[str, TwinIdentity]:
         """Reject revised window totals without invalidating unrelated later transactions.
 
         The original settlement remains an immutable historical record. A fresh
@@ -135,6 +156,7 @@ class ForecastValidation:
             rows = raw_rows(twin, owner)
             for settlement in settlements:
                 frozen = settlement.registration
+                require_current_month(settlement, rows)
                 if identity.as_of < frozen.forecast_end.isoformat():
                     raise ServiceError("validation_observation_revised", 409)
                 current = observed_total(rows, frozen.forecast_start, frozen.forecast_end)
@@ -145,6 +167,7 @@ class ForecastValidation:
                     raise ServiceError("validation_observation_revised", 409)
         except ValidationError:
             raise ServiceError("validation_observation_contract_invalid") from None
+        return source_digest(twin), identity
 
     async def metrics(self, owner: str, request: MetricRequest) -> MetricReport:
         """Only explicit settled IDs from one comparable cohort enter a report.
@@ -179,7 +202,7 @@ class ForecastValidation:
             for row in forecasts
         ):
             raise ServiceError("validation_incomparable_cohort")
-        await self.require_current_outcomes(owner, settlements)
+        checked_digest, checked_identity = await self.require_current_outcomes(owner, settlements)
         ordered = sorted(forecasts, key=lambda row: (row.forecast_end, row.forecast_start))
         independent = 0
         last_end = None
@@ -187,7 +210,7 @@ class ForecastValidation:
             if last_end is None or row.forecast_start > last_end:
                 independent += 1
                 last_end = row.forecast_end
-        return MetricReport(
+        report = MetricReport(
             registration_ids=request.registration_ids,
             source_references=tuple(row.source_reference for row in forecasts),
             horizon_days=first.horizon_days,
@@ -200,6 +223,17 @@ class ForecastValidation:
                 tuple(row.actual_krw for row in settlements),
                 tuple(row.baseline.prediction_krw for row in forecasts),
             ),
+            envelopes=envelope_metrics(settlements),
             overlapping_windows=independent < len(forecasts),
             non_overlapping_window_count=independent,
         )
+        # 최초 조회와 thread 경계 사이에 이벤트가 확정될 수 있으므로 계산 뒤 다시 확인한다.
+        # 마지막 read 시점의 일관성만 보장한다. 이 응답 이후의 거래는 다음 조회 대상이다.
+        if source_digest(await self.core.twin(owner)) != checked_digest:
+            raise ServiceError("validation_observation_changed_during_metrics", 409)
+        for frozen in forecasts:
+            if frozen.monthly is not None:
+                require_month_policy(frozen.monthly)
+        return report.model_copy(update={
+            "observed_identity": checked_identity, "observed_checked_at": self.clock(),
+        })

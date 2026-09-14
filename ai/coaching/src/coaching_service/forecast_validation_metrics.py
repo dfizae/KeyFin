@@ -1,6 +1,8 @@
 """Transparent point and central-80%-interval errors; no customer-accuracy gate."""
 
-from coaching_service.forecast_validation_contracts import MetricValues, Quantiles
+from coaching_service.errors import ServiceError
+from coaching_service.forecast_validation_contracts import EnvelopeMetric, MetricValues, Quantiles, Settlement
+from coaching_service.forecast_validation_values import ENVELOPES
 
 
 def calculate_metrics(
@@ -41,3 +43,29 @@ def calculate_metrics(
         baseline_wape=baseline_absolute / actual_sum if actual_sum else None,
         baseline_bias_krw=sum(baseline_errors) / n,
     )
+
+
+def envelope_metrics(settlements: tuple[Settlement, ...]) -> tuple[EnvelopeMetric, ...] | None:
+    """예측과 기준 모델의 오차는 같은 미래 기간만 비교한다. 월 예산 사용률은 합치지 않는다."""
+    if all(row.registration.monthly is None and row.monthly is None for row in settlements):
+        return None
+    if any(row.registration.monthly is None or row.monthly is None for row in settlements):
+        raise ServiceError("validation_incomparable_monthly_cohort")
+    result: list[EnvelopeMetric] = []
+    for envelope in ENVELOPES:
+        forecasts = tuple(
+            item for row in settlements if row.registration.monthly is not None
+            for item in row.registration.monthly.forecasts if item.envelope == envelope
+        )
+        actuals = tuple(
+            item.future_actual.consumption_krw for row in settlements if row.monthly is not None
+            for item in row.monthly.comparisons if item.envelope == envelope
+        )
+        result.append(EnvelopeMetric(
+            envelope=envelope,
+            values=calculate_metrics(
+                tuple(row.future_prediction for row in forecasts), actuals,
+                tuple(row.baseline_future_krw for row in forecasts),
+            ),
+        ))
+    return tuple(result)

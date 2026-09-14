@@ -9,6 +9,7 @@ from fastapi import Depends, FastAPI
 from coaching_service.auth import Authenticate
 from coaching_service.coaching import CoachingCore
 from coaching_service.forecast_validation import ForecastValidation
+from coaching_service.forecast_validation_budgets import MonthlyBudgets
 from coaching_service.forecast_validation_contracts import (
     MetricReport,
     MetricRequest,
@@ -17,6 +18,7 @@ from coaching_service.forecast_validation_contracts import (
     RegistrationRequest,
     Settlement,
 )
+from coaching_service.forecast_validation_month_contracts import MonthlyBudgetPlan, MonthlyBudgetRequest
 from coaching_service.http_contracts import RequestKey, operation
 from coaching_service.repository import document
 from coaching_service.schemas import Identifier
@@ -31,6 +33,27 @@ def register_forecast_validation(
 ) -> None:
     """Backend registers and attests coverage; the user can inspect their own results."""
     validation = ForecastValidation(core, clock)
+    budgets = MonthlyBudgets(core.repository, clock)
+
+    async def register_budget(
+        body: MonthlyBudgetRequest, key: RequestKey, owner: Annotated[str, Depends(auth.backend)],
+    ) -> MonthlyBudgetPlan:
+        result = await budgets.register(
+            operation(owner, "forecast-budget-register", key, document(body)), body,
+        )
+        return MonthlyBudgetPlan.model_validate(result.root)
+
+    async def get_budget(plan_id: Identifier, owner: Annotated[str, Depends(auth.user)]) -> MonthlyBudgetPlan:
+        return await budgets.get(owner, plan_id)
+
+    app.add_api_route(
+        "/v1/forecast-validation/monthly-budgets", register_budget,
+        methods=["POST"], response_model=MonthlyBudgetPlan,
+    )
+    app.add_api_route(
+        "/v1/forecast-validation/monthly-budgets/{plan_id}", get_budget,
+        methods=["GET"], response_model=MonthlyBudgetPlan,
+    )
 
     async def register(
         body: RegistrationRequest, key: RequestKey, owner: Annotated[str, Depends(auth.backend)]
