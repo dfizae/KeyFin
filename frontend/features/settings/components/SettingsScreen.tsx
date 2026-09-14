@@ -26,7 +26,7 @@ import { getColors } from "@/lib/theme";
 const MY_ROUTE = "/my";
 
 /**
- * PAGE-27 설정 상세. P0 범위인 이체 동의와 1회·1일 한도(GET/PUT /settings, FR-PAY-04)만 다룬다.
+ * PAGE-27 설정 상세. P0 범위인 이체 동의와 1회·1일 한도(GET/PUT /settings/transfer, FR-PAY-04)만 다룬다.
  * 코치 말투·알림 on/off·방해 금지는 P1 이고 PUT /settings/notifications 는 상세 미확인이라 넣지 않았다.
  * 동의를 끄면 이체 실행 경로 자체가 막히므로(규칙 80) 한도 입력도 함께 비활성이다. Pencil 시안 없음.
  */
