@@ -1,0 +1,145 @@
+package com.finset.key_fin.transaction.service;
+
+import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
+import com.finset.key_fin.transaction.entity.ConfirmStatus;
+import com.finset.key_fin.transaction.entity.ExcludeTag;
+import com.finset.key_fin.transaction.entity.TransactionStatus;
+import com.finset.key_fin.transaction.entity.TransactionType;
+import com.finset.key_fin.transaction.exception.TransactionErrorCode;
+import com.finset.key_fin.transaction.repository.TransactionQueryRepository;
+import com.finset.key_fin.transaction.repository.TransactionQueryRow;
+import com.finset.key_fin.transaction.repository.TransactionSearchCondition;
+import com.finset.key_fin.user.entity.User;
+import com.finset.key_fin.user.exception.UserErrorCode;
+import com.finset.key_fin.user.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneOffset;
+import java.util.List;
+import java.util.Optional;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+
+@ExtendWith(MockitoExtension.class)
+class TransactionServiceTest {
+
+	private static final long USER_ID = 1L;
+
+	@Mock
+	private UserRepository userRepository;
+
+	@Mock
+	private TransactionQueryRepository transactionQueryRepository;
+
+	private TransactionService transactionService;
+
+	@BeforeEach
+	void setUp() {
+		Clock clock = Clock.fixed(Instant.parse("2026-09-14T00:00:00Z"), ZoneOffset.UTC);
+		transactionService = new TransactionService(userRepository, transactionQueryRepository, clock);
+	}
+
+	@Test
+	void 필터와_월을_적용해_거래를_조회한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		given(transactionQueryRepository.findTransactions(org.mockito.ArgumentMatchers.any()))
+				.willReturn(List.of(row(501L)));
+
+		TransactionListResponse response = transactionService.getTransactions(
+				USER_ID, "202609", 1, 102, 3L, 7L, null, 20);
+
+		assertThat(response.items()).hasSize(1);
+		assertThat(response.items().getFirst().id()).isEqualTo(501L);
+		assertThat(response.nextCursor()).isNull();
+		ArgumentCaptor<TransactionSearchCondition> captor = ArgumentCaptor.forClass(TransactionSearchCondition.class);
+		verify(transactionQueryRepository).findTransactions(captor.capture());
+		assertThat(captor.getValue())
+				.extracting("startDate", "endDate", "envelopeId", "subcategoryId", "accountId", "cardId", "limit")
+				.containsExactly(LocalDate.of(2026, 9, 1), LocalDate.of(2026, 10, 1), 1, 102, 3L, 7L, 21);
+	}
+
+	@Test
+	void 월을_생략하면_KST_현재_월을_사용한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		given(transactionQueryRepository.findTransactions(org.mockito.ArgumentMatchers.any())).willReturn(List.of());
+
+		transactionService.getTransactions(USER_ID, null, null, null, null, null, null, null);
+
+		ArgumentCaptor<TransactionSearchCondition> captor = ArgumentCaptor.forClass(TransactionSearchCondition.class);
+		verify(transactionQueryRepository).findTransactions(captor.capture());
+		assertThat(captor.getValue().startDate()).isEqualTo(LocalDate.of(2026, 9, 1));
+		assertThat(captor.getValue().limit()).isEqualTo(21);
+	}
+
+	@Test
+	void 다음_거래가_있으면_마지막_반환_ID를_cursor로_제공한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		given(transactionQueryRepository.findTransactions(org.mockito.ArgumentMatchers.any()))
+				.willReturn(List.of(row(10L), row(9L), row(8L)));
+
+		TransactionListResponse response = transactionService.getTransactions(
+				USER_ID, "202609", null, null, null, null, null, 2);
+
+		assertThat(response.items()).extracting("id").containsExactly(10L, 9L);
+		assertThat(response.nextCursor()).isEqualTo(9L);
+	}
+
+	@Test
+	void 잘못된_월은_거절한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+
+		assertThatThrownBy(() -> transactionService.getTransactions(
+				USER_ID, "2026-09", null, null, null, null, null, 20))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode()).isEqualTo(TransactionErrorCode.INVALID_MONTH));
+	}
+
+	@Test
+	void 페이지_크기_범위를_검증한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+
+		assertThatThrownBy(() -> transactionService.getTransactions(
+				USER_ID, "202609", null, null, null, null, null, 101))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode()).isEqualTo(TransactionErrorCode.INVALID_PAGE_SIZE));
+	}
+
+	@Test
+	void 활성_사용자가_없으면_거래를_조회할_수_없다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.empty());
+
+		assertThatThrownBy(() -> transactionService.getTransactions(
+				USER_ID, "202609", null, null, null, null, null, 20))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.USER_NOT_FOUND));
+		verifyNoInteractions(transactionQueryRepository);
+	}
+
+	private TransactionQueryRow row(long id) {
+		return new TransactionQueryRow(
+				id, TransactionType.CARD, "메가커피", 4_500L,
+				LocalDate.of(2026, 9, 8), LocalTime.of(14, 21),
+				1, 102, "카페", ConfirmStatus.AUTO, ExcludeTag.NONE,
+				TransactionStatus.NORMAL, null, null, 7L, null
+		);
+	}
+}
