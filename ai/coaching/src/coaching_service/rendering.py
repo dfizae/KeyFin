@@ -2,6 +2,7 @@
 
 from datetime import date
 
+from coaching_service.numeric_rendering import numeric_text
 from coaching_service.periods import period_text
 from coaching_service.schemas import JsonDocument, Receipt
 
@@ -10,6 +11,7 @@ def authoritative_text(receipt: Receipt) -> str:
     pieces = historical_text(receipt)
     if receipt.period is not None:
         pieces.append(period_text(receipt.period, date.fromisoformat(receipt.identity.as_of)))
+    pieces.extend(numeric_text(receipt))
     facts = receipt.payment
     if facts is not None:
         pieces.append(
