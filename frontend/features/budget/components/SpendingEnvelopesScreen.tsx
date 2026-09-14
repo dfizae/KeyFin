@@ -20,7 +20,10 @@ const PROPOSAL_ROUTE = "/onboarding/budget-proposal";
 /** 하단 CTA 가 안전 영역이 없는 기기에서도 띄워지는 최소 여백 (AssetSelectScreen 과 같은 기준) */
 const MIN_BOTTOM_INSET = 12;
 
-// PAGE-06 소비 분석 결과 B (Pencil spending-analysis/envelopes t02uSx). 봉투 전체를 많이 쓴 순으로 보여 주고 합계를 단다.
+/** 얇은 막대 7개가 위에서부터 차례로 차오른다(요약 A 의 3개보다 촘촘하게) */
+const FILL_STAGGER_MS = 80;
+
+// PAGE-06 소비 분석 결과 B (Pencil spending-analysis/envelopes t02uSx, 제목은 헤더 한 줄). 봉투 전체를 많이 쓴 순으로 보여 주고 합계를 단다.
 // 제안은 분석 중 화면이 받아 둔 캐시만 읽고, 없으면(앱 재시작 등) 분석 중으로 돌려보낸다.
 function SpendingEnvelopesScreen() {
   const router = useRouter();
@@ -36,7 +39,7 @@ function SpendingEnvelopesScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center px-6 pb-3">
+      <View className="flex-row items-center gap-3 px-6 pb-2">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="뒤로"
@@ -45,29 +48,29 @@ function SpendingEnvelopesScreen() {
         >
           <Icon as={ChevronLeft} size={24} className="text-foreground" />
         </Pressable>
+        <Text className="text-h1 text-foreground" accessibilityRole="header">
+          봉투 {envelopes.length}개로 나눠 봤어요
+        </Text>
       </View>
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pb-6 pt-1">
-        <AnalysisHero
-          icon={Layers}
-          title={`봉투 ${envelopes.length}개로 나눠 봤어요`}
-          description="이 금액을 바탕으로 봉투별 한 달 예산을 제안해 드릴게요."
-        />
+      <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pb-6 pt-4">
+        <AnalysisHero icon={Layers} description="이 금액을 바탕으로 봉투별 한 달 예산을 제안해 드릴게요." />
 
         <View className="gap-3.5">
           <View className="flex-row items-center justify-between">
             <Text className="text-h3 text-foreground" accessibilityRole="header">
               봉투별 한 달 평균
             </Text>
-            <Text className="text-caption tabular-nums text-muted-foreground">{envelopes.length}개</Text>
+            <Text className="text-caption tabular-nums text-card-foreground">{envelopes.length}개</Text>
           </View>
-          {ranked.map((envelope) => (
+          {ranked.map((envelope, index) => (
             <SpendingBarRow
               key={envelope.envelopeId}
               name={envelope.name}
               value={formatKRW(envelope.monthlyAvg)}
               percent={monthlyAvgPercent(envelope.monthlyAvg, max)}
               thin
+              fillDelay={index * FILL_STAGGER_MS}
             />
           ))}
         </View>

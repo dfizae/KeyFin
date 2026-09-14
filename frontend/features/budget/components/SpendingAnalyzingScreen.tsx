@@ -1,7 +1,7 @@
 import { Redirect } from "expo-router";
-import { ChartPie, CircleAlert } from "lucide-react-native";
+import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { View } from "react-native";
+import { Image, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -15,11 +15,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { LottieLoop } from "@/components/ui/lottie-loop";
 import { Text } from "@/components/ui/text";
 import { useBudgetProposal } from "@/features/budget/api/queries";
 import { isBudgetExistsError, proposalErrorMessage } from "@/features/budget/errors";
 import { hasSpendingHistory } from "@/features/budget/model";
+import { CHARACTER_PHONE } from "@/features/room/assets";
 import { currentMonthKey } from "@/lib/date";
+
+/** 점 3개가 차례로 커지는 로딩 애니메이션(직접 만든 Lottie, 72×24) */
+const ANALYZING_DOTS = require("@/assets/lottie/analyzing-dots.json");
+const DOTS_STYLE = { width: 72, height: 24 } as const;
+
+/** 시안(LsD1Y)의 캐릭터 150×200. 4px 스케일 밖 값이라 크기만 style 로 준다 */
+const CHARACTER_STYLE = { width: 150, height: 200 } as const;
 
 const SUMMARY_ROUTE = "/onboarding/spending-summary";
 
@@ -46,22 +55,26 @@ function SpendingAnalyzingScreen() {
   return <Analyzing />;
 }
 
-// Pencil spending-analysis/analyzing (pWPd0). 버튼 없이 분석이 끝나면 다음 화면으로 넘어간다.
+// Pencil 소비 분석 · 분석 중 · 캐릭터 대안 (LsD1Y). 버튼 없이 분석이 끝나면 다음 화면으로 넘어간다.
 function Analyzing() {
   return (
     <View className="flex-1 items-center justify-center gap-5 bg-background px-10" accessibilityLiveRegion="polite">
-      <View className="h-16 w-16 items-center justify-center rounded-full bg-accent">
-        <Icon as={ChartPie} size={28} className="text-primary" />
-      </View>
+      <Image source={CHARACTER_PHONE} style={CHARACTER_STYLE} resizeMode="contain" accessible={false} />
       <View className="items-center gap-2">
         <Text className="text-h2 text-foreground" accessibilityRole="header">
           지난 소비를 분석하고 있어요
         </Text>
-        <Text className="text-center text-body-sm text-muted-foreground">
+        <Text className="text-center text-body-sm text-card-foreground">
           최근 카드·계좌 내역을 살펴보는 중이에요.{"\n"}잠시만 기다려 주세요.
         </Text>
       </View>
-      <IndeterminateBar />
+      <LottieLoop
+        source={ANALYZING_DOTS}
+        width={DOTS_STYLE.width}
+        height={DOTS_STYLE.height}
+        accessibilityLabel="분석 중"
+        fallback={<IndeterminateBar />}
+      />
     </View>
   );
 }
@@ -70,7 +83,8 @@ const TRACK_WIDTH = 160;
 const SEGMENT_WIDTH = 64;
 const SWEEP_MS = 1200;
 
-// 진행률을 알 수 없는 요청이라 막대 조각이 트랙을 계속 가로지른다. 동작 줄이기 설정이면 멈춰 둔다.
+// Lottie 를 못 그리는 웹에서 대신 쓰는 진행 표시. 진행률을 알 수 없는 요청이라 막대 조각이 트랙을 계속 가로지른다.
+// 동작 줄이기 설정이면 멈춰 둔다.
 function IndeterminateBar() {
   const reducedMotion = useReducedMotion();
   const offset = useSharedValue(-SEGMENT_WIDTH);
@@ -112,7 +126,7 @@ function AnalysisError({ error, retrying, onRetry }: AnalysisErrorProps) {
           <Text className="text-h2 text-foreground" accessibilityRole="header">
             소비를 분석하지 못했어요
           </Text>
-          <Text className="text-center text-body-sm text-muted-foreground">{proposalErrorMessage(error)}</Text>
+          <Text className="text-center text-body-sm text-card-foreground">{proposalErrorMessage(error)}</Text>
         </View>
       </View>
       <View className="px-6 pt-3" style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}>

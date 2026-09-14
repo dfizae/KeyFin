@@ -105,8 +105,8 @@ function ProposalHeader({ showBack }: { showBack: boolean }) {
           <Icon as={ChevronLeft} size={24} className="text-foreground" />
         </Pressable>
       ) : null}
-      <Text className="text-h3 text-foreground" accessibilityRole="header">
-        예산 설정
+      <Text className="text-h1 text-foreground" accessibilityRole="header">
+        이번 예산을 정해요
       </Text>
     </View>
   );
@@ -169,26 +169,21 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
   return (
     <View className="flex-1">
       <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-5 pb-6">
-        <View className="gap-1.5">
-          <Text className="text-h1 text-foreground" accessibilityRole="header">
-            이번 예산을 정해요
-          </Text>
-          <Text className="text-body-sm text-muted-foreground">{BASIS_DESCRIPTION[kind]}</Text>
-        </View>
+        <Text className="text-body-sm text-card-foreground">{BASIS_DESCRIPTION[kind]}</Text>
 
-        <View className="gap-1 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
-          <Text className="text-caption text-muted-foreground">{period} 총 예산</Text>
-          <Text className="text-amount-md tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
+        <View className="gap-1.5">
+          <Text className="text-label text-card-foreground">{period} 총 예산</Text>
+          <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
             {formatKRW(total)}
           </Text>
-          <Text className="text-caption tabular-nums text-muted-foreground">{summary}</Text>
+          <Text className="text-caption tabular-nums text-card-foreground">{summary}</Text>
         </View>
 
         <View className="flex-row items-center justify-between">
           <Text className="text-h3 text-foreground" accessibilityRole="header">
             봉투별 금액
           </Text>
-          <Text className="text-caption tabular-nums text-muted-foreground">{rows.length}개</Text>
+          <Text className="text-caption tabular-nums text-card-foreground">{rows.length}개</Text>
         </View>
 
         <View className="gap-3.5">
@@ -225,7 +220,7 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-h3 text-foreground">이 예산으로 시작할까요?</DialogTitle>
-            <DialogDescription className="text-body-sm text-muted-foreground">
+            <DialogDescription className="text-body-sm text-card-foreground">
               시작하면 이번 예산({period})은 바꿀 수 없어요.
             </DialogDescription>
           </DialogHeader>
@@ -276,7 +271,7 @@ function EnvelopeAmountRow({ row, amount, showMonthlyAvg, onChange }: EnvelopeAm
         accessibilityLabel={`${row.name} 금액`}
       />
       {showMonthlyAvg && row.monthlyAvg !== null ? (
-        <Text className="text-caption tabular-nums text-muted-foreground">월평균 {formatKRW(row.monthlyAvg)}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">월평균 {formatKRW(row.monthlyAvg)}</Text>
       ) : null}
     </View>
   );
