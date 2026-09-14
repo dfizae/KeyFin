@@ -1,4 +1,4 @@
-package com.finset.key_fin.room.entity;
+package com.finset.key_fin.item.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

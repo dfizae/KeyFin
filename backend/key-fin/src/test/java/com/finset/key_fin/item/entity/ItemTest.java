@@ -1,4 +1,4 @@
-package com.finset.key_fin.room.entity;
+package com.finset.key_fin.item.entity;
 
 import org.junit.jupiter.api.Test;
 

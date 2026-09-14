@@ -3,7 +3,7 @@ package com.finset.key_fin.room.service;
 import com.finset.key_fin.room.dto.response.RoomResponse;
 import com.finset.key_fin.room.entity.FurniturePlacementDirection;
 import com.finset.key_fin.room.entity.FurniturePlacementStatus;
-import com.finset.key_fin.room.entity.ItemSlotType;
+import com.finset.key_fin.item.entity.ItemSlotType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
