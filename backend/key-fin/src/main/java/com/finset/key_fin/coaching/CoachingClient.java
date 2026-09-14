@@ -76,6 +76,8 @@ public class CoachingClient {
         return send(userId, path, requestKey, body, backendTokens);
     }
 
+    JsonNode currentTwin(Long userId) { return send(userId, "/v1/twin", null, null, backendTokens); }
+
     public JsonNode notifications(Long userId) {
         return send(userId, "/v1/notifications", null, null, notificationTokens);
     }

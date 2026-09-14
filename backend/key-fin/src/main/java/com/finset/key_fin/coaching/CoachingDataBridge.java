@@ -23,4 +23,6 @@ public class CoachingDataBridge {
     public JsonNode applyEvent(Long authenticatedUserId, String requestKey, EngineInput.Event input) {
         return client.postBackend(authenticatedUserId, "/v1/events", requestKey, input);
     }
+
+    JsonNode currentTwin(Long authenticatedUserId) { return client.currentTwin(authenticatedUserId); }
 }

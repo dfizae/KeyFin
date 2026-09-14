@@ -25,4 +25,8 @@ public class CoachingProperties {
     private Map<Long, String> backendTokens = new HashMap<>();
     /** Python notification-role tokens for the inbox/ack API; user-role tokens cannot access it. */
     private Map<Long, String> notificationTokens = new HashMap<>();
+    /** Source adapter only: app principal -> Python financial owner, matching its backend token. */
+    private Map<Long, String> ownerIds = new HashMap<>();
+    /** Enable only after the outbox migration and owner/write-token mapping are deployed. */
+    private boolean sourceSyncEnabled = false;
 }
