@@ -32,7 +32,8 @@ type EnvelopeDetailScreenProps = {
 /**
  * PAGE-23 봉투 상세. 잔액은 GET /budgets/current 의 그 봉투 값이고 거래는 GET /transactions 의 envelopeId 필터다.
  * 거래 필터의 month 는 주기 시작월이라 주기가 두 달에 걸치면 목록이 주기와 딱 맞지 않는다 (TBD).
- * 확정 전(PROPOSED) 주기는 예산 탭과 같게 예산 확정 화면으로 보낸다(사용자 결정 2026-09-12). Pencil 시안 없음.
+ * 확정 전(PROPOSED) 주기는 예산 탭과 같게 예산 확정 화면으로 보낸다(사용자 결정 2026-09-12).
+ * Pencil 봉투 상세 · 금액 대안 (ola4D): 요약은 카드 없이 잔액이 화면에서 가장 크고 막대는 화면 폭 전체.
  */
 function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
   const router = useRouter();
@@ -85,7 +86,7 @@ function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
           keyExtractor={(transaction) => String(transaction.id)}
           contentContainerClassName="px-6 pb-8"
           ListHeaderComponent={
-            <View className="gap-4 pb-2">
+            <View className="gap-5 pb-2">
               <EnvelopeSummary envelope={envelope} period={budgetPeriodLabel(budget.data)} />
               <Text className="text-h3 text-foreground" accessibilityRole="header">
                 거래 내역
@@ -130,18 +131,18 @@ type EnvelopeSummaryProps = {
   period: string;
 };
 
-// 예산 탭의 총예산 카드(TotalCard)와 같은 모양을 봉투 하나에 맞춘 것. 금액은 서버 값만 쓴다(규칙 80).
+// 기간 · 잔액 · 사용률 막대 · 예산/사용액. 카드 없이 잔액이 주인공이다. 금액은 서버 값만 쓴다(규칙 80).
 function EnvelopeSummary({ envelope, period }: EnvelopeSummaryProps) {
   const health = envelopeHealth(envelope);
   const used = usedBarPercent(envelope.remainingRate);
 
   return (
-    <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
+    <View className="gap-3 pb-2 pt-3">
       <View className="flex-row items-center gap-2.5">
         <View className="h-7 w-7 items-center justify-center rounded-md bg-accent">
           <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className="text-primary" />
         </View>
-        <Text className="text-label tabular-nums text-muted-foreground">{period}</Text>
+        <Text className="text-label tabular-nums text-card-foreground">{period}</Text>
       </View>
       <Text
         className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")}
@@ -159,10 +160,10 @@ function EnvelopeSummary({ envelope, period }: EnvelopeSummaryProps) {
         <View className={cn("h-full rounded-full", BAR_CLASS[health])} style={{ width: `${used}%` }} />
       </View>
       <View className="flex-row justify-between">
-        <Text className="text-caption tabular-nums text-muted-foreground">
+        <Text className="text-caption tabular-nums text-card-foreground">
           {envelope.confirmed === null ? "예산 미설정" : `예산 ${formatKRW(envelope.confirmed)}`}
         </Text>
-        <Text className="text-caption tabular-nums text-muted-foreground">
+        <Text className="text-caption tabular-nums text-card-foreground">
           {envelope.spent === null ? "" : `사용 ${formatKRW(envelope.spent)}`}
         </Text>
       </View>
@@ -210,8 +211,10 @@ function ListSkeleton() {
 
 function EnvelopeSkeleton() {
   return (
-    <View className="gap-4 px-6" accessible accessibilityLabel="불러오는 중">
-      <Skeleton className="h-40 w-full rounded-2xl" />
+    <View className="gap-4 px-6 pt-3" accessible accessibilityLabel="불러오는 중">
+      <Skeleton className="h-5 w-28" />
+      <Skeleton className="h-11 w-56" />
+      <Skeleton className="h-2 w-full rounded-full" />
       <Skeleton className="h-6 w-24" />
       <ListSkeleton />
     </View>
