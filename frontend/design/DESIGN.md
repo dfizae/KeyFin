@@ -119,7 +119,7 @@
 | Pencil 컴포넌트 | 코드 | 기반 | variant / size |
 |---|---|---|---|
 | `AmountText` | `components/ui/amount-text.tsx` | `Text` | `lg` `md` `sm`, `sign` |
-| `AmountInput` | `components/ui/amount-input.tsx` | `Input` | 통화 `KRW` 고정, 콤마 포맷 |
+| `AmountInput` | `components/ui/amount-input.tsx` | `Input` | 통화 `KRW` 고정, 콤마 포맷. `variant="hero"`(기본, 36pt + 빠른 금액 칩 — 이체 금액) / `"field"`(폼의 한 칸, 다른 입력칸과 같은 16pt + '원', 칩 없음 — 고정지출 등록, 2026-09-14) |
 | `EmptyState` | `components/ui/empty-state.tsx` | `Text`, `Icon`, `Button` | 빈 목록·오류 |
 | `LottieLoop` | `components/ui/lottie-loop.tsx` | `lottie-react-native` (+ 웹 `@lottiefiles/dotlottie-react`) | 반복 재생 · 동작 줄이기면 정지 · 기기와 웹 모두 재생. 기다림·성공 순간(분석 중·입주 연출·이체 완료)에만 쓰고 입력 화면에는 쓰지 않는다. 에셋 `assets/lottie/*.json` 100KB 이하 |
 | `FillBar` | `components/ui/fill-bar.tsx` | Reanimated | 가로 진행 막대 한 종류(트랙 `bg-muted rounded-full`, 기본 `h-2`). `fillDelay` 를 주면 진입 시 0 에서 차오름(900ms). 소비 분석 막대·예산 탭 사용률 막대 |

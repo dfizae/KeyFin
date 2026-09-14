@@ -133,6 +133,7 @@ function FixedExpenseFormScreen({ route }: FixedExpenseFormScreenProps) {
 
         <Field label="금액">
           <AmountInput
+            variant="field"
             className="h-input rounded-lg"
             value={form.amount}
             onChangeValue={(amount) => patch({ amount })}
