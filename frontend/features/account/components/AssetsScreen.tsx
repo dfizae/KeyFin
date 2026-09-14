@@ -3,11 +3,13 @@ import { CalendarClock, CreditCard, Menu, Receipt, WalletMinimal } from "lucide-
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { linkedAccounts, linkedCards, totalBalance, type LinkedAccount, type LinkedCard } from "@/features/account/model";
+import { useAccounts } from "@/features/account/api/queries";
+import { balanceAsOfLabel, linkedCards, totalBalance, type LinkedAccount, type LinkedCard } from "@/features/account/model";
 import { useLinkCandidates } from "@/features/link/api/queries";
 import { BankLogoTile } from "@/features/link/components/BankLogoTile";
 import { CandidatesErrorState } from "@/features/link/components/CandidatesErrorState";
@@ -20,6 +22,7 @@ import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 const TRANSACTIONS_ROUTE = "/transaction";
+const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
 
 /** 시안(UjYhB)은 2건을 보여 준다. 남은 건이 많아도 가까운 순으로 이만큼만 둔다 */
 const UPCOMING_PAYMENT_LIMIT = 3;
@@ -32,13 +35,14 @@ const ASSET_TABS: { key: AssetTab; label: string }[] = [
 ];
 
 // PAGE-11 자산 (Pencil 자산관리 UjYhB). 사용자 결정(2026-09-11): 대출 탭·송금 버튼은 KeyFin 명세에 없어 빼고,
-// 햄버거는 자리만 두고 비활성, 정기결제 예정은 넣되 '관리'는 결제 캘린더(PAGE-24)가 생기기 전까지 숨긴다.
-// 계좌·카드는 ACCOUNT 명세가 없어 금융망 후보의 연결된 항목으로 만든다. 섹션마다 따로 불러와 한쪽이 실패해도 나머지는 보인다.
+// 햄버거는 자리만 두고 비활성, 정기결제 예정의 '관리'는 결제 캘린더(PAGE-24)로 간다.
+// 계좌는 GET /accounts(잔액 스냅샷), 카드는 카드 API 가 없어 금융망 후보에서 온다 — 카드 탭을 열 때만 금융망을 부른다.
+// 섹션마다 따로 불러와 한쪽이 실패해도 나머지는 보인다.
 function AssetsScreen() {
   const [tab, setTab] = React.useState<AssetTab>("accounts");
-  const candidates = useLinkCandidates();
-  const accounts = candidates.data ? linkedAccounts(candidates.data) : [];
-  const cards = candidates.data ? linkedCards(candidates.data) : [];
+  const accounts = useAccounts();
+  // 잔액은 실시간이 아니라 서버가 갱신한 스냅샷이라 기준 시각을 함께 보여 준다 (사용자 결정 2026-09-12)
+  const asOf = accounts.data ? balanceAsOfLabel(accounts.data) : null;
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="pb-8">
@@ -51,13 +55,14 @@ function AssetsScreen() {
 
       <View className="gap-1 px-6 pb-4">
         <Text className="text-caption text-muted-foreground">내 총 자산</Text>
-        {candidates.isPending ? (
+        {accounts.isPending ? (
           <Skeleton className="h-11 w-48 rounded-md" />
         ) : (
           <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
-            {candidates.isError ? "—" : formatKRW(totalBalance(accounts))}
+            {accounts.data === undefined ? "—" : formatKRW(totalBalance(accounts.data))}
           </Text>
         )}
+        {asOf === null ? null : <Text className="text-caption tabular-nums text-muted-foreground">{asOf}</Text>}
       </View>
 
       <View className="flex-row gap-2 px-6 pb-5" accessibilityRole="tablist">
@@ -78,14 +83,16 @@ function AssetsScreen() {
         <Text className="text-h3 text-foreground" accessibilityRole="header">
           {tab === "accounts" ? "입출금 계좌" : "카드"}
         </Text>
-        {candidates.isPending ? (
-          <AssetSkeleton />
-        ) : candidates.isError ? (
-          <CandidatesErrorState error={candidates.error} retrying={candidates.isFetching} onRetry={() => candidates.refetch()} />
-        ) : tab === "accounts" ? (
-          <AccountList accounts={accounts} />
+        {tab === "accounts" ? (
+          accounts.isPending ? (
+            <AssetSkeleton />
+          ) : accounts.isError ? (
+            <InlineRetry message="계좌를 불러오지 못했어요." retrying={accounts.isFetching} onRetry={() => accounts.refetch()} />
+          ) : (
+            <AccountList accounts={accounts.data} />
+          )
         ) : (
-          <CardList cards={cards} />
+          <CardSection />
         )}
       </View>
 
@@ -105,6 +112,7 @@ function MenuButton() {
 }
 
 // Pencil AccountItem (w4jgr1): accent 카드. 송금 버튼 대신 로고 타일과 마스킹 번호를 둔다.
+// 별칭이 있으면 제목으로 올리고 은행명은 아래로 내린다. 수입 계좌에는 뱃지를 단다.
 function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
   if (accounts.length === 0) {
     return <EmptyState icon={WalletMinimal} title="연결된 계좌가 없어요" className="py-6" />;
@@ -116,15 +124,29 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
           key={account.accountId}
           className="flex-row items-center gap-3 rounded-lg bg-accent p-4"
           accessible
-          accessibilityLabel={`${account.bankName} ${account.maskedNo} 잔액 ${formatKRW(account.balance)}`}
+          accessibilityLabel={[
+            account.alias ?? account.bankName,
+            account.isIncome ? "수입 계좌" : null,
+            account.maskedNo,
+            `잔액 ${formatKRW(account.balance)}`,
+          ]
+            .filter(Boolean)
+            .join(", ")}
         >
-          <BankLogoTile bankCode={account.bankCode} name={account.bankName} />
+          <BankLogoTile name={account.bankName} />
           <View className="flex-1 gap-0.5">
-            <Text className="text-h3 text-foreground" numberOfLines={1}>
-              {account.bankName}
-            </Text>
+            <View className="flex-row items-center gap-1.5">
+              <Text className="shrink text-h3 text-foreground" numberOfLines={1}>
+                {account.alias ?? account.bankName}
+              </Text>
+              {account.isIncome ? (
+                <Badge variant="secondary">
+                  <Text>수입</Text>
+                </Badge>
+              ) : null}
+            </View>
             <Text className="text-caption tabular-nums text-muted-foreground" numberOfLines={1}>
-              {account.maskedNo}
+              {account.alias === null ? account.maskedNo : `${account.bankName} · ${account.maskedNo}`}
             </Text>
           </View>
           <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
@@ -134,6 +156,17 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
       ))}
     </View>
   );
+}
+
+// 카드 목록 API 가 없어 금융망 후보의 연결 카드를 쓴다. 이 섹션이 보일 때만 후보를 불러온다.
+function CardSection() {
+  const candidates = useLinkCandidates();
+
+  if (candidates.isPending) return <AssetSkeleton />;
+  if (candidates.isError) {
+    return <CandidatesErrorState error={candidates.error} retrying={candidates.isFetching} onRetry={() => candidates.refetch()} />;
+  }
+  return <CardList cards={linkedCards(candidates.data)} />;
 }
 
 function CardList({ cards }: { cards: LinkedCard[] }) {
@@ -165,15 +198,22 @@ function CardList({ cards }: { cards: LinkedCard[] }) {
 }
 
 // Pencil RecurringPayments (Csfwz). 데이터는 홈 캘린더와 같은 GET /payments/calendar 캐시를 쓴다.
+// '관리'는 결제 캘린더(PAGE-24)가 생겨 2026-09-13 에 열었다.
 function UpcomingPayments() {
+  const router = useRouter();
   const calendar = usePaymentCalendar(currentMonthKey());
   const entries = calendar.data ? upcomingEntries(calendar.data, currentDateKey(), UPCOMING_PAYMENT_LIMIT) : [];
 
   return (
     <View className="gap-3 p-6">
-      <Text className="text-h2 text-foreground" accessibilityRole="header">
-        이번 달 정기결제 예정
-      </Text>
+      <View className="flex-row items-center justify-between">
+        <Text className="text-h2 text-foreground" accessibilityRole="header">
+          이번 달 정기결제 예정
+        </Text>
+        <Pressable accessibilityRole="link" accessibilityLabel="결제 캘린더 열기" hitSlop={10} onPress={() => router.push(PAYMENT_CALENDAR_ROUTE)}>
+          <Text className="text-caption text-primary">관리</Text>
+        </Pressable>
+      </View>
       {calendar.isPending ? (
         <AssetSkeleton />
       ) : calendar.isError ? (
@@ -243,7 +283,11 @@ function RecentTransactions() {
       ) : (
         <View>
           {recent.data.items.map((transaction) => (
-            <TransactionRow key={transaction.id} transaction={transaction} />
+            <TransactionRow
+              key={transaction.id}
+              transaction={transaction}
+              onPress={() => router.push(`${TRANSACTIONS_ROUTE}/${transaction.id}`)}
+            />
           ))}
         </View>
       )}

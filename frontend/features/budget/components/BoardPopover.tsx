@@ -4,7 +4,7 @@ import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { envelopeHealth, usedPercent, type Budget, type BudgetEnvelope, type EnvelopeHealth } from "@/features/budget/model";
+import { envelopeHealth, usedBarPercent, type Budget, type BudgetEnvelope, type BudgetTotal, type EnvelopeHealth } from "@/features/budget/model";
 import { getSceneScale } from "@/features/room/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -25,14 +25,15 @@ const FILL_CLASS: Record<EnvelopeHealth, string> = {
 type BoardPopoverProps = {
   width: number;
   budget: Budget;
-  monthLabel: string;
+  /** "9월 1일~30일" */
+  periodLabel: string;
   onClose: () => void;
 };
 
-function BoardPopover({ width, budget, monthLabel, onClose }: BoardPopoverProps) {
+function BoardPopover({ width, budget, periodLabel, onClose }: BoardPopoverProps) {
   const router = useRouter();
   const scale = getSceneScale(width);
-  const summary = budget.total ? `${formatKRW(budget.total.remaining)} · ${budget.total.remainingRate}% 남음` : "예산 미설정";
+  const summary = budget.total ? totalSummary(budget.total) : "예산 미설정";
 
   return (
     <>
@@ -43,7 +44,7 @@ function BoardPopover({ width, budget, monthLabel, onClose }: BoardPopoverProps)
         accessibilityLiveRegion="polite"
       >
         <View className="flex-row items-center justify-between">
-          <Text className="text-label text-foreground">{monthLabel} 예산 보드</Text>
+          <Text className="text-label text-foreground">{periodLabel} 예산 보드</Text>
           <Text className={cn("text-caption tabular-nums", budget.total ? "text-primary" : "text-muted-foreground")}>{summary}</Text>
         </View>
         {budget.total ? (
@@ -70,9 +71,15 @@ function BoardPopover({ width, budget, monthLabel, onClose }: BoardPopoverProps)
   );
 }
 
+/** 전체 확정액이 0 이면 잔여율이 없어(null) 금액만 쓴다 */
+function totalSummary(total: BudgetTotal): string {
+  return total.remainingRate === null ? `${formatKRW(total.remaining)} 남음` : `${formatKRW(total.remaining)} · ${total.remainingRate}% 남음`;
+}
+
+// 확정액 0 인 봉투는 잔여율이 없어 빈 트랙이고, 쓴 돈이 있으면 over 색으로 초과 금액을 적는다(사용자 결정 2026-09-12).
 function EnvelopeRow({ envelope }: { envelope: BudgetEnvelope }) {
   const health = envelopeHealth(envelope);
-  const barPercent = envelope.remainingRate === null ? 0 : Math.min(100, usedPercent(envelope.remainingRate));
+  const barPercent = usedBarPercent(envelope.remainingRate);
   const remainingText =
     envelope.remaining === null ? "-" : health === "over" ? `초과 ${formatKRW(envelope.remaining, { sign: "never" })}` : formatKRW(envelope.remaining);
 

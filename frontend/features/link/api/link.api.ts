@@ -1,4 +1,4 @@
-import { USE_MOCKS, api } from "@/api/client";
+import { api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
 import { connectFinanceMock, createLinksMock, financeStatusMock, linkCandidatesMock } from "@/api/mocks/link";
 import {
@@ -14,7 +14,7 @@ import {
 
 /** GET /links/status — 현재 사용자의 금융망 연결 여부 (docs/api-contract.md LINK). 미연결도 200 + false 다. */
 export async function getFinanceStatus(signal?: AbortSignal): Promise<boolean> {
-  if (USE_MOCKS) {
+  if (isMocked("link")) {
     const { connected } = await withMockLatency(financeStatusMock(), signal);
     return connected;
   }
@@ -24,7 +24,7 @@ export async function getFinanceStatus(signal?: AbortSignal): Promise<boolean> {
 
 /** POST /links/connect — 금융망 회원 연결 (docs/api-contract.md LINK). 같은 금융망 회원으로 다시 보내면 성공이다(멱등) */
 export async function connectFinanceAccount(request: FinanceLinkRequest): Promise<boolean> {
-  if (USE_MOCKS) {
+  if (isMocked("link")) {
     const { connected } = await withMockLatency(connectFinanceMock(request));
     return connected;
   }
@@ -37,14 +37,14 @@ export async function connectFinanceAccount(request: FinanceLinkRequest): Promis
  * 금융망 회원 연결(PAGE-03B)이 끝나야 후보가 돌아온다.
  */
 export async function getLinkCandidates(signal?: AbortSignal): Promise<LinkCandidates> {
-  if (USE_MOCKS) return toLinkCandidates(await withMockLatency(linkCandidatesMock(), signal));
+  if (isMocked("link")) return toLinkCandidates(await withMockLatency(linkCandidatesMock(), signal));
   const { data } = await api.get<LinkCandidatesDto>("/links/candidates", { signal });
   return toLinkCandidates(data);
 }
 
 /** POST /links — 후보의 KeyFin id 로 선택 항목을 연결한다. 금융망은 부르지 않고, 이미 관리 중인 항목은 건너뛰어 재시도해도 안전하다(멱등) */
 export async function createLinks(request: LinkRequest): Promise<LinkResponseDto> {
-  if (USE_MOCKS) return withMockLatency(createLinksMock(request));
+  if (isMocked("link")) return withMockLatency(createLinksMock(request));
   const { data } = await api.post<LinkResponseDto>("/links", request);
   return data;
 }

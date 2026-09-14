@@ -6,14 +6,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { linkedAccounts, linkedCards } from "@/features/account/model";
+import { useAccounts } from "@/features/account/api/queries";
+import { linkedCards } from "@/features/account/model";
 import { ENVELOPE_CATALOG } from "@/features/budget/catalog";
 import { useLinkCandidates } from "@/features/link/api/queries";
 import { useTransactionList } from "@/features/transaction/api/queries";
 import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
 import { TransactionRow } from "@/features/transaction/components/TransactionRow";
-import { monthFilterLabel, parseTransactionFilter, shiftMonthKey, type TransactionFilter } from "@/features/transaction/model";
-import { currentMonthKey } from "@/lib/date";
+import { monthFilterLabel, parseTransactionFilter, type TransactionFilter } from "@/features/transaction/model";
+import { currentMonthKey, shiftMonthKey } from "@/lib/date";
 
 const ASSETS_ROUTE = "/assets";
 
@@ -21,7 +22,7 @@ const ASSETS_ROUTE = "/assets";
 type FilterParams = { month?: string; envelopeId?: string; accountId?: string; cardId?: string };
 
 // 거래 내역 전체보기 (자산 탭 "전체보기", FR-TXN-09). Pencil 시안 없음 — 자산 탭 행 모양을 따른다.
-// 필터는 검색 파라미터로 둔다(규칙 10: 딥링크로 복원되는 필터). 행 탭(거래 상세 PAGE-21)은 아직 없다.
+// 필터는 검색 파라미터로 둔다(규칙 10: 딥링크로 복원되는 필터). 행을 탭하면 거래 상세(PAGE-21)로 간다.
 function TransactionListScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
@@ -69,7 +70,9 @@ function TransactionListScreen() {
         <FlatList
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
-          renderItem={({ item }) => <TransactionRow transaction={item} />}
+          renderItem={({ item }) => (
+            <TransactionRow transaction={item} onPress={() => router.push(`/transaction/${item.id}`)} />
+          )}
           contentContainerClassName="px-6 pb-8"
           onEndReachedThreshold={0.4}
           onEndReached={() => {
@@ -151,13 +154,14 @@ function assetParamsOf(key: string): FilterParams {
   return { accountId: undefined, cardId: undefined };
 }
 
-// 봉투 선택 + 계좌·카드 선택을 나란히 둔다. 계좌·카드 목록은 금융망 후보에서 온다(ACCOUNT 명세 미완성) —
-// 못 불러왔거나 연결된 게 없으면 그쪽 선택만 비활성이다.
+// 봉투 선택 + 계좌·카드 선택을 나란히 둔다. 계좌는 GET /accounts, 카드는 카드 API 가 없어 금융망 후보에서 온다 —
+// 둘 다 못 불러왔거나 연결된 게 없으면 그쪽 선택만 비활성이다.
 function FilterSelects({ filter, onChange }: FilterSelectsProps) {
+  const accounts = useAccounts();
   const candidates = useLinkCandidates();
   const assetOptions: SelectOption[] = [
     { key: ALL_KEY, label: "전체 계좌·카드" },
-    ...(candidates.data ? linkedAccounts(candidates.data) : []).map((account) => ({
+    ...(accounts.data ?? []).map((account) => ({
       key: `account:${account.accountId}`,
       label: `${account.bankName} ${account.maskedNo.slice(-4)}`,
       section: "계좌",

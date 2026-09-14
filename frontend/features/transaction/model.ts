@@ -1,4 +1,5 @@
 import { ContractMismatchError } from "@/lib/contract";
+import { formatDate, formatDateTime, KST_LOCAL_DATE_TIME, parseKSTDateKey, parseKSTLocalDateTime } from "@/lib/date";
 import { fromServerWon, type KRW } from "@/lib/money";
 
 /**
@@ -145,18 +146,50 @@ export function transactionBadge(transaction: Transaction): string | null {
   return EXCLUDE_TAG_LABELS[transaction.excludeTag] ?? null;
 }
 
-const MONTH_KEY = /^(\d{4})(0[1-9]|1[0-2])$/;
-const POSITIVE_ID = /^[1-9]\d*$/;
-const MONTHS_PER_YEAR = 12;
+/** 거래 상세(PAGE-21)의 거래 종류 자리. 계약에 없는 값은 "기타" 로 적는다 */
+const TX_TYPE_LABELS: Record<TxType, string> = {
+  CARD: "카드 결제",
+  DEPOSIT: "입금",
+  WITHDRAW: "계좌 출금",
+  TRANSFER: "이체",
+  UNKNOWN: "기타",
+};
 
-/** "202609" 을 delta 달만큼 옮긴다. 형식이 틀린 키는 그대로 돌려준다 */
-export function shiftMonthKey(key: string, delta: number): string {
-  const matched = MONTH_KEY.exec(key);
-  if (!matched) return key;
-  const index = Number(matched[1]) * MONTHS_PER_YEAR + Number(matched[2]) - 1 + delta;
-  return `${Math.floor(index / MONTHS_PER_YEAR)}${String((index % MONTHS_PER_YEAR) + 1).padStart(2, "0")}`;
+export function txTypeLabel(transaction: Transaction): string {
+  return TX_TYPE_LABELS[transaction.txType];
 }
 
+/** 분류 상태 자리. 모르는 값은 자리를 비운다 */
+const CONFIRM_STATUS_LABELS: Partial<Record<ConfirmStatus, string>> = {
+  AUTO: "자동 분류",
+  PENDING: "확인 필요",
+  CONFIRMED: "확인 완료",
+};
+
+export function confirmStatusLabel(transaction: Transaction): string | null {
+  return CONFIRM_STATUS_LABELS[transaction.confirmStatus] ?? null;
+}
+
+/** 거래 상세의 "2026.09.08 14:21". 서버는 날짜·시각을 따로 주므로 합쳐 읽고, 시각 형식이 틀리면 날짜만 쓴다 */
+export function transactionDateTimeLabel(transaction: Transaction): string {
+  const dateTime = `${transaction.txDate}T${transaction.txTime}`;
+  return KST_LOCAL_DATE_TIME.test(dateTime)
+    ? formatDateTime(parseKSTLocalDateTime(dateTime))
+    : formatDate(parseKSTDateKey(transaction.txDate));
+}
+
+/**
+ * 분류를 바꿀 수 없는 거래의 이유. 바꿀 수 있으면 null (FR-TXN-03·05).
+ * 들어온 돈은 봉투에서 나가지 않고 취소된 결제는 봉투 합계에서 이미 빠졌다 — 서버 제약이 아니라 화면 판단이다 (TBD)
+ */
+export function reclassifyBlockedReason(transaction: Transaction): string | null {
+  if (transaction.status === "CANCELED") return "취소된 결제는 분류를 바꿀 수 없어요.";
+  if (isIncoming(transaction)) return "입금은 봉투에 들어가지 않아 분류가 없어요.";
+  return null;
+}
+
+const MONTH_KEY = /^(\d{4})(0[1-9]|1[0-2])$/;
+const POSITIVE_ID = /^[1-9]\d*$/;
 /** "202609" → "2026년 9월" */
 export function monthFilterLabel(key: string): string {
   const matched = MONTH_KEY.exec(key);
@@ -190,6 +223,12 @@ export function parseTransactionFilter(params: SearchParams, currentMonth: strin
   if (accountId !== undefined) filter.accountId = accountId;
   if (cardId !== undefined) filter.cardId = cardId;
   return filter;
+}
+
+/** 거래 상세 라우트(`/transaction/[id]`)의 id. 양의 정수가 아니면 null — 라우트 파라미터는 믿지 않는다 */
+export function parseTransactionId(value: string | string[] | undefined): number | null {
+  const raw = firstParam(value);
+  return raw !== undefined && POSITIVE_ID.test(raw) ? Number(raw) : null;
 }
 
 export function toSubcategories(dto: SubcategoryListDto): Subcategory[] {

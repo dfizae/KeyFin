@@ -14,6 +14,8 @@ public interface FixedExpenseRepository extends JpaRepository<FixedExpense, Long
 
 	Optional<FixedExpense> findByIdAndUserIdAndActiveTrue(Long id, Long userId);
 
+	List<FixedExpense> findAllByUserIdAndFinSubscriptionIdIsNotNull(Long userId);
+
 	boolean existsByUserIdAndActiveTrueAndNameAndExpenseTypeAndAmountAndPaymentDayAndWithdrawalAccountId(
 			Long userId, String name, ExpenseType expenseType, Long amount, int paymentDay, Long withdrawalAccountId);
 }

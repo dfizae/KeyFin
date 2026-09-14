@@ -1,9 +1,11 @@
-import { classifyTransactionMock, pendingTransactionsMock, subcategoriesMock, transactionListMock } from "@/api/mocks/transaction";
+import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock, transactionListMock } from "@/api/mocks/transaction";
 import {
+  confirmStatusLabel,
   isIncoming,
   monthFilterLabel,
   parseTransactionFilter,
-  shiftMonthKey,
+  parseTransactionId,
+  reclassifyBlockedReason,
   toClassifyResult,
   toPendingTransactions,
   toSubcategories,
@@ -11,8 +13,11 @@ import {
   toTransactionPage,
   transactionBadge,
   transactionCategoryLabel,
+  transactionDateTimeLabel,
+  txTypeLabel,
 } from "@/features/transaction/model";
 import { ContractMismatchError } from "@/lib/contract";
+import { shiftMonthKey } from "@/lib/date";
 
 describe("toTransaction", () => {
   const dto = pendingTransactionsMock().items[0];
@@ -123,5 +128,52 @@ describe("transactionListMock · toTransactionPage", () => {
     const account = transactionListMock({ month: "202609", accountId: 1, size: 100 }, TODAY);
     expect(account.items.some((tx) => tx.txType === "DEPOSIT")).toBe(true);
     expect(account.items.every((tx) => tx.txType !== "CARD")).toBe(true);
+  });
+});
+
+describe("거래 상세 표시 (txTypeLabel · confirmStatusLabel · transactionDateTimeLabel · reclassifyBlockedReason)", () => {
+  const card = toTransaction(pendingTransactionsMock().items[0]);
+
+  it("거래 종류와 분류 상태를 화면 문구로 바꾸고 모르는 상태는 자리를 비운다", () => {
+    expect(txTypeLabel(card)).toBe("카드 결제");
+    expect(txTypeLabel({ ...card, txType: "UNKNOWN" })).toBe("기타");
+    expect(confirmStatusLabel(card)).toBe("확인 필요");
+    expect(confirmStatusLabel({ ...card, confirmStatus: "AUTO" })).toBe("자동 분류");
+    expect(confirmStatusLabel({ ...card, confirmStatus: "UNKNOWN" })).toBeNull();
+  });
+
+  it("날짜와 시각을 합쳐 KST 로 읽고 시각 형식이 틀리면 날짜만 쓴다", () => {
+    expect(transactionDateTimeLabel(card)).toBe("2026.09.08 14:21");
+    expect(transactionDateTimeLabel({ ...card, txTime: "" })).toBe("2026.09.08");
+  });
+
+  it("입금과 취소된 결제는 분류를 바꿀 수 없다", () => {
+    expect(reclassifyBlockedReason(card)).toBeNull();
+    expect(reclassifyBlockedReason({ ...card, txType: "DEPOSIT" })).toContain("입금");
+    expect(reclassifyBlockedReason({ ...card, status: "CANCELED" })).toContain("취소");
+  });
+});
+
+describe("parseTransactionId", () => {
+  it("양의 정수만 거래 id 로 받고 배열이면 첫 값을 쓴다", () => {
+    expect(parseTransactionId("501")).toBe(501);
+    expect(parseTransactionId(["502", "503"])).toBe(502);
+    expect(parseTransactionId("0")).toBeNull();
+    expect(parseTransactionId("12.5")).toBeNull();
+    expect(parseTransactionId("abc")).toBeNull();
+    expect(parseTransactionId(undefined)).toBeNull();
+  });
+});
+
+describe("목 확정과 거래 목록", () => {
+  const TODAY = "2026-09-20";
+
+  it("확정한 거래는 목록에서도 바뀐 봉투·세분류·상태로 나온다", () => {
+    const target = transactionListMock({ month: "202609" }, TODAY).items[1];
+    classifyTransactionMock(target.id, { subcategoryId: 201 });
+
+    const after = transactionListMock({ month: "202609", size: 100 }, TODAY).items.find((item) => item.id === target.id);
+    expect(after).toMatchObject({ envelopeId: 2, subcategoryId: 201, subcategoryName: "대중교통", confirmStatus: "CONFIRMED" });
+    resetTransactionMocks();
   });
 });

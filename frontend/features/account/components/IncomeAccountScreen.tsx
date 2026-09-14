@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { Circle, CircleDot, WalletMinimal } from "lucide-react-native";
+import { Circle, CircleDot, WalletMinimal, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -9,12 +9,10 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useSetIncomeAccount } from "@/features/account/api/queries";
+import { useAccounts, useSetIncomeAccount } from "@/features/account/api/queries";
 import { incomeAccountErrorMessage } from "@/features/account/errors";
-import { canSubmitIncomeAccount, toIncomeAccountOptions, type IncomeAccountOption } from "@/features/account/model";
-import { useLinkCandidates } from "@/features/link/api/queries";
+import { canSubmitIncomeAccount, incomeAccountIdOf, type IncomeAccountOption } from "@/features/account/model";
 import { BankLogoTile } from "@/features/link/components/BankLogoTile";
-import { CandidatesErrorState } from "@/features/link/components/CandidatesErrorState";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -27,16 +25,18 @@ const ASSET_SELECT_ROUTE = "/onboarding/asset-select";
 const MIN_BOTTOM_INSET = 12;
 
 // PAGE-05 수입 계좌 지정. Pencil 시안이 없어 계좌·카드 연결(PAGE-04)의 구성과 행 모양을 따른다.
-// 목록은 GET /accounts 대신 금융망 후보 중 연결된 계좌로 만든다 — ACCOUNT 명세 미완성 (docs/api-contract.md ACCOUNT).
+// 목록은 GET /accounts(관리 중 계좌)이고, 이미 수입 계좌가 있으면 그 계좌를 골라 둔 채로 보여 준다.
 function IncomeAccountScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const candidates = useLinkCandidates();
+  const accounts = useAccounts();
   const setIncomeAccount = useSetIncomeAccount();
 
-  const [selectedId, setSelectedId] = React.useState<number | null>(null);
+  // 사용자가 고르기 전에는 서버의 현재 수입 계좌를 선택값으로 쓴다(파생값이라 state 에 복사하지 않는다).
+  const [pickedId, setPickedId] = React.useState<number | null>(null);
 
-  const options = candidates.data === undefined ? [] : toIncomeAccountOptions(candidates.data);
+  const options = accounts.data ?? [];
+  const selectedId = pickedId ?? incomeAccountIdOf(options);
   const canSubmit = canSubmitIncomeAccount(options, selectedId) && !setIncomeAccount.isPending;
   const errorMessage = setIncomeAccount.isError ? incomeAccountErrorMessage(setIncomeAccount.error) : null;
 
@@ -55,14 +55,15 @@ function IncomeAccountScreen() {
           <Text className="text-body-sm text-muted-foreground">급여·용돈처럼 돈이 들어오는 계좌 1개를 지정해요.</Text>
         </View>
 
-        {candidates.isPending ? (
+        {accounts.isPending ? (
           <OptionsSkeleton />
-        ) : candidates.isError ? (
+        ) : accounts.isError ? (
           <View className="flex-1 justify-center pb-20">
-            <CandidatesErrorState
-              error={candidates.error}
-              retrying={candidates.isFetching}
-              onRetry={() => candidates.refetch()}
+            <EmptyState
+              icon={WifiOff}
+              title="계좌를 불러오지 못했어요"
+              description="연결 상태를 확인한 뒤 다시 시도해 주세요."
+              action={{ label: "다시 시도", onPress: () => accounts.refetch(), disabled: accounts.isFetching }}
             />
           </View>
         ) : options.length === 0 ? (
@@ -82,7 +83,7 @@ function IncomeAccountScreen() {
                 option={option}
                 selected={option.accountId === selectedId}
                 disabled={setIncomeAccount.isPending}
-                onSelect={() => setSelectedId(option.accountId)}
+                onSelect={() => setPickedId(option.accountId)}
               />
             ))}
           </ScrollView>
@@ -130,7 +131,7 @@ function IncomeAccountRow({ option, selected, disabled, onSelect }: IncomeAccoun
         className={selected ? "text-primary" : "text-muted-foreground"}
       />
 
-      <BankLogoTile bankCode={option.bankCode} name={option.bankName} />
+      <BankLogoTile name={option.bankName} />
 
       <View className="flex-1 gap-0.5">
         <Text className="text-label text-foreground" numberOfLines={1}>

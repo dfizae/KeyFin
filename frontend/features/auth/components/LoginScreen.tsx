@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useLogin } from "@/features/auth/api/queries";
 import { authErrorMessage } from "@/features/auth/errors";
-import { canSubmitLogin } from "@/features/auth/model";
+import { canSubmitLogin, parseReturnTo } from "@/features/auth/model";
 import { cn } from "@/lib/utils";
 
 /** Pencil login (HUL5i) 의 Main Logo 1 (LfIsh) 을 3배로 내보낸 이미지 */
@@ -18,7 +18,6 @@ const LOGO = require("@/assets/brand/keyfin-logo.png");
 /** NativeWind className 은 RN Image 에 적용되지 않아 크기만 style 로 준다. 폭에 맞춰 contain 하면 시안의 338x91 과 같아진다. */
 const LOGO_STYLE = { width: "100%", height: 96 } as const;
 
-const HOME_ROUTE = "/";
 const SIGNUP_ROUTE = "/(auth)/signup";
 
 // Pencil login (HUL5i) · login/error (JF0Db) · login/pending (bG1FL).
@@ -27,7 +26,7 @@ function LoginScreen() {
   const login = useLogin();
 
   // 가입 직후 돌아오면 방금 만든 이메일을 채워 두고 안내를 한 줄 보여준다.
-  const { signedUpEmail } = useLocalSearchParams<{ signedUpEmail?: string }>();
+  const { signedUpEmail, returnTo } = useLocalSearchParams<{ signedUpEmail?: string; returnTo?: string }>();
   const [email, setEmail] = React.useState(signedUpEmail ?? "");
   const [password, setPassword] = React.useState("");
 
@@ -37,7 +36,8 @@ function LoginScreen() {
   const handleSubmit = () => {
     if (!canSubmit) return;
     // 온보딩 완료 여부로 분기하는 자리. 판정 기준이 미정이고 PAGE-03~06 이 없어 지금은 홈으로 보낸다. (TBD)
-    login.mutate({ email: email.trim(), password }, { onSuccess: () => router.replace(HOME_ROUTE) });
+    // 푸시·딥링크로 들어왔다 로그인한 경우 원래 보려던 화면으로 돌아간다 (규칙 50).
+    login.mutate({ email: email.trim(), password }, { onSuccess: () => router.replace(parseReturnTo(returnTo)) });
   };
 
   return (

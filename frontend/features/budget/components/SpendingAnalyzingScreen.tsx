@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { useBudgetProposal } from "@/features/budget/api/queries";
-import { proposalErrorMessage } from "@/features/budget/errors";
+import { isBudgetExistsError, proposalErrorMessage } from "@/features/budget/errors";
 import { hasSpendingHistory } from "@/features/budget/model";
 import { currentMonthKey } from "@/lib/date";
 
@@ -37,6 +37,9 @@ function SpendingAnalyzingScreen() {
   if (proposal.data !== undefined) {
     return <Redirect href={hasSpendingHistory(proposal.data) ? SUMMARY_ROUTE : PROPOSAL_ROUTE} />;
   }
+  // 이번 주기 예산이 이미 있으면(앱을 다시 켜 온보딩을 이어 가는 경우 등) 제안을 다시 만들 수 없다.
+  // 예산 확정 화면이 GET /budgets/current 로 이미 있는 제안을 받으므로 분석 결과(A·B) 없이 그리로 보낸다.
+  if (proposal.isError && isBudgetExistsError(proposal.error)) return <Redirect href={PROPOSAL_ROUTE} />;
   if (proposal.isError) {
     return <AnalysisError error={proposal.error} retrying={proposal.isFetching} onRetry={() => proposal.refetch()} />;
   }

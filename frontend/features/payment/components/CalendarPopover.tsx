@@ -21,9 +21,11 @@ type CalendarPopoverProps = {
   calendar: PaymentCalendar;
   monthLabel: string;
   onClose: () => void;
+  /** 결제 캘린더(PAGE-24)로 보낸다 */
+  onOpenCalendar: () => void;
 };
 
-function CalendarPopover({ width, calendar, monthLabel, onClose }: CalendarPopoverProps) {
+function CalendarPopover({ width, calendar, monthLabel, onClose, onOpenCalendar }: CalendarPopoverProps) {
   const scale = getSceneScale(width);
   const { entries, shortageCount } = calendar;
   const summary = shortageCount > 0 ? `${entries.length}건 · 부족 ${shortageCount}건` : `${entries.length}건`;
@@ -53,17 +55,15 @@ function CalendarPopover({ width, calendar, monthLabel, onClose }: CalendarPopov
         ) : (
           <Text className="text-body-sm text-muted-foreground">{CALENDAR_EMPTY_MESSAGE}</Text>
         )}
-        {/* PAGE-24 결제 캘린더(app/payment/calendar.tsx)는 아직 없어 진입을 막아 둔다 (TBD) */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={CALENDAR_LINK_LABEL}
-          accessibilityState={{ disabled: true }}
-          disabled
           hitSlop={8}
-          className="flex-row items-center gap-1 self-start"
+          className="flex-row items-center gap-1 self-start active:opacity-70"
+          onPress={onOpenCalendar}
         >
-          <Text className="text-label text-muted-foreground">{CALENDAR_LINK_LABEL}</Text>
-          <Icon as={ChevronRight} size={14} className="text-muted-foreground" />
+          <Text className="text-label text-primary">{CALENDAR_LINK_LABEL}</Text>
+          <Icon as={ChevronRight} size={14} className="text-primary" />
         </Pressable>
       </View>
     </>

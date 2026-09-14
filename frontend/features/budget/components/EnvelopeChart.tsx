@@ -1,8 +1,8 @@
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Text } from "@/components/ui/text";
 import { envelopeShortName } from "@/features/budget/catalog";
-import { envelopeHealth, usedPercent, type BudgetEnvelope, type EnvelopeHealth } from "@/features/budget/model";
+import { envelopeHealth, usedBarPercent, usedPercent, type BudgetEnvelope, type EnvelopeHealth } from "@/features/budget/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -16,9 +16,11 @@ const FILL_CLASS: Record<EnvelopeHealth, string> = {
 
 type EnvelopeChartProps = {
   envelopes: BudgetEnvelope[];
+  /** 막대를 탭하면 그 봉투의 상세(PAGE-23)로 보낸다 */
+  onSelect?: (envelopeId: number) => void;
 };
 
-function EnvelopeChart({ envelopes }: EnvelopeChartProps) {
+function EnvelopeChart({ envelopes, onSelect }: EnvelopeChartProps) {
   return (
     <View className="gap-2">
       <View className="flex-row items-center justify-between">
@@ -27,22 +29,31 @@ function EnvelopeChart({ envelopes }: EnvelopeChartProps) {
       </View>
       <View className="flex-row items-end gap-1.5">
         {envelopes.map((envelope) => (
-          <EnvelopeBar key={envelope.envelopeId} envelope={envelope} />
+          <EnvelopeBar key={envelope.envelopeId} envelope={envelope} onSelect={onSelect} />
         ))}
       </View>
     </View>
   );
 }
 
-function EnvelopeBar({ envelope }: { envelope: BudgetEnvelope }) {
+// 확정액 0 인 봉투는 잔여율이 없어 빈 막대다. 쓴 돈이 있으면(over) 사용률 대신 "초과" 라고 적는다(사용자 결정 2026-09-12).
+function EnvelopeBar({ envelope, onSelect }: { envelope: BudgetEnvelope; onSelect?: (envelopeId: number) => void }) {
   const health = envelopeHealth(envelope);
   const used = envelope.remainingRate === null ? null : usedPercent(envelope.remainingRate);
-  const barPercent = used === null ? 0 : Math.min(100, used);
-  const usedText = used === null ? "-" : `${used}%`;
+  const barPercent = usedBarPercent(envelope.remainingRate);
+  const usedText = used === null ? (health === "over" ? "초과" : "-") : `${used}%`;
   const remainingText = envelope.remaining === null ? "" : `, 남은 ${formatKRW(envelope.remaining)}`;
 
   return (
-    <View className="flex-1 items-center gap-1" accessible accessibilityLabel={`${envelope.name} 사용률 ${usedText}${remainingText}`}>
+    <Pressable
+      className="flex-1 items-center gap-1 active:opacity-70"
+      accessible
+      accessibilityRole={onSelect ? "button" : undefined}
+      accessibilityLabel={`${envelope.name} 사용률 ${usedText}${remainingText}`}
+      accessibilityHint={onSelect ? "봉투 상세를 엽니다" : undefined}
+      disabled={onSelect === undefined}
+      onPress={onSelect === undefined ? undefined : () => onSelect(envelope.envelopeId)}
+    >
       <Text className="text-caption tabular-nums text-primary-foreground">{usedText}</Text>
       <View className="h-20 w-6 justify-end overflow-hidden rounded-md bg-accent">
         <View className={cn("w-full rounded-md", FILL_CLASS[health])} style={{ height: `${barPercent}%` }} />
@@ -50,7 +61,7 @@ function EnvelopeBar({ envelope }: { envelope: BudgetEnvelope }) {
       <Text className="text-caption text-primary-foreground" numberOfLines={1}>
         {envelopeShortName(envelope.envelopeId, envelope.name)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

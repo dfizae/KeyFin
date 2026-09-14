@@ -8,9 +8,10 @@ import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payme
 import { attendanceMock, roomMock } from "@/api/mocks/room";
 import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock } from "@/api/mocks/transaction";
 import { useAuthStore } from "@/features/auth/store";
-import { getBudget } from "@/features/budget/api/budget.api";
+import { getCurrentBudget } from "@/features/budget/api/budget.api";
+import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
-import { CLASSIFY_ERROR_MESSAGE } from "@/features/home/components/HomeCoach";
+import { CLASSIFY_ERROR_MESSAGE } from "@/features/transaction/errors";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
@@ -21,7 +22,7 @@ import { classifyTransaction, getPendingTransactions, getSubcategories } from "@
 import { toClassifyResult, toPendingTransactions, toSubcategories } from "@/features/transaction/model";
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
-jest.mock("@/features/budget/api/budget.api", () => ({ getBudget: jest.fn() }));
+jest.mock("@/features/budget/api/budget.api", () => ({ getCurrentBudget: jest.fn() }));
 jest.mock("@/features/payment/api/payment.api", () => ({ getPaymentCalendar: jest.fn() }));
 jest.mock("@/features/transaction/api/transaction.api", () => ({
   getPendingTransactions: jest.fn(),
@@ -33,6 +34,8 @@ jest.mock("@/features/transaction/api/transaction.api", () => ({
 notifyManager.setScheduler((callback) => callback());
 
 const MONTH = "202609";
+const TODAY_KEY = "2026-09-08";
+const PERIOD = "9월 1일~30일";
 jest.mock("@/lib/date", () => ({
   ...jest.requireActual<typeof import("@/lib/date")>("@/lib/date"),
   currentMonthKey: () => "202609",
@@ -40,16 +43,21 @@ jest.mock("@/lib/date", () => ({
 }));
 
 const mockPush = jest.fn();
+const mockRedirect = jest.fn();
 jest.mock("expo-router", () => {
   const ReactActual = jest.requireActual<typeof import("react")>("react");
   return {
     useRouter: () => ({ push: mockPush }),
+    Redirect: ({ href }: { href: unknown }) => {
+      mockRedirect(href);
+      return null;
+    },
     useFocusEffect: (effect: () => void) => ReactActual.useEffect(effect, [effect]),
   };
 });
 
 const mockedGetRoom = jest.mocked(getRoom);
-const mockedGetBudget = jest.mocked(getBudget);
+const mockedGetBudget = jest.mocked(getCurrentBudget);
 const mockedCheckAttendance = jest.mocked(checkAttendance);
 const mockedGetCalendar = jest.mocked(getPaymentCalendar);
 const mockedGetPending = jest.mocked(getPendingTransactions);
@@ -95,6 +103,7 @@ describe("HomeScreen", () => {
     mockedClassify.mockReset();
     mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", envelopeId: 1, remaining: "132000" });
     mockPush.mockReset();
+    mockRedirect.mockReset();
   });
 
   // 확정 뒤 무효화로 다시 불러와도 확정한 거래가 빠지도록, 목 모듈의 상태를 그대로 쓴다.
@@ -106,7 +115,7 @@ describe("HomeScreen", () => {
 
   it("미확정 거래가 있으면 코치가 묻고, 확정을 누르면 제안된 세분류로 분류한 뒤 다음 질문으로 넘어간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockPendingFlow();
     await renderHome();
     await screen.findByText("180,000원");
@@ -122,7 +131,7 @@ describe("HomeScreen", () => {
 
   it("다른 카테고리를 누르면 세분류 시트가 열리고, 세분류나 제외 태그를 고르면 그대로 분류한다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockPendingFlow();
     await renderHome();
     await screen.findByText("180,000원");
@@ -145,7 +154,7 @@ describe("HomeScreen", () => {
 
   it("분류 저장이 실패하면 말풍선에 오류 문구를 보여주고 다시 시도할 수 있다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockPendingFlow();
     mockedClassify.mockRejectedValueOnce(new Error("network"));
     await renderHome();
@@ -164,7 +173,7 @@ describe("HomeScreen", () => {
   it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방·예산 카드를 표시한다", async () => {
     let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
     mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
     expect(screen.getByLabelText("불러오는 중")).toBeTruthy();
 
@@ -176,7 +185,8 @@ describe("HomeScreen", () => {
     expect(screen.getByLabelText("캐릭터가 방에 있어요")).toBeTruthy();
 
     expect(await screen.findByText("180,000원")).toBeTruthy();
-    expect(screen.getByText("이번 달 남은 예산")).toBeTruthy();
+    expect(screen.getByText("남은 예산")).toBeTruthy();
+    expect(screen.getByText(PERIOD)).toBeTruthy();
     expect(screen.getByText("총 예산 500,000원 중 320,000원 사용")).toBeTruthy();
     expect(screen.getByText("좋아요!")).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: "예산 사용률" }).props.accessibilityValue).toEqual({
@@ -184,13 +194,13 @@ describe("HomeScreen", () => {
       max: 100,
       now: 64,
     });
-    expect(mockedGetBudget).toHaveBeenCalledWith(MONTH, expect.anything());
+    expect(mockedGetBudget).toHaveBeenCalledWith(expect.anything());
     expect(screen.queryByLabelText("불러오는 중")).toBeNull();
   });
 
   it("오늘 출석 전이면 홈 진입 시 출석을 한 번 처리하고 코인 배지와 토스트를 갱신한다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom(roomMock));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
     expect(await screen.findByLabelText("출석 +10 코인")).toBeTruthy();
@@ -200,7 +210,7 @@ describe("HomeScreen", () => {
 
   it("오늘 이미 출석했으면 출석을 부르지 않는다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
     expect(await screen.findByLabelText("코인 1,250개")).toBeTruthy();
@@ -210,7 +220,7 @@ describe("HomeScreen", () => {
 
   it("지급 코인이 0이면 토스트 없이 잔액만 반영한다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom(roomMock));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedCheckAttendance.mockResolvedValue(toAttendance({ granted: 0, balance: 1250 }));
     await renderHome();
 
@@ -222,7 +232,7 @@ describe("HomeScreen", () => {
 
   it("예산 카드에 봉투 7종 사용률 막대를 그리고 초과 봉투는 사용률이 100 을 넘는다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
     expect(await screen.findByText("봉투별 사용률")).toBeTruthy();
@@ -233,16 +243,16 @@ describe("HomeScreen", () => {
 
   it("벽 보드 에셋은 잔여율을 보여주고, 탭하면 봉투별 잔액 팝오버가 열리며 링크는 예산 탭으로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
     await screen.findByText("180,000원");
     await layoutRoom();
 
-    const board = await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" });
-    expect(screen.queryByText("9월 예산 보드")).toBeNull();
+    const board = await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" });
+    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
 
     await fireEvent.press(board);
-    expect(await screen.findByText("9월 예산 보드")).toBeTruthy();
+    expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
     expect(screen.getByText("180,000원 · 36% 남음")).toBeTruthy();
     expect(screen.getByLabelText("쇼핑 초과 8,000원 남음")).toBeTruthy();
     expect(screen.getByLabelText("외식 32,000원 남음")).toBeTruthy();
@@ -251,25 +261,24 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/budget");
 
     await fireEvent.press(screen.getByRole("button", { name: "보드 닫기" }));
-    expect(screen.queryByText("9월 예산 보드")).toBeNull();
+    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
     await waitForQueriesToSettle();
   });
 
-  it("예산이 미승인이면 벽 보드는 미설정으로 보이고 팝오버는 승인 안내를 보여준다", async () => {
+  it("이번 주기 예산이 확정 전(PROPOSED)이면 홈 대신 예산 확정 화면으로 보낸다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("9월 예산이 아직 없어요");
-    await layoutRoom();
 
-    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 예산 미설정" }));
-    expect(await screen.findByText("예산을 승인하면 봉투별 잔액이 여기에 보여요.")).toBeTruthy();
+    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith(PROPOSAL_FROM_HOME_HREF));
+    expect(screen.queryByText("남은 예산")).toBeNull();
+    expect(screen.queryByRole("button", { name: /예산 보드/ })).toBeNull();
     await waitForQueriesToSettle();
   });
 
   it("캘린더 에셋은 다음 출금을 보여주고, 탭하면 날짜별 출금 일정과 준비 상태가 열린다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
     await screen.findByText("180,000원");
     await layoutRoom();
@@ -283,8 +292,10 @@ describe("HomeScreen", () => {
     expect(screen.getByLabelText("15일 월세 550,000원, 부족 230,000원")).toBeTruthy();
     expect(screen.getByLabelText("20일 넷플릭스 17,000원, 준비됨")).toBeTruthy();
     expect(screen.getByLabelText("25일 통신비 (예상) 55,000원, 준비됨")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "캘린더 열기" }).props.accessibilityState).toMatchObject({ disabled: true });
     expect(mockedGetCalendar).toHaveBeenCalledWith(MONTH, expect.anything());
+
+    await fireEvent.press(screen.getByRole("button", { name: "캘린더 열기" }));
+    expect(mockPush).toHaveBeenCalledWith("/payment/calendar");
 
     await fireEvent.press(screen.getByRole("button", { name: "출금 일정 닫기" }));
     expect(screen.queryByText("9월 출금 일정")).toBeNull();
@@ -293,7 +304,7 @@ describe("HomeScreen", () => {
 
   it("이번 달 출금 예정이 없으면 캘린더는 예정 없음으로 보이고 팝오버는 빈 상태를 알린다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetCalendar.mockResolvedValue(toPaymentCalendar(paymentCalendarEmptyMock));
     await renderHome();
     await screen.findByText("180,000원");
@@ -307,48 +318,44 @@ describe("HomeScreen", () => {
 
   it("벽 오브젝트 팝오버는 한 번에 하나만 열린다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
     await screen.findByText("180,000원");
     await layoutRoom();
 
-    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" }));
-    expect(await screen.findByText("9월 예산 보드")).toBeTruthy();
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
+    expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" }));
     expect(await screen.findByText("9월 출금 일정")).toBeTruthy();
-    expect(screen.queryByText("9월 예산 보드")).toBeNull();
+    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
     await waitForQueriesToSettle();
   });
 
   it("결제 일정만 못 받으면 캘린더 에셋만 감추고 나머지는 그대로 둔다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetCalendar.mockRejectedValue(new Error("network"));
     await renderHome();
     await screen.findByText("180,000원");
     await layoutRoom();
 
-    expect(await screen.findByRole("button", { name: "예산 보드, 9월 36% 남음" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" })).toBeTruthy();
     expect(screen.queryByLabelText(/출금 캘린더/)).toBeNull();
     await waitForQueriesToSettle();
   });
 
-  it("예산이 미승인이면 승인 유도 배너를 보여주고, 버튼은 예산 제안·승인 화면으로 이동한다", async () => {
-    mockedGetRoom.mockResolvedValue(toRoom(roomMock));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(MONTH)));
+  it("확정 전 예산이면 방 정보를 기다리지 않고 확정 화면으로 보낸다(홈으로 돌아오도록 next=home)", async () => {
+    mockedGetRoom.mockReturnValue(new Promise(() => undefined));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetProposedMock(TODAY_KEY)));
     await renderHome();
 
-    expect(await screen.findByText("9월 예산이 아직 없어요")).toBeTruthy();
-    expect(screen.queryByText("이번 달 남은 예산")).toBeNull();
-
-    await fireEvent.press(screen.getByRole("button", { name: "이 예산으로 시작하기" }));
-    expect(mockPush).toHaveBeenCalledWith("/onboarding/budget-proposal");
+    await waitFor(() => expect(mockRedirect).toHaveBeenCalledWith({ pathname: "/onboarding/budget-proposal", params: { next: "home" } }));
   });
 
   it("방 정보를 못 받으면 화면 전체에 오류와 재시도를 보여주고, 재시도 성공 시 내용을 표시한다", async () => {
     mockedGetRoom.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(toRoom(roomMock));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
     expect(await screen.findByText("방 정보를 불러오지 못했어요")).toBeTruthy();
@@ -360,7 +367,7 @@ describe("HomeScreen", () => {
 
   it("예산만 못 받으면 방은 그대로 두고 예산 영역에서만 재시도한다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom(roomMock));
-    mockedGetBudget.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(toBudget(budgetConfirmedMock(MONTH)));
+    mockedGetBudget.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
     expect(await screen.findByText("예산을 불러오지 못했어요")).toBeTruthy();

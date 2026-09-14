@@ -18,6 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.Objects;
 
 @Getter
 @Entity
@@ -48,4 +49,20 @@ public class FinCoin extends BaseEntity {
 
 	@Column(name = "ref_id", length = 30)
 	private String refId;
+
+	public static FinCoin forAttendance(User user, LocalDate grantDate, int reward, int balanceBefore) {
+		Objects.requireNonNull(user, "user must not be null");
+		Objects.requireNonNull(grantDate, "grantDate must not be null");
+		if (reward <= 0 || balanceBefore < 0) {
+			throw new IllegalArgumentException("출석 지급량은 양수이고 기존 잔액은 0 이상이어야 합니다.");
+		}
+
+		FinCoin coin = new FinCoin();
+		coin.user = user;
+		coin.delta = reward;
+		coin.balanceAfter = Math.addExact(balanceBefore, reward);
+		coin.reasonCode = FinCoinReason.ATTEND;
+		coin.grantDate = grantDate;
+		return coin;
+	}
 }

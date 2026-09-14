@@ -1,5 +1,6 @@
 package com.finset.key_fin.fincoin.controller;
 
+import com.finset.key_fin.fincoin.dto.response.AttendanceCheckResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinBalanceResponse;
 import com.finset.key_fin.fincoin.dto.response.FinCoinResponse;
 import com.finset.key_fin.global.base.BaseResponse;
@@ -93,4 +94,35 @@ public interface FinCoinControllerDocs {
 					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	})
 	BaseResponse<FinCoinBalanceResponse> getFinCoinBalance(@Parameter(hidden = true) Long userId);
+
+	@Operation(
+			summary = "출석 보상 지급",
+			description = "인증된 사용자의 당일 첫 출석에 10코인을 지급합니다. "
+					+ "날짜는 사용자 잠금 획득 후 서버의 Asia/Seoul 시각으로 결정합니다. "
+					+ "당일 재요청도 200으로 응답하며 granted는 0, balance는 처리 시점의 최신 잔액입니다. "
+					+ "요청 본문과 쿼리 파라미터는 필요하지 않으며 금융망 연결 여부와 관계없이 출석할 수 있습니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "출석 처리 성공", useReturnTypeSchema = true,
+					content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = {
+							@ExampleObject(name = "첫 출석", value = """
+									{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
+									 "data":{"granted":10,"balance":1260}}
+									"""),
+							@ExampleObject(name = "당일 재요청", value = """
+									{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
+									 "data":{"granted":0,"balance":1260}}
+									""")
+					})),
+			@ApiResponse(responseCode = "401", description = "Access Token 없음(AUTH_005), 잘못된 토큰(AUTH_002), 만료(AUTH_003)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "활성 사용자를 찾을 수 없음 (USER_001)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류 (COMMON_006)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<AttendanceCheckResponse> checkAttendance(@Parameter(hidden = true) Long userId);
 }

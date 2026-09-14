@@ -72,6 +72,11 @@ export function linkCandidatesMock(): LinkCandidatesDto {
   };
 }
 
+/** 계좌 목(GET /accounts)이 쓰는 관리 중 계좌. 연결 목(POST /links)과 같은 상태를 봐서 연결한 계좌가 곧바로 나온다 */
+export function managedAccountsMock(): Omit<LinkCandidateAccountDto, "managed">[] {
+  return CANDIDATE_ACCOUNTS.filter((account) => managedAccounts.has(account.id));
+}
+
 /** 새로 관리 대상이 된 수를 돌려준다. 이미 관리 중인 id 는 세지 않는다(멱등) */
 function manageAll(ids: readonly number[], managed: Set<number>): number {
   let added = 0;

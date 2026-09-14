@@ -1,5 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
-import { useFocusEffect } from "expo-router";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
@@ -9,9 +9,9 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
-import { useBudget } from "@/features/budget/api/queries";
-import { BudgetUnsetBanner } from "@/features/budget/components/BudgetUnsetBanner";
-import type { Budget } from "@/features/budget/model";
+import { useCurrentBudget } from "@/features/budget/api/queries";
+import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
+import { budgetPeriodLabel, type Budget } from "@/features/budget/model";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { BudgetCard } from "@/features/home/components/BudgetCard";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
@@ -28,11 +28,14 @@ type RoomPanel = "board" | "calendar" | null;
 function HomeScreen() {
   const room = useRoom();
   const month = currentMonthKey();
-  const budget = useBudget(month);
+  const budget = useCurrentBudget();
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
   // 확대 중에는 방을 끌어 움직이므로 홈의 세로 스크롤을 잠근다.
   const [roomZoomed, setRoomZoomed] = React.useState(false);
+
+  // 이번 주기 예산이 확정 전이면 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12). 방·보드가 확정 예산을 기준으로 동작한다.
+  if (budget.data?.status === "PROPOSED") return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6" scrollEnabled={!roomZoomed}>
@@ -56,13 +59,13 @@ function HomeScreen() {
               onZoomedChange={setRoomZoomed}
               sceneObjects={(width) => (
                 <>
-                  <HomeWallBoard width={width} budget={budget.data} month={month} onOpen={() => setPanel("board")} />
+                  <HomeWallBoard width={width} budget={budget.data} onOpen={() => setPanel("board")} />
                   <HomeCalendar width={width} month={month} onOpen={() => setPanel("calendar")} />
                 </>
               )}
               panels={(width) => (
                 <>
-                  {panel === "board" ? <HomeBoardPanel width={width} budget={budget.data} month={month} onClose={() => setPanel(null)} /> : null}
+                  {panel === "board" ? <HomeBoardPanel width={width} budget={budget.data} onClose={() => setPanel(null)} /> : null}
                   {panel === "calendar" ? <HomeCalendarPanel width={width} month={month} onClose={() => setPanel(null)} /> : null}
                   <HomeCoach width={width} />
                 </>
@@ -71,7 +74,7 @@ function HomeScreen() {
             {attendance.isSuccess && attendance.data.granted > 0 ? <AttendanceToast granted={attendance.data.granted} /> : null}
           </View>
           <View className="px-6 pt-6">
-            <BudgetSection budget={budget} month={month} />
+            <BudgetSection budget={budget} />
           </View>
         </>
       ) : null}
@@ -101,11 +104,15 @@ function useHomeAttendance(shouldCheckIn: boolean) {
 
 type BudgetSectionProps = {
   budget: UseQueryResult<Budget>;
-  month: string;
 };
 
+/** 봉투 막대 탭 → 봉투 상세(PAGE-23) (docs/frontend-spec.md §3 홈 요소) */
+const ENVELOPE_DETAIL_ROUTE = "/budget";
+
 // 예산만 실패해도 방은 그대로 두고 이 영역에서만 재시도한다 (규칙 50 일부 실패 대응).
-function BudgetSection({ budget, month }: BudgetSectionProps) {
+function BudgetSection({ budget }: BudgetSectionProps) {
+  const router = useRouter();
+
   if (budget.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
   if (budget.isError) {
     return (
@@ -117,8 +124,16 @@ function BudgetSection({ budget, month }: BudgetSectionProps) {
       />
     );
   }
-  if (budget.data.total === null) return <BudgetUnsetBanner month={month} />;
-  return <BudgetCard total={budget.data.total} envelopes={budget.data.envelopes} />;
+  // 확정 전(PROPOSED)은 화면 위에서 확정 화면으로 보낸다. 여기까지 total 이 없는 건 모르는 상태(UNKNOWN)뿐이라 카드를 그리지 않는다.
+  if (budget.data.total === null) return null;
+  return (
+    <BudgetCard
+      total={budget.data.total}
+      envelopes={budget.data.envelopes}
+      period={budgetPeriodLabel(budget.data)}
+      onSelectEnvelope={(envelopeId) => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelopeId}`)}
+    />
+  );
 }
 
 type HomeHeaderProps = {

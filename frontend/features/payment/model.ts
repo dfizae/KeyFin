@@ -1,5 +1,5 @@
 import { ContractMismatchError } from "@/lib/contract";
-import { fromServerWon, type KRW } from "@/lib/money";
+import { fromServerWon, toWon, type KRW } from "@/lib/money";
 
 /**
  * GET /payments/calendar?month=YYYYMM 계약 (docs/api-contract.md PAYMENT, FR-PAY-01·02).
@@ -33,6 +33,9 @@ export type CalendarEntry = {
   /** 같은 날 여러 건이 올 수 있어 date 만으로는 목록 키가 안 된다 */
   key: string;
   date: string;
+  /** 고정지출만 있다. 수정 화면(PAGE-26)으로 갈 수 있는 건인지 가른다 */
+  fixedExpenseId: number | null;
+  withdrawalAccountId: number | null;
   /** 날짜의 일(1~31) */
   day: number;
   type: PaymentType;
@@ -72,6 +75,8 @@ export function toPaymentCalendar(dto: PaymentCalendarDto): PaymentCalendar {
     return day.items.map((item, index) => ({
       key: `${day.date}#${index}`,
       date: day.date,
+      fixedExpenseId: item.fixedExpenseId ?? null,
+      withdrawalAccountId: item.withdrawalAccountId ?? null,
       day: Number(matched[2]),
       type: toType(item.type),
       name: item.name,
@@ -94,4 +99,194 @@ export function upcomingEntries(calendar: PaymentCalendar, todayKey: string, lim
 export function upcomingEntry(calendar: PaymentCalendar, todayKey: string): CalendarEntry | null {
   if (calendar.entries.length === 0) return null;
   return calendar.entries.find((entry) => entry.date >= todayKey) ?? calendar.entries[calendar.entries.length - 1];
+}
+
+/** 고정지출 유형 (docs/api-contract.md 열거형 ExpenseType) */
+export const EXPENSE_TYPES = ["RENT", "SUBSCRIPTION", "CARD_BILL", "LOAN", "UTILITY"] as const;
+export type ExpenseType = (typeof EXPENSE_TYPES)[number];
+
+export const MIN_PAYMENT_DAY = 1;
+export const MAX_PAYMENT_DAY = 31;
+
+/** 고정지출 등록·수정 화면(PAGE-26)의 입력값. 금액·출금일은 입력 중 상태를 그대로 두려고 문자열이다 */
+export type FixedExpenseForm = {
+  name: string;
+  expenseType: ExpenseType;
+  /** 원 단위 숫자만 있는 문자열(AmountInput) */
+  amount: string;
+  /** "1"~"31" */
+  paymentDay: string;
+  withdrawalAccountId: number | null;
+};
+
+/** POST /fixed-expenses 요청 (docs/api-contract.md PAYMENT, FR-PAY-07) */
+export type FixedExpenseRequest = {
+  name: string;
+  expenseType: ExpenseType;
+  amount: number;
+  paymentDay: number;
+  withdrawalAccountId: number;
+  isVariable?: boolean;
+};
+
+export type FixedExpenseResponseDto = { id: number };
+
+const PAYMENT_DAY = /^\d{1,2}$/;
+
+/**
+ * 저장할 수 없는 이유. 없으면 null.
+ * 서버가 다시 검사하므로(출금일 29~31 말일 보정도 서버) 여기서는 보낼 수 있는 형태인지만 본다.
+ */
+export function fixedExpenseFormError(form: FixedExpenseForm): string | null {
+  if (form.name.trim() === "") return "이름을 입력해 주세요.";
+  if (form.amount === "" || toWon(form.amount) <= 0n) return "금액을 입력해 주세요.";
+  const day = Number(form.paymentDay);
+  if (!PAYMENT_DAY.test(form.paymentDay) || day < MIN_PAYMENT_DAY || day > MAX_PAYMENT_DAY) {
+    return `출금일은 ${MIN_PAYMENT_DAY}~${MAX_PAYMENT_DAY} 사이로 입력해 주세요.`;
+  }
+  if (form.withdrawalAccountId === null) return "출금 계좌를 골라 주세요.";
+  return null;
+}
+
+/** 화면 값 → 요청 본문. 공과금은 달마다 금액이 달라 isVariable 을 붙인다 (계약 사본 PAYMENT) */
+export function toFixedExpenseRequest(form: FixedExpenseForm): FixedExpenseRequest {
+  const error = fixedExpenseFormError(form);
+  if (error !== null || form.withdrawalAccountId === null) throw new Error(error ?? "고정지출 입력이 올바르지 않습니다");
+  const request: FixedExpenseRequest = {
+    name: form.name.trim(),
+    expenseType: form.expenseType,
+    amount: Number(toWon(form.amount)),
+    paymentDay: Number(form.paymentDay),
+    withdrawalAccountId: form.withdrawalAccountId,
+  };
+  return form.expenseType === "UTILITY" ? { ...request, isVariable: true } : request;
+}
+
+export type CalendarDayGroup = {
+  date: string;
+  day: number;
+  entries: CalendarEntry[];
+};
+
+/** 결제 캘린더(PAGE-24)는 날짜로 묶어 보여준다. entries 는 이미 날짜순이다 */
+export function groupEntriesByDate(entries: CalendarEntry[]): CalendarDayGroup[] {
+  const groups: CalendarDayGroup[] = [];
+  for (const entry of entries) {
+    const last = groups[groups.length - 1];
+    if (last !== undefined && last.date === entry.date) last.entries.push(entry);
+    else groups.push({ date: entry.date, day: entry.day, entries: [entry] });
+  }
+  return groups;
+}
+
+export const NEW_FIXED_EXPENSE_ID = "new";
+
+/** 고정지출 화면의 라우트 파라미터. "new" 는 등록, 양의 정수는 수정, 나머지는 잘못된 주소다 */
+export type FixedExpenseRoute = { mode: "create" } | { mode: "edit"; id: number } | null;
+
+export function parseFixedExpenseRoute(value: string | string[] | undefined): FixedExpenseRoute {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === NEW_FIXED_EXPENSE_ID) return { mode: "create" };
+  return raw !== undefined && /^[1-9]\d*$/.test(raw) ? { mode: "edit", id: Number(raw) } : null;
+}
+
+const MONTH_KEY = /^\d{4}(0[1-9]|1[0-2])$/;
+
+/** 결제 캘린더의 month 검색 파라미터. 형식이 틀리면 이번 달. 앞으로 나갈 출금이라 미래 달도 본다 */
+export function parseCalendarMonth(value: string | string[] | undefined, currentMonth: string): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== undefined && MONTH_KEY.test(raw) ? raw : currentMonth;
+}
+
+/**
+ * GET /transfers 계약 (docs/api-contract.md PAYMENT, FR-PAY-03·08).
+ * 상태는 PROPOSED → APPROVED → EXECUTED / FAILED / CANCELED 이고 모르는 값은 UNKNOWN 으로 흡수한다 (규칙 80).
+ */
+export const TRANSFER_STATUSES = ["PROPOSED", "APPROVED", "EXECUTED", "FAILED", "CANCELED"] as const;
+export type TransferStatus = (typeof TRANSFER_STATUSES)[number] | "UNKNOWN";
+
+export type TransferDto = {
+  id: number;
+  status: string;
+  /** "2026-09-15" */
+  scheduledDate: string;
+  requiredAmount: number;
+  fromAccountId: number;
+  toAccountId: number;
+  /** 실행된 이체만 "2026-09-14T07:12:00" */
+  executedAt?: string | null;
+  /** 실패한 이체만 */
+  failReason?: string | null;
+  purpose: { type: string; name: string };
+};
+
+export type TransferListDto = { items: TransferDto[] };
+
+export type Transfer = {
+  id: number;
+  status: TransferStatus;
+  scheduledDate: string;
+  requiredAmount: KRW;
+  fromAccountId: number;
+  toAccountId: number;
+  executedAt: string | null;
+  failReason: string | null;
+  purposeName: string;
+  purposeType: string;
+};
+
+export type ApproveTransferDto = { status: string; executedAt: string };
+
+const TRANSFER_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function toTransferStatus(raw: string): TransferStatus {
+  return (TRANSFER_STATUSES as readonly string[]).includes(raw) ? (raw as TransferStatus) : "UNKNOWN";
+}
+
+export function toTransfer(dto: TransferDto): Transfer {
+  if (!TRANSFER_DATE.test(dto.scheduledDate)) throw new ContractMismatchError("scheduledDate");
+  return {
+    id: dto.id,
+    status: toTransferStatus(dto.status),
+    scheduledDate: dto.scheduledDate,
+    requiredAmount: won(dto.requiredAmount, "requiredAmount"),
+    fromAccountId: dto.fromAccountId,
+    toAccountId: dto.toAccountId,
+    executedAt: dto.executedAt ?? null,
+    failReason: dto.failReason ?? null,
+    purposeName: dto.purpose.name,
+    purposeType: dto.purpose.type,
+  };
+}
+
+export function toTransfers(dto: TransferListDto): Transfer[] {
+  return dto.items.map(toTransfer);
+}
+
+export function findTransfer(transfers: Transfer[], id: number): Transfer | null {
+  return transfers.find((transfer) => transfer.id === id) ?? null;
+}
+
+/** 승인·연기를 보낼 수 있는 상태는 제안뿐이다. 나머지는 서버가 이미 끝냈거나 진행 중이다 */
+export function canApproveTransfer(transfer: Transfer): boolean {
+  return transfer.status === "PROPOSED";
+}
+
+const TRANSFER_STATUS_LABELS: Record<TransferStatus, string> = {
+  PROPOSED: "승인 대기",
+  APPROVED: "처리 중",
+  EXECUTED: "이체 완료",
+  FAILED: "이체 실패",
+  CANCELED: "취소됨",
+  UNKNOWN: "확인 중",
+};
+
+export function transferStatusLabel(status: TransferStatus): string {
+  return TRANSFER_STATUS_LABELS[status];
+}
+
+/** 이체 승인 라우트(`/payment/transfer/[id]`)의 id. 양의 정수가 아니면 null — 푸시·딥링크 값은 믿지 않는다 (규칙 80) */
+export function parseTransferId(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== undefined && /^[1-9]\d*$/.test(raw) ? Number(raw) : null;
 }

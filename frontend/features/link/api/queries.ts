@@ -1,5 +1,6 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { accountKeys } from "@/features/account/api/queries";
 import { selectAuthStatus, useAuthStore } from "@/features/auth/store";
 import { connectFinanceAccount, createLinks, getFinanceStatus, getLinkCandidates } from "@/features/link/api/link.api";
 import { isStaleCandidateError, needsFinanceReconnect } from "@/features/link/errors";
@@ -53,7 +54,7 @@ export function useLinkCandidates() {
 }
 
 /**
- * 연결 성공 후 후보 목록을 무효화해 linked 상태를 서버 기준으로 다시 받는다 (docs/api-guide.md §5).
+ * 연결 성공 후 후보 목록과 계좌 목록(GET /accounts)을 무효화해 서버 기준으로 다시 받는다 (docs/api-guide.md §5).
  * 고른 항목이 후보에서 사라졌다는 오류(LINK_004·LINK_005)도 서버 안내대로 목록을 다시 받는다.
  */
 export function useCreateLinks() {
@@ -61,7 +62,11 @@ export function useCreateLinks() {
 
   return useMutation({
     mutationFn: (request: LinkRequest) => createLinks(request),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: linkKeys.candidates() }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: linkKeys.candidates() }),
+        queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+      ]),
     onError: (error) => {
       if (isStaleCandidateError(error)) void queryClient.invalidateQueries({ queryKey: linkKeys.candidates() });
     },

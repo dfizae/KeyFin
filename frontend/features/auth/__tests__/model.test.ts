@@ -1,7 +1,16 @@
 import { ApiError } from "@/api/error";
 import { loginMock, MOCK_PASSWORD, MOCK_TAKEN_EMAIL, resetAuthMocks, signupMock } from "@/api/mocks/auth";
 import { authErrorMessage } from "@/features/auth/errors";
-import { canAgreeToTerms, canSubmitLogin, canSubmitSignup, isValidEmail, TERMS_ITEMS, toAuthSession } from "@/features/auth/model";
+import {
+  canAgreeToTerms,
+  canSubmitLogin,
+  canSubmitSignup,
+  isValidEmail,
+  loginHref,
+  parseReturnTo,
+  TERMS_ITEMS,
+  toAuthSession,
+} from "@/features/auth/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 const EMAIL = "qwer@qwer.com";
@@ -110,5 +119,28 @@ describe("canAgreeToTerms", () => {
   it("필수는 2개, 선택은 1개다", () => {
     expect(TERMS_ITEMS.filter((item) => item.required)).toHaveLength(2);
     expect(TERMS_ITEMS.filter((item) => !item.required)).toHaveLength(1);
+  });
+});
+
+describe("loginHref · parseReturnTo (로그인 후 복귀)", () => {
+  it("딥링크로 들어온 경로는 returnTo 로 달고, 홈은 그냥 로그인으로 보낸다", () => {
+    expect(loginHref("/payment/transfer/501")).toBe("/(auth)/login?returnTo=%2Fpayment%2Ftransfer%2F501");
+    expect(loginHref("/")).toBe("/(auth)/login");
+  });
+
+  it("앱 밖 주소나 인증 화면은 복귀 대상으로 받지 않는다", () => {
+    expect(loginHref("//evil.example.com")).toBe("/(auth)/login");
+    expect(loginHref("https://evil.example.com")).toBe("/(auth)/login");
+    expect(loginHref("/(auth)/terms")).toBe("/(auth)/login");
+  });
+
+  it("returnTo 는 디코딩해 앱 안 경로만 통과시키고 나머지는 홈이다", () => {
+    expect(parseReturnTo("%2Ftransaction%2F501")).toBe("/transaction/501");
+    expect(parseReturnTo("/my/settings")).toBe("/my/settings");
+    expect(parseReturnTo(["/budget/1", "/x"])).toBe("/budget/1");
+    expect(parseReturnTo("//evil.example.com")).toBe("/");
+    expect(parseReturnTo("https://evil.example.com")).toBe("/");
+    expect(parseReturnTo("%E0%A4%A")).toBe("/");
+    expect(parseReturnTo(undefined)).toBe("/");
   });
 });
