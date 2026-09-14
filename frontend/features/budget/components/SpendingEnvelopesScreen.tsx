@@ -1,13 +1,14 @@
 import { Redirect, useRouter } from "expo-router";
-import { ChevronLeft, Layers } from "lucide-react-native";
-import { Pressable, ScrollView, View } from "react-native";
+import { Layers } from "lucide-react-native";
+import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
-import { Icon } from "@/components/ui/icon";
 import { Separator } from "@/components/ui/separator";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useCachedBudgetProposal } from "@/features/budget/api/queries";
+import { envelopeTone } from "@/features/budget/catalog";
 import { AnalysisHero, SpendingBarRow } from "@/features/budget/components/SpendingAnalysisParts";
 import { monthlyAvgPercent, sortByMonthlyAvg, sumAmounts } from "@/features/budget/model";
 import { currentMonthKey } from "@/lib/date";
@@ -39,19 +40,10 @@ function SpendingEnvelopesScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace(SUMMARY_ROUTE))}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h1 text-foreground" accessibilityRole="header">
-          봉투 {envelopes.length}개로 나눠 봤어요
-        </Text>
-      </View>
+      <ScreenHeader
+        title={`봉투 ${envelopes.length}개로 나눠 봤어요`}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace(SUMMARY_ROUTE))}
+      />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pb-6 pt-4">
         <AnalysisHero icon={Layers} description="이 금액을 바탕으로 봉투별 한 달 예산을 제안해 드릴게요." />
@@ -71,6 +63,7 @@ function SpendingEnvelopesScreen() {
               percent={monthlyAvgPercent(envelope.monthlyAvg, max)}
               thin
               fillDelay={index * FILL_STAGGER_MS}
+              barClassName={envelopeTone(envelope.envelopeId).bar}
             />
           ))}
         </View>

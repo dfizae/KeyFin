@@ -49,10 +49,12 @@ type SpendingBarRowProps = {
   thin?: boolean;
   /** 주면 막대가 0 에서 percent 까지 차오른다(ms 뒤 시작). 없으면 바로 채워진 채 그린다 */
   fillDelay?: number;
+  /** 막대 색. 봉투 행이면 `envelopeTone(id).bar`, 기본은 primary */
+  barClassName?: string;
 };
 
 // 이름·금액 한 줄 + 막대. 요약(A)은 굵은 막대, 봉투별(B)은 7줄이라 얇은 막대를 쓴다.
-function SpendingBarRow({ name, value, percent, thin = false, fillDelay }: SpendingBarRowProps) {
+function SpendingBarRow({ name, value, percent, thin = false, fillDelay, barClassName = "bg-primary" }: SpendingBarRowProps) {
   return (
     <View className={thin ? "gap-1.5" : "gap-2"} accessible accessibilityLabel={`${name} ${value}`}>
       <View className="flex-row items-center justify-between gap-3">
@@ -63,9 +65,9 @@ function SpendingBarRow({ name, value, percent, thin = false, fillDelay }: Spend
       </View>
       <View className={cn("w-full overflow-hidden rounded-full bg-muted", thin ? "h-1.5" : "h-2")}>
         {fillDelay === undefined ? (
-          <View className="h-full rounded-full bg-primary" style={{ width: `${percent}%` }} />
+          <View className={cn("h-full rounded-full", barClassName)} style={{ width: `${percent}%` }} />
         ) : (
-          <FillingBar percent={percent} delay={fillDelay} />
+          <FillingBar percent={percent} delay={fillDelay} barClassName={barClassName} />
         )}
       </View>
     </View>
@@ -77,7 +79,7 @@ const FILL_MS = 900;
 const FULL_HEIGHT = { height: "100%" } as const;
 
 // 트랙 폭을 재서 0 → percent 만큼 px 로 차오른다. 동작 줄이기 설정이면 처음부터 채워 둔다.
-function FillingBar({ percent, delay }: { percent: number; delay: number }) {
+function FillingBar({ percent, delay, barClassName }: { percent: number; delay: number; barClassName: string }) {
   const reducedMotion = useReducedMotion();
   const [trackWidth, setTrackWidth] = React.useState(0);
   const progress = useSharedValue(reducedMotion ? 1 : 0);
@@ -93,7 +95,7 @@ function FillingBar({ percent, delay }: { percent: number; delay: number }) {
   return (
     <View className="h-full w-full" onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}>
       <Animated.View style={[FULL_HEIGHT, fill]}>
-        <View className="h-full rounded-full bg-primary" />
+        <View className={cn("h-full rounded-full", barClassName)} />
       </Animated.View>
     </View>
   );

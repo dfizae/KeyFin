@@ -1,13 +1,14 @@
 import { Redirect, useRouter } from "expo-router";
-import { ChevronLeft, Receipt, WalletMinimal, WifiOff } from "lucide-react-native";
+import { Receipt, WalletMinimal, WifiOff } from "lucide-react-native";
 import { FlatList, Pressable, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useCurrentBudget } from "@/features/budget/api/queries";
-import { envelopeIcon } from "@/features/budget/catalog";
+import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
   budgetPeriodLabel,
@@ -55,14 +56,7 @@ function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={goBack}>
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          {envelope?.name ?? "봉투"}
-        </Text>
-      </View>
+      <ScreenHeader title={envelope?.name ?? "봉투"} onBack={goBack} />
 
       {budget.isPending ? (
         <EnvelopeSkeleton />
@@ -139,8 +133,8 @@ function EnvelopeSummary({ envelope, period }: EnvelopeSummaryProps) {
   return (
     <View className="gap-3 pb-2 pt-3">
       <View className="flex-row items-center gap-2.5">
-        <View className="h-7 w-7 items-center justify-center rounded-md bg-accent">
-          <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className="text-primary" />
+        <View className={cn("h-7 w-7 items-center justify-center rounded-md", envelopeTone(envelope.envelopeId).tile)}>
+          <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className={envelopeTone(envelope.envelopeId).icon} />
         </View>
         <Text className="text-label tabular-nums text-card-foreground">{period}</Text>
       </View>

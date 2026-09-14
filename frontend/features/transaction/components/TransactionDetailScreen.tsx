@@ -1,13 +1,14 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, ChevronRight, CircleAlert, Receipt } from "lucide-react-native";
+import { ChevronRight, CircleAlert, Receipt } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { envelopeIcon, envelopeName } from "@/features/budget/catalog";
+import { envelopeIcon, envelopeName, envelopeTone } from "@/features/budget/catalog";
 import { useCachedTransaction, useClassifyTransaction, useSubcategories } from "@/features/transaction/api/queries";
 import { SubcategorySheet } from "@/features/transaction/components/SubcategorySheet";
 import { classifyErrorMessage } from "@/features/transaction/errors";
@@ -65,14 +66,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={goBack}>
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          거래 상세
-        </Text>
-      </View>
+      <ScreenHeader title="거래 상세" onBack={goBack} />
 
       {transaction === null ? (
         <EmptyState
@@ -167,8 +161,8 @@ function ClassificationList({ transaction, isPending, errorMessage, onReclassify
         disabled={disabled}
         onPress={onReclassify}
       >
-        <View className="h-icon-tile w-icon-tile items-center justify-center rounded-md bg-accent">
-          <Icon as={envelopeIcon(transaction.envelopeId)} size={20} className="text-primary" />
+        <View className={cn("h-icon-tile w-icon-tile items-center justify-center rounded-md", envelopeTone(transaction.envelopeId).tile)}>
+          <Icon as={envelopeIcon(transaction.envelopeId)} size={20} className={envelopeTone(transaction.envelopeId).icon} />
         </View>
         <View className="flex-1 gap-0.5">
           <Text className="text-label text-foreground">{envelopeName(transaction.envelopeId)}</Text>

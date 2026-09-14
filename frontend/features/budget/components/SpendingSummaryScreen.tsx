@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useCachedBudgetProposal } from "@/features/budget/api/queries";
+import { envelopeTone } from "@/features/budget/catalog";
 import { AnalysisHero, SpendingBarRow } from "@/features/budget/components/SpendingAnalysisParts";
 import { monthlyAvgPercent, sortByMonthlyAvg, sumAmounts } from "@/features/budget/model";
 import { currentMonthKey } from "@/lib/date";
@@ -59,6 +60,7 @@ function SpendingSummaryScreen() {
               value={`월 ${formatKRW(envelope.monthlyAvg)}`}
               percent={monthlyAvgPercent(envelope.monthlyAvg, max)}
               fillDelay={index * FILL_STAGGER_MS}
+              barClassName={envelopeTone(envelope.envelopeId).bar}
             />
           ))}
         </View>

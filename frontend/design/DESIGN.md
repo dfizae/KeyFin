@@ -78,6 +78,12 @@
 | `text-body-lg` | 18/28 | 400 | 강조 본문 |
 | `text-body` | 16/24 | 400 | 기본 본문 (킷 Body 2) |
 | `text-body-sm` | 14/21 | 400 | 보조 설명 |
+
+화면 헤더 제목은 탭 헤더(예산관리·자산관리)와 뒤로가기 헤더(`<` + 제목) 모두 `text-h1`(24) 한 가지다(2026-09-14 통일). `text-h3` 는 본문 섹션 제목에만 쓴다.
+
+봉투 7종은 정체성 색을 갖는다(2026-09-14, 토큰 `env-dining`·`env-transport`·`env-health`·`env-leisure`·`env-shopping`·`env-grocery`·`env-etc` + `-muted`): 아이콘 타일은 `bg-env-*-muted` + `text-env-*`, 소비 분석 막대는 `bg-env-*`. 클래스 묶음은 `features/budget/catalog.ts`의 `envelopeTone(id)`에서만 가져온다. 사용률 막대(예산 탭·봉투 상세·홈)는 상태색 `positive`/`warning`/`destructive`를 그대로 쓴다 — 정체성 색과 상태색을 섞지 않는다.
+
+카드(`bg-card` 면, `rounded-2xl p-5`)는 두 경우에만 쓴다(2026-09-14 규칙): ① 눌러서 어딘가로 가는 목록 항목(결제 캘린더 항목·자산 탭 계좌/카드·빠른 메뉴·수입 계좌 선택지) ② 선택지·버튼이 한 덩어리로 묶인 것(미확정 정리 항목·코치 말풍선·팝오버). 정보를 보여주기만 하는 덩어리(총예산·준비할 금액·설정 동의·거래/봉투 요약)는 카드 없이 본문에 바로 놓고, 상태 안내는 `*-muted` 색 띠(`rounded-lg p-3.5`)로 한다.
 | `text-label` | 14/21 | 500 | 입력 라벨, 탭, 카테고리명 (킷 Body 3) |
 | `text-caption` | 12/16 | 500 | 날짜, 상태, 법적 고지 (킷 Caption 2) |
 | `text-button` | 16/24 | 500 | 버튼 (킷 Button 라벨) |
@@ -117,6 +123,7 @@
 | `EmptyState` | `components/ui/empty-state.tsx` | `Text`, `Icon`, `Button` | 빈 목록·오류 |
 | `LottieLoop` | `components/ui/lottie-loop.tsx` (+ `.native.tsx`) | `lottie-react-native` | 반복 재생 · 동작 줄이기면 정지 · 웹은 `fallback`. 기다림·성공 순간(분석 중·입주 연출·이체 완료)에만 쓰고 입력 화면에는 쓰지 않는다. 에셋 `assets/lottie/*.json` 100KB 이하 |
 | `Floating` | `components/ui/floating.tsx` | Reanimated | 캐릭터 정지 이미지 둥실거림(`distance` 6 · `period` 2400ms) · 동작 줄이기면 정지. 로그인 캐릭터·`CoachRow` |
+| `ScreenHeader` | `components/ui/screen-header.tsx` | `Icon`, `Text`, `Pressable` | Pencil `ScreenHeader` — `<`(24) + `text-h1` 제목 + 오른쪽 액션 슬롯, `px-6 pb-3`. 모든 화면 헤더가 이것 하나다 |
 | `CoachRow` | `components/ui/coach-row.tsx` | `Floating`, `Text` | 온보딩 코치 행 — 캐릭터 76×112 + 말풍선 `bg-card border-border rounded-lg p-3.5 text-label`(홈 코치 말풍선과 같은 스타일). 회원가입·약관·금융망 이메일 |
 | `Toast` | `components/ui/toast.tsx` | — | `info` `success` `error`, `bg-inverse` |
 | `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Dialog` 또는 별도 | `bg-popover` |
