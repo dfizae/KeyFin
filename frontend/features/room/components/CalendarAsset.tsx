@@ -49,7 +49,7 @@ function CalendarAsset({ width, monthLabel, upcoming, onPress }: CalendarAssetPr
         </View>
         <View className="items-center px-1 pb-1.5 pt-1" accessible={false}>
           <Text className="text-h2 tabular-nums text-foreground">{upcoming ? upcoming.day : "–"}</Text>
-          <Text className="text-caption text-muted-foreground" numberOfLines={1}>
+          <Text className="text-caption text-card-foreground" numberOfLines={1}>
             {upcoming ? upcoming.name : CALENDAR_EMPTY_LABEL}
           </Text>
         </View>

@@ -1,13 +1,16 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, Circle, CircleCheckBig } from "lucide-react-native";
+import { Circle, CircleCheckBig } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
+import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { canAgreeToTerms, TERMS_ITEMS } from "@/features/auth/model";
 import { useAuthStore } from "@/features/auth/store";
+import { CHARACTER_PHONE } from "@/features/room/assets";
 import { saveTermsAgreed } from "@/lib/session-storage";
 import { cn } from "@/lib/utils";
 
@@ -29,7 +32,7 @@ const CLAUSES = [
   },
 ];
 
-// Pencil terms (R2GYj). 서버 호출이 없어 동의는 기기에만 남긴다.
+// Pencil 약관 동의 · 캐릭터 대안 (f0WyT). 서버 호출이 없어 동의는 기기에만 남긴다.
 function TermsScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -56,33 +59,19 @@ function TermsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => router.canGoBack() && router.back()}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          약관 동의
-        </Text>
-      </View>
+      <ScreenHeader title="약관에 동의해 주세요" onBack={() => router.canGoBack() && router.back()} />
 
       <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-4">
-        <View className="gap-2">
-          <Text className="text-h1 text-foreground" accessibilityRole="header">
-            약관에 동의해 주세요
-          </Text>
-          <Text className="text-body-sm text-muted-foreground">자산을 연결하고 예산을 만들려면 아래 약관이 필요해요.</Text>
-        </View>
+        <CoachRow
+          character={CHARACTER_PHONE}
+          message={"약관은 제가 미리 읽어 봤어요.\n필수 2개만 체크하면 바로 시작할 수 있어요."}
+        />
 
         <View className="gap-2.5 rounded-lg bg-muted p-4">
           {CLAUSES.map((clause) => (
             <View key={clause.title} className="gap-1">
               <Text className="text-label text-foreground">{clause.title}</Text>
-              <Text className="text-caption text-muted-foreground">{clause.body}</Text>
+              <Text className="text-caption text-card-foreground">{clause.body}</Text>
             </View>
           ))}
         </View>
@@ -113,7 +102,7 @@ function TermsScreen() {
                   hitSlop={6}
                 >
                   <CheckMark checked={checked} />
-                  <Text className={cn("flex-1 text-body-sm", checked ? "text-foreground" : "text-muted-foreground")}>
+                  <Text className={cn("flex-1 text-body-sm", checked ? "text-foreground" : "text-card-foreground")}>
                     {item.label}
                   </Text>
                 </Pressable>
@@ -143,7 +132,7 @@ function CheckMark({ checked }: { checked: boolean }) {
     <Icon
       as={checked ? CircleCheckBig : Circle}
       size={20}
-      className={checked ? "text-primary" : "text-muted-foreground"}
+      className={checked ? "text-primary" : "text-card-foreground"}
     />
   );
 }

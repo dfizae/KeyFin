@@ -38,6 +38,20 @@
     --color-border: 236 236 236;
     --color-input: 202 202 202;
     --color-ring: 54 41 183;
+    --color-env-dining: 234 162 58;
+    --color-env-dining-muted: 251 238 220;
+    --color-env-transport: 101 170 240;
+    --color-env-transport-muted: 227 240 252;
+    --color-env-health: 96 205 187;
+    --color-env-health-muted: 226 246 243;
+    --color-env-leisure: 162 131 236;
+    --color-env-leisure-muted: 238 233 252;
+    --color-env-shopping: 219 104 166;
+    --color-env-shopping-muted: 249 228 239;
+    --color-env-grocery: 168 200 71;
+    --color-env-grocery-muted: 239 245 222;
+    --color-env-etc: 238 212 82;
+    --color-env-etc-muted: 252 247 224;
     --color-white: 255 255 255;
     --color-black: 0 0 0;
   }
@@ -76,6 +90,20 @@
     --color-border: 46 42 77;
     --color-input: 58 53 96;
     --color-ring: 168 163 215;
+    --color-env-dining: 234 162 58;
+    --color-env-dining-muted: 80 61 47;
+    --color-env-transport: 101 170 240;
+    --color-env-transport-muted: 48 63 90;
+    --color-env-health: 96 205 187;
+    --color-env-health-muted: 47 71 78;
+    --color-env-leisure: 162 131 236;
+    --color-env-leisure-muted: 62 53 89;
+    --color-env-shopping: 219 104 166;
+    --color-env-shopping-muted: 76 47 73;
+    --color-env-grocery: 168 200 71;
+    --color-env-grocery-muted: 64 70 50;
+    --color-env-etc: 238 212 82;
+    --color-env-etc-muted: 81 73 52;
     --color-white: 255 255 255;
     --color-black: 0 0 0;
   }

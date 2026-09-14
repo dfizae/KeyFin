@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { CalendarClock, Check, ChevronLeft, CircleAlert, Trash2 } from "lucide-react-native";
+import { CalendarClock, Check, CircleAlert, Trash2 } from "lucide-react-native";
 import { useState } from "react";
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 
@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
 import type { LinkedAccount } from "@/features/account/model";
@@ -126,7 +127,7 @@ function FixedExpenseFormScreen({ route }: FixedExpenseFormScreenProps) {
             ))}
           </View>
           {form.expenseType === "UTILITY" ? (
-            <Text className="text-caption text-muted-foreground">공과금은 달마다 금액이 달라 예상액으로 준비해 둬요.</Text>
+            <Text className="text-caption text-card-foreground">공과금은 달마다 금액이 달라 예상액으로 준비해 둬요.</Text>
           ) : null}
         </Field>
 
@@ -151,7 +152,7 @@ function FixedExpenseFormScreen({ route }: FixedExpenseFormScreenProps) {
             />
             <Text className="text-body text-foreground">일</Text>
           </View>
-          <Text className="text-caption text-muted-foreground">
+          <Text className="text-caption text-card-foreground">
             {MIN_PAYMENT_DAY}~{MAX_PAYMENT_DAY} 중에 고르면 돼요. 29~31일은 그 날짜가 없는 달이면 말일에 나가요.
           </Text>
         </Field>
@@ -195,7 +196,7 @@ function FixedExpenseFormScreen({ route }: FixedExpenseFormScreenProps) {
             <Text className="shrink text-caption text-destructive">{fixedExpenseDeleteErrorMessage(remove.error)}</Text>
           </View>
         )}
-        {invalidReason === null ? null : <Text className="text-caption text-muted-foreground">{invalidReason}</Text>}
+        {invalidReason === null ? null : <Text className="text-caption text-card-foreground">{invalidReason}</Text>}
         <Button
           size="lg"
           className="h-button-lg rounded-lg"
@@ -211,7 +212,7 @@ function FixedExpenseFormScreen({ route }: FixedExpenseFormScreenProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-h3 text-foreground">이 고정지출을 삭제할까요?</DialogTitle>
-            <DialogDescription className="text-body-sm text-muted-foreground">
+            <DialogDescription className="text-body-sm text-card-foreground">
               삭제하면 결제 캘린더와 준비 이체 제안에서 빠져요.
             </DialogDescription>
           </DialogHeader>
@@ -251,16 +252,7 @@ type FormHeaderProps = {
 };
 
 function FormHeader({ title, onBack }: FormHeaderProps) {
-  return (
-    <View className="flex-row items-center gap-3 px-6 pb-3">
-      <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={onBack}>
-        <Icon as={ChevronLeft} size={24} className="text-foreground" />
-      </Pressable>
-      <Text className="text-h3 text-foreground" accessibilityRole="header">
-        {title}
-      </Text>
-    </View>
-  );
+  return <ScreenHeader title={title} onBack={onBack} />;
 }
 
 type FieldProps = {
@@ -271,7 +263,7 @@ type FieldProps = {
 function Field({ label, children }: FieldProps) {
   return (
     <View className="gap-2">
-      <Text className="text-label text-muted-foreground">{label}</Text>
+      <Text className="text-label text-card-foreground">{label}</Text>
       {children}
     </View>
   );
@@ -324,7 +316,7 @@ function AccountPicker({ accounts, isPending, isError, disabled, selectedId, onS
     );
   }
   if (accounts.length === 0) {
-    return <Text className="text-body-sm text-muted-foreground">연결된 계좌가 없어요. 자산 탭에서 계좌를 먼저 연결해 주세요.</Text>;
+    return <Text className="text-body-sm text-card-foreground">연결된 계좌가 없어요. 자산 탭에서 계좌를 먼저 연결해 주세요.</Text>;
   }
 
   return (
@@ -350,7 +342,7 @@ function AccountPicker({ accounts, isPending, isError, disabled, selectedId, onS
               <Text className="text-label text-foreground" numberOfLines={1}>
                 {name}
               </Text>
-              <Text className="text-caption tabular-nums text-muted-foreground">{account.maskedNo}</Text>
+              <Text className="text-caption tabular-nums text-card-foreground">{account.maskedNo}</Text>
             </View>
             {selected ? <Icon as={Check} size={18} className="text-primary" /> : null}
           </Pressable>

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { Text } from "@/components/ui/text";
 import { useCachedBudgetProposal } from "@/features/budget/api/queries";
+import { envelopeTone } from "@/features/budget/catalog";
 import { AnalysisHero, SpendingBarRow } from "@/features/budget/components/SpendingAnalysisParts";
 import { monthlyAvgPercent, sortByMonthlyAvg, sumAmounts } from "@/features/budget/model";
 import { currentMonthKey } from "@/lib/date";
@@ -15,6 +16,9 @@ const ENVELOPES_ROUTE = "/onboarding/spending-envelopes";
 const ANALYZING_ROUTE = "/onboarding/spending-analysis";
 
 const TOP_SPENDING_COUNT = 3;
+
+/** 막대 3개가 위에서부터 차례로 차오른다 */
+const FILL_STAGGER_MS = 150;
 
 /** 하단 CTA 가 안전 영역이 없는 기기에서도 띄워지는 최소 여백 (AssetSelectScreen 과 같은 기준) */
 const MIN_BOTTOM_INSET = 12;
@@ -39,7 +43,7 @@ function SpendingSummaryScreen() {
         <AnalysisHero icon={ChartPie} title="지난 소비를 분석했어요" description={`${basis} 기준으로 계산했어요.`} />
 
         <View className="gap-1">
-          <Text className="text-label text-muted-foreground">한 달 평균 소비</Text>
+          <Text className="text-label text-card-foreground">한 달 평균 소비</Text>
           <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
             {formatKRW(total)}
           </Text>
@@ -49,12 +53,14 @@ function SpendingSummaryScreen() {
           <Text className="text-h3 text-foreground" accessibilityRole="header">
             가장 많이 쓴 곳
           </Text>
-          {ranked.slice(0, TOP_SPENDING_COUNT).map((envelope) => (
+          {ranked.slice(0, TOP_SPENDING_COUNT).map((envelope, index) => (
             <SpendingBarRow
               key={envelope.envelopeId}
               name={envelope.name}
               value={`월 ${formatKRW(envelope.monthlyAvg)}`}
               percent={monthlyAvgPercent(envelope.monthlyAvg, max)}
+              fillDelay={index * FILL_STAGGER_MS}
+              barClassName={envelopeTone(envelope.envelopeId).bar}
             />
           ))}
         </View>

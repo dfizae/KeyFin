@@ -1,26 +1,29 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
+import { Floating } from "@/components/ui/floating";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useLogin } from "@/features/auth/api/queries";
 import { authErrorMessage } from "@/features/auth/errors";
 import { canSubmitLogin, parseReturnTo } from "@/features/auth/model";
+import { CHARACTER_WAVE } from "@/features/room/assets";
 import { cn } from "@/lib/utils";
 
-/** Pencil login (HUL5i) 의 Main Logo 1 (LfIsh) 을 3배로 내보낸 이미지 */
-const LOGO = require("@/assets/brand/keyfin-logo.png");
+/** Pencil 로그인 · 캐릭터 대안(QmtGU) 의 Main Logo 1 에서 태그라인을 뺀 아이콘+워드마크를 3배로 내보낸 이미지 */
+const WORDMARK = require("@/assets/brand/keyfin-wordmark.png");
 
-/** NativeWind className 은 RN Image 에 적용되지 않아 크기만 style 로 준다. 폭에 맞춰 contain 하면 시안의 338x91 과 같아진다. */
-const LOGO_STYLE = { width: "100%", height: 96 } as const;
+/** NativeWind className 은 RN Image 에 적용되지 않아 크기만 style 로 준다. 시안 117×27, 캐릭터 150×210 */
+const WORDMARK_STYLE = { width: 117, height: 27 } as const;
+const CHARACTER_STYLE = { width: 150, height: 210 } as const;
 
 const SIGNUP_ROUTE = "/(auth)/signup";
 
-// Pencil login (HUL5i) · login/error (JF0Db) · login/pending (bG1FL).
+// Pencil 로그인 · 캐릭터 대안 (QmtGU) · login/error (JF0Db) · login/pending (bG1FL).
 function LoginScreen() {
   const router = useRouter();
   const login = useLogin();
@@ -42,88 +45,92 @@ function LoginScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <View className="flex-1 justify-between px-6 pb-8">
-        <View className="gap-8 pt-16">
-          <Image
-            source={LOGO}
-            style={LOGO_STYLE}
-            resizeMode="contain"
-            accessibilityRole="image"
-            accessibilityLabel="KeyFin"
-          />
+      <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pt-4" keyboardShouldPersistTaps="handled">
+        <Image source={WORDMARK} style={WORDMARK_STYLE} resizeMode="contain" accessibilityRole="image" accessibilityLabel="KeyFin" />
 
-          {signedUpEmail === undefined ? null : (
-            <View className="rounded-lg bg-positive-muted px-4 py-3" accessibilityLiveRegion="polite">
-              <Text className="text-body-sm text-foreground">가입이 완료됐어요. 로그인해 주세요.</Text>
-            </View>
-          )}
-
-          <View className="gap-4">
-            <Field label="이메일">
-              <Input
-                className={cn("h-input rounded-lg", errorMessage !== null && "border-destructive")}
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="email"
-                textContentType="emailAddress"
-                editable={!login.isPending}
-                accessibilityLabel="이메일"
-                returnKeyType="next"
-              />
-            </Field>
-
-            <Field label="비밀번호">
-              <Input
-                className={cn("h-input rounded-lg", errorMessage !== null && "border-destructive")}
-                value={password}
-                onChangeText={setPassword}
-                placeholder="비밀번호"
-                secureTextEntry
-                autoCapitalize="none"
-                autoComplete="current-password"
-                textContentType="password"
-                editable={!login.isPending}
-                accessibilityLabel="비밀번호"
-                returnKeyType="done"
-                onSubmitEditing={handleSubmit}
-              />
-            </Field>
-
-            {errorMessage === null ? null : (
-              <View className="flex-row items-center gap-1.5" accessibilityLiveRegion="polite">
-                <Icon as={CircleAlert} size={16} className="text-destructive" />
-                <Text className="flex-1 text-body-sm text-destructive">{errorMessage}</Text>
-              </View>
-            )}
+        <View className="items-center gap-5">
+          <Floating>
+            <Image source={CHARACTER_WAVE} style={CHARACTER_STYLE} resizeMode="contain" accessible={false} />
+          </Floating>
+          <View className="items-center gap-1.5">
+            <Text className="text-h1 text-foreground" accessibilityRole="header">
+              안녕하세요!
+            </Text>
+            <Text className="text-body-sm text-card-foreground">로그인하면 방으로 바로 들어가요</Text>
           </View>
         </View>
 
-        <View className="gap-4">
-          <Button
-            size="lg"
-            className="h-button-lg rounded-lg"
-            onPress={handleSubmit}
-            disabled={!canSubmit}
-            accessibilityLabel="로그인"
-          >
-            <Text>{login.isPending ? "로그인 중…" : "로그인"}</Text>
-          </Button>
-
-          <View className="flex-row items-center justify-center gap-1.5">
-            <Text className="text-body-sm text-muted-foreground">계정이 없으신가요?</Text>
-            <Pressable
-              accessibilityRole="link"
-              accessibilityLabel="회원가입"
-              hitSlop={10}
-              onPress={() => router.push(SIGNUP_ROUTE)}
-            >
-              <Text className="text-label text-primary">회원가입</Text>
-            </Pressable>
+        {signedUpEmail === undefined ? null : (
+          <View className="rounded-lg bg-positive-muted px-4 py-3" accessibilityLiveRegion="polite">
+            <Text className="text-body-sm text-foreground">가입이 완료됐어요. 로그인해 주세요.</Text>
           </View>
+        )}
+
+        <View className="gap-4">
+          <Field label="이메일">
+            <Input
+              className={cn("h-input rounded-lg", errorMessage !== null && "border-destructive")}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="you@example.com"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              textContentType="emailAddress"
+              editable={!login.isPending}
+              accessibilityLabel="이메일"
+              returnKeyType="next"
+            />
+          </Field>
+
+          <Field label="비밀번호">
+            <Input
+              className={cn("h-input rounded-lg", errorMessage !== null && "border-destructive")}
+              value={password}
+              onChangeText={setPassword}
+              placeholder="비밀번호"
+              secureTextEntry
+              autoCapitalize="none"
+              autoComplete="current-password"
+              textContentType="password"
+              editable={!login.isPending}
+              accessibilityLabel="비밀번호"
+              returnKeyType="done"
+              onSubmitEditing={handleSubmit}
+            />
+          </Field>
+
+          {errorMessage === null ? null : (
+            <View className="flex-row items-center gap-1.5" accessibilityLiveRegion="polite">
+              <Icon as={CircleAlert} size={16} className="text-destructive" />
+              <Text className="flex-1 text-body-sm text-destructive">{errorMessage}</Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <View className="gap-4 px-6 pb-8 pt-4">
+        <Button
+          size="lg"
+          className="h-button-lg rounded-lg"
+          onPress={handleSubmit}
+          disabled={!canSubmit}
+          accessibilityLabel="로그인"
+        >
+          <Text>{login.isPending ? "로그인 중…" : "로그인"}</Text>
+        </Button>
+
+        <View className="flex-row items-center justify-center gap-1.5">
+          <Text className="text-body-sm text-card-foreground">계정이 없으신가요?</Text>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="회원가입"
+            hitSlop={10}
+            onPress={() => router.push(SIGNUP_ROUTE)}
+          >
+            <Text className="text-label text-primary">회원가입</Text>
+          </Pressable>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -133,7 +140,7 @@ function LoginScreen() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <View className="gap-1.5">
-      <Text className="text-caption text-muted-foreground">{label}</Text>
+      <Text className="text-caption text-card-foreground">{label}</Text>
       {children}
     </View>
   );

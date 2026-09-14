@@ -8,7 +8,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useCurrentBudget } from "@/features/budget/api/queries";
-import { envelopeIcon } from "@/features/budget/catalog";
+import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
   budgetHealth,
@@ -118,14 +118,14 @@ type TotalCardProps = {
   period: string;
 };
 
-// Pencil TotalCard (aAfOZ): bg-card · radius 24 · padding 20 · gap 12 · 진행 바 8pt.
+// Pencil 예산 탭 · 카드 정리 대안 (IiOk3) 의 TotalCard: 카드 없이 라벨 · 금액 · 진행 바 8pt · 총/사용이 본문에 바로.
 function TotalCard({ total, period }: TotalCardProps) {
   const health = budgetHealth(total);
   const used = usedBarPercent(total.remainingRate);
 
   return (
-    <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
-      <Text className="text-label tabular-nums text-muted-foreground">{period} 남은 예산</Text>
+    <View className="gap-3 pb-1 pt-5">
+      <Text className="text-label tabular-nums text-card-foreground">{period} 남은 예산</Text>
       <Text className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")} maxFontSizeMultiplier={1.3}>
         {formatKRW(total.remaining)}
       </Text>
@@ -139,8 +139,8 @@ function TotalCard({ total, period }: TotalCardProps) {
         <View className={cn("h-full rounded-full", TOTAL_BAR_CLASS[health])} style={{ width: `${used}%` }} />
       </View>
       <View className="flex-row justify-between">
-        <Text className="text-caption tabular-nums text-muted-foreground">총 {formatKRW(total.confirmed)}</Text>
-        <Text className="text-caption tabular-nums text-muted-foreground">사용 {formatKRW(total.spent)}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">총 {formatKRW(total.confirmed)}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">사용 {formatKRW(total.spent)}</Text>
       </View>
     </View>
   );
@@ -158,7 +158,7 @@ function SectionTitle({ heading, count }: SectionTitleProps) {
       <Text className="text-h3 text-foreground" accessibilityRole="header">
         {heading}
       </Text>
-      <Text className="text-caption tabular-nums text-muted-foreground">{count}개</Text>
+      <Text className="text-caption tabular-nums text-card-foreground">{count}개</Text>
     </View>
   );
 }
@@ -188,15 +188,15 @@ function EnvelopeRow({ envelope, onPress }: { envelope: BudgetEnvelope; onPress:
     >
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
-          <View className="h-7 w-7 items-center justify-center rounded-md bg-accent">
-            <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className="text-primary" />
+          <View className={cn("h-7 w-7 items-center justify-center rounded-md", envelopeTone(envelope.envelopeId).tile)}>
+            <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className={envelopeTone(envelope.envelopeId).icon} />
           </View>
           <Text className="text-label text-foreground">{envelope.name}</Text>
         </View>
         <Text
           className={cn(
             "text-amount-sm tabular-nums",
-            health === "over" ? "text-destructive" : health === "unset" ? "text-muted-foreground" : "text-foreground"
+            health === "over" ? "text-destructive" : health === "unset" ? "text-card-foreground" : "text-foreground"
           )}
         >
           {amountText}
@@ -219,8 +219,12 @@ const SKELETON_ROWS = [1, 2, 3, 4, 5, 6, 7];
 
 function BudgetSkeleton() {
   return (
-    <View className="gap-5 px-6" accessible accessibilityLabel="불러오는 중">
-      <Skeleton className="h-40 w-full rounded-2xl" />
+    <View className="gap-5 px-6 pt-5" accessible accessibilityLabel="불러오는 중">
+      <View className="gap-3">
+        <Skeleton className="h-5 w-32" />
+        <Skeleton className="h-11 w-48" />
+        <Skeleton className="h-2 w-full rounded-full" />
+      </View>
       <Skeleton className="h-6 w-24" />
       <View className="gap-4">
         {SKELETON_ROWS.map((row) => (

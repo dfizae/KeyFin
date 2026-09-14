@@ -17,10 +17,10 @@ type EmptyStateProps = {
 function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
     <View className={cn("items-center gap-3 px-6 py-10", className)} accessibilityLiveRegion="polite">
-      <Icon as={icon} size={40} className="text-muted-foreground/70" />
+      <Icon as={icon} size={40} className="text-card-foreground/70" />
       <Text className="text-center text-h3">{title}</Text>
       {description ? (
-        <Text className="text-center text-body-sm text-muted-foreground">{description}</Text>
+        <Text className="text-center text-body-sm text-card-foreground">{description}</Text>
       ) : null}
       {action ? (
         <Button

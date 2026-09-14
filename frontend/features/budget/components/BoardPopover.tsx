@@ -45,7 +45,7 @@ function BoardPopover({ width, budget, periodLabel, onClose }: BoardPopoverProps
       >
         <View className="flex-row items-center justify-between">
           <Text className="text-label text-foreground">{periodLabel} 예산 보드</Text>
-          <Text className={cn("text-caption tabular-nums", budget.total ? "text-primary" : "text-muted-foreground")}>{summary}</Text>
+          <Text className={cn("text-caption tabular-nums", budget.total ? "text-primary" : "text-card-foreground")}>{summary}</Text>
         </View>
         {budget.total ? (
           <View className="gap-1.5">
@@ -54,7 +54,7 @@ function BoardPopover({ width, budget, periodLabel, onClose }: BoardPopoverProps
             ))}
           </View>
         ) : (
-          <Text className="text-body-sm text-muted-foreground">예산을 승인하면 봉투별 잔액이 여기에 보여요.</Text>
+          <Text className="text-body-sm text-card-foreground">예산을 승인하면 봉투별 잔액이 여기에 보여요.</Text>
         )}
         <Pressable
           accessibilityRole="button"

@@ -5,6 +5,7 @@ import { FlatList, Pressable, View } from "react-native";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { usePaymentCalendar } from "@/features/payment/api/queries";
 import { CALENDAR_EMPTY_MESSAGE, PREPARED_LABEL } from "@/features/payment/components/CalendarPopover";
@@ -32,30 +33,21 @@ function PaymentCalendarScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center justify-between gap-3 px-6 pb-3">
-        <View className="flex-row items-center gap-3">
+      <ScreenHeader
+        title="결제 캘린더"
+        onBack={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
+        right={
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="뒤로"
+            accessibilityLabel="고정지출 등록"
             hitSlop={10}
-            onPress={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
+            className="h-touch w-touch items-center justify-center active:opacity-70"
+            onPress={() => router.push(`${FIXED_EXPENSE_ROUTE}/new`)}
           >
-            <Icon as={ChevronLeft} size={24} className="text-foreground" />
+            <Icon as={Plus} size={24} className="text-foreground" />
           </Pressable>
-          <Text className="text-h3 text-foreground" accessibilityRole="header">
-            결제 캘린더
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="고정지출 등록"
-          hitSlop={10}
-          className="h-touch w-touch items-center justify-center active:opacity-70"
-          onPress={() => router.push(`${FIXED_EXPENSE_ROUTE}/new`)}
-        >
-          <Icon as={Plus} size={24} className="text-foreground" />
-        </Pressable>
-      </View>
+        }
+      />
 
       <MonthStepper month={month} onChange={(next) => router.setParams({ month: next })} />
 
@@ -125,7 +117,7 @@ function CalendarSummary({ count, shortageCount }: CalendarSummaryProps) {
 
   return (
     <View className="flex-row items-center justify-between pb-1" accessibilityLiveRegion="polite">
-      <Text className="text-body-sm text-muted-foreground">출금 예정 {count}건</Text>
+      <Text className="text-body-sm text-card-foreground">출금 예정 {count}건</Text>
       {shortageCount > 0 ? (
         <Text className="text-body-sm tabular-nums text-destructive">준비 부족 {shortageCount}건</Text>
       ) : (
@@ -143,7 +135,7 @@ type DayGroupProps = {
 function DayGroup({ group, onSelect }: DayGroupProps) {
   return (
     <View className="gap-2">
-      <Text className="text-label text-muted-foreground">{formatMonthDay(parseKSTDateKey(group.date))}</Text>
+      <Text className="text-label text-card-foreground">{formatMonthDay(parseKSTDateKey(group.date))}</Text>
       <View className="gap-2">
         {group.entries.map((entry) => (
           <EntryCard key={entry.key} entry={entry} onPress={() => onSelect(entry)} />
@@ -186,7 +178,7 @@ function EntryCard({ entry, onPress }: EntryCardProps) {
       <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
         {formatKRW(entry.amount)}
       </Text>
-      {editable ? <Icon as={ChevronRight} size={18} className="text-muted-foreground" /> : null}
+      {editable ? <Icon as={ChevronRight} size={18} className="text-card-foreground" /> : null}
     </Pressable>
   );
 }

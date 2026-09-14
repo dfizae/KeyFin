@@ -4,3 +4,9 @@ export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-default.png");
 export const CHARACTER_IDLE = require("@/assets/sprites/char1-idle.png");
 /** 입주 연출(PAGE-08)에서만 쓰는 환호 포즈 */
 export const CHARACTER_CELEBRATE = require("@/assets/sprites/char1-celebrate.png");
+/** 온보딩 코치 — 손 흔드는 포즈(로그인·회원가입) */
+export const CHARACTER_WAVE = require("@/assets/sprites/char1-wave.png");
+/** 온보딩 코치 — 휴대폰 보는 포즈(약관·소비 분석 중) */
+export const CHARACTER_PHONE = require("@/assets/sprites/char1-phone.png");
+/** 온보딩 코치 — 살펴보는 포즈(금융망 이메일) */
+export const CHARACTER_SCAN = require("@/assets/sprites/char1-scan.png");

@@ -35,7 +35,7 @@ function SubcategorySheet({ visible, subcategories, selectedSubcategoryId, disab
               {SHEET_TITLE}
             </Text>
             <Pressable accessibilityRole="button" accessibilityLabel="닫기" onPress={onClose} hitSlop={8} className="h-touch w-touch items-center justify-center">
-              <Icon as={X} size={20} className="text-muted-foreground" />
+              <Icon as={X} size={20} className="text-card-foreground" />
             </Pressable>
           </View>
           <ScrollView className="max-h-96" contentContainerClassName="gap-4 px-5 pt-3">
@@ -94,7 +94,7 @@ type ChipGroupProps = {
 function ChipGroup({ title, chips, disabled, onSelect }: ChipGroupProps) {
   return (
     <View className="gap-2">
-      <Text className="text-label text-muted-foreground">{title}</Text>
+      <Text className="text-label text-card-foreground">{title}</Text>
       <View className="flex-row flex-wrap gap-2">
         {chips.map((chip) => (
           <Pressable

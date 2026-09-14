@@ -14,6 +14,8 @@ type SliderProps = {
   disabled?: boolean;
   accessibilityLabel?: string;
   className?: string;
+  /** 채움 막대와 손잡이 색. 봉투 행이면 `envelopeTone(id).bar`, 기본은 primary */
+  fillClassName?: string;
 };
 
 /**
@@ -29,6 +31,7 @@ function Slider({
   disabled = false,
   accessibilityLabel,
   className,
+  fillClassName = "bg-primary",
 }: SliderProps) {
   const [width, setWidth] = React.useState(0);
 
@@ -70,10 +73,10 @@ function Slider({
       }}
     >
       <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <View className="h-full rounded-full bg-primary" style={{ width: `${ratio * 100}%` }} />
+        <View className={cn("h-full rounded-full", fillClassName)} style={{ width: `${ratio * 100}%` }} />
       </View>
       <View
-        className="absolute items-center justify-center rounded-full bg-primary"
+        className={cn("absolute items-center justify-center rounded-full", fillClassName)}
         style={{ left: knobLeft, width: KNOB_SIZE, height: KNOB_SIZE }}
       >
         <View className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />

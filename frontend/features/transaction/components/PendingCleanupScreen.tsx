@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
-import { CheckCheck, ChevronLeft, CircleAlert, WifiOff } from "lucide-react-native";
+import { CheckCheck, CircleAlert, WifiOff } from "lucide-react-native";
 import { useState } from "react";
-import { FlatList, Pressable, View } from "react-native";
+import { FlatList, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useClassifyTransaction, usePendingTransactions, useSubcategories } from "@/features/transaction/api/queries";
 import { SubcategorySheet } from "@/features/transaction/components/SubcategorySheet";
@@ -41,19 +42,10 @@ function PendingCleanupScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          미확정 정리
-        </Text>
-      </View>
+      <ScreenHeader
+        title="미확정 정리"
+        onBack={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
+      />
 
       {pending.isPending ? (
         <CleanupSkeleton />
@@ -73,7 +65,7 @@ function PendingCleanupScreen() {
           onRefresh={() => pending.refetch()}
           ListHeaderComponent={
             items.length === 0 ? null : (
-              <Text className="pb-1 text-body-sm text-muted-foreground" accessibilityLiveRegion="polite">
+              <Text className="pb-1 text-body-sm text-card-foreground" accessibilityLiveRegion="polite">
                 확인이 필요한 결제 {items.length}건
               </Text>
             )
@@ -124,7 +116,7 @@ function PendingCard({ transaction, isPending, errorMessage, onConfirm, onOther 
           <Text className="text-h3 text-foreground" numberOfLines={1}>
             {transaction.merchantName}
           </Text>
-          <Text className="text-caption text-muted-foreground">{transactionDateTimeLabel(transaction)}</Text>
+          <Text className="text-caption text-card-foreground">{transactionDateTimeLabel(transaction)}</Text>
         </View>
         <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
           {formatKRW(subtractKRW("0", transaction.amount))}

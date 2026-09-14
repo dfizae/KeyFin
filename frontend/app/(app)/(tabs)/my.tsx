@@ -21,7 +21,7 @@ export default function MyRoute() {
       <Text className="py-4 text-h1" accessibilityRole="header">
         마이페이지
       </Text>
-      {userName === null ? null : <Text className="text-body text-muted-foreground">{userName}님</Text>}
+      {userName === null ? null : <Text className="text-body text-card-foreground">{userName}님</Text>}
       <View className="pt-6">
         <Pressable
           accessibilityRole="button"
@@ -30,7 +30,7 @@ export default function MyRoute() {
           onPress={() => router.push(SETTINGS_ROUTE)}
         >
           <Text className="text-label text-foreground">설정</Text>
-          <Icon as={ChevronRight} size={18} className="text-muted-foreground" />
+          <Icon as={ChevronRight} size={18} className="text-card-foreground" />
         </Pressable>
       </View>
 

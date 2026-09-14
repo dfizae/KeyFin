@@ -148,7 +148,7 @@ function HomeHeader({ coinBalance }: HomeHeaderProps) {
   return (
     <View className="flex-row items-center justify-between bg-background px-6 py-4">
       <View className="gap-1">
-        <Text className="text-caption text-muted-foreground">환영합니다</Text>
+        <Text className="text-caption text-card-foreground">환영합니다</Text>
         <Text className="text-h2 text-foreground" accessibilityRole="header">
           {greeting}
         </Text>

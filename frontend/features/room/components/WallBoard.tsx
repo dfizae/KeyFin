@@ -52,9 +52,9 @@ function WallBoard({ width, periodLabel, periodAccessibilityLabel, remainingRate
         <Text className="shrink text-caption tabular-nums text-foreground" numberOfLines={1}>
           {periodLabel}
         </Text>
-        <Icon as={Pin} size={10} className="text-muted-foreground" />
+        <Icon as={Pin} size={10} className="text-card-foreground" />
       </View>
-      <Text className={cn("text-label tabular-nums", remainingRate === null ? "text-muted-foreground" : "text-primary")}>{status}</Text>
+      <Text className={cn("text-label tabular-nums", remainingRate === null ? "text-card-foreground" : "text-primary")}>{status}</Text>
       <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted" accessible={false}>
         {remainingRate !== null ? <View className="h-full rounded-full bg-positive" style={{ width: `${fillPercent}%` }} /> : null}
       </View>

@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, Circle, CircleCheckBig, WalletMinimal } from "lucide-react-native";
+import { Circle, CircleCheckBig, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useCreateLinks, useLinkCandidates } from "@/features/link/api/queries";
 import { BankLogoTile } from "@/features/link/components/BankLogoTile";
@@ -79,12 +80,7 @@ function AssetSelectScreen() {
       />
 
       <View className="flex-1 gap-5 px-6 pt-2">
-        <View className="gap-1.5">
-          <Text className="text-h2 text-foreground" accessibilityRole="header">
-            연결할 자산을 선택해 주세요
-          </Text>
-          <Text className="text-body-sm text-muted-foreground">선택한 계좌와 카드의 거래만 불러옵니다.</Text>
-        </View>
+        <Text className="text-body-sm text-card-foreground">선택한 계좌와 카드의 거래만 불러옵니다.</Text>
 
         {candidates.isPending ? (
           <CandidatesSkeleton />
@@ -166,34 +162,24 @@ function AssetSelectHeader({ allSelected, disabled, onToggleAll }: AssetSelectHe
   const router = useRouter();
 
   return (
-    <View className="flex-row items-center justify-between px-6 pb-3">
-      <View className="flex-row items-center gap-2">
+    <ScreenHeader
+      title="연결할 자산 선택"
+      onBack={() => router.canGoBack() && router.back()}
+      right={
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="뒤로"
+          accessibilityLabel={allSelected ? "전체 해제" : "전체 선택"}
+          accessibilityState={{ disabled }}
           hitSlop={10}
-          onPress={() => router.canGoBack() && router.back()}
+          disabled={disabled}
+          onPress={onToggleAll}
         >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
+          <Text className={cn("text-label", disabled ? "text-card-foreground" : "text-primary")}>
+            {allSelected ? "전체 해제" : "전체 선택"}
+          </Text>
         </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          내 자산
-        </Text>
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={allSelected ? "전체 해제" : "전체 선택"}
-        accessibilityState={{ disabled }}
-        hitSlop={10}
-        disabled={disabled}
-        onPress={onToggleAll}
-      >
-        <Text className={cn("text-label", disabled ? "text-muted-foreground" : "text-primary")}>
-          {allSelected ? "전체 해제" : "전체 선택"}
-        </Text>
-      </Pressable>
-    </View>
+      }
+    />
   );
 }
 
@@ -210,7 +196,7 @@ function LinkSection({ title, count, children }: LinkSectionProps) {
         <Text className="text-h3 text-foreground" accessibilityRole="header">
           {title}
         </Text>
-        <Text className="text-caption tabular-nums text-muted-foreground">{count}개</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">{count}개</Text>
       </View>
       <View className="gap-2.5">{children}</View>
     </View>
@@ -259,7 +245,7 @@ function CardRow({ card, selected, onToggle }: CardRowProps) {
       selected={selected}
       onToggle={onToggle}
       right={
-        <Text className="text-caption tabular-nums text-muted-foreground">출금 {card.maskedWithdrawalNo}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">출금 {card.maskedWithdrawalNo}</Text>
       }
     />
   );
@@ -293,21 +279,21 @@ function LinkRow({ logo, title, subtitle, right, linked, selected, onToggle }: L
       <Icon
         as={selected ? CircleCheckBig : Circle}
         size={20}
-        className={selected ? "text-primary" : "text-muted-foreground"}
+        className={selected ? "text-primary" : "text-card-foreground"}
       />
 
       {logo}
 
       <View className="flex-1 gap-0.5">
-        <Text className={cn("text-label", linked ? "text-muted-foreground" : "text-foreground")} numberOfLines={1}>
+        <Text className={cn("text-label", linked ? "text-card-foreground" : "text-foreground")} numberOfLines={1}>
           {title}
         </Text>
-        <Text className="text-caption tabular-nums text-muted-foreground" numberOfLines={1}>
+        <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
           {subtitle}
         </Text>
       </View>
 
-      {linked ? <Text className="text-caption text-muted-foreground">연결됨</Text> : right}
+      {linked ? <Text className="text-caption text-card-foreground">연결됨</Text> : right}
     </Pressable>
   );
 }

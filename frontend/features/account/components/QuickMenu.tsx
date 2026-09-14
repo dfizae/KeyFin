@@ -50,7 +50,7 @@ function QuickMenu({ onSelect }: QuickMenuProps) {
             className="aspect-square items-center justify-center gap-2 rounded-lg border border-transparent bg-card p-3 shadow-sm shadow-black/5 active:bg-muted dark:border-border dark:shadow-none"
           >
             <Icon as={item.icon} size={28} className={item.iconClassName} />
-            <Text className="text-center text-label text-muted-foreground" numberOfLines={2}>
+            <Text className="text-center text-label text-card-foreground" numberOfLines={2}>
               {item.label}
             </Text>
           </Pressable>

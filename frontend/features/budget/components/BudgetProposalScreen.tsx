@@ -1,8 +1,8 @@
 import type { UseMutationResult } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronLeft, WifiOff } from "lucide-react-native";
+import { WifiOff } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import {
   useCachedBudgetProposal,
@@ -18,7 +19,7 @@ import {
   useCurrentBudget,
   type ConfirmBudgetVariables,
 } from "@/features/budget/api/queries";
-import { envelopeIcon } from "@/features/budget/catalog";
+import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { confirmErrorMessage, isAlreadyConfirmedError } from "@/features/budget/errors";
 import {
   budgetPeriodLabel,
@@ -32,6 +33,7 @@ import {
 } from "@/features/budget/model";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW, fromWon, toWon, type KRW } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 /** 슬라이더 범위. 명세에 상한이 없어 시안 기준 15만원·1천원 단위로 두고, 제안액이 더 크면 그만큼 늘린다. (TBD) */
 const SLIDER_BASE_MAX = 150000;
@@ -94,21 +96,11 @@ function ProposalHeader({ showBack }: { showBack: boolean }) {
   const router = useRouter();
 
   return (
-    <View className="flex-row items-center gap-3 bg-card px-6 pb-3">
-      {showBack ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace("/budget"))}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-      ) : null}
-      <Text className="text-h3 text-foreground" accessibilityRole="header">
-        예산 설정
-      </Text>
-    </View>
+    <ScreenHeader
+      title="이번 달 예산 설정"
+      className="bg-card"
+      onBack={showBack ? () => (router.canGoBack() ? router.back() : router.replace("/budget")) : undefined}
+    />
   );
 }
 
@@ -169,26 +161,21 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
   return (
     <View className="flex-1">
       <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-5 pb-6">
-        <View className="gap-1.5">
-          <Text className="text-h1 text-foreground" accessibilityRole="header">
-            이번 예산을 정해요
-          </Text>
-          <Text className="text-body-sm text-muted-foreground">{BASIS_DESCRIPTION[kind]}</Text>
-        </View>
+        <Text className="text-body-sm text-card-foreground">{BASIS_DESCRIPTION[kind]}</Text>
 
-        <View className="gap-1 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
-          <Text className="text-caption text-muted-foreground">{period} 총 예산</Text>
-          <Text className="text-amount-md tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
+        <View className="gap-1.5">
+          <Text className="text-label text-card-foreground">{period} 총 예산</Text>
+          <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
             {formatKRW(total)}
           </Text>
-          <Text className="text-caption tabular-nums text-muted-foreground">{summary}</Text>
+          <Text className="text-caption tabular-nums text-card-foreground">{summary}</Text>
         </View>
 
         <View className="flex-row items-center justify-between">
           <Text className="text-h3 text-foreground" accessibilityRole="header">
             봉투별 금액
           </Text>
-          <Text className="text-caption tabular-nums text-muted-foreground">{rows.length}개</Text>
+          <Text className="text-caption tabular-nums text-card-foreground">{rows.length}개</Text>
         </View>
 
         <View className="gap-3.5">
@@ -225,7 +212,7 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-h3 text-foreground">이 예산으로 시작할까요?</DialogTitle>
-            <DialogDescription className="text-body-sm text-muted-foreground">
+            <DialogDescription className="text-body-sm text-card-foreground">
               시작하면 이번 예산({period})은 바꿀 수 없어요.
             </DialogDescription>
           </DialogHeader>
@@ -250,7 +237,7 @@ type EnvelopeAmountRowProps = {
   onChange: (amount: KRW) => void;
 };
 
-// Pencil 행(I3tEno): 28pt accent 타일 + 이름 / 우측 금액칸 · 슬라이더 · 월평균 근거.
+// Pencil 행(N9eU0 의 외식 행): 봉투 색 타일 + 이름 / 우측 금액칸 · 봉투 색 슬라이더 · 월평균 근거.
 function EnvelopeAmountRow({ row, amount, showMonthlyAvg, onChange }: EnvelopeAmountRowProps) {
   const current = Number(toWon(amount));
   const max = Math.max(SLIDER_BASE_MAX, Math.ceil(Number(toWon(row.proposed)) / SLIDER_STEP) * SLIDER_STEP);
@@ -259,8 +246,8 @@ function EnvelopeAmountRow({ row, amount, showMonthlyAvg, onChange }: EnvelopeAm
     <View className="gap-2">
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2.5">
-          <View className="h-7 w-7 items-center justify-center rounded-md bg-accent">
-            <Icon as={envelopeIcon(row.envelopeId)} size={16} className="text-primary" />
+          <View className={cn("h-7 w-7 items-center justify-center rounded-md", envelopeTone(row.envelopeId).tile)}>
+            <Icon as={envelopeIcon(row.envelopeId)} size={16} className={envelopeTone(row.envelopeId).icon} />
           </View>
           <Text className="text-label text-foreground">{row.name}</Text>
         </View>
@@ -274,9 +261,10 @@ function EnvelopeAmountRow({ row, amount, showMonthlyAvg, onChange }: EnvelopeAm
         step={SLIDER_STEP}
         onValueChange={(next) => onChange(fromWon(BigInt(next)))}
         accessibilityLabel={`${row.name} 금액`}
+        fillClassName={envelopeTone(row.envelopeId).bar}
       />
       {showMonthlyAvg && row.monthlyAvg !== null ? (
-        <Text className="text-caption tabular-nums text-muted-foreground">월평균 {formatKRW(row.monthlyAvg)}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">월평균 {formatKRW(row.monthlyAvg)}</Text>
       ) : null}
     </View>
   );

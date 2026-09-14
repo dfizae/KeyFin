@@ -1,14 +1,15 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, CircleAlert, WifiOff } from "lucide-react-native";
+import { CircleAlert, WifiOff } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Pressable, ScrollView, Switch, View } from "react-native";
+import { ScrollView, Switch, View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useTransferSettings, useUpdateTransferSettings } from "@/features/settings/api/queries";
 import { transferSettingsErrorMessage } from "@/features/settings/errors";
@@ -35,19 +36,7 @@ function SettingsScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-3">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace(MY_ROUTE))}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          설정
-        </Text>
-      </View>
+      <ScreenHeader title="설정" onBack={() => (router.canGoBack() ? router.back() : router.replace(MY_ROUTE))} />
 
       {settings.isPending ? (
         <SettingsSkeleton />
@@ -89,7 +78,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
   return (
     <>
       <ScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">
-        <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
+        <View className="gap-3 border-b border-border pb-6 pt-2">
           <View className="flex-row items-center justify-between gap-3">
             <Text className="shrink text-h3 text-foreground">결제 준비 이체 동의</Text>
             <Switch
@@ -102,16 +91,16 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
               thumbColor={colors.background}
             />
           </View>
-          <Text className="text-body-sm text-muted-foreground">
+          <Text className="text-body-sm text-card-foreground">
             동의하면 결제일 전에 부족한 금액을 미리 옮길지 물어봐요. 옮기는 건 매번 직접 승인해야 해요.
           </Text>
           {form.consent ? null : (
-            <Text className="text-caption text-muted-foreground">동의를 끄면 준비 이체 제안과 실행이 모두 멈춰요.</Text>
+            <Text className="text-caption text-card-foreground">동의를 끄면 준비 이체 제안과 실행이 모두 멈춰요.</Text>
           )}
         </View>
 
         <View className="gap-4">
-          <Text className="text-label text-muted-foreground">이체 한도</Text>
+          <Text className="text-label text-card-foreground">이체 한도</Text>
           <LimitField
             label="1회 한도"
             value={form.limitOnce}
@@ -124,7 +113,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
             editable={form.consent && !update.isPending}
             onChange={(limitDaily) => patch({ limitDaily })}
           />
-          <Text className="text-caption text-muted-foreground">
+          <Text className="text-caption text-card-foreground">
             한도를 넘는 이체는 승인해도 서버가 막아요. 한도는 준비 이체에만 쓰이고 직접 하는 송금과는 관계없어요.
           </Text>
         </View>
@@ -137,7 +126,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
             <Text className="shrink text-caption text-destructive">{transferSettingsErrorMessage(update.error)}</Text>
           </View>
         ) : null}
-        {invalidReason === null ? null : <Text className="text-caption text-muted-foreground">{invalidReason}</Text>}
+        {invalidReason === null ? null : <Text className="text-caption text-card-foreground">{invalidReason}</Text>}
         <Button
           size="lg"
           className="h-button-lg rounded-lg"
@@ -177,8 +166,11 @@ function LimitField({ label, value, editable, onChange }: LimitFieldProps) {
 
 function SettingsSkeleton() {
   return (
-    <View className="gap-6 px-6" accessible accessibilityLabel="불러오는 중">
-      <Skeleton className="h-32 w-full rounded-2xl" />
+    <View className="gap-6 px-6 pt-2" accessible accessibilityLabel="불러오는 중">
+      <View className="gap-3 border-b border-border pb-6">
+        <Skeleton className="h-7 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </View>
       <Skeleton className="h-6 w-20" />
       <Skeleton className="h-14 w-full rounded-lg" />
       <Skeleton className="h-14 w-full rounded-lg" />
