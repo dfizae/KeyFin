@@ -1,4 +1,5 @@
 import type { UseQueryResult } from "@tanstack/react-query";
+import { Redirect } from "expo-router";
 import { Menu, WalletMinimal, WifiOff } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -6,32 +7,33 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useBudget } from "@/features/budget/api/queries";
+import { useCurrentBudget } from "@/features/budget/api/queries";
 import { envelopeIcon } from "@/features/budget/catalog";
-import { BudgetUnsetBanner } from "@/features/budget/components/BudgetUnsetBanner";
+import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
   budgetHealth,
+  budgetPeriodLabel,
   envelopeHealth,
-  usedPercent,
+  usedBarPercent,
   type Budget,
   type BudgetEnvelope,
   type BudgetHealth,
   type BudgetTotal,
   type EnvelopeHealth,
 } from "@/features/budget/model";
-import { currentMonthKey, formatMonthKeyLabel } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-// Pencil budget (kvc1e) · budget/proposed (ZOmXC). 승인 전(total null)은 총예산 카드 대신 승인 유도 배너 + 제안 금액만 보여준다.
+// Pencil budget (kvc1e). 확정 전(PROPOSED) 주기는 이 탭 대신 예산 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12).
 function BudgetScreen() {
-  const month = currentMonthKey();
-  const budget = useBudget(month);
+  const budget = useCurrentBudget();
+
+  if (budget.data?.status === "PROPOSED") return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <View className="flex-1 bg-background">
       <BudgetHeader />
-      <BudgetContent budget={budget} month={month} />
+      <BudgetContent budget={budget} />
     </View>
   );
 }
@@ -59,11 +61,10 @@ function MenuButton() {
 
 type BudgetContentProps = {
   budget: UseQueryResult<Budget>;
-  month: string;
 };
 
 // Pencil Content (U133b / AptUM): 좌우 여백 24 · 블록 간격 20.
-function BudgetContent({ budget, month }: BudgetContentProps) {
+function BudgetContent({ budget }: BudgetContentProps) {
   if (budget.isPending) return <BudgetSkeleton />;
   if (budget.isError) {
     return (
@@ -80,8 +81,8 @@ function BudgetContent({ budget, month }: BudgetContentProps) {
 
   return (
     <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pb-6">
-      {total === null ? <BudgetUnsetBanner month={month} /> : <TotalCard total={total} month={month} />}
-      <SectionTitle heading={total === null ? "봉투별 제안 금액" : "봉투별 잔액"} count={envelopes.length} />
+      {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
+      <SectionTitle heading="봉투별 잔액" count={envelopes.length} />
       {envelopes.length === 0 ? (
         <EmptyState icon={WalletMinimal} title="봉투가 아직 없어요" description="예산이 만들어지면 봉투 7종이 여기에 보여요." />
       ) : (
@@ -104,17 +105,18 @@ const TOTAL_BAR_CLASS: Record<BudgetHealth, string> = {
 
 type TotalCardProps = {
   total: BudgetTotal;
-  month: string;
+  /** 현재 주기 "9월 1일~30일" */
+  period: string;
 };
 
 // Pencil TotalCard (aAfOZ): bg-card · radius 24 · padding 20 · gap 12 · 진행 바 8pt.
-function TotalCard({ total, month }: TotalCardProps) {
+function TotalCard({ total, period }: TotalCardProps) {
   const health = budgetHealth(total);
-  const used = Math.min(100, usedPercent(total.remainingRate));
+  const used = usedBarPercent(total.remainingRate);
 
   return (
     <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
-      <Text className="text-label text-muted-foreground">{formatMonthKeyLabel(month)} 남은 예산</Text>
+      <Text className="text-label tabular-nums text-muted-foreground">{period} 남은 예산</Text>
       <Text className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")} maxFontSizeMultiplier={1.3}>
         {formatKRW(total.remaining)}
       </Text>
@@ -160,10 +162,10 @@ const ENVELOPE_BAR_CLASS: Record<EnvelopeHealth, string> = {
 };
 
 // Pencil EnvelopeList (MhHC7 / uPyCM) 의 행: 28pt accent 타일 + 아이콘 16 · 이름 14/500 · 금액 16/600 · 사용률 바 6pt.
-// 승인 전에는 잔액이 없어 제안 금액을 muted 로 적고 바는 빈 트랙만 남긴다.
+// 확정액 0 인 봉투는 잔여율이 없어 빈 트랙이고, 쓴 돈이 있으면 over 색으로 초과 금액을 적는다(사용자 결정 2026-09-12).
 function EnvelopeRow({ envelope }: { envelope: BudgetEnvelope }) {
   const health = envelopeHealth(envelope);
-  const used = envelope.remainingRate === null ? 0 : Math.min(100, usedPercent(envelope.remainingRate));
+  const used = usedBarPercent(envelope.remainingRate);
   const amountText = envelopeAmountText(envelope, health);
 
   return (
@@ -192,7 +194,7 @@ function EnvelopeRow({ envelope }: { envelope: BudgetEnvelope }) {
 }
 
 function envelopeAmountText(envelope: BudgetEnvelope, health: EnvelopeHealth): string {
-  if (health === "unset" || envelope.remaining === null) return `제안 ${formatKRW(envelope.proposed)}`;
+  if (health === "unset" || envelope.remaining === null) return envelope.proposed === null ? "-" : `제안 ${formatKRW(envelope.proposed)}`;
   if (health === "over") return `${formatKRW(envelope.remaining, { sign: "never" })} 초과`;
   return `${formatKRW(envelope.remaining)} 남음`;
 }

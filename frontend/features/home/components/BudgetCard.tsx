@@ -2,7 +2,7 @@ import { View } from "react-native";
 
 import { Text } from "@/components/ui/text";
 import { EnvelopeChart } from "@/features/budget/components/EnvelopeChart";
-import { budgetHealth, type BudgetEnvelope, type BudgetHealth, type BudgetTotal } from "@/features/budget/model";
+import { budgetHealth, usedBarPercent, type BudgetEnvelope, type BudgetHealth, type BudgetTotal } from "@/features/budget/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -17,16 +17,21 @@ const HEALTH_STYLE: Record<BudgetHealth, { label: string; textClassName: string;
 type BudgetCardProps = {
   total: BudgetTotal;
   envelopes: BudgetEnvelope[];
+  /** 현재 주기 "9월 1일~30일". 주기가 달력 월과 다를 수 있어 "이번 달" 대신 기간을 쓴다 */
+  period: string;
 };
 
-function BudgetCard({ total, envelopes }: BudgetCardProps) {
+function BudgetCard({ total, envelopes, period }: BudgetCardProps) {
   const health = HEALTH_STYLE[budgetHealth(total)];
-  const usedPercent = Math.min(100, Math.max(0, 100 - total.remainingRate));
+  const usedPercent = usedBarPercent(total.remainingRate);
 
   return (
     <View className="gap-4 rounded-xl bg-primary p-5">
       <View className="flex-row items-center justify-between">
-        <Text className="text-h3 text-primary-foreground">이번 달 남은 예산</Text>
+        <View className="gap-0.5">
+          <Text className="text-h3 text-primary-foreground">남은 예산</Text>
+          <Text className="text-caption tabular-nums text-primary-foreground">{period}</Text>
+        </View>
         <Text className={cn("text-caption", health.textClassName)}>{health.label}</Text>
       </View>
       <View className="gap-1">
