@@ -4,7 +4,7 @@ import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.room.dto.response.RoomResponse;
 import com.finset.key_fin.room.entity.FurniturePlacementDirection;
 import com.finset.key_fin.room.entity.FurniturePlacementStatus;
-import com.finset.key_fin.room.entity.ItemSlotType;
+import com.finset.key_fin.item.entity.ItemSlotType;
 import com.finset.key_fin.room.service.RoomService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -1,5 +1,7 @@
 package com.finset.key_fin.room.entity;
 
+import com.finset.key_fin.item.entity.Item;
+import com.finset.key_fin.item.entity.ItemCategory;
 import com.finset.key_fin.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
