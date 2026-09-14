@@ -125,7 +125,7 @@ function TotalCard({ total, period }: TotalCardProps) {
 
   return (
     <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
-      <Text className="text-label tabular-nums text-muted-foreground">{period} 남은 예산</Text>
+      <Text className="text-label tabular-nums text-card-foreground">{period} 남은 예산</Text>
       <Text className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")} maxFontSizeMultiplier={1.3}>
         {formatKRW(total.remaining)}
       </Text>
@@ -139,8 +139,8 @@ function TotalCard({ total, period }: TotalCardProps) {
         <View className={cn("h-full rounded-full", TOTAL_BAR_CLASS[health])} style={{ width: `${used}%` }} />
       </View>
       <View className="flex-row justify-between">
-        <Text className="text-caption tabular-nums text-muted-foreground">총 {formatKRW(total.confirmed)}</Text>
-        <Text className="text-caption tabular-nums text-muted-foreground">사용 {formatKRW(total.spent)}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">총 {formatKRW(total.confirmed)}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">사용 {formatKRW(total.spent)}</Text>
       </View>
     </View>
   );
@@ -158,7 +158,7 @@ function SectionTitle({ heading, count }: SectionTitleProps) {
       <Text className="text-h3 text-foreground" accessibilityRole="header">
         {heading}
       </Text>
-      <Text className="text-caption tabular-nums text-muted-foreground">{count}개</Text>
+      <Text className="text-caption tabular-nums text-card-foreground">{count}개</Text>
     </View>
   );
 }
@@ -196,7 +196,7 @@ function EnvelopeRow({ envelope, onPress }: { envelope: BudgetEnvelope; onPress:
         <Text
           className={cn(
             "text-amount-sm tabular-nums",
-            health === "over" ? "text-destructive" : health === "unset" ? "text-muted-foreground" : "text-foreground"
+            health === "over" ? "text-destructive" : health === "unset" ? "text-card-foreground" : "text-foreground"
           )}
         >
           {amountText}

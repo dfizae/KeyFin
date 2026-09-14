@@ -73,7 +73,7 @@ function PendingCleanupScreen() {
           onRefresh={() => pending.refetch()}
           ListHeaderComponent={
             items.length === 0 ? null : (
-              <Text className="pb-1 text-body-sm text-muted-foreground" accessibilityLiveRegion="polite">
+              <Text className="pb-1 text-body-sm text-card-foreground" accessibilityLiveRegion="polite">
                 확인이 필요한 결제 {items.length}건
               </Text>
             )
@@ -124,7 +124,7 @@ function PendingCard({ transaction, isPending, errorMessage, onConfirm, onOther 
           <Text className="text-h3 text-foreground" numberOfLines={1}>
             {transaction.merchantName}
           </Text>
-          <Text className="text-caption text-muted-foreground">{transactionDateTimeLabel(transaction)}</Text>
+          <Text className="text-caption text-card-foreground">{transactionDateTimeLabel(transaction)}</Text>
         </View>
         <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
           {formatKRW(subtractKRW("0", transaction.amount))}

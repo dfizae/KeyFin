@@ -44,7 +44,7 @@ function CalendarPopover({ width, calendar, monthLabel, onClose, onOpenCalendar 
       >
         <View className="flex-row items-center justify-between">
           <Text className="text-label text-foreground">{monthLabel} 출금 일정</Text>
-          <Text className={cn("text-caption tabular-nums", shortageCount > 0 ? "text-destructive" : "text-muted-foreground")}>{summary}</Text>
+          <Text className={cn("text-caption tabular-nums", shortageCount > 0 ? "text-destructive" : "text-card-foreground")}>{summary}</Text>
         </View>
         {entries.length > 0 ? (
           <View className="gap-1.5">
@@ -53,7 +53,7 @@ function CalendarPopover({ width, calendar, monthLabel, onClose, onOpenCalendar 
             ))}
           </View>
         ) : (
-          <Text className="text-body-sm text-muted-foreground">{CALENDAR_EMPTY_MESSAGE}</Text>
+          <Text className="text-body-sm text-card-foreground">{CALENDAR_EMPTY_MESSAGE}</Text>
         )}
         <Pressable
           accessibilityRole="button"
@@ -82,7 +82,7 @@ function EntryRow({ entry }: { entry: CalendarEntry }) {
         <Text className="text-caption text-foreground" numberOfLines={1}>
           {name}
         </Text>
-        <Text className="text-caption tabular-nums text-muted-foreground">{amount}</Text>
+        <Text className="text-caption tabular-nums text-card-foreground">{amount}</Text>
       </View>
       <View className={cn("rounded-sm px-1.5 py-0.5", entry.prepared ? "bg-positive-muted" : "bg-destructive-muted")} accessible={false}>
         <Text className={cn("text-caption tabular-nums", entry.prepared ? "text-positive" : "text-destructive")}>{badge}</Text>

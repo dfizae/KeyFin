@@ -52,7 +52,7 @@ function IncomeAccountScreen() {
           <Text className="text-h2 text-foreground" accessibilityRole="header">
             수입이 들어오는 계좌를 골라 주세요
           </Text>
-          <Text className="text-body-sm text-muted-foreground">급여·용돈처럼 돈이 들어오는 계좌 1개를 지정해요.</Text>
+          <Text className="text-body-sm text-card-foreground">급여·용돈처럼 돈이 들어오는 계좌 1개를 지정해요.</Text>
         </View>
 
         {accounts.isPending ? (
@@ -128,7 +128,7 @@ function IncomeAccountRow({ option, selected, disabled, onSelect }: IncomeAccoun
       <Icon
         as={selected ? CircleDot : Circle}
         size={20}
-        className={selected ? "text-primary" : "text-muted-foreground"}
+        className={selected ? "text-primary" : "text-card-foreground"}
       />
 
       <BankLogoTile name={option.bankName} />
@@ -137,7 +137,7 @@ function IncomeAccountRow({ option, selected, disabled, onSelect }: IncomeAccoun
         <Text className="text-label text-foreground" numberOfLines={1}>
           {option.bankName}
         </Text>
-        <Text className="text-caption tabular-nums text-muted-foreground" numberOfLines={1}>
+        <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
           {option.maskedNo}
         </Text>
       </View>

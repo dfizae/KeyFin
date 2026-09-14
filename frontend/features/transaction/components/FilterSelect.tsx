@@ -50,7 +50,7 @@ function FilterSelect({ title, options, selectedKey, disabled = false, onSelect 
         <Text className="shrink text-label text-foreground" numberOfLines={1}>
           {label}
         </Text>
-        <Icon as={ChevronDown} size={16} className="text-muted-foreground" />
+        <Icon as={ChevronDown} size={16} className="text-card-foreground" />
       </Pressable>
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
@@ -68,14 +68,14 @@ function FilterSelect({ title, options, selectedKey, disabled = false, onSelect 
                 hitSlop={8}
                 className="h-touch w-touch items-center justify-center"
               >
-                <Icon as={X} size={20} className="text-muted-foreground" />
+                <Icon as={X} size={20} className="text-card-foreground" />
               </Pressable>
             </View>
             <ScrollView className="max-h-96" contentContainerClassName="px-5 pt-2">
               {options.map((option, index) => (
                 <React.Fragment key={option.key}>
                   {option.section !== undefined && option.section !== options[index - 1]?.section ? (
-                    <Text className="pb-1 pt-4 text-caption text-muted-foreground" accessibilityRole="header">
+                    <Text className="pb-1 pt-4 text-caption text-card-foreground" accessibilityRole="header">
                       {option.section}
                     </Text>
                   ) : null}

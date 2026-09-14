@@ -38,7 +38,7 @@ function TransactionRow({ transaction, onPress }: TransactionRowProps) {
           {transaction.merchantName}
         </Text>
         <View className="flex-row items-center gap-1.5">
-          <Text className="shrink text-caption text-muted-foreground" numberOfLines={1}>
+          <Text className="shrink text-caption text-card-foreground" numberOfLines={1}>
             {meta}
           </Text>
           {badge === null ? null : (
@@ -52,7 +52,7 @@ function TransactionRow({ transaction, onPress }: TransactionRowProps) {
         className={cn(
           "text-amount-sm tabular-nums",
           incoming ? "text-positive" : "text-foreground",
-          canceled && "text-muted-foreground line-through"
+          canceled && "text-card-foreground line-through"
         )}
         maxFontSizeMultiplier={1.3}
       >

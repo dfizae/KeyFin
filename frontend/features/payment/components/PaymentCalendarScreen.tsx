@@ -125,7 +125,7 @@ function CalendarSummary({ count, shortageCount }: CalendarSummaryProps) {
 
   return (
     <View className="flex-row items-center justify-between pb-1" accessibilityLiveRegion="polite">
-      <Text className="text-body-sm text-muted-foreground">출금 예정 {count}건</Text>
+      <Text className="text-body-sm text-card-foreground">출금 예정 {count}건</Text>
       {shortageCount > 0 ? (
         <Text className="text-body-sm tabular-nums text-destructive">준비 부족 {shortageCount}건</Text>
       ) : (
@@ -143,7 +143,7 @@ type DayGroupProps = {
 function DayGroup({ group, onSelect }: DayGroupProps) {
   return (
     <View className="gap-2">
-      <Text className="text-label text-muted-foreground">{formatMonthDay(parseKSTDateKey(group.date))}</Text>
+      <Text className="text-label text-card-foreground">{formatMonthDay(parseKSTDateKey(group.date))}</Text>
       <View className="gap-2">
         {group.entries.map((entry) => (
           <EntryCard key={entry.key} entry={entry} onPress={() => onSelect(entry)} />
@@ -186,7 +186,7 @@ function EntryCard({ entry, onPress }: EntryCardProps) {
       <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
         {formatKRW(entry.amount)}
       </Text>
-      {editable ? <Icon as={ChevronRight} size={18} className="text-muted-foreground" /> : null}
+      {editable ? <Icon as={ChevronRight} size={18} className="text-card-foreground" /> : null}
     </Pressable>
   );
 }

@@ -122,7 +122,7 @@ function MonthStepper({ month, canGoNext, onChange }: MonthStepperProps) {
         hitSlop={12}
         onPress={() => onChange(shiftMonthKey(month, 1))}
       >
-        <Icon as={ChevronRight} size={20} className={canGoNext ? "text-foreground" : "text-muted-foreground/40"} />
+        <Icon as={ChevronRight} size={20} className={canGoNext ? "text-foreground" : "text-card-foreground/40"} />
       </Pressable>
     </View>
   );

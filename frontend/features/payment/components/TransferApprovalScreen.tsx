@@ -153,7 +153,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle className="text-h3 text-foreground">{formatKRW(transfer.requiredAmount)}을 옮길까요?</DialogTitle>
-                <DialogDescription className="text-body-sm text-muted-foreground">
+                <DialogDescription className="text-body-sm text-card-foreground">
                   {accountLabel(accounts.data, transfer.fromAccountId)} → {accountLabel(accounts.data, transfer.toAccountId)}
                   {"\n"}
                   {formatMonthDay(parseKSTDateKey(transfer.scheduledDate))} {transfer.purposeName} 출금에 쓸 돈이에요.
@@ -191,7 +191,7 @@ function TransferSummary({ transfer, accounts }: TransferSummaryProps) {
   return (
     <View className="gap-4 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
       <View className="gap-1">
-        <Text className="text-caption text-muted-foreground">
+        <Text className="text-caption text-card-foreground">
           {formatMonthDay(parseKSTDateKey(transfer.scheduledDate))} · {transfer.purposeName}
         </Text>
         <Text className="text-h2 text-foreground">준비할 금액</Text>
@@ -201,7 +201,7 @@ function TransferSummary({ transfer, accounts }: TransferSummaryProps) {
       </Text>
       <View className="gap-2">
         <AccountLine label="출금 계좌" value={accountLabel(accounts, transfer.fromAccountId)} />
-        <Icon as={ArrowDown} size={16} className="text-muted-foreground" />
+        <Icon as={ArrowDown} size={16} className="text-card-foreground" />
         <AccountLine label="결제 계좌" value={accountLabel(accounts, transfer.toAccountId)} />
       </View>
     </View>
@@ -213,7 +213,7 @@ type AccountLineProps = { label: string; value: string };
 function AccountLine({ label, value }: AccountLineProps) {
   return (
     <View className="flex-row items-center justify-between gap-3">
-      <Text className="text-caption text-muted-foreground">{label}</Text>
+      <Text className="text-caption text-card-foreground">{label}</Text>
       <Text className="shrink text-label tabular-nums text-foreground" numberOfLines={1}>
         {value}
       </Text>
@@ -228,7 +228,7 @@ function LimitNote({ once, daily }: LimitNoteProps) {
   if (once === undefined || daily === undefined) return null;
 
   return (
-    <Text className="text-caption tabular-nums text-muted-foreground">
+    <Text className="text-caption tabular-nums text-card-foreground">
       1회 한도 {formatKRW(once)} · 1일 한도 {formatKRW(daily)} 안에서 실행돼요. 넘으면 서버가 막아요.
     </Text>
   );
@@ -247,26 +247,26 @@ function ResultCard({ transfer }: ResultCardProps) {
         <Icon
           as={failed ? CircleAlert : CircleCheck}
           size={20}
-          className={failed ? "text-destructive" : executed ? "text-positive" : "text-muted-foreground"}
+          className={failed ? "text-destructive" : executed ? "text-positive" : "text-card-foreground"}
         />
         <Text className="text-h3 text-foreground">{transferStatusLabel(transfer.status)}</Text>
       </View>
       {executed && transfer.executedAt !== null ? (
-        <Text className="text-body-sm tabular-nums text-muted-foreground">
+        <Text className="text-body-sm tabular-nums text-card-foreground">
           {formatDateTime(parseKSTLocalDateTime(transfer.executedAt))}에 옮겼어요.
         </Text>
       ) : null}
       {failed ? (
         <>
           <Text className="text-body-sm text-destructive">{transfer.failReason ?? "실패 사유를 받지 못했어요."}</Text>
-          <Text className="text-caption text-muted-foreground">다시 시도는 준비 중이에요. 계좌 잔액을 확인한 뒤 결제일 전에 직접 옮겨 주세요.</Text>
+          <Text className="text-caption text-card-foreground">다시 시도는 준비 중이에요. 계좌 잔액을 확인한 뒤 결제일 전에 직접 옮겨 주세요.</Text>
         </>
       ) : null}
       {transfer.status === "APPROVED" ? (
-        <Text className="text-body-sm text-muted-foreground">승인을 받아 실행하는 중이에요. 결과가 나오면 알림으로 알려드려요.</Text>
+        <Text className="text-body-sm text-card-foreground">승인을 받아 실행하는 중이에요. 결과가 나오면 알림으로 알려드려요.</Text>
       ) : null}
       {transfer.status === "CANCELED" || transfer.status === "UNKNOWN" ? (
-        <Text className="text-body-sm text-muted-foreground">이 제안은 더 이상 실행되지 않아요.</Text>
+        <Text className="text-body-sm text-card-foreground">이 제안은 더 이상 실행되지 않아요.</Text>
       ) : null}
     </View>
   );

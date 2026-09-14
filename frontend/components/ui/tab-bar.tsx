@@ -54,8 +54,8 @@ function TabBar({ state, descriptors, navigation }: TabBarProps) {
               focused ? "bg-accent" : "active:opacity-70"
             )}
           >
-            <Icon as={icon} size={20} className={focused ? "text-primary" : "text-muted-foreground"} />
-            <Text className={cn("text-caption", focused ? "text-primary" : "text-muted-foreground")}>{label}</Text>
+            <Icon as={icon} size={20} className={focused ? "text-primary" : "text-card-foreground"} />
+            <Text className={cn("text-caption", focused ? "text-primary" : "text-card-foreground")}>{label}</Text>
           </Pressable>
         );
       })}

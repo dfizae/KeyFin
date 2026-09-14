@@ -54,7 +54,7 @@ function AssetsScreen() {
       </View>
 
       <View className="gap-1 px-6 pb-4">
-        <Text className="text-caption text-muted-foreground">내 총 자산</Text>
+        <Text className="text-caption text-card-foreground">내 총 자산</Text>
         {accounts.isPending ? (
           <Skeleton className="h-11 w-48 rounded-md" />
         ) : (
@@ -62,7 +62,7 @@ function AssetsScreen() {
             {accounts.data === undefined ? "—" : formatKRW(totalBalance(accounts.data))}
           </Text>
         )}
-        {asOf === null ? null : <Text className="text-caption tabular-nums text-muted-foreground">{asOf}</Text>}
+        {asOf === null ? null : <Text className="text-caption tabular-nums text-card-foreground">{asOf}</Text>}
       </View>
 
       <View className="flex-row gap-2 px-6 pb-5" accessibilityRole="tablist">
@@ -74,7 +74,7 @@ function AssetsScreen() {
             onPress={() => setTab(key)}
             className={cn("h-10 flex-1 items-center justify-center rounded-md", tab === key ? "bg-primary" : "bg-accent")}
           >
-            <Text className={cn("text-label", tab === key ? "text-primary-foreground" : "text-muted-foreground")}>{label}</Text>
+            <Text className={cn("text-label", tab === key ? "text-primary-foreground" : "text-card-foreground")}>{label}</Text>
           </Pressable>
         ))}
       </View>
@@ -145,7 +145,7 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
                 </Badge>
               ) : null}
             </View>
-            <Text className="text-caption tabular-nums text-muted-foreground" numberOfLines={1}>
+            <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
               {account.alias === null ? account.maskedNo : `${account.bankName} · ${account.maskedNo}`}
             </Text>
           </View>
@@ -187,7 +187,7 @@ function CardList({ cards }: { cards: LinkedCard[] }) {
             <Text className="text-h3 text-foreground" numberOfLines={1}>
               {card.cardName}
             </Text>
-            <Text className="text-caption tabular-nums text-muted-foreground" numberOfLines={1}>
+            <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
               {card.issuerName} · {card.maskedNo}
             </Text>
           </View>
@@ -219,7 +219,7 @@ function UpcomingPayments() {
       ) : calendar.isError ? (
         <InlineRetry message="정기결제 일정을 불러오지 못했어요." retrying={calendar.isFetching} onRetry={() => calendar.refetch()} />
       ) : entries.length === 0 ? (
-        <Text className="text-body-sm text-muted-foreground">이번 달 남은 정기결제가 없어요.</Text>
+        <Text className="text-body-sm text-card-foreground">이번 달 남은 정기결제가 없어요.</Text>
       ) : (
         <View className="gap-2">
           {entries.map((entry) => (
@@ -245,7 +245,7 @@ function PaymentRow({ entry }: { entry: CalendarEntry }) {
           <Text className="text-h3 text-foreground" numberOfLines={1}>
             {entry.name}
           </Text>
-          <Text className="text-caption text-muted-foreground">{date}</Text>
+          <Text className="text-caption text-card-foreground">{date}</Text>
         </View>
       </View>
       <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
@@ -305,9 +305,9 @@ type InlineRetryProps = {
 function InlineRetry({ message, retrying, onRetry }: InlineRetryProps) {
   return (
     <View className="flex-row items-center justify-between gap-3 rounded-lg bg-muted px-4 py-3" accessibilityLiveRegion="polite">
-      <Text className="flex-1 text-body-sm text-muted-foreground">{message}</Text>
+      <Text className="flex-1 text-body-sm text-card-foreground">{message}</Text>
       <Pressable accessibilityRole="button" accessibilityState={{ disabled: retrying }} disabled={retrying} hitSlop={10} onPress={onRetry}>
-        <Text className={cn("text-label", retrying ? "text-muted-foreground" : "text-primary")}>다시 시도</Text>
+        <Text className={cn("text-label", retrying ? "text-card-foreground" : "text-primary")}>다시 시도</Text>
       </Pressable>
     </View>
   );

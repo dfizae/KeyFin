@@ -102,16 +102,16 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
               thumbColor={colors.background}
             />
           </View>
-          <Text className="text-body-sm text-muted-foreground">
+          <Text className="text-body-sm text-card-foreground">
             동의하면 결제일 전에 부족한 금액을 미리 옮길지 물어봐요. 옮기는 건 매번 직접 승인해야 해요.
           </Text>
           {form.consent ? null : (
-            <Text className="text-caption text-muted-foreground">동의를 끄면 준비 이체 제안과 실행이 모두 멈춰요.</Text>
+            <Text className="text-caption text-card-foreground">동의를 끄면 준비 이체 제안과 실행이 모두 멈춰요.</Text>
           )}
         </View>
 
         <View className="gap-4">
-          <Text className="text-label text-muted-foreground">이체 한도</Text>
+          <Text className="text-label text-card-foreground">이체 한도</Text>
           <LimitField
             label="1회 한도"
             value={form.limitOnce}
@@ -124,7 +124,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
             editable={form.consent && !update.isPending}
             onChange={(limitDaily) => patch({ limitDaily })}
           />
-          <Text className="text-caption text-muted-foreground">
+          <Text className="text-caption text-card-foreground">
             한도를 넘는 이체는 승인해도 서버가 막아요. 한도는 준비 이체에만 쓰이고 직접 하는 송금과는 관계없어요.
           </Text>
         </View>
@@ -137,7 +137,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
             <Text className="shrink text-caption text-destructive">{transferSettingsErrorMessage(update.error)}</Text>
           </View>
         ) : null}
-        {invalidReason === null ? null : <Text className="text-caption text-muted-foreground">{invalidReason}</Text>}
+        {invalidReason === null ? null : <Text className="text-caption text-card-foreground">{invalidReason}</Text>}
         <Button
           size="lg"
           className="h-button-lg rounded-lg"
