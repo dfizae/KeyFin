@@ -18,7 +18,7 @@ flowchart TB
         FDT["EngineAdapter → 팀 FDT<br/>Twin · Engine · Coach<br/>금융 수치와 조건부 예측 계산"]
         ModelClient["LLM 호출 및 응답 검증<br/>작업별 근거 · 실제 토큰 검사<br/>llm.py · token_budget.py"]
         Store["Repository → Store<br/>요청 예약 · 재시도 · 원자적 저장"]
-        Output["결과 조립<br/>코칭 · 대화 · 차트 JSON<br/>고정 렌더러로 차트 HTML 조회"]
+        Output["결과 조립<br/>numeric_rendering.py 수치·원본·기간 검증<br/>코칭 · 대화 · 차트 JSON 및 HTML"]
         API --> Core
         Core <--> FDT
         Core <--> ModelClient
@@ -40,6 +40,8 @@ flowchart TB
 ```
 
 `CoachingCore`가 FDT 어댑터·모델 클라이언트·저장소를 연결하고, 요청 종류에 따라 `Events`, `Dialogue`, `Charts`가 호출 순서를 정합니다. FDT는 API 프로세스 안에서 스레드 실행 제한을 두고 호출하는 Python 코드입니다. 별도 FDT HTTP 서버를 호출하는 구성이 아닙니다.
+
+대화의 `numeric_result`는 `numeric_rendering.py`에서 원본 Twin과 요청 기간에 일치하는지 검사한 뒤 본문에 들어갑니다. 금액·확률을 LLM이 재작성하지 않습니다. R12에서 수정한 수치 누락과 실제 응답 비교는 [답변·예측 개선 결과](answer-forecast-improvement.md)에 있습니다.
 
 알림은 SQLite의 outbox에 저장한 뒤 조회·ack API로 전달 여부를 관리합니다. 실제 푸시 발송, 금융기관 데이터 자동 동기화, 자동 재시작 운영은 별도 연결이 필요합니다. 엔진이나 LLM이 실제 이체·결제를 실행하지 않습니다.
 

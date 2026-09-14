@@ -4,6 +4,8 @@
 
 [AI·FDT 구조도](docs/architecture.md)에서 전체 구성, FDT 내부 계산, 차트 생성 순서를 Mermaid로 볼 수 있습니다.
 
+[답변 개선과 실제 은행 원장 실험](docs/answer-forecast-improvement.md)에는 GPU 수치 전달 0/14→14/14, 공개 원장의 7일 출금 오차 17.59% 감소, 30일 개선 없음의 실행 결과와 한계를 정리했습니다.
+
 [실제 고객 검증 계획](docs/real-customer-validation.md)에서 현재 실험 수치의 의미, 예측 개선 순서와 Jira AI 코칭 잔여 업무를 확인할 수 있습니다.
 
 ## 빠르게 실행하기
@@ -45,7 +47,7 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 | `engine.py`, `periods.py` | FDT 호출과 기준일·종료일 계산 |
 | `coaching.py`, `dialogue.py`, `payments.py` | 코칭 발생·대화·결제 흐름 |
 | `llm.py`, `evidence_projection.py`, `token_budget.py` | 모델 호출·근거 선택·실제 토큰 한도 검사 |
-| `admission.py`, `rendering.py` | 모델 결과 검사와 설명 대체 |
+| `admission.py`, `rendering.py`, `numeric_rendering.py` | 모델 결과 검사, 원본 수치·기간 검증 후 본문 조립, 설명 대체 |
 | `chart_routes.py`, `charts.py`, `chart_contract.py`, `chart_projection.py`, `chart_rendering.py` | 고정 차트 JSON 변환, 생성·저장·HTML 조회 |
 | `vendor/fdt/`, `ENGINE_MANIFEST.json` | 고정 엔진 소스와 무결성 목록 |
 | `vendor/keyfin_chart/`, `CHART_MANIFEST.json` | 원래 차트 실행 자산 6개와 무결성 목록 |
