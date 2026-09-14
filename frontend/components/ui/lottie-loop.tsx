@@ -1,6 +1,6 @@
-import type { AnimationObject } from "lottie-react-native";
-import type * as React from "react";
+import LottieView, { type AnimationObject } from "lottie-react-native";
 import { View } from "react-native";
+import { useReducedMotion } from "react-native-reanimated";
 
 type LottieLoopProps = {
   /** `require("@/assets/lottie/<name>.json")` — Metro 가 JSON 을 객체로 준다 */
@@ -8,14 +8,24 @@ type LottieLoopProps = {
   width: number;
   height: number;
   accessibilityLabel?: string;
-  /** 애니메이션을 못 그리는 환경(웹)에서 대신 보여줄 것. 없으면 같은 크기의 빈 자리만 잡는다. */
-  fallback?: React.ReactNode;
 };
 
-// 웹 구현. lottie-react-native 의 웹 렌더러는 @lottiefiles/dotlottie-react 를 따로 요구하므로
-// 웹(개발 중 확인용)에서는 애니메이션 대신 fallback 을 그린다. 기기에서는 lottie-loop.native.tsx 가 쓰인다.
-function LottieLoop({ width, height, fallback }: LottieLoopProps) {
-  return <View style={{ width, height }}>{fallback}</View>;
+// Lottie 반복 재생. 기기는 lottie-react-native 네이티브 뷰, 웹은 같은 패키지의 웹 구현(@lottiefiles/dotlottie-react)이 그린다.
+// 동작 줄이기 설정이면 첫 프레임에 멈춰 둔다. LottieView 는 접근성 prop 을 받지 않아 감싸는 View 에 붙인다.
+function LottieLoop({ source, width, height, accessibilityLabel }: LottieLoopProps) {
+  const reducedMotion = useReducedMotion();
+
+  return (
+    <View accessible={accessibilityLabel !== undefined} accessibilityLabel={accessibilityLabel}>
+      <LottieView
+        source={source}
+        autoPlay={!reducedMotion}
+        loop
+        progress={reducedMotion ? 0 : undefined}
+        style={{ width, height }}
+      />
+    </View>
+  );
 }
 
 export { LottieLoop };
