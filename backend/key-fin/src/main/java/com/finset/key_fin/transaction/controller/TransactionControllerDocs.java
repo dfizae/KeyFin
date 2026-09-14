@@ -44,13 +44,13 @@ public interface TransactionControllerDocs {
 	})
 	BaseResponse<TransactionListResponse> getTransactions(
 			@Parameter(hidden = true) Long userId,
-			@Parameter(description = "조회 월(yyyyMM). 생략 시 현재 월", example = "202609") String month,
-			@Parameter(description = "봉투 ID", example = "1") Integer envelopeId,
-			@Parameter(description = "세분류 ID", example = "102") Integer subcategoryId,
-			@Parameter(description = "계좌 ID", example = "3") Long accountId,
-			@Parameter(description = "카드 ID", example = "7") Long cardId,
-			@Parameter(description = "이전 응답의 nextCursor", example = "481") Long cursor,
-			@Parameter(description = "조회 개수(1~100, 기본 20)", example = "20") Integer size
+			@Parameter(description = "조회 월(yyyyMM). 선택값이며 생략 시 현재 월", example = "202609") String month,
+			@Parameter(description = "봉투 ID. 선택값이며 생략 시 전체 봉투 조회", example = "1") Integer envelopeId,
+			@Parameter(description = "세분류 ID. 선택값이며 생략 시 전체 세분류 조회", example = "102") Integer subcategoryId,
+			@Parameter(description = "계좌 ID. 선택값이며 생략 시 전체 계좌 조회", example = "3") Long accountId,
+			@Parameter(description = "카드 ID. 선택값이며 생략 시 전체 카드 조회", example = "7") Long cardId,
+			@Parameter(description = "이전 응답의 nextCursor. 선택값이며 첫 조회 시 생략", example = "481") Long cursor,
+			@Parameter(description = "조회 개수(1~100). 선택값이며 생략 시 20", example = "20") Integer size
 	);
 
 	@Operation(
