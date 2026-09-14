@@ -5,6 +5,7 @@ import anyio
 from coaching_service.coaching import CoachingCore, coaching_writes, evidence_for
 from coaching_service.errors import ServiceError
 from coaching_service.evidence import context_limited
+from coaching_service.forecast_validation_ingestion import ingestion_writes
 from coaching_service.llm_contract import Judgment
 from coaching_service.payments import Detection, Ledger, reconcile_cancellation, reduce_payment
 from coaching_service.repository import Mutation, document, write
@@ -25,9 +26,10 @@ class Events:
                 raise ServiceError("duplicate_envelope")
             twin = await anyio.to_thread.run_sync(self.core.engine.create, request, op.owner)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, twin)
+            ingress = await ingestion_writes(self.core.repository, op.owner, identity, op.digest)
             return Mutation(
                 result=document(identity),
-                writes=(write("twin", twin), write("ledger", Ledger(envelopes=request.envelopes))),
+                writes=(write("twin", twin), write("ledger", Ledger(envelopes=request.envelopes)), *ingress),
             )
 
         return await self.core.repository.mutate(op, action)
@@ -48,8 +50,9 @@ class Events:
             )
             detection = await self.detect(op.owner, before, after, request)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, after)
+            ingress = await ingestion_writes(self.core.repository, op.owner, identity, op.digest)
             result = EventResult(identity=identity, detection=detection.reason, payment=detection.facts)
-            changes = (write("twin", after), write("ledger", detection.ledger))
+            changes = (write("twin", after), write("ledger", detection.ledger), *ingress)
             if detection.reason not in {"p0_half_balance", "p1_ambiguous"}:
                 return Mutation(result=document(result), writes=changes)
             receipt = await self.core.payment_receipt(after, detection.facts)

@@ -17,7 +17,9 @@ class FinanceQuestion(Frozen):
 
 class ChatAnswer(Frozen):
     id: str
-    answer_type: Literal["finance_education", "spending_history", "data_request", "scope_response"]
+    answer_type: Literal[
+        "finance_education", "spending_history", "personal_context", "data_request", "scope_response"
+    ]
     status: Literal[
         "answered", "needs_source", "needs_data", "out_of_scope", "unavailable", "needs_clarification"
     ]

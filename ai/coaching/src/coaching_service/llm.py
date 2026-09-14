@@ -64,7 +64,9 @@ class InferenceText:
     text: str
 
 
-def finance_inference_wording(result: InferenceText | InferenceFailure, model: str) -> Wording:
+def finance_inference_wording(
+    evidence: EvidenceInput, result: InferenceText | InferenceFailure, model: str,
+) -> Wording:
     match result:
         case InferenceFailure(reason=reason):
             return selected_finance_wording(None, model, reason)
@@ -73,7 +75,7 @@ def finance_inference_wording(result: InferenceText | InferenceFailure, model: s
                 raw = structured_json(text)
             except (ValueError, RecursionError):
                 return selected_finance_wording(None, model)
-            return selected_finance_wording(raw, model)
+            return selected_finance_wording(raw, model, evidence=evidence)
         case unreachable:
             assert_never(unreachable)
 
@@ -157,7 +159,7 @@ class OpenAICompatibleCoachModel:
         result = await self._infer(evidence, "write")
         match evidence.purpose:
             case "finance":
-                return finance_inference_wording(result, self._config.model)
+                return finance_inference_wording(evidence, result, self._config.model)
             case "chart":
                 return chart_inference_wording(evidence, result, self._config.model)
             case "coaching":

@@ -1,119 +1,24 @@
-"""Versioned, source-backed concepts; model selection cannot invent financial facts.
-
-This is a bounded knowledge collection, not live search or unrestricted financial
-advice. Text is a short Korean paraphrase of the linked source. New subjects need
-their own source review; test questions never select an answer through string matching.
-"""
+"""Official-source retrieval and bounded model selection; financial values stay in FDT."""
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Final, Literal, Self
 
 from pydantic import Field, model_validator
 from pydantic_core import PydanticCustomError
 
+from coaching_service.knowledge_catalog import load_catalog
+from coaching_service.knowledge_retrieval import retrieve_facts
 from coaching_service.llm_contract import EvidenceInput, FinanceWording, FrozenContract
+from coaching_service.schemas import JsonDocument
 
 if TYPE_CHECKING:
     from coaching_service.llm_contract import ChatMessage
 
-VERSION: Final = "finance-concepts/2026-09-14-v1"
-
-
-@dataclass(frozen=True, slots=True)
-class KnowledgeFact:
-    id: str
-    title: str
-    text: str
-    source_title: str
-    source_url: str
-
-
-FACTS: Final = (
-    KnowledgeFact(
-        "compound_interest",
-        "복리",
-        "복리는 원금에서 생긴 이자를 원금에 더해, 다음 이자 계산 때 이자에도 이자가 붙는 방식입니다. "
-        "적용 금리뿐 아니라 이자를 원금에 합치는 주기와 맡겨 두는 기간에 따라 결과가 달라집니다.",
-        "Investor.gov 복리 설명",
-        "https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/small-savings-add-big-money",
-    ),
-    KnowledgeFact(
-        "deposits",
-        "정기예금과 정기적금",
-        "정기예금은 이미 가진 목돈을 일정 기간 맡기는 상품이고, 정기적금은 정해진 기간 동안 돈을 나누어 넣어 "
-        "목돈을 만드는 상품입니다. 적금은 납입 시점마다 돈을 맡겨 두는 기간이 다르므로, 표시 금리만 같다고 "
-        "최종 납입 원금 전체에 같은 기간의 이자가 붙는 것은 아닙니다.",
-        "한국은행 장기 생활설계",
-        "https://www.bok.or.kr/portal/bbs/B0000216/view.do?menuNo=20134&nttId=165640",
-    ),
-    KnowledgeFact(
-        "revolving",
-        "신용카드 리볼빙",
-        "리볼빙은 카드 대금 중 약정한 일부만 결제하고 남은 대금을 다음 결제일로 넘기는 "
-        "일부결제금액이월약정입니다. 넘긴 카드 부채에는 이자·수수료가 붙습니다. "
-        "당장 결제할 금액이 줄어도 갚아야 할 부채가 사라지는 것은 아닙니다.",
-        "금융위원회 리볼빙 안내",
-        "https://www.fsc.go.kr/no040101?cnId=1312",
-    ),
-    KnowledgeFact(
-        "dsr",
-        "총부채원리금상환비율 DSR",
-        "DSR은 연간 소득과 비교해 대출의 원금과 이자를 갚는 부담이 얼마나 되는지를 나타내는 비율입니다. "
-        "기본 개념은 연간 대출 원리금 상환액을 연간 소득으로 나눈 것입니다. 실제 심사에서는 포함 대출과 "
-        "산정 방식·적용 기준을 확인해야 하며, 이 정의만으로 개인의 대출 한도나 승인 여부를 정할 수 없습니다.",
-        "금융위원회 DSR 개념 설명",
-        "https://www.fsc.go.kr/po010101/73190",
-    ),
-    KnowledgeFact(
-        "interest_types",
-        "고정금리와 변동금리",
-        "고정금리는 약정한 고정 기간에 기준 지표 변화만으로 금리가 움직이지 않는 방식입니다. "
-        "변동금리는 계약에서 정한 기준금리나 지표가 바뀔 때 적용 금리도 달라지는 방식이어서 이자 부담이 "
-        "커지거나 작아질 수 있습니다. 실제 고정 기간과 변경 조건은 상품 계약에서 확인해야 합니다.",
-        "CFPB 고정·변동 금리의 개념",
-        "https://www.consumerfinance.gov/ask-cfpb/what-is-the-difference-between-a-fixed-apr-and-a-variable-apr-en-45/",
-    ),
-    KnowledgeFact(
-        "emergency_fund",
-        "비상금",
-        "비상금은 갑작스러운 수리비·의료비·소득 중단처럼 평소 예산에 없던 지출에 대비해 "
-        "따로 두는 현금성 여유 자금입니다. 필요한 규모는 소득의 안정성과 예상치 못한 지출에 따라 달라집니다. "
-        "급히 쓸 때 접근할 수 있는지도 고려해야 합니다.",
-        "CFPB 비상금 안내",
-        "https://www.consumerfinance.gov/an-essential-guide-to-building-an-emergency-fund/",
-    ),
-    KnowledgeFact(
-        "diversification",
-        "분산투자",
-        "분산투자는 돈을 여러 자산이나 투자 대상에 나누어 특정 대상에 집중된 위험을 줄이려는 방법입니다. "
-        "상품이 여러 개여도 실제 보유 종목이나 업종이 겹칠 수 있습니다. 분산 여부는 상품 이름의 개수보다 "
-        "안에 담긴 투자 대상과 위험을 함께 살펴야 합니다.",
-        "Investor.gov 자산 배분과 분산",
-        "https://www.investor.gov/introduction-investing/getting-started/asset-allocation",
-    ),
-    KnowledgeFact(
-        "etf",
-        "상장지수펀드 ETF",
-        "ETF는 투자자의 돈을 모아 주식·채권 등 자산에 투자하는 펀드로, "
-        "거래소에서 시장 가격으로 사고팔 수 있습니다. 무엇에 투자하는지는 상품마다 다르므로 "
-        "ETF라는 이름만으로 보유 자산이나 분산 정도를 판단할 수 없습니다.",
-        "Investor.gov ETF 설명",
-        "https://www.investor.gov/introduction-investing/investing-basics/glossary/exchange-traded-fund-etf",
-    ),
-    KnowledgeFact(
-        "credit_score",
-        "신용점수",
-        "신용점수는 신용거래 기록 등을 바탕으로 돈을 제때 갚을 가능성과 같은 "
-        "신용 행동을 평가하는 지표입니다. "
-        "사용하는 자료와 평가 모형에 따라 결과가 달라질 수 있습니다. "
-        "점수의 일반적인 뜻과 개인의 실제 점수·대출 조건은 구분해야 합니다.",
-        "CFPB 신용점수 개념",
-        "https://www.consumerfinance.gov/ask-cfpb/what-is-a-credit-score-en-315/",
-    ),
-)
+_CATALOG: Final = load_catalog()
+VERSION: Final = _CATALOG.version
+FACTS: Final = _CATALOG.facts
 _BY_ID: Final = {fact.id: fact for fact in FACTS}
 _STATUS_TEXT: Final = {
     "needs_source": (
@@ -157,30 +62,36 @@ class FinanceSelection(FrozenContract):
 
 
 def finance_evidence(question: str, history: tuple[ChatMessage, ...] = ()) -> EvidenceInput:
-    """Keep transaction documents and forecast periods out of the concept prompt."""
+    """Retrieve approved subjects needed for this turn without Twin data."""
     return EvidenceInput(
-        purpose="finance",
-        question=question,
-        history=history,
-        facts_json=json.dumps(
-            {
-                "version": VERSION,
-                "knowledge_facts": [
-                    {"id": fact.id, "title": fact.title, "text": fact.text} for fact in FACTS
-                ],
-            },
-            ensure_ascii=False,
-        ),
+        purpose="finance", question=question, history=history,
+        facts_json=json.dumps({
+            "version": VERSION, "catalog_sha256": _CATALOG.digest,
+            "scope": "general_concepts_only",
+            "knowledge_facts": [fact.model_dump(mode="json") for fact in retrieve_facts(question, history)],
+        }, ensure_ascii=False),
     )
 
 
-def selected_finance_wording(raw: str | None, model: str, failure: str | None = None) -> FinanceWording:
+def selected_finance_wording(
+    raw: str | None, model: str, failure: str | None = None, *, evidence: EvidenceInput | None = None,
+) -> FinanceWording:
     """Only a valid whitelist selection can contribute answer text or a citation."""
     selection: FinanceSelection | None = None
     if raw is not None:
         try:
             selection = FinanceSelection.model_validate_json(raw)
+            # A valid catalog ID must also belong to the evidence retrieved for this question.
+            if evidence is not None:
+                supplied = JsonDocument.model_validate_json(evidence.facts_json).root.get("knowledge_facts")
+                allowed: set[str] = {
+                    key for row in supplied if isinstance(row, dict) and isinstance(key := row.get("id"), str)
+                } if isinstance(supplied, list) else set()
+                if any(key not in allowed for key in selection.fact_ids):
+                    selection = None
+                    failure = "invalid_finance_selection"
         except ValueError:
+            selection = None
             failure = "invalid_finance_selection"
     if selection is None:
         return FinanceWording(
@@ -190,10 +101,7 @@ def selected_finance_wording(raw: str | None, model: str, failure: str | None = 
             fallback_reason=failure or "invalid_finance_selection",
             answer_status="unavailable",
         )
-    paragraphs = [
-        _BY_ID[key].text + "\n출처: [" + _BY_ID[key].source_title + "](" + _BY_ID[key].source_url + ")"
-        for key in selection.fact_ids
-    ]
+    paragraphs = [_BY_ID[key].cited_text for key in selection.fact_ids]
     return FinanceWording(
         text="\n\n".join(paragraphs) if paragraphs else _STATUS_TEXT[selection.status],
         source="llm",
@@ -209,9 +117,14 @@ def reference_document(keys: tuple[str, ...]) -> str:
         {
             "version": VERSION,
             "scope": "general_concepts_only",
-            "reviewed_on": "2026-09-14",
+            "catalog_sha256": _CATALOG.digest,
             "references": [
-                {"id": key, "title": _BY_ID[key].source_title, "url": _BY_ID[key].source_url} for key in keys
+                {
+                    "id": key, "title": _BY_ID[key].source_title, "url": _BY_ID[key].source_url,
+                    "reviewed_on": _BY_ID[key].reviewed_on.isoformat(),
+                    "review_due": _BY_ID[key].review_due.isoformat(),
+                    "jurisdiction": _BY_ID[key].jurisdiction,
+                } for key in keys
             ],
         },
         ensure_ascii=False,

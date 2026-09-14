@@ -9,8 +9,10 @@ from coaching_service.auth import Authenticate
 from coaching_service.chart_routes import register_charts
 from coaching_service.coaching import CoachingCore, LanguageModel
 from coaching_service.engine import ENGINE_COMMIT
+from coaching_service.forecast_validation_routes import register_forecast_validation
 from coaching_service.http_errors import register_errors
 from coaching_service.llm import OpenAICompatibleCoachModel, create_http_client
+from coaching_service.personal_routes import register_personal_context
 from coaching_service.provenance import verify_engine
 from coaching_service.repository import Repository
 from coaching_service.routes import register_coaching, register_records, register_twin
@@ -58,6 +60,8 @@ def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAP
     register_coaching(app, core, auth)
     register_records(app, core, auth)
     register_charts(app, core, auth)
+    register_forecast_validation(app, core, auth)
+    register_personal_context(app, core, auth)
     return app
 
 

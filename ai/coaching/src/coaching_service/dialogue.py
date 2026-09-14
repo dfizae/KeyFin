@@ -20,9 +20,11 @@ from coaching_service.errors import ServiceError
 from coaching_service.evidence import bounded_evidence, context_limited
 from coaching_service.finance_knowledge import finance_evidence
 from coaching_service.history import historical_context
+from coaching_service.knowledge_retrieval import is_followup
 from coaching_service.llm_contract import ChatMessage, EvidenceInput, Routing
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
+from coaching_service.personal_service import personal_answer
 from coaching_service.repository import Mutation, document, write
 from coaching_service.schemas import (
     Coaching,
@@ -37,13 +39,21 @@ from coaching_service.spending_history import spending_answer
 from coaching_service.store import Operation
 
 
-def chat_history(session: Session) -> tuple[ChatMessage, ...]:
+def chat_history(session: Session, *, include_subject: bool = False) -> tuple[ChatMessage, ...]:
     """Use recent context for intent; keep every original message intact in storage."""
+    messages = session.messages[-4:]
+    if include_subject:
+        # Preserve one explicit topic through repeated short follow-ups without resending the full session.
+        subject = next((
+            row for row in reversed(session.messages) if row.role == "user" and not is_followup(row.content)
+        ), None)
+        if subject is not None and subject not in messages:
+            messages = (subject, *messages[-2:])
     return tuple(
         ChatMessage(
             role=row.role, content=row.content[:800] + (" [이력 일부 생략]" if len(row.content) > 800 else "")
         )
-        for row in session.messages[-4:]
+        for row in messages
     )
 
 
@@ -102,12 +112,12 @@ class Dialogue:
         return await self.core.repository.mutate(op, action)
 
     async def standalone_answer(
-        self, request: TurnRequest, route: Routing, history: tuple[ChatMessage, ...]
+        self, owner: str, request: TurnRequest, route: Routing, history: tuple[ChatMessage, ...]
     ) -> ChatAnswer | None:
         """Answer concepts before loading financial data; explicit analysis takes precedence."""
         if request.analysis is not None:
             return None
-        if route.mode in {"finance", "history", "other"} and request.period is not None:
+        if route.mode in {"finance", "history", "personal", "other"} and request.period is not None:
             # The period object specifies a future interval, never a historical filter.
             raise ServiceError("period_not_supported_for_intent", 422)
         match route.mode:
@@ -117,6 +127,8 @@ class Dialogue:
                 )
             case "other":
                 return out_of_scope_answer()
+            case "personal":
+                return await personal_answer(self.core.repository, owner, request.question)
             case "history" | "review" | "risk" | "forecast":
                 return None
             case unreachable:
@@ -140,8 +152,15 @@ class Dialogue:
                     question=request.question, history=history, facts_json='{"operation":"dialogue"}'
                 )
             )
-            standalone = await self.standalone_answer(request, route, history)
+            standalone = await self.standalone_answer(
+                op.owner, request, route,
+                chat_history(session, include_subject=True) if route.mode == "finance" else history,
+            )
             if standalone is not None:
+                # Keep actual router adoption separate from answer generation and HTTP success.
+                standalone = standalone.model_copy(update={
+                    "evidence": JsonDocument({**standalone.evidence.root, "routing": document(route).root})
+                })
                 return save_turn(session, request.question, standalone)
             try:
                 twin = await self.core.twin(op.owner)

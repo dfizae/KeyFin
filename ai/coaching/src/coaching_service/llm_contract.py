@@ -19,7 +19,7 @@ from pydantic import (
 from pydantic_core import PydanticCustomError
 
 Source = Literal["llm", "template"]
-Mode = Literal["review", "risk", "forecast", "finance", "history", "other"]
+Mode = Literal["review", "risk", "forecast", "finance", "history", "personal", "other"]
 Operation = Literal["write", "judge", "route"]
 _FACTS: Final = TypeAdapter(dict[str, JsonValue])
 

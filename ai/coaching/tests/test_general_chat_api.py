@@ -181,7 +181,7 @@ async def test_failed_intent_without_twin_preserves_actual_failure(tmp_path: Pat
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("mode", ["history", "finance", "other"])
+@pytest.mark.parametrize("mode", ["history", "finance", "personal", "other"])
 async def test_future_period_is_not_silently_ignored_by_non_forecast_intents(
     tmp_path: Path, mode: Mode
 ) -> None:
@@ -201,4 +201,28 @@ async def test_future_period_is_not_silently_ignored_by_non_forecast_intents(
         assert response.status_code == 422
         assert response.json()["error"] == "period_not_supported_for_intent"
         assert (await client.get(path)).json() == session
+        assert model.writes == 0
+
+
+@pytest.mark.anyio
+async def test_personal_question_routes_without_inventing_missing_money(tmp_path: Path) -> None:
+    model = IntentModel("personal")
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=setup(tmp_path / "personal.sqlite3", model)),
+        base_url="http://test", headers={"Authorization": "Bearer " + TOKEN},
+    ) as client:
+        session = (await client.post("/v1/sessions", json={}, headers={"Idempotency-Key": "session"})).json()
+        path = "/v1/sessions/" + session["id"]
+        answer = await client.post(
+            path + "/messages", json={"question": "내 보험료 얼마야?"}, headers={"Idempotency-Key": "turn"},
+        )
+        assert answer.status_code == 200
+        payload = answer.json()
+        assert payload["answer_type"] == "personal_context"
+        assert payload["status"] == "needs_data"
+        assert payload["evidence"]["routing"]["mode"] == "personal"
+        assert payload["evidence"]["routing"]["source"] == "llm"
+        assert payload["evidence"]["total_krw"] is None
+        assert (await client.get("/v1/answers/" + payload["id"])).json() == payload
+        assert (await client.get(path)).json()["messages"][-1]["content"] == payload["text"]
         assert model.writes == 0
