@@ -2,6 +2,8 @@
 
 거래 이벤트를 저장하고 예산 초과 징후를 감지하며, 코칭 카드·대화·수치 분석 결과를 제공하는 Python API입니다. **금액과 예측 구간은 팀 FDT가 계산하고, LLM은 분류와 설명을 담당합니다.** 이 저장소에는 독립 API까지 구현되어 있으며 실제 서비스 백엔드와 알림 전송 시스템 연결은 별도입니다.
 
+[AI·FDT 구조도](docs/architecture.md)에서 전체 구성, FDT 내부 계산, 차트 생성 순서를 Mermaid로 볼 수 있습니다.
+
 ## 빠르게 실행하기
 
 Python 3.11~3.13과 `uv`가 필요합니다. 저장소 루트에서 PowerShell로 실행합니다.
@@ -50,7 +52,7 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 | `benchmarks/` | 코칭·소비 예측 성능 실험을 실행하는 코드와 고정 시나리오 입력 |
 | `artifacts/` | 실행해서 만들어진 로그·결과·예측값·빌드 패키지; Git 업로드 제외 |
 
-[코드 리뷰 안내](docs/code-review.md)에서 읽을 순서·호출 흐름·고정값의 이유·관련 테스트를 확인할 수 있습니다. [코드 재점검 결과](docs/code-audit.md), [구조와 기간 계약](docs/architecture.md), [검증 결과](docs/validation.md), [운영 설정](docs/operations.md)도 함께 참고합니다. `benchmarks/`는 API의 런타임 의존성이 아닙니다.
+[코드 리뷰 안내](docs/code-review.md)에서 읽을 순서·호출 흐름·고정값의 이유·관련 테스트를 확인할 수 있습니다. [코드 재점검 결과](docs/code-audit.md), [AI·FDT 구조와 기간 계약](docs/architecture.md), [검증 결과](docs/validation.md), [운영 설정](docs/operations.md)도 함께 참고합니다. `benchmarks/`는 API의 런타임 의존성이 아닙니다.
 
 ## 검증 실행
 

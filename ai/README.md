@@ -7,7 +7,7 @@
 | 알고 싶은 내용 | 문서 |
 | --- | --- |
 | 무엇을 실행하고 어떻게 호출하는가 | [서비스 시작하기](coaching/README.md) |
-| FDT와 LLM이 각각 무엇을 하는가 | [구조와 기간 계약](coaching/docs/architecture.md) |
+| AI·FDT·DB가 어떻게 연결되고 요청이 어떻게 처리되는가 | [Mermaid 구조도와 기간 계약](coaching/docs/architecture.md) |
 | 거래 입력으로 기존 KeyFin 차트를 생성하려면 | [차트 API와 프런트엔드 연결](coaching/docs/charts.md) |
 | 어떤 성능을 실제로 확인했는가 | [검증 결과와 한계](coaching/docs/validation.md) |
 | 추론 서버와 인증은 어떻게 설정하는가 | [운영 설정](coaching/docs/operations.md) |

@@ -1,20 +1,166 @@
-# 구조와 기간 계약
+# AI·FDT 구조와 기간 계약
 
-이 서비스의 금융 수치 계산자는 팀 FDT입니다. LLM이 미래 잔액을 직접 만들어 반환하지 않습니다.
+**현재 구조는 Python 코칭 API 안의 FDT 계산 엔진, 별도 GPU 추론 프로세스, SQLite 저장소로 구성됩니다.** FDT의 `Twin`은 거래·잔액·반복 규칙·행동 통계를 표현하는 객체이고, SQLite는 이 상태와 코칭 결과를 보관합니다. 금융 예측 수치는 FDT가 계산하며 LLM은 판단·라우팅·근거 선택·보조 설명을 맡습니다.
+
+2026-09-14의 구현을 기준으로 작성했습니다. 도식의 파일명은 아래 코드 연결 표와 대응합니다. 전체 구성을 먼저 보고, FDT 내부와 차트 요청 순서로 내려가면 됩니다.
+
+## 전체 구성
 
 ```mermaid
-flowchart TD
-    A[인증된 거래·잔액 이벤트] --> B[SQLite 원장과 버전 관리]
-    B --> C[팀 FDT: 예측·시나리오·목표·위험·행동 계산]
-    Q[사용자 질문] --> D[기간·금액·의도 추출]
-    D --> C
-    C --> E[작업별 근거 구성]
-    E --> F[실제 토큰 수·요청 해시 검사]
-    F --> G[LLM 설명 생성]
-    G --> H[숫자·구조·근거 검사]
-    H --> I[검증된 설명 또는 템플릿]
-    C --> I
+flowchart TB
+    Caller["호출 주체: 앱·백엔드·검증 클라이언트<br/>실서비스 연동은 별도"]
+
+    subgraph Service["독립 Python API 프로세스 · ai/coaching"]
+        API["FastAPI 진입점<br/>api.py · routes.py · chart_routes.py<br/>인증 · 요청 스키마 · 소유자 검사"]
+        Core["CoachingCore와 요청별 흐름<br/>Events · Dialogue · Charts"]
+        FDT["EngineAdapter → 팀 FDT<br/>Twin · Engine · Coach<br/>금융 수치와 조건부 예측 계산"]
+        ModelClient["LLM 호출 및 응답 검증<br/>작업별 근거 · 실제 토큰 검사<br/>llm.py · token_budget.py"]
+        Store["Repository → Store<br/>요청 예약 · 재시도 · 원자적 저장"]
+        Output["결과 조립<br/>코칭 · 대화 · 차트 JSON<br/>고정 렌더러로 차트 HTML 조회"]
+        API --> Core
+        Core <--> FDT
+        Core <--> ModelClient
+        Core <--> Store
+        Core --> Output
+    end
+
+    subgraph Inference["별도 GPU 추론 프로세스"]
+        Worker["gpu_worker.py<br/>POST /v1/tokenize<br/>POST /v1/chat/completions"]
+        Model["gpu_runtime.py → gpu_models.py<br/>등록한 로컬 체크포인트<br/>최근 검증 태그: latest27_nf4"]
+        Worker <--> Model
+    end
+
+    DB[("SQLite<br/>Twin · 봉투 원장 · 코칭 · 세션<br/>차트 · 알림 대기 · 재시도 응답")]
+    Caller -->|"거래·질문·차트 요청"| API
+    Store <--> DB
+    ModelClient <-->|"인증된 HTTP"| Worker
+    Output -->|"검증된 JSON 또는 HTML"| Caller
 ```
+
+`CoachingCore`가 FDT 어댑터·모델 클라이언트·저장소를 연결하고, 요청 종류에 따라 `Events`, `Dialogue`, `Charts`가 호출 순서를 정합니다. FDT는 API 프로세스 안에서 스레드 실행 제한을 두고 호출하는 Python 코드입니다. 별도 FDT HTTP 서버를 호출하는 구성이 아닙니다.
+
+알림은 SQLite의 outbox에 저장한 뒤 조회·ack API로 전달 여부를 관리합니다. 실제 푸시 발송, 금융기관 데이터 자동 동기화, 자동 재시작 운영은 별도 연결이 필요합니다. 엔진이나 LLM이 실제 이체·결제를 실행하지 않습니다.
+
+## FDT 안에서 예측과 코칭을 계산하는 방법
+
+현재 팀 엔진의 모델 버전은 **`calendar-block-bootstrap/2.0`**입니다. 거래에서 반복 일정과 나머지 일별 금융 흐름을 만들고, 요일이 맞는 과거 7일 블록을 재표본추출합니다. 충분한 블록이 없으면 요일별 일 표본으로 대체하고 경고를 남깁니다. 입력 이력 길이는 거래 자료로 결정하며 항상 과거 365일로 고정하지 않습니다.
+
+```mermaid
+flowchart TB
+    Input["거래 + 선택적 snapshot<br/>계좌 · 카드 청구 · 예산 · 예정 일정"]
+    Normalize["ingest.py · mapping.py<br/>정규화 · 중복/취소 처리 · 금융 흐름 분류"]
+    Twin["model.py: Twin<br/>기준일 · revision · 입력 digest<br/>반복 규칙 · 잔여 일별 벡터 · 품질 경고"]
+    Bundle["simulation.py: generate_bundle<br/>요일 정렬 7일 블록 + 반복 금액 표본<br/>seed와 paths로 재현 가능한 공통 경로"]
+    Input --> Normalize --> Twin --> Bundle
+
+    subgraph Numeric["Engine.run · 다섯 수치 분석 모드"]
+        Sim["simulation.py: simulate<br/>소비 · 고정비 · 계좌 현금 · 카드 미결제액"]
+        Forecast["forecast<br/>미래 경로와 P10/P50/P90"]
+        WhatIf["what_if<br/>같은 표본으로 기준·가정 비교"]
+        Goal["goal<br/>목표 및 현금 부족 조건 계산"]
+        Risk["risk<br/>현금 부족과 요청한 충격 분석"]
+        Optimize["optimize<br/>제약을 만족하는 유한 후보 탐색"]
+        NumericResult["원본 결과<br/>metrics · datasets · warnings · decision"]
+        Sim --> Forecast --> NumericResult
+        Sim --> WhatIf --> NumericResult
+        Sim --> Goal --> NumericResult
+        Sim --> Risk --> NumericResult
+        Sim --> Optimize --> NumericResult
+    end
+
+    subgraph Coaching["Coach.review · 사용자 코칭 계산"]
+        Project["coaching_projection.py: project<br/>같은 simulate 사용 + 현금·카드·목적자금 반영"]
+        Advice["요약 및 행동 제안 규칙<br/>changes가 있으면 같은 표본으로 재계산"]
+        CoachResult["코칭 근거<br/>projection · comparison · next_action"]
+        Project --> Advice --> CoachResult
+    end
+
+    Bundle --> Sim
+    Bundle --> Project
+    Twin -->|"snapshot 및 분류 정보"| Sim
+    Twin -->|"관측 예산 및 자료 충분성 검사"| Project
+```
+
+수치 분석과 코칭 검토는 같은 `Twin`·표본 생성·시뮬레이터를 사용하지만 반환 형식과 추가 계산이 다릅니다. `EngineAdapter.numeric()`은 `Engine.run()`, `EngineAdapter.review()`는 `Coach.review()`에 연결됩니다. 코칭의 자료 부족·기준일 불일치 처리는 일부 계산이나 행동 제안을 중단할 수 있습니다.
+
+차트는 `Engine`을 상속한 `ChartEngine`으로 `forecast`를 한 번 실행합니다. 전체 소비 P50을 계산한 **동일한 Simulation**에서 날짜별·7개 봉투별 평균을 얻습니다. 누적 P50을 나누어 미래 일별 막대를 만드는 방식이 아니며, 일별 평균의 합과 누적 P50을 억지로 일치시키지 않습니다.
+
+잔액·카드 정산 정보가 부족하면 절대 현금 예측이 `null` 또는 자료 부족으로 표시됩니다. 모델 확률과 분위수는 실세계 정확도가 보장된 값이 아닙니다. `optimize`의 최적성 범위는 요청한 유한 격자 후보이며 실제 금융 행동을 실행하지 않습니다.
+
+## 요청 종류에 따른 실행 경로
+
+| 요청 | 호출 순서 | 저장 또는 응답 |
+| --- | --- | --- |
+| 초기 입력·거래 이벤트 | `Events` → FDT 정규화/갱신 → `Ledger` 결제·취소 처리 | Twin·봉투 원장·revision을 원자적으로 반영 |
+| 결제 후 코칭 | 결제 규칙 감지 → `Coach.review` → 모호한 경우 LLM `judge` → 검증된 설명 | 코칭 발생 시 코칭과 알림 outbox를 원장 변경과 함께 저장 |
+| 코칭 검토 | `Dialogue.review` → `Coach.review` → LLM 보조 설명 | 원본 receipt와 코칭 저장; 알림은 만들지 않음 |
+| 후속 질문 | 기간 해석 → `Coach.review` → LLM `route` → 필요한 `Engine.run` → 설명 검증 | 현재·과거 근거와 수치 결과를 보존하고 세션·코칭 저장 |
+| 예산 차트 | `Charts.forecast` → `ChartEngine` → 차트 계약 검사 → LLM 근거 ID 선택 | 차트 JSON·원본 receipt 저장, 별도 GET에서 HTML 조립 |
+
+LLM의 자동 라우팅 값은 현재 `review`, `forecast`, `risk`입니다. `what_if`, `goal`, `optimize`도 엔진에 구현되어 있지만, 대화에서는 호출자가 요청의 구조화된 `analysis`에 조건을 제공해야 합니다. 모든 자연어 질문에서 다섯 모드의 조건을 자동으로 완성하는 기능으로 표현하지 않습니다. 일반 기간은 `period_request.py`·`periods.py`가, 차트 주기는 `chart_contract.py`가 검사합니다.
+
+## 차트 한 건이 만들어지는 순서
+
+```mermaid
+sequenceDiagram
+    participant C as 호출 클라이언트
+    participant A as API의 Charts
+    participant S as Repository / SQLite
+    participant F as EngineAdapter / FDT
+    participant G as GPU 워커
+
+    C->>A: POST /v1/charts/budget-forecast
+    A->>S: 소유자·요청 키·본문 digest로 예약
+    alt 같은 키의 완료 요청
+        S-->>A: 저장된 응답
+        A-->>C: 기존 JSON 반환
+    else 신규 요청
+        S-->>A: 예약 소유권
+        A->>A: 인라인 또는 저장 Twin 검증, 예산 주기 계산
+        alt 기준일 다음 날부터 미래 기간이 남음
+            A->>F: forecast 요청, seed와 paths
+            F-->>A: 원본 수치 결과 + 같은 경로의 일별 평균
+            A->>A: 날짜·봉투·금액 검증, 선택 가능한 근거 ID 구성
+            A->>G: POST /v1/tokenize, 스키마를 포함한 요청
+            G-->>A: 실제 토큰 수·한도·프롬프트 지문
+            alt 사전 검사 통과
+                A->>G: POST /v1/chat/completions, 같은 요청과 지문
+                G-->>A: 근거 ID 선택 결과 또는 오류
+            else 한도 초과 또는 사전 검사 실패
+                A->>A: 대체 사유 기록
+            end
+            A->>A: 근거 ID 검증, 검증 문장 또는 정형 안내 조립
+        else 종료된 예산 기간
+            A->>F: 관측 품질 점검 결과 조회
+            F-->>A: observation_audit
+            A->>A: 관측값 + 기간 종료 안내, 예측·LLM 생략
+        end
+        A->>S: 차트·receipt·완료 응답을 함께 commit
+        S-->>A: 저장 완료
+        A-->>C: 차트 JSON + wording 출처 + receipt
+    end
+    C->>A: GET /v1/charts/{chart_id}/html
+    A->>S: 소유자 범위의 저장 차트 조회
+    S-->>A: 저장 JSON
+    A->>A: 고정 KeyFin 렌더러로 HTML 조립
+    A-->>C: HTML
+```
+
+금융 입력·계산 계약 위반은 오류 응답으로 끝나며 차트를 저장하지 않습니다. LLM 실패는 수치를 유지한 정형 안내와 `fallback_reason`으로 구분합니다. 긴 추론 중 DB 쓰기 트랜잭션을 열어두지 않고, 마지막 commit에서 예약 소유권을 다시 검사합니다. `wording.source=llm`인 차트도 GPU가 금액이나 HTML 코드를 자유롭게 생성한 결과가 아니라, 허용된 근거 ID 선택을 채택했다는 뜻입니다.
+
+## 도식에서 실제 코드로 이동하기
+
+| 도식 요소 | 코드 |
+| --- | --- |
+| API·요청별 흐름 | [`api.py`](../src/coaching_service/api.py), [`coaching.py`](../src/coaching_service/coaching.py), [`events.py`](../src/coaching_service/events.py), [`dialogue.py`](../src/coaching_service/dialogue.py), [`charts.py`](../src/coaching_service/charts.py) |
+| FDT 연결·차트 경로 추출 | [`engine.py`](../src/coaching_service/engine.py), [`chart_engine.py`](../src/coaching_service/chart_engine.py) |
+| Twin·다섯 모드·시뮬레이션 | [`vendor/fdt/model.py`](../vendor/fdt/model.py), [`engine.py`](../vendor/fdt/engine.py), [`simulation.py`](../vendor/fdt/simulation.py) |
+| FDT 코칭 계산 | [`coaching.py`](../vendor/fdt/coaching.py), [`coaching_projection.py`](../vendor/fdt/coaching_projection.py) |
+| 근거·모델 검증 | [`evidence.py`](../src/coaching_service/evidence.py), [`chart_wording.py`](../src/coaching_service/chart_wording.py), [`llm.py`](../src/coaching_service/llm.py), [`token_budget.py`](../src/coaching_service/token_budget.py) |
+| 추론 워커·모델 로딩 | [`gpu_worker.py`](../scripts/gpu_worker.py), [`gpu_runtime.py`](../scripts/gpu_runtime.py), [`gpu_models.py`](../scripts/gpu_models.py) |
+| 저장·차트 출력 | [`repository.py`](../src/coaching_service/repository.py), [`store.py`](../src/coaching_service/store.py), [`chart_projection.py`](../src/coaching_service/chart_projection.py), [`chart_rendering.py`](../src/coaching_service/chart_rendering.py) |
+
+추론 모델·revision·NF4/BF16 조합은 [운영 설정](operations.md)에 있습니다. `benchmarks/`의 후보 비교·추가 학습·점수 산출은 [오프라인 실험 경로](../benchmarks/README.md)이며 API 요청 중 실행되지 않습니다. 이번 도식은 현재 배포 구조를 설명하며 과거 실험 모델을 모두 동시에 호출하는 구성으로 그리지 않았습니다.
 
 ## 책임 구분
 
