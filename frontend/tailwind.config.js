@@ -152,25 +152,25 @@ module.exports = {
           }
         ],
         "body-sm": [
-          "14px",
+          "15px",
           {
-            "lineHeight": "21px",
+            "lineHeight": "22px",
             "letterSpacing": "0px",
             "fontWeight": "400"
           }
         ],
         "label": [
-          "14px",
+          "15px",
           {
-            "lineHeight": "21px",
+            "lineHeight": "22px",
             "letterSpacing": "0px",
             "fontWeight": "500"
           }
         ],
         "caption": [
-          "12px",
+          "13px",
           {
-            "lineHeight": "16px",
+            "lineHeight": "18px",
             "letterSpacing": "0px",
             "fontWeight": "500"
           }
