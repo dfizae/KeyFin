@@ -6,8 +6,49 @@ import { clearTokens, getAccessTokenSync, getRefreshToken, saveTokens } from "@/
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "";
 export const API_PREFIX = "/api/v1";
-/** 호스트가 비어 있으면 도메인 함수가 api/mocks 값을 돌려준다 (docs/api-guide.md §9). */
-export const USE_MOCKS = API_BASE_URL === "";
+
+/** 통신 도메인. features/<domain> 폴더 이름과 같다 (settings 는 계약상 USER 도메인이다) */
+export const API_DOMAINS = [
+  "auth",
+  "settings",
+  "link",
+  "account",
+  "transaction",
+  "budget",
+  "payment",
+  "room",
+  "shop",
+  "notification",
+  "coaching",
+] as const;
+export type ApiDomain = (typeof API_DOMAINS)[number];
+
+const LIVE_ALL = "all";
+
+/**
+ * 실서버로 보낼 도메인 집합 (docs/api-guide.md §9).
+ * 백엔드가 도메인별로 배포되는 동안 "AUTH 는 실서버, 거래는 목" 처럼 섞어 쓰려고 둔다.
+ *
+ * - 호스트가 비어 있으면 무엇도 실서버가 아니다 → 전부 목
+ * - 호스트만 있으면 기존처럼 전부 실서버
+ * - `EXPO_PUBLIC_LIVE_DOMAINS` 에 적으면 그 도메인만 실서버고 나머지는 목 (`all` 은 전부)
+ */
+export function resolveLiveDomains(apiBaseUrl: string, rawLiveDomains: string | undefined): ReadonlySet<ApiDomain> {
+  if (apiBaseUrl === "") return new Set();
+  const listed = (rawLiveDomains ?? "")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter((name) => name !== "");
+  if (listed.length === 0 || listed.includes(LIVE_ALL)) return new Set(API_DOMAINS);
+  return new Set(API_DOMAINS.filter((domain) => listed.includes(domain)));
+}
+
+const LIVE_DOMAINS = resolveLiveDomains(API_BASE_URL, process.env.EXPO_PUBLIC_LIVE_DOMAINS);
+
+/** 이 도메인은 api/mocks 값을 돌려줄지. 도메인 API 함수가 첫 줄에서 확인한다 */
+export function isMocked(domain: ApiDomain): boolean {
+  return !LIVE_DOMAINS.has(domain);
+}
 export const TIMEOUT_QUERY_MS = 10_000;
 export const TIMEOUT_MONEY_MS = 30_000;
 

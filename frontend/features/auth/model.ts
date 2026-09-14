@@ -69,3 +69,35 @@ export const TERMS_ITEMS: readonly TermsItem[] = [
 export function canAgreeToTerms(checkedIds: readonly string[]): boolean {
   return TERMS_ITEMS.filter((item) => item.required).every((item) => checkedIds.includes(item.id));
 }
+
+export const LOGIN_ROUTE = "/(auth)/login";
+export const HOME_ROUTE = "/";
+
+/** 앱 안의 절대 경로만 복귀 대상으로 받는다. `//evil.com` 같은 스킴 상대 주소와 인증 화면은 막는다 (규칙 80) */
+const INTERNAL_PATH = /^\/(?!\/)[\w\-./%?=&[\]]*$/;
+
+function isInternalPath(path: string): boolean {
+  return INTERNAL_PATH.test(path) && !path.startsWith("/(auth)");
+}
+
+/**
+ * 로그인 화면 주소. 푸시·딥링크로 들어왔다가 로그아웃 상태면 그 경로를 returnTo 로 달아
+ * 로그인 뒤 원래 보려던 화면으로 돌아가게 한다 (규칙 50: 로그인 후 기존 화면 복귀).
+ */
+export function loginHref(pathname: string): string {
+  if (pathname === HOME_ROUTE || !isInternalPath(pathname)) return LOGIN_ROUTE;
+  return `${LOGIN_ROUTE}?returnTo=${encodeURIComponent(pathname)}`;
+}
+
+/** returnTo 파라미터. 앱 밖 주소나 인증 화면이면 홈으로 돌린다 */
+export function parseReturnTo(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === undefined) return HOME_ROUTE;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    return HOME_ROUTE;
+  }
+  return isInternalPath(decoded) ? decoded : HOME_ROUTE;
+}
