@@ -115,6 +115,9 @@
 | `AmountText` | `components/ui/amount-text.tsx` | `Text` | `lg` `md` `sm`, `sign` |
 | `AmountInput` | `components/ui/amount-input.tsx` | `Input` | 통화 `KRW` 고정, 콤마 포맷 |
 | `EmptyState` | `components/ui/empty-state.tsx` | `Text`, `Icon`, `Button` | 빈 목록·오류 |
+| `LottieLoop` | `components/ui/lottie-loop.tsx` (+ `.native.tsx`) | `lottie-react-native` | 반복 재생 · 동작 줄이기면 정지 · 웹은 `fallback`. 기다림·성공 순간(분석 중·입주 연출·이체 완료)에만 쓰고 입력 화면에는 쓰지 않는다. 에셋 `assets/lottie/*.json` 100KB 이하 |
+| `Floating` | `components/ui/floating.tsx` | Reanimated | 캐릭터 정지 이미지 둥실거림(`distance` 6 · `period` 2400ms) · 동작 줄이기면 정지. 로그인 캐릭터·`CoachRow` |
+| `CoachRow` | `components/ui/coach-row.tsx` | `Floating`, `Text` | 온보딩 코치 행 — 캐릭터 76×112 + 말풍선 `bg-card border-border rounded-lg p-3.5 text-label`(홈 코치 말풍선과 같은 스타일). 회원가입·약관·금융망 이메일 |
 | `Toast` | `components/ui/toast.tsx` | — | `info` `success` `error`, `bg-inverse` |
 | `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Dialog` 또는 별도 | `bg-popover` |
 | `ListGroup` | `components/ui/list-group.tsx` | `Separator` | 설정·메뉴 목록 |
