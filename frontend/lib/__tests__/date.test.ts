@@ -8,6 +8,7 @@ import {
   getKSTParts,
   parseISODate,
   parseKSTDateKey,
+  parseKSTLocalDateTime,
   toKSTDateKey,
 } from "@/lib/date";
 
@@ -56,6 +57,13 @@ describe("KST 변환", () => {
     expect(toKSTDateKey(parseKSTDateKey("2026-09-01"))).toBe("2026-09-01");
     expect(() => parseKSTDateKey("2026-09-08T00:00:00")).toThrow(InvalidDateError);
     expect(() => parseKSTDateKey("9월 8일")).toThrow(InvalidDateError);
+  });
+
+  it("서버의 시간대 없는 일시(LocalDateTime)는 KST 로 읽고 소수점 초도 받는다", () => {
+    expect(formatDateTime(parseKSTLocalDateTime("2026-09-11T14:30:00"))).toBe("2026.09.11 14:30");
+    expect(formatTime(parseKSTLocalDateTime("2026-09-11T14:30:05.123456"))).toBe("14:30");
+    expect(() => parseKSTLocalDateTime("2026-09-11T14:30:00Z")).toThrow(InvalidDateError);
+    expect(() => parseKSTLocalDateTime("2026-09-11")).toThrow(InvalidDateError);
   });
 
   it("잘못된 값이면 InvalidDateError를 던진다", () => {
