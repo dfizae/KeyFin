@@ -99,6 +99,7 @@ class AssetSyncServiceTest {
 		assertThat(card.getCvc()).isEqualTo("725");
 		assertThat(card.getIssuerCode()).isEqualTo("1005");
 		assertThat(card.isManaged()).isFalse();
+		assertThat(card.getWithdrawalWeekday()).isEqualTo(1);
 		assertThat(card.getWithdrawalAccount()).isNotNull();
 		assertThat(card.getWithdrawalAccount().getFinAccountNo()).isEqualTo("0880680068408149");
 
