@@ -217,11 +217,11 @@ function AccountLine({ label, value }: AccountLineProps) {
   );
 }
 
-type LimitNoteProps = { once: string | undefined; daily: string | undefined };
+type LimitNoteProps = { once: string | null | undefined; daily: string | null | undefined };
 
-// 한도는 서버가 실행 직전 검사한다. 화면은 지금 설정값을 알려주기만 한다 (FR-PAY-04).
+// 한도는 서버가 실행 직전 검사한다. 화면은 지금 설정값을 알려주기만 하고 미설정(null)이면 적지 않는다 (FR-PAY-04).
 function LimitNote({ once, daily }: LimitNoteProps) {
-  if (once === undefined || daily === undefined) return null;
+  if (once === undefined || once === null || daily === undefined || daily === null) return null;
 
   return (
     <Text className="text-caption tabular-nums text-card-foreground">

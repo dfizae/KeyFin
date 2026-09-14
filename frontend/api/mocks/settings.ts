@@ -1,7 +1,7 @@
 import type { TransferSettingsDto } from "@/features/settings/model";
 
 /**
- * GET/PUT /settings 응답 예시 (docs/api-contract.md USER).
+ * GET/PUT /settings/transfer 응답 예시 (docs/api-contract.md USER).
  * 서버처럼 상태를 들고 있어야 저장한 값이 다시 조회될 때 보인다.
  */
 const INITIAL: TransferSettingsDto = { transferConsent: true, transferLimitOnce: 500000, transferLimitDaily: 1000000 };
