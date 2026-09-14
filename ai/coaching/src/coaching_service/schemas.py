@@ -1,8 +1,8 @@
 """Validated service contracts; original FDT JSON stays lossless."""
 
-from typing import Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, RootModel, model_validator
 
 from coaching_service.periods import DateOnly, PeriodSpec, ResolvedPeriod
 
@@ -132,9 +132,24 @@ class TurnRequest(Frozen):
     period: PeriodSpec | None = None
 
 
+class AnswerReference(Frozen):
+    """본문에서 추정하지 않고, 같은 트랜잭션에 저장한 원본 답변을 가리킨다."""
+
+    kind: Literal["chat", "coaching"]
+    id: Identifier
+
+
 class Message(Frozen):
     role: Literal["user", "assistant"]
     content: str
+    # 과거 메시지는 원본을 확정할 수 없으므로 null로 읽고 이관하지 않는다.
+    response: AnswerReference | None = None
+
+    @model_validator(mode="after")
+    def assistant_reference_only(self) -> Self:
+        if self.role == "user" and self.response is not None:
+            raise ValueError("user_message_cannot_reference_answer")
+        return self
 
 
 class Session(Frozen):

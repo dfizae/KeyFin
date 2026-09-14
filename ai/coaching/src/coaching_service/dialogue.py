@@ -27,6 +27,7 @@ from coaching_service.period_request import turn_period
 from coaching_service.personal_service import personal_answer
 from coaching_service.repository import Mutation, document, write
 from coaching_service.schemas import (
+    AnswerReference,
     Coaching,
     JsonDocument,
     Message,
@@ -59,22 +60,25 @@ def chat_history(session: Session, *, include_subject: bool = False) -> tuple[Ch
 
 def save_turn(session: Session, question: str, answer: Coaching | ChatAnswer) -> Mutation:
     """Commit the delivered answer and session text together, including retries."""
+    match answer:
+        case Coaching():
+            response = AnswerReference(kind="coaching", id=answer.id)
+            answer_writes = coaching_writes(answer, notify=False)
+        case ChatAnswer():
+            response = AnswerReference(kind="chat", id=answer.id)
+            answer_writes = (write("answer/" + answer.id, answer),)
+        case unreachable:
+            assert_never(unreachable)
     updated = session.model_copy(
         update={
             "messages": (
                 *session.messages,
                 Message(role="user", content=question),
-                Message(role="assistant", content=answer.text),
+                Message(role="assistant", content=answer.text, response=response),
             )
         }
     )
-    match answer:
-        case Coaching():
-            answer_writes = coaching_writes(answer, notify=False)
-        case ChatAnswer():
-            answer_writes = (write("answer/" + answer.id, answer),)
-        case unreachable:
-            assert_never(unreachable)
+    # 참조만 먼저 저장하거나 별도 호출로 재생성하지 않아 재시도에도 원문과 ID가 일치한다.
     return Mutation(result=document(answer), writes=(write("session/" + session.id, updated), *answer_writes))
 
 
