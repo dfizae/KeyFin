@@ -50,6 +50,20 @@ def test_unknown_subject_does_not_borrow_past_topic() -> None:
     assert retrieve_facts("더 설명해줘", changed) == ()
 
 
+@pytest.mark.parametrize("question", [
+    "그럼 조금 더 자세히 설명해 줘.",
+    "그러면 자세하게 알려 주세요!",
+    "그것은 좀 더 상세히 설명해 주세요",
+])
+def test_natural_followup_keeps_last_explicit_subject(question: str) -> None:
+    # 설명의 길이·띄어쓰기가 달라도 직전 사용자가 지정한 주제만 가져온다.
+    history = (ChatMessage(role="user", content="복리가 뭐야?"),)
+    assert "compound_interest" in {row.id for row in retrieve_facts(question, history)}
+    assert retrieve_facts(question) == ()
+    changed = (*history, ChatMessage(role="user", content="바젤3가 뭐야?"))
+    assert retrieve_facts(question, changed) == ()
+
+
 def test_expired_sources_cannot_be_sent_to_model() -> None:
     catalog = load_catalog()
     assert retrieve_facts("복리", catalog=catalog, today=date(2030, 1, 1)) == ()

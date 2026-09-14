@@ -212,6 +212,8 @@ def test_unsupported_filter_is_not_silently_dropped(question: str) -> None:
     ("question", "topic"),
     [
         ("내 계좌 잔액 알려줘", "accounts"),
+        ("내 계좌 잔액은 지금 얼마야?", "accounts"),
+        ("내 부채는 현재 얼마인가요?", "debts"),
         ("지금 나의 부채는 얼마야?", "debts"),
         ("내 월 소득이 얼마야", "income"),
         ("내 보험료는?", "insurance"),

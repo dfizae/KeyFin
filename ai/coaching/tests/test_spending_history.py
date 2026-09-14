@@ -86,6 +86,7 @@ def test_last_month_matches_independent_raw_ledger_arithmetic() -> None:
     ("question", "envelope", "total"),
     [
         ("지난달 외식비 얼마 썼어?", "외식", 12000),
+        ("지난달 외식 소비를 다시 확인해줘.", "외식", 12000),
         ("내 지난달 교통비 알려줘", "교통비", 5000),
         ("지난달 기타 봉투 소비 알려주세요", "기타", 3000),
     ],
@@ -112,6 +113,7 @@ def test_exact_envelope_filter(question: str, envelope: str, total: int) -> None
         "지난달 주말 소비 알려줘",
         "지난달 고정비 포함 총지출 알려줘",
         "지난달 외식 빼고 소비 알려줘",
+        "이번달 외식 빼고 소비를 다시 확인해줘",
         "앞으로 7일 지출 예측해줘",
         "지난달 커피값 알려줘",
         "소비 알려줘",
