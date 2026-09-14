@@ -9,7 +9,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
-import { useCurrentBudget } from "@/features/budget/api/queries";
+import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { budgetPeriodLabel, type Budget } from "@/features/budget/model";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
@@ -35,7 +35,7 @@ function HomeScreen() {
   const [roomZoomed, setRoomZoomed] = React.useState(false);
 
   // 이번 주기 예산이 확정 전이면 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12). 방·보드가 확정 예산을 기준으로 동작한다.
-  if (budget.data?.status === "PROPOSED") return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
+  if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6" scrollEnabled={!roomZoomed}>

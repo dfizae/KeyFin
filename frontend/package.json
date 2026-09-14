@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "packageManager": "pnpm@11.13.0",
   "dependencies": {
+    "@lottiefiles/dotlottie-react": "^0.13.5",
     "@rn-primitives/dialog": "^1.5.2",
     "@rn-primitives/portal": "^1.5.3",
     "@rn-primitives/separator": "^1.5.2",

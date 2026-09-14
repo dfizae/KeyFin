@@ -4,9 +4,9 @@ import { ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
+import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { Text } from "@/components/ui/text";
 import { useCachedBudgetProposal } from "@/features/budget/api/queries";
-import { envelopeTone } from "@/features/budget/catalog";
 import { AnalysisHero, SpendingBarRow } from "@/features/budget/components/SpendingAnalysisParts";
 import { monthlyAvgPercent, sortByMonthlyAvg, sumAmounts } from "@/features/budget/model";
 import { currentMonthKey } from "@/lib/date";
@@ -44,9 +44,7 @@ function SpendingSummaryScreen() {
 
         <View className="gap-1">
           <Text className="text-label text-card-foreground">한 달 평균 소비</Text>
-          <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
-            {formatKRW(total)}
-          </Text>
+          <CountUpAmount value={total} className="text-amount-lg tabular-nums text-foreground" />
         </View>
 
         <View className="gap-4">
@@ -56,11 +54,11 @@ function SpendingSummaryScreen() {
           {ranked.slice(0, TOP_SPENDING_COUNT).map((envelope, index) => (
             <SpendingBarRow
               key={envelope.envelopeId}
+              envelopeId={envelope.envelopeId}
               name={envelope.name}
               value={`월 ${formatKRW(envelope.monthlyAvg)}`}
               percent={monthlyAvgPercent(envelope.monthlyAvg, max)}
               fillDelay={index * FILL_STAGGER_MS}
-              barClassName={envelopeTone(envelope.envelopeId).bar}
             />
           ))}
         </View>

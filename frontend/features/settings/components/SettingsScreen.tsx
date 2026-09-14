@@ -154,6 +154,7 @@ function LimitField({ label, value, editable, onChange }: LimitFieldProps) {
     <View className="gap-2">
       <Text className="text-label text-foreground">{label}</Text>
       <AmountInput
+        variant="field"
         className="h-input rounded-lg"
         value={value}
         onChangeValue={onChange}

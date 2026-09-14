@@ -2,12 +2,13 @@ import { Redirect, useRouter } from "expo-router";
 import { Receipt, WalletMinimal, WifiOff } from "lucide-react-native";
 import { FlatList, Pressable, View } from "react-native";
 
+import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { useCurrentBudget } from "@/features/budget/api/queries";
+import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
@@ -52,7 +53,7 @@ function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
     else router.replace(BUDGET_ROUTE);
   };
 
-  if (budget.data?.status === "PROPOSED") return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
+  if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <View className="flex-1 bg-background">
@@ -138,12 +139,17 @@ function EnvelopeSummary({ envelope, period }: EnvelopeSummaryProps) {
         </View>
         <Text className="text-label tabular-nums text-card-foreground">{period}</Text>
       </View>
-      <Text
-        className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")}
-        maxFontSizeMultiplier={1.3}
-      >
-        {summaryAmountText(envelope, health)}
-      </Text>
+      {health === "unset" || envelope.remaining === null ? (
+        <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
+          예산 미설정
+        </Text>
+      ) : (
+        <CountUpAmount
+          value={envelope.remaining}
+          format={(shown) => (health === "over" ? `${formatKRW(shown, { sign: "never" })} 초과` : `${formatKRW(shown)} 남음`)}
+          className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")}
+        />
+      )}
       <View
         className="h-2 w-full overflow-hidden rounded-full bg-muted"
         accessible
@@ -163,12 +169,6 @@ function EnvelopeSummary({ envelope, period }: EnvelopeSummaryProps) {
       </View>
     </View>
   );
-}
-
-function summaryAmountText(envelope: BudgetEnvelope, health: EnvelopeHealth): string {
-  if (health === "unset" || envelope.remaining === null) return "예산 미설정";
-  if (health === "over") return `${formatKRW(envelope.remaining, { sign: "never" })} 초과`;
-  return `${formatKRW(envelope.remaining)} 남음`;
 }
 
 type TransactionsPlaceholderProps = {

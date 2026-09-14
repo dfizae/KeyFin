@@ -4,10 +4,12 @@ import { Menu, WalletMinimal, WifiOff } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
+import { CountUpAmount } from "@/components/ui/count-up-amount";
+import { FillBar } from "@/components/ui/fill-bar";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useCurrentBudget } from "@/features/budget/api/queries";
+import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
@@ -31,7 +33,7 @@ const ENVELOPE_DETAIL_ROUTE = "/budget";
 function BudgetScreen() {
   const budget = useCurrentBudget();
 
-  if (budget.data?.status === "PROPOSED") return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
+  if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <View className="flex-1 bg-background">
@@ -92,10 +94,11 @@ function BudgetContent({ budget }: BudgetContentProps) {
         <EmptyState icon={WalletMinimal} title="봉투가 아직 없어요" description="예산이 만들어지면 봉투 7종이 여기에 보여요." />
       ) : (
         <View className="gap-4">
-          {envelopes.map((envelope) => (
+          {envelopes.map((envelope, index) => (
             <EnvelopeRow
               key={envelope.envelopeId}
               envelope={envelope}
+              fillDelay={index * FILL_STAGGER_MS}
               onPress={() => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelope.envelopeId}`)}
             />
           ))}
@@ -104,6 +107,9 @@ function BudgetContent({ budget }: BudgetContentProps) {
     </ScrollView>
   );
 }
+
+/** 봉투 막대 7개가 위에서부터 차례로 차오른다(소비 분석 봉투별 화면과 같은 간격) */
+const FILL_STAGGER_MS = 80;
 
 // Pencil TotalCard (aAfOZ) 의 Used 막대는 $primary 한 가지뿐이라 경고·초과 색은 홈 BudgetCard 와 같은 기준으로 맞췄다.
 const TOTAL_BAR_CLASS: Record<BudgetHealth, string> = {
@@ -126,18 +132,19 @@ function TotalCard({ total, period }: TotalCardProps) {
   return (
     <View className="gap-3 pb-1 pt-5">
       <Text className="text-label tabular-nums text-card-foreground">{period} 남은 예산</Text>
-      <Text className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")} maxFontSizeMultiplier={1.3}>
-        {formatKRW(total.remaining)}
-      </Text>
-      <View
-        className="h-2 w-full overflow-hidden rounded-full bg-muted"
+      <CountUpAmount
+        value={total.remaining}
+        className={cn("text-amount-lg tabular-nums", health === "over" ? "text-destructive" : "text-foreground")}
+      />
+      <FillBar
+        percent={used}
+        fillClassName={TOTAL_BAR_CLASS[health]}
+        fillDelay={0}
         accessible
         accessibilityRole="progressbar"
         accessibilityLabel="예산 사용률"
         accessibilityValue={{ min: 0, max: 100, now: used }}
-      >
-        <View className={cn("h-full rounded-full", TOTAL_BAR_CLASS[health])} style={{ width: `${used}%` }} />
-      </View>
+      />
       <View className="flex-row justify-between">
         <Text className="text-caption tabular-nums text-card-foreground">총 {formatKRW(total.confirmed)}</Text>
         <Text className="text-caption tabular-nums text-card-foreground">사용 {formatKRW(total.spent)}</Text>
@@ -172,7 +179,7 @@ const ENVELOPE_BAR_CLASS: Record<EnvelopeHealth, string> = {
 
 // Pencil EnvelopeList (MhHC7 / uPyCM) 의 행: 28pt accent 타일 + 아이콘 16 · 이름 14/500 · 금액 16/600 · 사용률 바 6pt.
 // 확정액 0 인 봉투는 잔여율이 없어 빈 트랙이고, 쓴 돈이 있으면 over 색으로 초과 금액을 적는다(사용자 결정 2026-09-12).
-function EnvelopeRow({ envelope, onPress }: { envelope: BudgetEnvelope; onPress: () => void }) {
+function EnvelopeRow({ envelope, fillDelay, onPress }: { envelope: BudgetEnvelope; fillDelay: number; onPress: () => void }) {
   const health = envelopeHealth(envelope);
   const used = usedBarPercent(envelope.remainingRate);
   const amountText = envelopeAmountText(envelope, health);
@@ -202,9 +209,7 @@ function EnvelopeRow({ envelope, onPress }: { envelope: BudgetEnvelope; onPress:
           {amountText}
         </Text>
       </View>
-      <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <View className={cn("h-full rounded-full", ENVELOPE_BAR_CLASS[health])} style={{ width: `${used}%` }} />
-      </View>
+      <FillBar percent={used} fillClassName={ENVELOPE_BAR_CLASS[health]} className="h-1.5" fillDelay={fillDelay} />
     </Pressable>
   );
 }

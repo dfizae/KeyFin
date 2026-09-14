@@ -1,7 +1,7 @@
 import { Redirect } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { Image, View } from "react-native";
+import { View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -20,15 +20,11 @@ import { Text } from "@/components/ui/text";
 import { useBudgetProposal } from "@/features/budget/api/queries";
 import { isBudgetExistsError, proposalErrorMessage } from "@/features/budget/errors";
 import { hasSpendingHistory } from "@/features/budget/model";
-import { CHARACTER_PHONE } from "@/features/room/assets";
 import { currentMonthKey } from "@/lib/date";
 
-/** 점 3개가 차례로 커지는 로딩 애니메이션(직접 만든 Lottie, 72×24) */
-const ANALYZING_DOTS = require("@/assets/lottie/analyzing-dots.json");
-const DOTS_STYLE = { width: 72, height: 24 } as const;
-
-/** 시안(LsD1Y)의 캐릭터 150×200. 4px 스케일 밖 값이라 크기만 style 로 준다 */
-const CHARACTER_STYLE = { width: 150, height: 200 } as const;
+/** 모래시계가 뒤집히는 로딩 애니메이션(LottieFiles "Time Hourglass", 색은 primary 계열로 바꿈, 1초 반복). 시안(pWPd0)의 아이콘 타일 자리 */
+const ANALYZING_HOURGLASS = require("@/assets/lottie/analyzing-hourglass.json");
+const HOURGLASS_STYLE = { width: 96, height: 96 } as const;
 
 const SUMMARY_ROUTE = "/onboarding/spending-summary";
 
@@ -55,11 +51,11 @@ function SpendingAnalyzingScreen() {
   return <Analyzing />;
 }
 
-// Pencil 소비 분석 · 분석 중 · 캐릭터 대안 (LsD1Y). 버튼 없이 분석이 끝나면 다음 화면으로 넘어간다.
+// Pencil 소비 분석 · 분석 중 (pWPd0): 아이콘 타일 자리에 모래시계 Lottie + 제목·설명 + 진행 막대. 버튼 없이 분석이 끝나면 다음 화면으로 넘어간다.
 function Analyzing() {
   return (
     <View className="flex-1 items-center justify-center gap-5 bg-background px-10" accessibilityLiveRegion="polite">
-      <Image source={CHARACTER_PHONE} style={CHARACTER_STYLE} resizeMode="contain" accessible={false} />
+      <LottieLoop source={ANALYZING_HOURGLASS} width={HOURGLASS_STYLE.width} height={HOURGLASS_STYLE.height} />
       <View className="items-center gap-2">
         <Text className="text-h2 text-foreground" accessibilityRole="header">
           지난 소비를 분석하고 있어요
@@ -68,13 +64,7 @@ function Analyzing() {
           최근 카드·계좌 내역을 살펴보는 중이에요.{"\n"}잠시만 기다려 주세요.
         </Text>
       </View>
-      <LottieLoop
-        source={ANALYZING_DOTS}
-        width={DOTS_STYLE.width}
-        height={DOTS_STYLE.height}
-        accessibilityLabel="분석 중"
-        fallback={<IndeterminateBar />}
-      />
+      <IndeterminateBar />
     </View>
   );
 }
@@ -83,8 +73,7 @@ const TRACK_WIDTH = 160;
 const SEGMENT_WIDTH = 64;
 const SWEEP_MS = 1200;
 
-// Lottie 를 못 그리는 웹에서 대신 쓰는 진행 표시. 진행률을 알 수 없는 요청이라 막대 조각이 트랙을 계속 가로지른다.
-// 동작 줄이기 설정이면 멈춰 둔다.
+// 진행률을 알 수 없는 요청이라 막대 조각이 트랙을 계속 가로지른다. 동작 줄이기 설정이면 멈춰 둔다.
 function IndeterminateBar() {
   const reducedMotion = useReducedMotion();
   const offset = useSharedValue(-SEGMENT_WIDTH);
