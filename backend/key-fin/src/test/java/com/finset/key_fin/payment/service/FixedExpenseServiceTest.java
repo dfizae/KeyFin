@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,10 +25,9 @@ import com.finset.key_fin.payment.entity.FixedExpense;
 import com.finset.key_fin.payment.exception.PaymentErrorCode;
 import com.finset.key_fin.payment.repository.FixedExpenseRepository;
 
-@SpringBootTest
 @Transactional
 @Sql(scripts = "/sql/fixed-expense-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
-class FixedExpenseServiceTest {
+class FixedExpenseServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long OWNER = 988L;
 	private static final long OTHER_USER = 987L;
