@@ -1,14 +1,14 @@
 package com.finset.key_fin.transaction.repository;
 
 import com.finset.key_fin.transaction.entity.TransactionAssetType;
-import com.finset.key_fin.transaction.entity.TransactionSyncState;
+import com.finset.key_fin.transaction.entity.TransactionPollingState;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
 
-public interface TransactionSyncStateRepository extends JpaRepository<TransactionSyncState, Long> {
+public interface TransactionPollingStateRepository extends JpaRepository<TransactionPollingState, Long> {
 
-	Optional<TransactionSyncState> findByUserIdAndAssetTypeAndAssetId(
+	Optional<TransactionPollingState> findByUserIdAndAssetTypeAndAssetId(
 			Long userId,
 			TransactionAssetType assetType,
 			Long assetId

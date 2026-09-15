@@ -26,14 +26,14 @@ import java.util.Objects;
 @Getter
 @Entity
 @Table(
-		name = "transaction_sync_states",
+		name = "transaction_polling_states",
 		uniqueConstraints = @UniqueConstraint(
-				name = "uq_transaction_sync_state",
+				name = "uq_transaction_polling_state",
 				columnNames = {"user_id", "asset_type", "asset_id"}
 		)
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class TransactionSyncState extends BaseEntity {
+public class TransactionPollingState extends BaseEntity {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -50,14 +50,14 @@ public class TransactionSyncState extends BaseEntity {
 	@Column(name = "asset_id", nullable = false)
 	private Long assetId;
 
-	@Column(name = "last_synced_at")
-	private LocalDateTime lastSyncedAt;
+	@Column(name = "last_polled_at")
+	private LocalDateTime lastPolledAt;
 
 	@Generated(event = {EventType.INSERT, EventType.UPDATE})
 	@Column(name = "updated_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime updatedAt;
 
-	private TransactionSyncState(User user, TransactionAssetType assetType, Long assetId) {
+	private TransactionPollingState(User user, TransactionAssetType assetType, Long assetId) {
 		this.user = Objects.requireNonNull(user, "user must not be null");
 		this.assetType = Objects.requireNonNull(assetType, "assetType must not be null");
 		if (assetId == null || assetId <= 0) {
@@ -66,11 +66,11 @@ public class TransactionSyncState extends BaseEntity {
 		this.assetId = assetId;
 	}
 
-	public static TransactionSyncState create(User user, TransactionAssetType assetType, Long assetId) {
-		return new TransactionSyncState(user, assetType, assetId);
+	public static TransactionPollingState create(User user, TransactionAssetType assetType, Long assetId) {
+		return new TransactionPollingState(user, assetType, assetId);
 	}
 
-	public void complete(LocalDateTime syncedAt) {
-		this.lastSyncedAt = Objects.requireNonNull(syncedAt, "syncedAt must not be null");
+	public void recordPollingSuccess(LocalDateTime polledAt) {
+		this.lastPolledAt = Objects.requireNonNull(polledAt, "polledAt must not be null");
 	}
 }
