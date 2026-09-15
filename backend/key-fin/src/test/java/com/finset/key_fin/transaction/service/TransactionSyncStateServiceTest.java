@@ -1,8 +1,8 @@
 package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.transaction.entity.TransactionAssetType;
-import com.finset.key_fin.transaction.entity.TransactionPollingState;
-import com.finset.key_fin.transaction.repository.TransactionPollingStateRepository;
+import com.finset.key_fin.transaction.entity.TransactionSyncState;
+import com.finset.key_fin.transaction.repository.TransactionSyncStateRepository;
 import com.finset.key_fin.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,47 +21,47 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class TransactionPollingStateServiceTest {
+class TransactionSyncStateServiceTest {
 
 	private static final long USER_ID = 1L;
 	private static final long ACCOUNT_ID = 3L;
 	private static final LocalDate TODAY = LocalDate.of(2026, 9, 15);
 
 	@Mock
-	private TransactionPollingStateRepository pollingStateRepository;
+	private TransactionSyncStateRepository syncStateRepository;
 
-	private TransactionPollingStateService pollingStateService;
+	private TransactionSyncStateService syncStateService;
 	private User user;
 
 	@BeforeEach
 	void setUp() {
-		pollingStateService = new TransactionPollingStateService(pollingStateRepository);
+		syncStateService = new TransactionSyncStateService(syncStateRepository);
 		user = User.create("qwer@qwer.com", "password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
 	}
 
 	@Test
-	void 최초_폴링은_어제부터_오늘까지_조회한다() {
-		given(pollingStateRepository.findByUserIdAndAssetTypeAndAssetId(
+	void 최초_동기화은_어제부터_오늘까지_조회한다() {
+		given(syncStateRepository.findByUserIdAndAssetTypeAndAssetId(
 				USER_ID, TransactionAssetType.ACCOUNT, ACCOUNT_ID))
 				.willReturn(Optional.empty());
 
-		LocalDate startDate = pollingStateService.calculatePollingStartDate(
+		LocalDate startDate = syncStateService.calculateSyncStartDate(
 				USER_ID, TransactionAssetType.ACCOUNT, ACCOUNT_ID, TODAY);
 
 		assertThat(startDate).isEqualTo(TODAY.minusDays(1));
 	}
 
 	@Test
-	void 기존_폴링은_마지막_성공일의_하루_전부터_오늘까지_조회한다() {
-		TransactionPollingState state = TransactionPollingState.create(
+	void 기존_동기화은_마지막_성공일의_하루_전부터_오늘까지_조회한다() {
+		TransactionSyncState state = TransactionSyncState.create(
 				user, TransactionAssetType.ACCOUNT, ACCOUNT_ID);
-		state.recordPollingSuccess(LocalDateTime.of(2026, 9, 14, 10, 30));
-		given(pollingStateRepository.findByUserIdAndAssetTypeAndAssetId(
+		state.recordSyncSuccess(LocalDateTime.of(2026, 9, 14, 10, 30));
+		given(syncStateRepository.findByUserIdAndAssetTypeAndAssetId(
 				USER_ID, TransactionAssetType.ACCOUNT, ACCOUNT_ID))
 				.willReturn(Optional.of(state));
 
-		LocalDate startDate = pollingStateService.calculatePollingStartDate(
+		LocalDate startDate = syncStateService.calculateSyncStartDate(
 				USER_ID, TransactionAssetType.ACCOUNT, ACCOUNT_ID, TODAY);
 
 		assertThat(startDate).isEqualTo(LocalDate.of(2026, 9, 13));
@@ -70,34 +70,35 @@ class TransactionPollingStateServiceTest {
 	@Test
 	void 상태가_없으면_성공_상태를_새로_저장한다() {
 		LocalDateTime syncedAt = LocalDateTime.of(2026, 9, 15, 10, 30);
-		given(pollingStateRepository.findByUserIdAndAssetTypeAndAssetId(
+		given(syncStateRepository.findByUserIdAndAssetTypeAndAssetId(
 				USER_ID, TransactionAssetType.ACCOUNT, ACCOUNT_ID))
 				.willReturn(Optional.empty());
 
-		pollingStateService.recordPollingSuccess(
+		syncStateService.recordSyncSuccess(
 				user, TransactionAssetType.ACCOUNT, ACCOUNT_ID, syncedAt);
 
-		ArgumentCaptor<TransactionPollingState> captor = ArgumentCaptor.forClass(TransactionPollingState.class);
-		verify(pollingStateRepository).save(captor.capture());
+		ArgumentCaptor<TransactionSyncState> captor = ArgumentCaptor.forClass(TransactionSyncState.class);
+		verify(syncStateRepository).save(captor.capture());
 		assertThat(captor.getValue().getUser()).isSameAs(user);
 		assertThat(captor.getValue().getAssetType()).isEqualTo(TransactionAssetType.ACCOUNT);
 		assertThat(captor.getValue().getAssetId()).isEqualTo(ACCOUNT_ID);
-		assertThat(captor.getValue().getLastPolledAt()).isEqualTo(syncedAt);
+		assertThat(captor.getValue().getLastSyncedAt()).isEqualTo(syncedAt);
 	}
 
 	@Test
 	void 기존_상태가_있으면_마지막_성공_시각을_변경한다() {
-		TransactionPollingState state = TransactionPollingState.create(
+		TransactionSyncState state = TransactionSyncState.create(
 				user, TransactionAssetType.ACCOUNT, ACCOUNT_ID);
 		LocalDateTime syncedAt = LocalDateTime.of(2026, 9, 15, 10, 30);
-		given(pollingStateRepository.findByUserIdAndAssetTypeAndAssetId(
+		given(syncStateRepository.findByUserIdAndAssetTypeAndAssetId(
 				USER_ID, TransactionAssetType.ACCOUNT, ACCOUNT_ID))
 				.willReturn(Optional.of(state));
 
-		pollingStateService.recordPollingSuccess(
+		syncStateService.recordSyncSuccess(
 				user, TransactionAssetType.ACCOUNT, ACCOUNT_ID, syncedAt);
 
-		assertThat(state.getLastPolledAt()).isEqualTo(syncedAt);
-		verify(pollingStateRepository).save(state);
+		assertThat(state.getLastSyncedAt()).isEqualTo(syncedAt);
+		verify(syncStateRepository).save(state);
 	}
 }
+

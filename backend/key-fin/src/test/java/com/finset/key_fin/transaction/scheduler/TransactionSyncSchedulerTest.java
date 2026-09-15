@@ -1,6 +1,6 @@
 package com.finset.key_fin.transaction.scheduler;
 
-import com.finset.key_fin.transaction.service.TransactionPollingService;
+import com.finset.key_fin.transaction.service.TransactionSyncManager;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
@@ -25,71 +25,71 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class TransactionPollingSchedulerTest {
+class TransactionSyncSchedulerTest {
 
 	@Mock
 	private UserRepository userRepository;
 	@Mock
-	private TransactionPollingService pollingService;
+	private TransactionSyncManager syncManager;
 
 	@Test
-	void 금융_연결된_활성_사용자를_한명씩_폴링한다() {
-		TransactionPollingScheduler scheduler = scheduler();
+	void 금융_연결된_활성_사용자를_한명씩_동기화한다() {
+		TransactionSyncScheduler scheduler = scheduler();
 		User first = user(1L);
 		User second = user(2L);
 		given(userRepository.findAllByFinUserKeyIsNotNullAndDeletedAtIsNull())
 				.willReturn(List.of(first, second));
 
-		scheduler.pollAll();
+		scheduler.syncAll();
 
-		verify(pollingService).pollUser(eq(1L), any(LocalDateTime.class));
-		verify(pollingService).pollUser(eq(2L), any(LocalDateTime.class));
+		verify(syncManager).syncUser(eq(1L), any(LocalDateTime.class));
+		verify(syncManager).syncUser(eq(2L), any(LocalDateTime.class));
 	}
 
 	@Test
-	void 사용자_한명의_폴링이_실패해도_다음_사용자를_계속한다() {
-		TransactionPollingScheduler scheduler = scheduler();
+	void 사용자_한명의_동기화이_실패해도_다음_사용자를_계속한다() {
+		TransactionSyncScheduler scheduler = scheduler();
 		User first = user(1L);
 		User second = user(2L);
 		given(userRepository.findAllByFinUserKeyIsNotNullAndDeletedAtIsNull())
 				.willReturn(List.of(first, second));
 		doThrow(new IllegalStateException("boom"))
-				.when(pollingService).pollUser(eq(1L), any(LocalDateTime.class));
+				.when(syncManager).syncUser(eq(1L), any(LocalDateTime.class));
 
-		scheduler.pollAll();
+		scheduler.syncAll();
 
-		verify(pollingService).pollUser(eq(2L), any(LocalDateTime.class));
+		verify(syncManager).syncUser(eq(2L), any(LocalDateTime.class));
 	}
 
 	@Test
-	void 이전_폴링이_실행_중이면_새로운_실행을_건너뛴다() {
-		TransactionPollingScheduler scheduler = scheduler();
+	void 이전_동기화이_실행_중이면_새로운_실행을_건너뛴다() {
+		TransactionSyncScheduler scheduler = scheduler();
 		AtomicBoolean running = (AtomicBoolean) ReflectionTestUtils.getField(scheduler, "running");
 		assertThat(running).isNotNull();
 		running.set(true);
 
-		scheduler.pollAll();
+		scheduler.syncAll();
 
-		verifyNoInteractions(userRepository, pollingService);
+		verifyNoInteractions(userRepository, syncManager);
 	}
 
 	@Test
 	void 실행_중_오류가_발생해도_다음_실행이_가능하다() {
-		TransactionPollingScheduler scheduler = scheduler();
+		TransactionSyncScheduler scheduler = scheduler();
 		given(userRepository.findAllByFinUserKeyIsNotNullAndDeletedAtIsNull())
 				.willThrow(new IllegalStateException("boom"))
 				.willReturn(List.of());
 
-		assertThatThrownBy(scheduler::pollAll)
+		assertThatThrownBy(scheduler::syncAll)
 				.isInstanceOf(IllegalStateException.class);
-		scheduler.pollAll();
+		scheduler.syncAll();
 
 		verify(userRepository, times(2)).findAllByFinUserKeyIsNotNullAndDeletedAtIsNull();
-		verify(pollingService, never()).pollUser(any(Long.class), any(LocalDateTime.class));
+		verify(syncManager, never()).syncUser(any(Long.class), any(LocalDateTime.class));
 	}
 
-	private TransactionPollingScheduler scheduler() {
-		return new TransactionPollingScheduler(userRepository, pollingService);
+	private TransactionSyncScheduler scheduler() {
+		return new TransactionSyncScheduler(userRepository, syncManager);
 	}
 
 	private User user(long id) {
@@ -98,3 +98,4 @@ class TransactionPollingSchedulerTest {
 		return user;
 	}
 }
+

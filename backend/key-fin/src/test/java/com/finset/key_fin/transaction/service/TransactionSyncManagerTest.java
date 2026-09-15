@@ -27,11 +27,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
-class TransactionPollingServiceTest {
+class TransactionSyncManagerTest {
 
 	private static final long USER_ID = 1L;
-	private static final LocalDateTime POLLING_TIME = LocalDateTime.of(2026, 9, 15, 10, 30);
-	private static final LocalDate TODAY = POLLING_TIME.toLocalDate();
+	private static final LocalDateTime SYNC_TIME = LocalDateTime.of(2026, 9, 15, 10, 30);
+	private static final LocalDate TODAY = SYNC_TIME.toLocalDate();
 	private static final LocalDate START_DATE = TODAY.minusDays(1);
 
 	@Mock
@@ -43,21 +43,21 @@ class TransactionPollingServiceTest {
 	@Mock
 	private TransactionSyncService transactionSyncService;
 	@Mock
-	private TransactionPollingStateService pollingStateService;
+	private TransactionSyncStateService syncStateService;
 
-	private TransactionPollingService pollingService;
+	private TransactionSyncManager syncManager;
 	private User user;
 	private Account account;
 	private Card card;
 
 	@BeforeEach
 	void setUp() {
-		pollingService = new TransactionPollingService(
+		syncManager = new TransactionSyncManager(
 				userRepository,
 				accountRepository,
 				cardRepository,
 				transactionSyncService,
-				pollingStateService
+				syncStateService
 		);
 		user = User.create("qwer@qwer.com", "password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
@@ -67,56 +67,56 @@ class TransactionPollingServiceTest {
 	}
 
 	@Test
-	void 사용자의_관리_계좌와_카드를_하나씩_폴링한다() {
-		givenPollingTargets();
-		givenPollingStartDate(TransactionAssetType.ACCOUNT, account.getId());
-		givenPollingStartDate(TransactionAssetType.CARD, card.getId());
+	void 사용자의_관리_계좌와_카드를_하나씩_동기화한다() {
+		givenSyncTargets();
+		givenSyncStartDate(TransactionAssetType.ACCOUNT, account.getId());
+		givenSyncStartDate(TransactionAssetType.CARD, card.getId());
 
-		pollingService.pollUser(USER_ID, POLLING_TIME);
+		syncManager.syncUser(USER_ID, SYNC_TIME);
 
 		verify(transactionSyncService).syncAccountTransactions(user, account, START_DATE, TODAY);
 		verify(transactionSyncService).syncCardTransactions(user, card, START_DATE, TODAY);
-		verify(pollingStateService).recordPollingSuccess(
-				user, TransactionAssetType.ACCOUNT, account.getId(), POLLING_TIME);
-		verify(pollingStateService).recordPollingSuccess(
-				user, TransactionAssetType.CARD, card.getId(), POLLING_TIME);
+		verify(syncStateService).recordSyncSuccess(
+				user, TransactionAssetType.ACCOUNT, account.getId(), SYNC_TIME);
+		verify(syncStateService).recordSyncSuccess(
+				user, TransactionAssetType.CARD, card.getId(), SYNC_TIME);
 	}
 
 	@Test
-	void 계좌_폴링이_실패해도_카드_폴링을_계속한다() {
-		givenPollingTargets();
-		givenPollingStartDate(TransactionAssetType.ACCOUNT, account.getId());
-		givenPollingStartDate(TransactionAssetType.CARD, card.getId());
+	void 계좌_동기화이_실패해도_카드_동기화을_계속한다() {
+		givenSyncTargets();
+		givenSyncStartDate(TransactionAssetType.ACCOUNT, account.getId());
+		givenSyncStartDate(TransactionAssetType.CARD, card.getId());
 		doThrow(new BusinessException(FinanceErrorCode.SERVICE_UNAVAILABLE))
 				.when(transactionSyncService)
 				.syncAccountTransactions(user, account, START_DATE, TODAY);
 
-		pollingService.pollUser(USER_ID, POLLING_TIME);
+		syncManager.syncUser(USER_ID, SYNC_TIME);
 
-		verify(pollingStateService, never()).recordPollingSuccess(
-				user, TransactionAssetType.ACCOUNT, account.getId(), POLLING_TIME);
+		verify(syncStateService, never()).recordSyncSuccess(
+				user, TransactionAssetType.ACCOUNT, account.getId(), SYNC_TIME);
 		verify(transactionSyncService).syncCardTransactions(user, card, START_DATE, TODAY);
-		verify(pollingStateService).recordPollingSuccess(
-				user, TransactionAssetType.CARD, card.getId(), POLLING_TIME);
+		verify(syncStateService).recordSyncSuccess(
+				user, TransactionAssetType.CARD, card.getId(), SYNC_TIME);
 	}
 
 	@Test
-	void 금융_사용자_키가_무효하면_해당_사용자의_남은_폴링을_중단한다() {
-		givenPollingTargets();
-		givenPollingStartDate(TransactionAssetType.ACCOUNT, account.getId());
+	void 금융_사용자_키가_무효하면_해당_사용자의_남은_동기화을_중단한다() {
+		givenSyncTargets();
+		givenSyncStartDate(TransactionAssetType.ACCOUNT, account.getId());
 		doThrow(new BusinessException(FinanceErrorCode.USER_KEY_INVALID))
 				.when(transactionSyncService)
 				.syncAccountTransactions(user, account, START_DATE, TODAY);
 
-		pollingService.pollUser(USER_ID, POLLING_TIME);
+		syncManager.syncUser(USER_ID, SYNC_TIME);
 
 		verify(transactionSyncService, never()).syncCardTransactions(
 				user, card, START_DATE, TODAY);
-		verify(pollingStateService, never()).recordPollingSuccess(
-				user, TransactionAssetType.ACCOUNT, account.getId(), POLLING_TIME);
+		verify(syncStateService, never()).recordSyncSuccess(
+				user, TransactionAssetType.ACCOUNT, account.getId(), SYNC_TIME);
 	}
 
-	private void givenPollingTargets() {
+	private void givenSyncTargets() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(accountRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(USER_ID))
 				.willReturn(List.of(account));
@@ -124,8 +124,8 @@ class TransactionPollingServiceTest {
 				.willReturn(List.of(card));
 	}
 
-	private void givenPollingStartDate(TransactionAssetType assetType, long assetId) {
-		given(pollingStateService.calculatePollingStartDate(
+	private void givenSyncStartDate(TransactionAssetType assetType, long assetId) {
+		given(syncStateService.calculateSyncStartDate(
 				USER_ID, assetType, assetId, TODAY)).willReturn(START_DATE);
 	}
 
@@ -157,3 +157,4 @@ class TransactionPollingServiceTest {
 		return card;
 	}
 }
+

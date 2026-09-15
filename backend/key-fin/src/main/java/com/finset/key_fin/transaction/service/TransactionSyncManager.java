@@ -22,34 +22,34 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class TransactionPollingService {
+public class TransactionSyncManager {
 
 	private final UserRepository userRepository;
 	private final AccountRepository accountRepository;
 	private final CardRepository cardRepository;
 	private final TransactionSyncService transactionSyncService;
-	private final TransactionPollingStateService pollingStateService;
+	private final TransactionSyncStateService syncStateService;
 
-	public void pollUser(long userId, LocalDateTime pollingTime) {
+	public void syncUser(long userId, LocalDateTime syncTime) {
 		User user = requireFinanceConnectedUser(userId);
-		LocalDate today = pollingTime.toLocalDate();
+		LocalDate today = syncTime.toLocalDate();
 		List<Account> accounts = accountRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(userId);
 		List<Card> cards = cardRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(userId);
 
-		if (!pollAccounts(user, accounts, today, pollingTime)) {
+		if (!syncAccounts(user, accounts, today, syncTime)) {
 			return;
 		}
-		pollCards(user, cards, today, pollingTime);
+		syncCards(user, cards, today, syncTime);
 	}
 
-	private boolean pollAccounts(
+	private boolean syncAccounts(
 			User user,
 			List<Account> accounts,
 			LocalDate today,
-			LocalDateTime pollingTime
+			LocalDateTime syncTime
 	) {
 		for (Account account : accounts) {
-			boolean shouldContinue = pollAccount(user, account, today, pollingTime);
+			boolean shouldContinue = syncAccount(user, account, today, syncTime);
 			if (!shouldContinue) {
 				return false;
 			}
@@ -57,32 +57,32 @@ public class TransactionPollingService {
 		return true;
 	}
 
-	private void pollCards(
+	private void syncCards(
 			User user,
 			List<Card> cards,
 			LocalDate today,
-			LocalDateTime pollingTime
+			LocalDateTime syncTime
 	) {
 		for (Card card : cards) {
-			boolean shouldContinue = pollCard(user, card, today, pollingTime);
+			boolean shouldContinue = syncCard(user, card, today, syncTime);
 			if (!shouldContinue) {
 				return;
 			}
 		}
 	}
 
-	private boolean pollAccount(
+	private boolean syncAccount(
 			User user,
 			Account account,
 			LocalDate today,
-			LocalDateTime pollingTime
+			LocalDateTime syncTime
 	) {
 		try {
-			LocalDate startDate = pollingStateService.calculatePollingStartDate(
+			LocalDate startDate = syncStateService.calculateSyncStartDate(
 					user.getId(), TransactionAssetType.ACCOUNT, account.getId(), today);
 			transactionSyncService.syncAccountTransactions(user, account, startDate, today);
-			pollingStateService.recordPollingSuccess(
-					user, TransactionAssetType.ACCOUNT, account.getId(), pollingTime);
+			syncStateService.recordSyncSuccess(
+					user, TransactionAssetType.ACCOUNT, account.getId(), syncTime);
 			return true;
 		} catch (BusinessException exception) {
 			return handleBusinessFailure(
@@ -94,18 +94,18 @@ public class TransactionPollingService {
 		}
 	}
 
-	private boolean pollCard(
+	private boolean syncCard(
 			User user,
 			Card card,
 			LocalDate today,
-			LocalDateTime pollingTime
+			LocalDateTime syncTime
 	) {
 		try {
-			LocalDate startDate = pollingStateService.calculatePollingStartDate(
+			LocalDate startDate = syncStateService.calculateSyncStartDate(
 					user.getId(), TransactionAssetType.CARD, card.getId(), today);
 			transactionSyncService.syncCardTransactions(user, card, startDate, today);
-			pollingStateService.recordPollingSuccess(
-					user, TransactionAssetType.CARD, card.getId(), pollingTime);
+			syncStateService.recordSyncSuccess(
+					user, TransactionAssetType.CARD, card.getId(), syncTime);
 			return true;
 		} catch (BusinessException exception) {
 			return handleBusinessFailure(
@@ -124,11 +124,11 @@ public class TransactionPollingService {
 			BusinessException exception
 	) {
 		if (exception.getErrorCode() == FinanceErrorCode.USER_KEY_INVALID) {
-			log.warn("거래 폴링 중단 — 금융 사용자 키 무효: userId={}", userId);
+			log.warn("거래 동기화 중단 — 금융 사용자 키 무효: userId={}", userId);
 			return false;
 		}
 		log.warn(
-				"거래 폴링 실패 — 다음 자산으로 진행: userId={}, assetType={}, assetId={}, code={}",
+				"거래 동기화 실패 — 다음 자산으로 진행: userId={}, assetType={}, assetId={}, code={}",
 				userId, assetType, assetId, exception.getErrorCode().getCode());
 		return true;
 	}
@@ -140,7 +140,7 @@ public class TransactionPollingService {
 			RuntimeException exception
 	) {
 		log.error(
-				"거래 폴링 실패 — 다음 자산으로 진행: userId={}, assetType={}, assetId={}",
+				"거래 동기화 실패 — 다음 자산으로 진행: userId={}, assetType={}, assetId={}",
 				userId, assetType, assetId, exception);
 	}
 
@@ -153,3 +153,4 @@ public class TransactionPollingService {
 		return user;
 	}
 }
+
