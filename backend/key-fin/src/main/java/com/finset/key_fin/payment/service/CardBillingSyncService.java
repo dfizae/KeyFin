@@ -3,6 +3,7 @@ package com.finset.key_fin.payment.service;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -46,23 +47,24 @@ public class CardBillingSyncService {
 				.findAllByCardIdIn(cards.stream().map(Card::getId).toList()).stream()
 				.collect(Collectors.toMap(billing -> key(billing.getCardId(), billing.getBillingDate()), Function.identity()));
 		YearMonth thisMonth = YearMonth.from(LocalDate.now(clock));
-		int created = 0, updated = 0;
+		List<CardBilling> created = new ArrayList<>();
+		int updated = 0;
 		for (Card card : cards) {
 			List<FinanceBillingStatement> statements = financeCardBillingClient.findBillingStatements(
 					userKey, card.getFinCardNo(), card.getCvc(), thisMonth.minusMonths(STATEMENT_LOOKBACK_MONTHS), thisMonth);
 			for (FinanceBillingStatement statement : statements) {
 				CardBilling row = byKey.get(key(card.getId(), statement.issuedOn()));
 				if (row == null) {
-					cardBillingRepository.save(CardBilling.sync(
+					created.add(CardBilling.sync(
 							card.getId(), statement.issuedOn(), statement.amount(), statement.isPaid(), statement.paidAt()));
-					created++;
 				} else {
 					row.syncFrom(statement.amount(), statement.isPaid(), statement.paidAt());
 					updated++;
 				}
 			}
 		}
-		return new SyncResult(true, created, updated);
+		cardBillingRepository.saveAll(created);
+		return new SyncResult(true, created.size(), updated);
 	}
 
 	private static String key(long cardId, LocalDate billingDate) {
