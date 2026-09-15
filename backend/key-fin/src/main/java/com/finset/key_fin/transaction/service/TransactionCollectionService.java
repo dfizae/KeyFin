@@ -55,8 +55,8 @@ public class TransactionCollectionService {
 		List<Transaction> newTransactions = new ArrayList<>();
 		Set<String> transactionNumbers = new HashSet<>();
 		collectAccountTransactions(
-				user, userKey, accounts, startDate, endDate, false,
-				transactionNumbers, newTransactions, Map.of());
+				user, userKey, accounts, startDate, endDate,
+				transactionNumbers, newTransactions);
 		collectCardTransactions(
 				user, userKey, cards, startDate, endDate,
 				transactionNumbers, newTransactions);
@@ -76,8 +76,8 @@ public class TransactionCollectionService {
 		List<Transaction> newTransactions = new ArrayList<>();
 		Map<Long, Transaction> reclassifiedTransactions = new LinkedHashMap<>();
 
-		collectAccountTransactions(
-				user, userKey, List.of(account), startDate, endDate, true,
+		collectNewlyManagedAccountTransactions(
+				user, userKey, account, startDate, endDate,
 				new HashSet<>(), newTransactions, reclassifiedTransactions);
 		saveTransactions(newTransactions, reclassifiedTransactions);
 	}
@@ -88,10 +88,8 @@ public class TransactionCollectionService {
 			List<Account> accounts,
 			LocalDate startDate,
 			LocalDate endDate,
-			boolean reclassifyExistingCounterpart,
 			Set<String> transactionNumbers,
-			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+			List<Transaction> newTransactions
 	) {
 		for (Account account : accounts) {
 			List<FinanceAccountTransaction> financeTransactions = accountTransactionClient.findTransactions(
@@ -101,12 +99,31 @@ public class TransactionCollectionService {
 					continue;
 				}
 				Transaction transaction = classificationService.fromAccount(user, account, financeTransaction);
-				if (reclassifyExistingCounterpart) {
-					reclassifyCounterpart(
-							user.getId(), transaction, financeTransaction, reclassifiedTransactions);
-				}
 				newTransactions.add(transaction);
 			}
+		}
+	}
+
+	private void collectNewlyManagedAccountTransactions(
+			User user,
+			String userKey,
+			Account account,
+			LocalDate startDate,
+			LocalDate endDate,
+			Set<String> transactionNumbers,
+			List<Transaction> newTransactions,
+			Map<Long, Transaction> reclassifiedTransactions
+	) {
+		List<FinanceAccountTransaction> financeTransactions = accountTransactionClient.findTransactions(
+				userKey, account.getFinAccountNo(), startDate, endDate);
+		for (FinanceAccountTransaction financeTransaction : financeTransactions) {
+			if (isDuplicate(user.getId(), financeTransaction.transactionUniqueNo(), transactionNumbers)) {
+				continue;
+			}
+			Transaction transaction = classificationService.fromAccount(user, account, financeTransaction);
+			reclassifyCounterpart(
+					user.getId(), transaction, financeTransaction, reclassifiedTransactions);
+			newTransactions.add(transaction);
 		}
 	}
 
