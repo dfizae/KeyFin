@@ -30,7 +30,7 @@ function HomeCalendar({ width, month, onOpen }: HomeCalendarProps) {
     <CalendarAsset
       width={width}
       monthLabel={formatMonthKeyLabel(month)}
-      upcoming={upcoming ? { day: upcoming.day, name: upcoming.name, hasShortage: !upcoming.prepared } : null}
+      upcoming={upcoming ? { day: upcoming.day, name: upcoming.name, hasShortage: upcoming.preparation?.status === "SHORTAGE" } : null}
       onPress={onOpen}
     />
   );

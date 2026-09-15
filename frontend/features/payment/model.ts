@@ -1,61 +1,74 @@
 import { ContractMismatchError } from "@/lib/contract";
-import { fromServerWon, toWon, type KRW } from "@/lib/money";
+import { formatKRW, fromServerWon, toWon, type KRW } from "@/lib/money";
 
 /**
  * GET /payments/calendar?month=YYYYMM 계약 (docs/api-contract.md PAYMENT, FR-PAY-01·02).
- * prepared·shortage 는 매일 06:00 배치가 계산하는 서버 파생값이라 검증만 하고 다시 계산하지 않는다.
- * estimated=true 는 발행 전 카드 청구 예정액이다.
+ * FIXED = 직접 등록한 고정지출(출금 계좌에서 나감) / CARD_SUBSCRIPTION = 금융망에서 동기화한 카드 정기결제(카드 대금에 포함돼
+ * withdrawalAccountId 가 null) / CARD_BILL = 카드 청구(FR-PAY-02). 같은 날 순서는 서버가 정해 보내므로 다시 정렬하지 않는다.
+ * prepared·shortage 는 서버 파생값이라 검증만 하고 다시 계산하지 않는다 — 필요 금액 계산(FR-PAY-02) 전까지는 null 이다.
+ * estimated=true 는 변동형 예상액이다(공과금, 발행 전 카드 청구).
  */
-export const PAYMENT_TYPES = ["FIXED", "CARD_BILL"] as const;
+export const PAYMENT_TYPES = ["FIXED", "CARD_SUBSCRIPTION", "CARD_BILL"] as const;
 export type PaymentType = (typeof PAYMENT_TYPES)[number] | "UNKNOWN";
 
 export type CalendarItemDto = {
   type: string;
-  fixedExpenseId?: number;
-  cardId?: number;
+  /** FIXED·CARD_SUBSCRIPTION 만 있다 */
+  fixedExpenseId: number | null;
   name: string;
+  expenseType: string | null;
   amount: number;
-  withdrawalAccountId?: number;
-  estimated?: boolean;
-  prepared: boolean;
-  shortage: number;
+  estimated: boolean;
+  /** CARD_SUBSCRIPTION 은 카드 청구 경로라 null */
+  withdrawalAccountId: number | null;
+  /** FR-PAY-02 전까지 null */
+  prepared: boolean | null;
+  /** FR-PAY-02 전까지 null */
+  shortage: number | null;
 };
 
 export type CalendarDayDto = {
-  /** "2026-09-15" */
+  /** "2026-09-15", 말일 보정 적용 */
   date: string;
   items: CalendarItemDto[];
 };
 
-export type PaymentCalendarDto = { days: CalendarDayDto[] };
+export type PaymentCalendarDto = {
+  /** "YYYYMM" */
+  month: string;
+  days: CalendarDayDto[];
+};
+
+/** 결제 준비 상태. 서버가 아직 계산하지 않은 건(null)은 화면이 뱃지를 그리지 않는다 */
+export type Preparation = { status: "PREPARED" } | { status: "SHORTAGE"; shortage: KRW };
 
 export type CalendarEntry = {
   /** 같은 날 여러 건이 올 수 있어 date 만으로는 목록 키가 안 된다 */
   key: string;
   date: string;
-  /** 고정지출만 있다. 수정 화면(PAGE-26)으로 갈 수 있는 건인지 가른다 */
   fixedExpenseId: number | null;
   withdrawalAccountId: number | null;
-  /** 날짜의 일(1~31) */
+  /** 날짜의 일(1~31). 말일 보정된 값이라 고정지출의 출금일(paymentDay)과 다를 수 있다 */
   day: number;
   type: PaymentType;
+  expenseType: ExpenseType | null;
   name: string;
   amount: KRW;
   estimated: boolean;
-  prepared: boolean;
-  /** 0 이면 준비된 건 */
-  shortage: KRW;
+  preparation: Preparation | null;
 };
 
 export type PaymentCalendar = {
   entries: CalendarEntry[];
-  /** prepared=false 인 건수 */
+  /** 준비가 부족한 건수 */
   shortageCount: number;
+  /** 준비 상태를 서버가 한 건이라도 계산했는지. false 면 '모두 준비됐어요' 같은 문구를 쓰지 않는다 */
+  preparationKnown: boolean;
 };
 
 const DATE = /^\d{4}-(\d{2})-(\d{2})$/;
 
-function won(value: number, field: string): KRW {
+function won(value: unknown, field: string): KRW {
   try {
     return fromServerWon(value);
   } catch {
@@ -67,27 +80,61 @@ function toType(raw: string): PaymentType {
   return (PAYMENT_TYPES as readonly string[]).includes(raw) ? (raw as PaymentType) : "UNKNOWN";
 }
 
+function toPreparation(item: CalendarItemDto): Preparation | null {
+  if (item.prepared === null || item.prepared === undefined) return null;
+  if (item.prepared) return { status: "PREPARED" };
+  return { status: "SHORTAGE", shortage: won(item.shortage, "items.shortage") };
+}
+
 export function toPaymentCalendar(dto: PaymentCalendarDto): PaymentCalendar {
   const days = [...dto.days].sort((a, b) => a.date.localeCompare(b.date));
   const entries = days.flatMap((day) => {
     const matched = DATE.exec(day.date);
     if (!matched) throw new ContractMismatchError("days.date");
-    return day.items.map((item, index) => ({
-      key: `${day.date}#${index}`,
-      date: day.date,
-      fixedExpenseId: item.fixedExpenseId ?? null,
-      withdrawalAccountId: item.withdrawalAccountId ?? null,
-      day: Number(matched[2]),
-      type: toType(item.type),
-      name: item.name,
-      amount: won(item.amount, "items.amount"),
-      estimated: item.estimated ?? false,
-      prepared: item.prepared,
-      shortage: won(item.shortage, "items.shortage"),
-    }));
+    return day.items.map(
+      (item, index): CalendarEntry => ({
+        key: `${day.date}#${index}`,
+        date: day.date,
+        fixedExpenseId: item.fixedExpenseId ?? null,
+        withdrawalAccountId: item.withdrawalAccountId ?? null,
+        day: Number(matched[2]),
+        type: toType(item.type),
+        expenseType: toExpenseType(item.expenseType),
+        name: item.name,
+        amount: won(item.amount, "items.amount"),
+        estimated: item.estimated ?? false,
+        preparation: toPreparation(item),
+      })
+    );
   });
 
-  return { entries, shortageCount: entries.filter((entry) => !entry.prepared).length };
+  return {
+    entries,
+    shortageCount: entries.filter((entry) => entry.preparation?.status === "SHORTAGE").length,
+    preparationKnown: entries.some((entry) => entry.preparation !== null),
+  };
+}
+
+export const PREPARED_LABEL = "준비됨";
+
+/** 뱃지·접근성 문구. 준비 상태를 모르면 null 이라 뱃지를 그리지 않는다 */
+export function preparationLabel(preparation: Preparation | null): string | null {
+  if (preparation === null) return null;
+  return preparation.status === "PREPARED" ? PREPARED_LABEL : `부족 ${formatKRW(preparation.shortage)}`;
+}
+
+/** 고칠 수 있는 건 직접 등록한 고정지출뿐이다. 동기화된 카드 정기결제는 서버가 409(PAY_002)로 막는다 */
+export function isEditableEntry(entry: CalendarEntry): entry is CalendarEntry & { fixedExpenseId: number } {
+  return entry.type === "FIXED" && entry.fixedExpenseId !== null;
+}
+
+/**
+ * 캘린더 항목을 눌러 고정지출 화면으로 갈 수 있는지. 고정지출 행이 있는 항목은 모두 연다 — 직접 등록한 것은 수정 폼,
+ * 동기화된 카드 정기결제는 읽기 전용 상세다(사용자 결정 2026-09-15: 한 항목만 눌리지 않으면 목록의 통일감이 깨진다).
+ * 카드 청구(CARD_BILL)는 고정지출 행이 없어 열 곳이 없다.
+ */
+export function canOpenEntry(entry: CalendarEntry): entry is CalendarEntry & { fixedExpenseId: number } {
+  return entry.fixedExpenseId !== null && (entry.type === "FIXED" || entry.type === "CARD_SUBSCRIPTION");
 }
 
 /** 자산 탭 "이번 달 정기결제 예정": 오늘 포함 이후 건을 날짜순으로 limit 건까지 */
@@ -102,16 +149,99 @@ export function upcomingEntry(calendar: PaymentCalendar, todayKey: string): Cale
 }
 
 /** 고정지출 유형 (docs/api-contract.md 열거형 ExpenseType) */
-export const EXPENSE_TYPES = ["RENT", "SUBSCRIPTION", "CARD_BILL", "LOAN", "UTILITY"] as const;
+export const EXPENSE_TYPES = ["RENT", "SUBSCRIPTION", "UTILITY", "LOAN", "CARD_BILL"] as const;
 export type ExpenseType = (typeof EXPENSE_TYPES)[number];
+
+/** 사용자가 직접 등록할 수 있는 유형. CARD_BILL 은 청구서로 엔진이 계산해 등록하면 400(PAY_004)이다 */
+export const MANUAL_EXPENSE_TYPES = ["RENT", "SUBSCRIPTION", "UTILITY", "LOAN"] as const;
+export type ManualExpenseType = (typeof MANUAL_EXPENSE_TYPES)[number];
+
+function toExpenseType(raw: string | null | undefined): ExpenseType | null {
+  return raw !== null && raw !== undefined && (EXPENSE_TYPES as readonly string[]).includes(raw) ? (raw as ExpenseType) : null;
+}
+
+export function isManualExpenseType(type: ExpenseType | null): type is ManualExpenseType {
+  return type !== null && (MANUAL_EXPENSE_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * GET /fixed-expenses 계약 (FR-PAY-07). 활성 고정지출을 등록 순으로 준다. 금융망 정기결제에서 동기화한 항목도 섞여 오며
+ * synced=true 는 수정·삭제가 409(PAY_002)라 화면이 잠근다. 동기화 항목은 출금 계좌가 없어(카드 청구 경로) withdrawalAccountId 가 null 이다.
+ */
+export type FixedExpenseDto = {
+  id: number;
+  name: string;
+  expenseType: string;
+  /** 자동 감지 CARD_BILL 은 null(엔진 계산) */
+  amount: number | null;
+  isVariable: boolean;
+  /** 1~31, 말일 보정 전 저장값 */
+  paymentDay: number;
+  withdrawalAccountId: number | null;
+  synced: boolean;
+};
+
+export type FixedExpenseListDto = FixedExpenseDto[];
+
+export type FixedExpense = {
+  id: number;
+  name: string;
+  /** 계약에 없는 값이면 null */
+  expenseType: ExpenseType | null;
+  amount: KRW | null;
+  isVariable: boolean;
+  paymentDay: number;
+  withdrawalAccountId: number | null;
+  synced: boolean;
+};
 
 export const MIN_PAYMENT_DAY = 1;
 export const MAX_PAYMENT_DAY = 31;
+export const MAX_FIXED_EXPENSE_NAME_LENGTH = 50;
+
+export function toFixedExpense(dto: FixedExpenseDto): FixedExpense {
+  if (!Number.isInteger(dto.paymentDay) || dto.paymentDay < MIN_PAYMENT_DAY || dto.paymentDay > MAX_PAYMENT_DAY) {
+    throw new ContractMismatchError("paymentDay");
+  }
+  return {
+    id: dto.id,
+    name: dto.name,
+    expenseType: toExpenseType(dto.expenseType),
+    amount: dto.amount === null || dto.amount === undefined ? null : won(dto.amount, "amount"),
+    isVariable: dto.isVariable,
+    paymentDay: dto.paymentDay,
+    withdrawalAccountId: dto.withdrawalAccountId ?? null,
+    synced: dto.synced,
+  };
+}
+
+export function toFixedExpenses(dto: FixedExpenseListDto): FixedExpense[] {
+  return dto.map(toFixedExpense);
+}
+
+export function findFixedExpense(expenses: FixedExpense[], id: number): FixedExpense | null {
+  return expenses.find((expense) => expense.id === id) ?? null;
+}
+
+/** 고정지출 관리 화면: 직접 등록한 항목(고칠 수 있음)과 동기화된 카드 정기결제(잠김)를 나눈다. 순서는 서버의 등록 순 그대로다 */
+export function splitFixedExpenses(expenses: FixedExpense[]): { manual: FixedExpense[]; synced: FixedExpense[] } {
+  return {
+    manual: expenses.filter((expense) => !expense.synced),
+    synced: expenses.filter((expense) => expense.synced),
+  };
+}
+
+const MONTH_END_ADJUSTED_FROM = 29;
+
+/** "매달 15일", 29~31일은 없는 달에 말일로 나간다는 뜻을 붙인다(보정은 서버) */
+export function paymentDayLabel(paymentDay: number): string {
+  return paymentDay >= MONTH_END_ADJUSTED_FROM ? `매달 ${paymentDay}일 (없는 달은 말일)` : `매달 ${paymentDay}일`;
+}
 
 /** 고정지출 등록·수정 화면(PAGE-26)의 입력값. 금액·출금일은 입력 중 상태를 그대로 두려고 문자열이다 */
 export type FixedExpenseForm = {
   name: string;
-  expenseType: ExpenseType;
+  expenseType: ManualExpenseType;
   /** 원 단위 숫자만 있는 문자열(AmountInput) */
   amount: string;
   /** "1"~"31" */
@@ -119,17 +249,42 @@ export type FixedExpenseForm = {
   withdrawalAccountId: number | null;
 };
 
-/** POST /fixed-expenses 요청 (docs/api-contract.md PAYMENT, FR-PAY-07) */
+/** POST /fixed-expenses 와 PUT /fixed-expenses/{id} 요청. PUT 은 이 본문 전체로 교체한다 (FR-PAY-07) */
 export type FixedExpenseRequest = {
   name: string;
-  expenseType: ExpenseType;
+  expenseType: ManualExpenseType;
+  /** 원, 1 이상. 변동형은 예상액 */
   amount: number;
+  isVariable: boolean;
   paymentDay: number;
   withdrawalAccountId: number;
-  isVariable?: boolean;
 };
 
 export type FixedExpenseResponseDto = { id: number };
+
+const DEFAULT_EXPENSE_TYPE: ManualExpenseType = "SUBSCRIPTION";
+
+export const EMPTY_FIXED_EXPENSE_FORM: FixedExpenseForm = {
+  name: "",
+  expenseType: DEFAULT_EXPENSE_TYPE,
+  amount: "",
+  paymentDay: "",
+  withdrawalAccountId: null,
+};
+
+/**
+ * 수정 폼 초기값. 출금일은 말일 보정 전 저장값(paymentDay)이라 그대로 저장해도 날짜가 바뀌지 않는다.
+ * 직접 등록할 수 없는 유형(CARD_BILL·모르는 값)은 기본 유형에서 다시 고르게 한다.
+ */
+export function toFixedExpenseForm(expense: FixedExpense): FixedExpenseForm {
+  return {
+    name: expense.name,
+    expenseType: isManualExpenseType(expense.expenseType) ? expense.expenseType : DEFAULT_EXPENSE_TYPE,
+    amount: expense.amount === null ? "" : String(toWon(expense.amount)),
+    paymentDay: String(expense.paymentDay),
+    withdrawalAccountId: expense.withdrawalAccountId,
+  };
+}
 
 const PAYMENT_DAY = /^\d{1,2}$/;
 
@@ -138,7 +293,9 @@ const PAYMENT_DAY = /^\d{1,2}$/;
  * 서버가 다시 검사하므로(출금일 29~31 말일 보정도 서버) 여기서는 보낼 수 있는 형태인지만 본다.
  */
 export function fixedExpenseFormError(form: FixedExpenseForm): string | null {
-  if (form.name.trim() === "") return "이름을 입력해 주세요.";
+  const name = form.name.trim();
+  if (name === "") return "이름을 입력해 주세요.";
+  if (name.length > MAX_FIXED_EXPENSE_NAME_LENGTH) return `이름은 ${MAX_FIXED_EXPENSE_NAME_LENGTH}자까지 쓸 수 있어요.`;
   if (form.amount === "" || toWon(form.amount) <= 0n) return "금액을 입력해 주세요.";
   const day = Number(form.paymentDay);
   if (!PAYMENT_DAY.test(form.paymentDay) || day < MIN_PAYMENT_DAY || day > MAX_PAYMENT_DAY) {
@@ -148,18 +305,23 @@ export function fixedExpenseFormError(form: FixedExpenseForm): string | null {
   return null;
 }
 
-/** 화면 값 → 요청 본문. 공과금은 달마다 금액이 달라 isVariable 을 붙인다 (계약 사본 PAYMENT) */
+/** 공과금은 달마다 금액이 달라 변동형(예상액)으로 보낸다 (FR-PAY-09). 나머지 유형은 고정 금액이다 */
+export function isVariableExpenseType(type: ManualExpenseType): boolean {
+  return type === "UTILITY";
+}
+
+/** 화면 값 → 요청 본문. PUT 이 전체 교체라 isVariable 도 항상 명시한다 */
 export function toFixedExpenseRequest(form: FixedExpenseForm): FixedExpenseRequest {
   const error = fixedExpenseFormError(form);
   if (error !== null || form.withdrawalAccountId === null) throw new Error(error ?? "고정지출 입력이 올바르지 않습니다");
-  const request: FixedExpenseRequest = {
+  return {
     name: form.name.trim(),
     expenseType: form.expenseType,
     amount: Number(toWon(form.amount)),
+    isVariable: isVariableExpenseType(form.expenseType),
     paymentDay: Number(form.paymentDay),
     withdrawalAccountId: form.withdrawalAccountId,
   };
-  return form.expenseType === "UTILITY" ? { ...request, isVariable: true } : request;
 }
 
 export type CalendarDayGroup = {

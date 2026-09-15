@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import type { CalendarEntry, PaymentCalendar } from "@/features/payment/model";
+import { preparationLabel, type CalendarEntry, type PaymentCalendar } from "@/features/payment/model";
 import { getSceneScale } from "@/features/room/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -13,8 +13,7 @@ export const CALENDAR_POPOVER_SCENE_RECT = { x: 64, y: 104, width: 250 } as cons
 export const CALENDAR_CLOSE_LABEL = "출금 일정 닫기";
 export const CALENDAR_LINK_LABEL = "캘린더 열기";
 export const CALENDAR_EMPTY_MESSAGE = "이번 달 출금 예정이 없어요.";
-export const PREPARED_LABEL = "준비됨";
-const ESTIMATED_SUFFIX = "(예상)";
+export const ESTIMATED_SUFFIX = "(예상)";
 
 type CalendarPopoverProps = {
   width: number;
@@ -70,13 +69,19 @@ function CalendarPopover({ width, calendar, monthLabel, onClose, onOpenCalendar 
   );
 }
 
+// 준비 상태를 서버가 아직 계산하지 않았으면(FR-PAY-02 전) 뱃지를 그리지 않는다.
 function EntryRow({ entry }: { entry: CalendarEntry }) {
   const name = entry.estimated ? `${entry.name} ${ESTIMATED_SUFFIX}` : entry.name;
   const amount = formatKRW(entry.amount);
-  const badge = entry.prepared ? PREPARED_LABEL : `부족 ${formatKRW(entry.shortage)}`;
+  const badge = preparationLabel(entry.preparation);
+  const prepared = entry.preparation?.status === "PREPARED";
 
   return (
-    <View className="flex-row items-center gap-2" accessible accessibilityLabel={`${entry.day}일 ${name} ${amount}, ${badge}`}>
+    <View
+      className="flex-row items-center gap-2"
+      accessible
+      accessibilityLabel={`${entry.day}일 ${name} ${amount}${badge === null ? "" : `, ${badge}`}`}
+    >
       <Text className="w-8 text-caption tabular-nums text-foreground">{entry.day}일</Text>
       <View className="flex-1">
         <Text className="text-caption text-foreground" numberOfLines={1}>
@@ -84,9 +89,11 @@ function EntryRow({ entry }: { entry: CalendarEntry }) {
         </Text>
         <Text className="text-caption tabular-nums text-card-foreground">{amount}</Text>
       </View>
-      <View className={cn("rounded-sm px-1.5 py-0.5", entry.prepared ? "bg-positive-muted" : "bg-destructive-muted")} accessible={false}>
-        <Text className={cn("text-caption tabular-nums", entry.prepared ? "text-positive" : "text-destructive")}>{badge}</Text>
-      </View>
+      {badge === null ? null : (
+        <View className={cn("rounded-sm px-1.5 py-0.5", prepared ? "bg-positive-muted" : "bg-destructive-muted")} accessible={false}>
+          <Text className={cn("text-caption tabular-nums", prepared ? "text-positive" : "text-destructive")}>{badge}</Text>
+        </View>
+      )}
     </View>
   );
 }
