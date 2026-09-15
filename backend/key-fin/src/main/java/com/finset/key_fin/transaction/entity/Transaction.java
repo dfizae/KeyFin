@@ -22,7 +22,6 @@ import java.time.LocalTime;
 
 @Getter
 @Entity
-@jakarta.persistence.EntityListeners(com.finset.key_fin.coaching.CoachingTransactionListener.class)
 @Table(name = "transactions")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Transaction extends BaseEntity {

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
-import { CoachingEntry } from "@/features/coaching/components/CoachingEntry";
 import { useConnectFinance } from "@/features/link/api/queries";
 import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/errors";
 import { canSubmitFinanceEmail, FINANCE_EMAIL_MAX_LENGTH } from "@/features/link/model";
@@ -34,7 +33,6 @@ function FinanceEmailScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <View className="px-6 py-3"><CoachingEntry /></View>
       <View className="flex-row items-center px-6 pb-2">
         <Pressable
           accessibilityRole="button"
