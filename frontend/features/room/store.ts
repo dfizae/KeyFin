@@ -1,24 +1,24 @@
 import { create } from "zustand";
 
-import type { FurnitureId } from "@/features/room/catalog";
+import type { RoomItemId } from "@/features/room/catalog";
 import type { ScenePoint } from "@/features/room/model";
 import { DEFAULT_LAYOUT, type Placement } from "@/features/room/scene";
 
 /**
- * 방 배치 상태.
+ * 방 배치 상태. 가구(바닥)와 벽 오브젝트(보드·캘린더)를 한 배열에 둔다.
  * - layout: 확정된 배치. 3단계에서 서버(GET/PUT /room/layout)와 동기화하며 TanStack Query 캐시로 옮긴다. (TBD)
- * - draft: 편집 모드에서 만지는 사본. 취소하면 버리고, 완료하면 layout 이 된다.
+ * - draft: 편집 모드(방 꾸미기 화면)에서 만지는 사본. 취소하면 버리고, 완료하면 layout 이 된다.
  * 편집 중 상태만 클라이언트 상태로 남기는 것이 최종 형태이며, 지금은 서버가 없어 layout 도 여기 둔다.
  */
 export type RoomState = {
   layout: readonly Placement[];
   draft: readonly Placement[] | null;
-  selectedId: FurnitureId | null;
+  selectedId: RoomItemId | null;
   startEdit: () => void;
   cancelEdit: () => void;
   commitEdit: () => void;
-  select: (id: FurnitureId | null) => void;
-  moveItem: (id: FurnitureId, anchor: ScenePoint) => void;
+  select: (id: RoomItemId | null) => void;
+  moveItem: (id: RoomItemId, anchor: ScenePoint) => void;
 };
 
 export const useRoomStore = create<RoomState>((set, get) => ({

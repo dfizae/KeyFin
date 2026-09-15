@@ -24,7 +24,7 @@ import {
   travelDurationMs,
   zoomAround,
 } from "@/features/room/model";
-import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintPolygon } from "@/features/room/scene";
+import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintPolygon, isFloorPlacement } from "@/features/room/scene";
 
 describe("room scene 좌표계", () => {
   it("씬 단위는 Pencil CharacterRoom 327×404 이다", () => {
@@ -162,7 +162,7 @@ describe("바닥 다각형", () => {
   });
 
   it("기본 배치의 가구 발끝은 모두 바닥 안에 있다", () => {
-    for (const placement of DEFAULT_LAYOUT) {
+    for (const placement of DEFAULT_LAYOUT.filter(isFloorPlacement)) {
       expect(isPointInPolygon(placement.anchor, FLOOR_POLYGON)).toBe(true);
     }
   });
@@ -181,7 +181,7 @@ describe("캐릭터 이동 (웨이포인트)", () => {
     let i = 0;
     return () => values[i++ % values.length];
   };
-  const blocked = DEFAULT_LAYOUT.map((p) => getFootprintPolygon(FURNITURE[p.itemId], p.anchor));
+  const blocked = DEFAULT_LAYOUT.filter(isFloorPlacement).map((p) => getFootprintPolygon(FURNITURE[p.itemId], p.anchor));
 
   it("선분이 다각형을 지나는지 근사로 판정한다", () => {
     const square = [

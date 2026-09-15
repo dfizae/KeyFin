@@ -1,5 +1,5 @@
 import { HALF_PER_CELL, type GridFootprint } from "@/features/room/grid";
-import type { AnchorRatio, SceneSize } from "@/features/room/model";
+import type { AnchorRatio, SceneSize, Surface } from "@/features/room/model";
 
 /**
  * 가구 정의. 백엔드 `GET /room/catalog` 가 생기면 그 응답으로 대체하고 여기는 스프라이트 require 만 남긴다. (TBD)
@@ -89,3 +89,59 @@ export const FURNITURE: Record<FurnitureId, FurnitureItem> = {
     grid: cells(1, 1),
   },
 };
+
+/**
+ * 벽에 붙는 오브젝트. 바닥 격자가 아니라 벽면 격자(scene.ts SURFACES.WALL_*)에 놓이고, 편집 모드에서 자기 벽 안에서만 옮긴다
+ * (사용자 결정 2026-09-15: 벽 에셋은 바닥에 놓지 않되 벽 위에서는 드래그로 이동). 벽걸이는 전부 1×1 칸이고 에셋 위에 글자를 얹지 않는다 —
+ * 숫자·막대는 탭해서 여는 팝오버가 보여준다(사용자 결정 2026-09-15).
+ * - sprite: Pencil AI 생성(에셋 생성 (AI) 프레임 wall-board·wall-calendar, 마젠타 키) → remove-white-bg.ps1. 임시 에셋이며 사용자가 직접 만든 이미지로 바꾼다.
+ * - size: 씬 단위. 벽 한 칸(왼쪽 45×58, 오른쪽 48×63) 안에 들어가도록 폭 44 를 기준으로 PNG 비율을 지켰다.
+ * - anchor: 스프라이트 중심. 이 점이 벽 칸의 중심(cellAnchor)에 놓인다.
+ */
+export type WallItemId = "board" | "calendar";
+export type WallSurface = Exclude<Surface, "FLOOR">;
+/** 방에 놓이는 모든 오브젝트 id. 배치(Placement)·선택·드래그가 이 타입으로 통한다 */
+export type RoomItemId = FurnitureId | WallItemId;
+
+export type WallItem = {
+  id: WallItemId;
+  name: string;
+  sprite: number;
+  size: SceneSize;
+  anchor: AnchorRatio;
+  grid: GridFootprint;
+  /** 붙는 벽. 다른 벽으로는 옮기지 않는다 */
+  surface: WallSurface;
+};
+
+/** 벽 칸은 col 이 벽을 따라가는 가로, row 가 세로다(바닥과 달리 축을 바꾸지 않는다) */
+const wallCells = (along: number, down: number): GridFootprint => ({ w: along * HALF_PER_CELL, d: down * HALF_PER_CELL });
+
+const CENTER: AnchorRatio = { x: 0.5, y: 0.5 };
+/** 벽걸이는 전부 같은 크기다(사용자 요청 2026-09-15). 생성 프레임 72×90 비율, 벽 한 칸(48×63) 안에 든다 */
+const WALL_ITEM_SIZE: SceneSize = { width: 44, height: 55 };
+
+export const WALL_ITEMS: Record<WallItemId, WallItem> = {
+  board: {
+    id: "board",
+    name: "예산 보드",
+    sprite: require("@/assets/sprites/wall/board.png"),
+    size: WALL_ITEM_SIZE,
+    anchor: CENTER,
+    grid: wallCells(1, 1),
+    surface: "WALL_RIGHT",
+  },
+  calendar: {
+    id: "calendar",
+    name: "출금 캘린더",
+    sprite: require("@/assets/sprites/wall/calendar.png"),
+    size: WALL_ITEM_SIZE,
+    anchor: CENTER,
+    grid: wallCells(1, 1),
+    surface: "WALL_RIGHT",
+  },
+};
+
+export function isWallItemId(id: RoomItemId): id is WallItemId {
+  return id in WALL_ITEMS;
+}

@@ -4,12 +4,13 @@ import { Pressable, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { preparationLabel, type CalendarEntry, type PaymentCalendar } from "@/features/payment/model";
-import { getSceneScale } from "@/features/room/model";
+import { getSceneScale, popoverBelow, type SceneRect } from "@/features/room/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-// Pencil home/p0/calendar-open CalendarPopover (ZzspU): 캘린더 에셋 아래 씬 단위 (64,104) 폭 250, bg-card · radius lg · 날짜 행 + 링크.
-export const CALENDAR_POPOVER_SCENE_RECT = { x: 64, y: 104, width: 250 } as const;
+// Pencil home/p0/calendar-open CalendarPopover (ZzspU): 캘린더 에셋 아래 씬 단위 폭 250, bg-card · radius lg · 날짜 행 + 링크.
+// 자리는 시안의 (64,104) 고정값 대신 캘린더 스프라이트 사각형 아래로 계산한다 — 방 꾸미기에서 캘린더를 옮겨도 따라간다(2026-09-15).
+export const CALENDAR_POPOVER_WIDTH = 250;
 export const CALENDAR_CLOSE_LABEL = "출금 일정 닫기";
 export const CALENDAR_LINK_LABEL = "캘린더 열기";
 export const CALENDAR_EMPTY_MESSAGE = "이번 달 출금 예정이 없어요.";
@@ -17,6 +18,8 @@ export const ESTIMATED_SUFFIX = "(예상)";
 
 type CalendarPopoverProps = {
   width: number;
+  /** 팝오버가 붙는 캘린더 스프라이트의 씬 사각형 */
+  below: SceneRect;
   calendar: PaymentCalendar;
   monthLabel: string;
   onClose: () => void;
@@ -24,8 +27,9 @@ type CalendarPopoverProps = {
   onOpenCalendar: () => void;
 };
 
-function CalendarPopover({ width, calendar, monthLabel, onClose, onOpenCalendar }: CalendarPopoverProps) {
+function CalendarPopover({ width, below, calendar, monthLabel, onClose, onOpenCalendar }: CalendarPopoverProps) {
   const scale = getSceneScale(width);
+  const origin = popoverBelow(below, CALENDAR_POPOVER_WIDTH);
   const { entries, shortageCount } = calendar;
   const summary = shortageCount > 0 ? `${entries.length}건 · 부족 ${shortageCount}건` : `${entries.length}건`;
 
@@ -34,11 +38,7 @@ function CalendarPopover({ width, calendar, monthLabel, onClose, onOpenCalendar 
       <Pressable className="absolute inset-0" accessibilityRole="button" accessibilityLabel={CALENDAR_CLOSE_LABEL} onPress={onClose} />
       <View
         className="absolute gap-2 rounded-lg border border-border bg-card p-3.5"
-        style={{
-          left: CALENDAR_POPOVER_SCENE_RECT.x * scale,
-          top: CALENDAR_POPOVER_SCENE_RECT.y * scale,
-          width: CALENDAR_POPOVER_SCENE_RECT.width * scale,
-        }}
+        style={{ left: origin.x * scale, top: origin.y * scale, width: CALENDAR_POPOVER_WIDTH * scale }}
         accessibilityLiveRegion="polite"
       >
         <View className="flex-row items-center justify-between">
