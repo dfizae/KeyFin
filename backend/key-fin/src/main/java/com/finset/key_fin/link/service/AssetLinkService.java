@@ -28,7 +28,7 @@ public class AssetLinkService {
 		Set<Long> accountIds = new LinkedHashSet<>(request.accountIdsOrEmpty());
 		Set<Long> cardIds = new LinkedHashSet<>(request.cardIdsOrEmpty());
 		LinkAssetsResponse response = assetLinkWriter.link(userId, accountIds, cardIds);
-		// TODO(yr): 새로 관리되는 계좌가 있으면 연결 커밋 후 collectNewlyManagedAccountHistory를 호출한다.
+		// TODO(yr): 새로 관리되는 계좌가 있으면 연결 커밋 후 syncNewlyManagedAccountHistory를 호출한다.
 		return response;
 	}
 

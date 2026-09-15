@@ -31,7 +31,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-public class TransactionCollectionService {
+public class TransactionSyncService {
 
 	private static final List<ConfirmStatus> RECLASSIFIABLE_STATUSES = List.of(
 			ConfirmStatus.PENDING,
@@ -46,7 +46,7 @@ public class TransactionCollectionService {
 	private final FinanceCardTransactionClient cardTransactionClient;
 	private final TransactionClassificationService classificationService;
 
-	public void collect(long userId, LocalDate startDate, LocalDate endDate) {
+	public void sync(long userId, LocalDate startDate, LocalDate endDate) {
 		validatePeriod(startDate, endDate);
 		User user = requireActiveUser(userId);
 		String userKey = requireFinanceUserKey(user);
@@ -54,16 +54,16 @@ public class TransactionCollectionService {
 		List<Card> cards = cardRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(userId);
 		List<Transaction> newTransactions = new ArrayList<>();
 		Set<String> transactionNumbers = new HashSet<>();
-		collectAccountTransactions(
+		syncAccountTransactions(
 				user, userKey, accounts, startDate, endDate,
 				transactionNumbers, newTransactions);
-		collectCardTransactions(
+		syncCardTransactions(
 				user, userKey, cards, startDate, endDate,
 				transactionNumbers, newTransactions);
 		saveTransactions(newTransactions, Map.of());
 	}
 
-	public void collectNewlyManagedAccountHistory(
+	public void syncNewlyManagedAccountHistory(
 			long userId,
 			long accountId,
 			LocalDate startDate,
@@ -76,13 +76,13 @@ public class TransactionCollectionService {
 		List<Transaction> newTransactions = new ArrayList<>();
 		Map<Long, Transaction> reclassifiedTransactions = new LinkedHashMap<>();
 
-		collectNewlyManagedAccountTransactions(
+		syncNewlyManagedAccountTransactions(
 				user, userKey, account, startDate, endDate,
 				new HashSet<>(), newTransactions, reclassifiedTransactions);
 		saveTransactions(newTransactions, reclassifiedTransactions);
 	}
 
-	private void collectAccountTransactions(
+	private void syncAccountTransactions(
 			User user,
 			String userKey,
 			List<Account> accounts,
@@ -104,7 +104,7 @@ public class TransactionCollectionService {
 		}
 	}
 
-	private void collectNewlyManagedAccountTransactions(
+	private void syncNewlyManagedAccountTransactions(
 			User user,
 			String userKey,
 			Account account,
@@ -127,7 +127,7 @@ public class TransactionCollectionService {
 		}
 	}
 
-	private void collectCardTransactions(
+	private void syncCardTransactions(
 			User user,
 			String userKey,
 			List<Card> cards,

@@ -44,7 +44,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 @SuppressWarnings("unchecked")
-class TransactionCollectionServiceTest {
+class TransactionSyncServiceTest {
 
 	private static final long USER_ID = 1L;
 	private static final LocalDate START_DATE = LocalDate.of(2026, 9, 14);
@@ -65,12 +65,12 @@ class TransactionCollectionServiceTest {
 	@Mock
 	private TransactionClassificationService classificationService;
 
-	private TransactionCollectionService collectionService;
+	private TransactionSyncService syncService;
 	private User user;
 
 	@BeforeEach
 	void setUp() {
-		collectionService = new TransactionCollectionService(
+		syncService = new TransactionSyncService(
 				userRepository,
 				accountRepository,
 				cardRepository,
@@ -102,7 +102,7 @@ class TransactionCollectionServiceTest {
 		given(classificationService.fromAccount(user, account, accountResponse)).willReturn(accountTransaction);
 		given(classificationService.fromCard(user, card, cardResponse)).willReturn(cardTransaction);
 
-		collectionService.collect(USER_ID, START_DATE, END_DATE);
+		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		ArgumentCaptor<List<Transaction>> captor = ArgumentCaptor.forClass(List.class);
 		verify(transactionRepository).saveAll(captor.capture());
@@ -124,7 +124,7 @@ class TransactionCollectionServiceTest {
 				.willReturn(true);
 		given(classificationService.fromAccount(user, account, first)).willReturn(transaction);
 
-		collectionService.collect(USER_ID, START_DATE, END_DATE);
+		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		verify(transactionRepository).saveAll(List.of(transaction));
 		verify(classificationService, never()).fromAccount(user, account, stored);
@@ -134,7 +134,7 @@ class TransactionCollectionServiceTest {
 	void 관리_자산이_없으면_금융망을_호출하지_않는다() {
 		givenCommonAssets(List.of(), List.of());
 
-		collectionService.collect(USER_ID, START_DATE, END_DATE);
+		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		verifyNoInteractions(accountTransactionClient, cardTransactionClient, classificationService);
 		verify(transactionRepository, never()).saveAll(anyList());
@@ -169,7 +169,7 @@ class TransactionCollectionServiceTest {
 						List.of(ConfirmStatus.PENDING, ConfirmStatus.AUTO)))
 				.willReturn(Optional.of(existing));
 
-		collectionService.collectNewlyManagedAccountHistory(
+		syncService.syncNewlyManagedAccountHistory(
 				USER_ID, source.getId(), START_DATE, END_DATE);
 
 		assertThat(existing.getExcludeTag()).isEqualTo(ExcludeTag.SELF_TRANSFER);
@@ -191,7 +191,7 @@ class TransactionCollectionServiceTest {
 				.willReturn(List.of(response));
 		given(classificationService.fromAccount(user, source, response)).willReturn(current);
 
-		collectionService.collect(USER_ID, START_DATE, END_DATE);
+		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		verify(accountRepository, never())
 				.findByUserIdAndFinAccountNoAndManagedTrue(any(), any());
@@ -213,7 +213,7 @@ class TransactionCollectionServiceTest {
 				"finance-user-key", card.getFinCardNo(), card.getCvc(), START_DATE, END_DATE))
 				.willThrow(new BusinessException(FinanceErrorCode.SERVICE_UNAVAILABLE));
 
-		assertThatThrownBy(() -> collectionService.collect(USER_ID, START_DATE, END_DATE))
+		assertThatThrownBy(() -> syncService.sync(USER_ID, START_DATE, END_DATE))
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(FinanceErrorCode.SERVICE_UNAVAILABLE));
@@ -226,7 +226,7 @@ class TransactionCollectionServiceTest {
 		ReflectionTestUtils.setField(disconnectedUser, "id", USER_ID);
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(disconnectedUser));
 
-		assertThatThrownBy(() -> collectionService.collect(USER_ID, START_DATE, END_DATE))
+		assertThatThrownBy(() -> syncService.sync(USER_ID, START_DATE, END_DATE))
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(LinkErrorCode.FINANCE_NOT_CONNECTED));
