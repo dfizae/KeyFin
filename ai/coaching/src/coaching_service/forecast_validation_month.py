@@ -5,6 +5,7 @@ from pydantic import Field, TypeAdapter
 from coaching_service.errors import ServiceError
 from coaching_service.forecast_validation_contracts import Registration, Settlement
 from coaching_service.forecast_validation_month_contracts import (
+    BudgetComparison,
     EnvelopeComparison,
     FrozenEnvelopeForecast,
     MonthlyBudgetPlan,
@@ -119,6 +120,16 @@ def settle_month(frozen: Registration, rows: tuple[RawTransaction, ...]) -> Mont
                 "over" if monthly.budget_used_krw > limit else "within"
             ),
             planned_saving_krw=None if budget is None else budget.planned_saving_krw,
+            budget_comparison=BudgetComparison(
+                observed_spending_basis=(
+                    "different" if monthly.consumption_krw > monthly.budget_used_krw else "aligned"
+                ),
+                diagnosis=(
+                    "indeterminate_missing_budget" if limit is None else
+                    "indeterminate_target_mismatch" if monthly.consumption_krw > monthly.budget_used_krw
+                    else "indeterminate_causal_evidence"
+                ),
+            ),
         ))
     require_month_policy(month)
     return MonthlySettlement(

@@ -179,10 +179,26 @@ uv run pytest tests/test_forecast_validation_api.py tests/test_forecast_validati
 | `future_actual.consumption_krw` | 기준일 다음날~월말 | 원거래에서 별도 합산한 확정 변동소비. 예측오차·baseline 비교의 정답 |
 | `month_actual.consumption_krw` | 월초~월말 | 이미 관측한 소비와 나중에 확정된 소비를 합친 월 전체 변동소비 |
 | `month_actual.budget_used_krw` | 월초~월말 | 변동소비 중 `exclude_tag=NONE`인 예산 대상 소비 |
+| `future_actual.budget_excluded_consumption_krw` | 기준일 다음날~월말 | 미래 확정 변동소비 중 예산에서 제외된 금액. `consumption_krw - budget_used_krw` |
+| `month_actual.budget_excluded_consumption_krw` | 월초~월말 | 월 전체 확정 변동소비 중 예산에서 제외된 금액. 당시 관측분의 제외 소비도 포함 |
 | `budget_usage_ratio` | 월초~월말 | 월 예산 대상 소비 / 원래 편성. 예측 정확도가 아님 |
 | `planned_saving_krw` | 해당 월의 선언된 계획 | 원래 편성과 함께 받은 정책 목표. 예측치·실제 절약액·코칭 효과로 계산하지 않음 |
 
 예를 들어 당시 식비 소비가 10,000원이고 이후 확정 소비가 일반 구매 20,000원과 `DUTCH` 구매 3,000원이면 미래 예측의 정답은 23,000원, 월 전체 소비는 33,000원, 예산 사용액은 30,000원이다. 원래 편성 20,000원에 대한 사용률은 1.5(150%)다. 계획 절약 5,000원이 있어도 미래 예측에서 5,000원을 빼지 않는다. 각 봉투의 분위수를 합산해 전체 소비 분위수로 표현하지 않는다.
+
+이 예시에서 미래 P50이 20,000원이면 예측오차는 -3,000원이고 월 예산 초과액은 10,000원이다. 제외 소비 3,000원이 예측오차에 포함되므로 이 두 값만으로 예측오차가 예산 초과를 일으켰다고 진단할 수 없다. 각 봉투 정산의 `budget_comparison`은 이를 아래 상태로 구분한다. 기존 오차·사용률·잔여액과 분류 규약은 그대로 유지한다.
+
+| 필드 | 의미 |
+| --- | --- |
+| `forecast_target` | `future_total_variable_consumption`: 기준일 다음날~월말의 전체 변동소비 |
+| `budget_target` | `full_month_consumption_with_exclude_tag_NONE`: 월초~월말의 예산 대상 변동소비 |
+| `observed_spending_basis` | 월 전체 관측 소비에 예산 제외액이 있으면 `different`, 없으면 `aligned` |
+| `diagnosis` | 편성 누락은 `indeterminate_missing_budget`, 편성이 있고 제외 소비가 있으면 `indeterminate_target_mismatch`, 편성이 있고 제외 소비가 없으면 `indeterminate_causal_evidence` |
+| `causal_attribution_established` | 항상 `false`. 예측오차가 예산 초과를 발생시켰다는 인과관계를 평가한 결과가 아님 |
+
+`aligned`는 해당 관측 자료에서 소비 구성의 차액이 0원이라는 뜻이다. 미래 예측과 월 전체 예산의 기간이 같아지거나 예측오차가 예산 초과의 원인으로 입증된다는 뜻이 아니다. 편성이 없으면서 제외 소비가 있는 경우에도 `observed_spending_basis=different`를 보존하고 진단은 `indeterminate_missing_budget`으로 표시한다. `DUTCH`·`EMERGENCY`·`CARRYOVER` 구매는 기존 소비 규약을 따르며, 취소·환불 입금·고정비를 제외 소비액에 더하지 않는다. 부분 환불 입금도 원구매를 소급 차감하지 않는 구매시점 평가 범위를 유지한다.
+
+새 관측에는 제외액을 명시하며 과거 저장 문서에 필드가 없으면 `budget_excluded_consumption_krw=null`, 과거 정산에 새 진단이 없으면 `budget_comparison=null`로 읽는다. 이를 0원·기준 일치·진단 완료로 대신 해석하지 않는다. 코드·스키마의 변경으로 관측 정책 해시가 달라진 과거 등록은 기존 정책 보호에 따라 새 정산·재채점이 차단되며, 과거 기록 조회는 유지한다. 이 메타데이터는 실제 미래 정확도 검증, 절약 효과 추정 또는 운영 승격의 근거가 아니다.
 
 원래 편성이 없으면 예산 금액·사용률·잔여·계획 절약은 모두 `null`, 상태는 `not_registered`다. 편성이 실제 0원이면 사용률의 분모가 없으므로 여전히 `null`이며 `zero_budget_unused`와 `zero_budget_exceeded`로 구분한다. 0을 자료 부족이나 무한대 사용률로 바꾸지 않는다.
 
@@ -271,7 +287,7 @@ FDT `snapshot.budgets`에는 월과 승인·원본 이력이 없고 서비스 `e
 - `tests/test_forecast_validation_metrics_snapshot.py`: 조회 도중 실제 이벤트 확정 및 관측 identity·시각
 
 ```powershell
-uv run pytest tests/test_forecast_validation_month_api.py tests/test_forecast_validation_month_guards.py tests/test_forecast_validation_month_observations.py
+uv run pytest tests/test_forecast_validation_month_api.py tests/test_forecast_validation_month_basis.py tests/test_forecast_validation_month_guards.py tests/test_forecast_validation_month_observations.py
 ```
 
 개발 중 로그·보고서·JSON 사례는 `artifacts/r15/envelope-validation/` 또는 pytest 임시 폴더에 둔다. 제품 API 검증과 실제 고객 관측 성능은 계속 구분한다. 동일 사용자의 선정된 창만으로 모집단 정확도나 절약 효과를 주장하지 않으며 `real_accuracy_validated=false`, `saving_effect_estimated=false`를 유지한다.

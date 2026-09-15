@@ -78,6 +78,8 @@ class EnvelopeObservation(Frozen):
     consumption_count: int = Field(ge=0)
     budget_used_krw: Amount
     budget_transaction_count: int = Field(ge=0)
+    # 이전 저장 문서의 부재는 0원으로 단정하지 않는다.
+    budget_excluded_consumption_krw: Amount | None = None
 
 
 class FrozenEnvelopeForecast(Frozen):
@@ -124,6 +126,18 @@ class MonthlyRegistration(Frozen):
         return self
 
 
+class BudgetComparison(Frozen):
+    forecast_target: Literal["future_total_variable_consumption"] = "future_total_variable_consumption"
+    budget_target: Literal["full_month_consumption_with_exclude_tag_NONE"] = (
+        "full_month_consumption_with_exclude_tag_NONE"
+    )
+    observed_spending_basis: Literal["aligned", "different"]
+    diagnosis: Literal[
+        "indeterminate_target_mismatch", "indeterminate_missing_budget", "indeterminate_causal_evidence",
+    ]
+    causal_attribution_established: Literal[False] = False
+
+
 class EnvelopeComparison(Frozen):
     envelope: EnvelopeName
     future_actual: EnvelopeObservation
@@ -136,6 +150,8 @@ class EnvelopeComparison(Frozen):
     budget_remaining_krw: int | None
     budget_state: Literal["not_registered", "zero_budget_unused", "zero_budget_exceeded", "within", "over"]
     planned_saving_krw: BudgetAmount | None
+    # 새 진단을 만들지 않았던 과거 정산은 명시적으로 미평가 상태를 유지한다.
+    budget_comparison: BudgetComparison | None = None
 
     @model_validator(mode="after")
     def same_envelope(self) -> Self:

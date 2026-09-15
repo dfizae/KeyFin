@@ -58,14 +58,27 @@ async def test_month_compares_exact_forecast_and_independent_seven_envelope_outc
         food = rows["외식"]
         assert food["future_actual"]["consumption_krw"] == 23000
         assert food["future_actual"]["budget_used_krw"] == 20000
+        assert food["future_actual"]["budget_excluded_consumption_krw"] == 3000
         assert food["month_actual"]["consumption_krw"] == 33000
         assert food["month_actual"]["budget_used_krw"] == 30000
+        assert food["month_actual"]["budget_excluded_consumption_krw"] == 3000
         assert food["original_budget_krw"] == 20000
         assert food["budget_usage_ratio"] == 1.5
         assert food["budget_remaining_krw"] == -10000
         assert food["budget_state"] == "over"
         assert food["planned_saving_krw"] == 5000
         assert food["future_error_krw"] == predictions["외식"]["p50_krw"] - 23000
+        assert food["budget_comparison"] == {
+            "forecast_target": "future_total_variable_consumption",
+            "budget_target": "full_month_consumption_with_exclude_tag_NONE",
+            "observed_spending_basis": "different",
+            "diagnosis": "indeterminate_target_mismatch",
+            "causal_attribution_established": False,
+        }
+        assert rows["교통비"]["month_actual"]["budget_excluded_consumption_krw"] == 0
+        assert rows["교통비"]["budget_comparison"]["observed_spending_basis"] == "aligned"
+        assert rows["교통비"]["budget_comparison"]["diagnosis"] == "indeterminate_causal_evidence"
+        assert rows["교통비"]["budget_comparison"]["causal_attribution_established"] is False
         assert rows["교통비"]["budget_usage_ratio"] is None
         assert rows["교통비"]["budget_state"] == "zero_budget_exceeded"
         assert rows["기타"]["budget_state"] == "zero_budget_unused"
@@ -125,3 +138,5 @@ async def test_missing_plan_is_unknown_and_not_a_zero_budget(
             assert row["original_budget_krw"] is row["budget_usage_ratio"] is None
             assert row["planned_saving_krw"] is None
             assert row["budget_state"] == "not_registered"
+            assert row["budget_comparison"]["diagnosis"] == "indeterminate_missing_budget"
+            assert row["budget_comparison"]["causal_attribution_established"] is False

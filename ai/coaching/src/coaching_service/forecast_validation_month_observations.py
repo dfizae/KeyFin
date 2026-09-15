@@ -68,6 +68,7 @@ def observed_envelopes(
         EnvelopeObservation(
             envelope=name, consumption_krw=values[0], consumption_count=values[1],
             budget_used_krw=values[2], budget_transaction_count=values[3],
+            budget_excluded_consumption_krw=values[0] - values[2],
         )
         for name, values in totals.items()
     )
