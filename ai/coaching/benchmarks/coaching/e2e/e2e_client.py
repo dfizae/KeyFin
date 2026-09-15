@@ -37,6 +37,7 @@ class ScenarioIO:
         self.sources: list[str] = []
         self.judgment_sources: list[str] = []
         self.routing_sources: list[str] = []
+        self.deterministic_routes: int = 0
         self.fallbacks: list[str] = []
         self.observed_route: str | None = None
         self.serial: int = 0

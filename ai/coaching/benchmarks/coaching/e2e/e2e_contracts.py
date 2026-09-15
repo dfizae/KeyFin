@@ -212,6 +212,7 @@ class CaseOutcome(Frozen):
     wording_sources: tuple[str, ...] = ()
     judgment_sources: tuple[str, ...] = ()
     routing_sources: tuple[str, ...] = ()
+    deterministic_routes: int = Field(default=0, ge=0)
     fallback_reasons: tuple[str, ...] = ()
     route_expected: Mode | None = None
     route_observed: str | None = None

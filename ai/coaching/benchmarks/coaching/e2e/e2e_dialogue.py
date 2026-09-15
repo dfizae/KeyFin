@@ -12,6 +12,7 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
     )
     latest = original
     for analysis in flow.case.analyses or (None,):
+        explicit_route = analysis is not None and analysis.root.get("mode") in ("forecast", "risk")
         before = len(flow.gateway.preflights)
         payload = JsonDocument({"question": flow.case.question})
         if analysis is not None:
@@ -23,7 +24,10 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
         mode = receipt.routing.root.get("mode") if receipt.routing else None
         flow.observed_route = mode if isinstance(mode, str) else None
         source = receipt.routing.root.get("source") if receipt.routing else None
-        if isinstance(source, str):
+        if explicit_route:
+            # Count an explicit request separately from attempted-model adoption/fallback.
+            flow.deterministic_routes += 1
+        elif isinstance(source, str):
             flow.routing_sources.append(source)
         reason = receipt.routing.root.get("fallback_reason") if receipt.routing else None
         if isinstance(reason, str):
@@ -45,20 +49,26 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
         calls = flow.gateway.preflights[before:]
         routes = [row for row in calls if row.operation == "route"]
         writers = [row for row in calls if row.operation == "write"]
-        flow.check("dialogue_operations", len(routes) == len(writers) == 1)
+        flow.check("dialogue_operations", len(routes) == (0 if explicit_route else 1) and len(writers) == 1)
+        if explicit_route:
+            flow.check("explicit_routing_provenance", source == "template" and reason is None
+                       and analysis is not None and mode == analysis.root["mode"])
         if routes:
             route_receipt = receipt.model_copy(
                 update={"routing": None, "numeric_request": None, "numeric_result": None}
             )
             flow.verify_projection(route_receipt, "route", routes[0].evidence)
-        if receipt.numeric_result is not None and routes and writers:
             route_facts = decode_facts(JsonDocument.model_validate_json(routes[0].evidence.facts_json))
+            flow.check(
+                "dialogue_router_has_no_numeric_result", route_facts.root.get("numeric_result") is None
+            )
+        if receipt.numeric_result is not None and writers:
+            # Numeric grounding remains mandatory when an explicit mode eliminated routing.
             writer_facts = decode_facts(JsonDocument.model_validate_json(writers[0].evidence.facts_json))
             displayed = writer_facts.root.get("authoritative_answer")
             flow.check(
                 "dialogue_writer_has_displayed_numeric_facts",
-                route_facts.root.get("numeric_result") is None
-                and isinstance(displayed, str)
+                isinstance(displayed, str)
                 and bool(numeric_text(receipt))
                 and all(line in displayed for line in numeric_text(receipt)),
             )

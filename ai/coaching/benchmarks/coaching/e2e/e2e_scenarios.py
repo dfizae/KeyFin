@@ -124,6 +124,7 @@ class Scenario(ScenarioIO):
             wording_sources=tuple(self.sources),
             judgment_sources=tuple(self.judgment_sources),
             routing_sources=tuple(self.routing_sources),
+            deterministic_routes=self.deterministic_routes,
             fallback_reasons=tuple(self.fallbacks),
             route_expected=expected_route,
             route_observed=self.observed_route,

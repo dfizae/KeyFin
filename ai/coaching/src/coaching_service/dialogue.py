@@ -150,12 +150,18 @@ class Dialogue:
         async def action() -> Mutation:
             session = await self.active_session(op.owner, session_id)
             history = chat_history(session)
-            # Intent comes before calendar parsing: a deposit's maturity is not a forecast period.
-            route = await self.core.model.route(
-                EvidenceInput(
-                    question=request.question, history=history, facts_json='{"operation":"dialogue"}'
-                )
-            )
+            match request.analysis.root.get("mode") if request.analysis is not None else None:
+                case "forecast" | "risk" as mode:
+                    # 명시한 수치 모드는 원래도 LLM 분류보다 우선했다. 같은 결정을 다시
+                    # GPU에 묻지 않으며, 기간·수치 입력 검증은 아래에서 그대로 수행한다.
+                    route = Routing(mode=mode, source="template")
+                case _:
+                    # General questions can mention deposit maturity, so route before parsing dates.
+                    route = await self.core.model.route(
+                        EvidenceInput(
+                            question=request.question, history=history, facts_json='{"operation":"dialogue"}'
+                        )
+                    )
             standalone = await self.standalone_answer(
                 op.owner, request, route,
                 chat_history(session, include_subject=True) if route.mode == "finance" else history,

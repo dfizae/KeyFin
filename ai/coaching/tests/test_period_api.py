@@ -117,11 +117,11 @@ async def test_invalid_forecast_period_is_rejected_after_intent_before_writer_or
         result = await client.post(path + "/messages", json=body.root, headers={"Idempotency-Key": "invalid"})
         assert result.status_code == 422
         assert error in result.text
-        # General questions can mention deposit maturity. Intent is classified first,
-        # but an invalid forecast period must never reach a writer or a saved turn.
+        # Natural-language requests still route before period parsing; structured forecast
+        # already supplies its intent. Neither path may generate or save an invalid period.
         assert (model.writes, model.routes, model.judgments) == (
             seen_before[0],
-            seen_before[1] + 1,
+            seen_before[1] + (0 if "analysis" in body.root else 1),
             seen_before[2],
         )
         assert (await client.get(path)).json() == session.json()

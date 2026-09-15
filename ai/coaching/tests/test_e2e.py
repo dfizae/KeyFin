@@ -174,7 +174,8 @@ async def test_real_uvicorn_http_runs_all_cases_and_preserves_receipts(tmp_path:
     assert sum(row.observed_results for row in observations.operation_results) == len(report.generations)
     assert sum(row.template_results for row in observations.operation_results) == 3
     assert observations.fallback_counts == {"http_status_503": 1, "invalid_schema": 1, "numeric_output": 1}
-    assert observations.http_status_counts == {"200": 41, "503": 1}
+    assert observations.http_status_counts == {"200": 39, "503": 1}
+    assert sum(case.deterministic_routes for case in report.cases) == 2
     assert report.api_base_url.startswith("http://127.0.0.1:")
     assert report.gateway_base_url != report.api_base_url
     assert {row.operation for row in report.generations} == {"write", "judge", "route"}
