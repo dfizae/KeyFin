@@ -233,6 +233,39 @@ class TransactionSyncServiceTest {
 		verifyNoInteractions(accountTransactionClient, cardTransactionClient);
 	}
 
+	@Test
+	void 관리_계좌_하나의_거래를_동기화한다() {
+		Account account = account(3L, "0016174648358792");
+		FinanceAccountTransaction response = accountResponse("61", "출금", null);
+		Transaction transaction = accountTransaction(account, "61", ExcludeTag.NONE);
+		given(accountTransactionClient.findTransactions(
+				"finance-user-key", account.getFinAccountNo(), START_DATE, END_DATE))
+				.willReturn(List.of(response));
+		given(classificationService.fromAccount(user, account, response)).willReturn(transaction);
+
+		syncService.syncAccountTransactions(user, account, START_DATE, END_DATE);
+
+		verify(transactionRepository).saveAll(List.of(transaction));
+		verifyNoInteractions(cardTransactionClient);
+	}
+
+	@Test
+	void 관리_카드_하나의_거래를_동기화한다() {
+		Account account = account(3L, "0016174648358792");
+		Card card = card(7L, account);
+		FinanceCardTransaction response = cardResponse("20", "승인");
+		Transaction transaction = cardTransaction(card, "20", TransactionStatus.NORMAL);
+		given(cardTransactionClient.findTransactions(
+				"finance-user-key", card.getFinCardNo(), card.getCvc(), START_DATE, END_DATE))
+				.willReturn(List.of(response));
+		given(classificationService.fromCard(user, card, response)).willReturn(transaction);
+
+		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
+
+		verify(transactionRepository).saveAll(List.of(transaction));
+		verifyNoInteractions(accountTransactionClient);
+	}
+
 	private void givenCommonAssets(List<Account> accounts, List<Card> cards) {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(accountRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(USER_ID)).willReturn(accounts);
