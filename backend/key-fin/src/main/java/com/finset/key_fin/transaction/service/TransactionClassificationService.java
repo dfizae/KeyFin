@@ -41,7 +41,6 @@ public class TransactionClassificationService {
 			FinanceAccountTransaction financeTransaction
 	) {
 		boolean transfer = isTransfer(financeTransaction.transactionTypeName());
-		// TODO(yr): 거래 수집 전 전체 계좌를 동기화하여 신규 계좌도 본인 계좌 이체 판정에 포함한다.
 		boolean ownAccountTransfer = transfer
 				&& hasText(financeTransaction.transactionAccountNo())
 				&& accountRepository.findByUserIdAndFinAccountNoAndManagedTrue(
