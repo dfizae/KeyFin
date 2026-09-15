@@ -3,6 +3,8 @@ import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
 
+import { isMocked } from "@/api/client";
+import { MOCK_LOGIN_EMAIL, MOCK_PASSWORD } from "@/api/mocks/auth";
 import { Button } from "@/components/ui/button";
 import { Floating } from "@/components/ui/floating";
 import { Icon } from "@/components/ui/icon";
@@ -23,6 +25,12 @@ const CHARACTER_STYLE = { width: 150, height: 210 } as const;
 
 const SIGNUP_ROUTE = "/(auth)/signup";
 
+/**
+ * 개발 빌드에서 auth 가 목이면 목 계정을 미리 채운다 — 서버 없이 화면을 볼 때마다 치는 수고를 던다(사용자 요청 2026-09-15).
+ * 배포 빌드(__DEV__ false)나 실서버 auth 에서는 절대 채우지 않는다.
+ */
+const MOCK_PREFILL = __DEV__ && isMocked("auth") ? { email: MOCK_LOGIN_EMAIL, password: MOCK_PASSWORD } : null;
+
 // Pencil 로그인 · 캐릭터 대안 (QmtGU) · login/error (JF0Db) · login/pending (bG1FL).
 function LoginScreen() {
   const router = useRouter();
@@ -30,8 +38,8 @@ function LoginScreen() {
 
   // 가입 직후 돌아오면 방금 만든 이메일을 채워 두고 안내를 한 줄 보여준다.
   const { signedUpEmail, returnTo } = useLocalSearchParams<{ signedUpEmail?: string; returnTo?: string }>();
-  const [email, setEmail] = React.useState(signedUpEmail ?? "");
-  const [password, setPassword] = React.useState("");
+  const [email, setEmail] = React.useState(signedUpEmail ?? MOCK_PREFILL?.email ?? "");
+  const [password, setPassword] = React.useState(signedUpEmail === undefined ? (MOCK_PREFILL?.password ?? "") : "");
 
   const errorMessage = login.isError ? authErrorMessage(login.error) : null;
   const canSubmit = canSubmitLogin(email, password) && !login.isPending;
@@ -65,6 +73,11 @@ function LoginScreen() {
             <Text className="text-body-sm text-foreground">가입이 완료됐어요. 로그인해 주세요.</Text>
           </View>
         )}
+        {MOCK_PREFILL !== null && signedUpEmail === undefined ? (
+          <View className="rounded-lg bg-muted px-4 py-3">
+            <Text className="text-body-sm text-card-foreground">개발용 목 계정이 채워져 있어요. 로그인만 누르면 돼요.</Text>
+          </View>
+        ) : null}
 
         <View className="gap-4">
           <Field label="이메일">
