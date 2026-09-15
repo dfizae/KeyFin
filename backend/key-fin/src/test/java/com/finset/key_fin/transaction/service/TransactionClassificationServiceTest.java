@@ -31,7 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
-class TransactionFactoryTest {
+class TransactionClassificationServiceTest {
 
 	private static final long USER_ID = 1L;
 	private static final long ACCOUNT_ID = 3L;
@@ -43,14 +43,15 @@ class TransactionFactoryTest {
 	@Mock
 	private MerchantClassificationRepository merchantClassificationRepository;
 
-	private TransactionFactory transactionFactory;
+	private TransactionClassificationService transactionClassificationService;
 	private User user;
 	private Account account;
 	private Card card;
 
 	@BeforeEach
 	void setUp() {
-		transactionFactory = new TransactionFactory(accountRepository, merchantClassificationRepository);
+		transactionClassificationService = new TransactionClassificationService(
+				accountRepository, merchantClassificationRepository);
 		user = User.create("qwer@qwer.com", "password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
 		account = Account.sync(user, "0016174648358792", "001", "한국은행", 1_000_000L,
@@ -62,7 +63,7 @@ class TransactionFactoryTest {
 
 	@Test
 	void 일반_입금은_AUTO로_변환한다() {
-		Transaction transaction = transactionFactory.fromAccount(
+		Transaction transaction = transactionClassificationService.fromAccount(
 				user, account, accountTransaction("1", "입금", null)
 		);
 
@@ -74,7 +75,7 @@ class TransactionFactoryTest {
 
 	@Test
 	void 일반_출금은_PENDING으로_변환한다() {
-		Transaction transaction = transactionFactory.fromAccount(
+		Transaction transaction = transactionClassificationService.fromAccount(
 				user, account, accountTransaction("2", "출금", null)
 		);
 
@@ -88,7 +89,7 @@ class TransactionFactoryTest {
 		given(accountRepository.existsByUserIdAndFinAccountNo(USER_ID, "0204667768182760"))
 				.willReturn(true);
 
-		Transaction transaction = transactionFactory.fromAccount(
+		Transaction transaction = transactionClassificationService.fromAccount(
 				user, account, accountTransaction("2", "출금(이체)", "0204667768182760")
 		);
 
@@ -102,7 +103,7 @@ class TransactionFactoryTest {
 		given(accountRepository.existsByUserIdAndFinAccountNo(USER_ID, "9999999999999999"))
 				.willReturn(false);
 
-		Transaction transaction = transactionFactory.fromAccount(
+		Transaction transaction = transactionClassificationService.fromAccount(
 				user, account, accountTransaction("2", "출금(이체)", "9999999999999999")
 		);
 
@@ -116,7 +117,7 @@ class TransactionFactoryTest {
 		given(merchantClassificationRepository.findByFinanceMerchantId(40_114L))
 				.willReturn(Optional.of(new MerchantClassification(12L, 203)));
 
-		Transaction transaction = transactionFactory.fromCard(user, card, cardTransaction("승인"));
+		Transaction transaction = transactionClassificationService.fromCard(user, card, cardTransaction("승인"));
 
 		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.CARD);
 		assertThat(transaction.getMerchantId()).isEqualTo(12L);
@@ -131,7 +132,7 @@ class TransactionFactoryTest {
 		given(merchantClassificationRepository.findByFinanceMerchantId(40_114L))
 				.willReturn(Optional.empty());
 
-		Transaction transaction = transactionFactory.fromCard(user, card, cardTransaction("승인"));
+		Transaction transaction = transactionClassificationService.fromCard(user, card, cardTransaction("승인"));
 
 		assertThat(transaction.getMerchantId()).isNull();
 		assertThat(transaction.getSubcategoryId()).isNull();
@@ -143,7 +144,7 @@ class TransactionFactoryTest {
 		given(merchantClassificationRepository.findByFinanceMerchantId(40_114L))
 				.willReturn(Optional.of(new MerchantClassification(12L, 203)));
 
-		Transaction transaction = transactionFactory.fromCard(user, card, cardTransaction("취소"));
+		Transaction transaction = transactionClassificationService.fromCard(user, card, cardTransaction("취소"));
 
 		assertThat(transaction.getStatus()).isEqualTo(TransactionStatus.CANCELED);
 	}
@@ -153,7 +154,8 @@ class TransactionFactoryTest {
 		given(merchantClassificationRepository.findByFinanceMerchantId(40_114L))
 				.willReturn(Optional.empty());
 
-		assertThatThrownBy(() -> transactionFactory.fromCard(user, card, cardTransaction("알 수 없음")))
+		assertThatThrownBy(() -> transactionClassificationService.fromCard(
+				user, card, cardTransaction("알 수 없음")))
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode()).isEqualTo(FinanceErrorCode.INVALID_RESPONSE));
 	}

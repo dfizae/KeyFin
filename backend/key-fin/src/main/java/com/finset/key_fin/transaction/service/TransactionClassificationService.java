@@ -16,16 +16,16 @@ import com.finset.key_fin.transaction.repository.MerchantClassification;
 import com.finset.key_fin.transaction.repository.MerchantClassificationRepository;
 import com.finset.key_fin.user.entity.User;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 
-@Component
+@Service
 @RequiredArgsConstructor
-public class TransactionFactory {
+public class TransactionClassificationService {
 
 	private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.BASIC_ISO_DATE;
 	private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HHmmss");
@@ -41,6 +41,7 @@ public class TransactionFactory {
 			FinanceAccountTransaction financeTransaction
 	) {
 		boolean transfer = isTransfer(financeTransaction.transactionTypeName());
+		// TODO(yr): 거래 수집 전 전체 계좌를 동기화하여 신규 계좌도 본인 계좌 이체 판정에 포함한다.
 		boolean ownAccountTransfer = transfer
 				&& hasText(financeTransaction.transactionAccountNo())
 				&& accountRepository.existsByUserIdAndFinAccountNo(
@@ -49,10 +50,19 @@ public class TransactionFactory {
 		TransactionType transactionType = accountTransactionType(
 				financeTransaction.transactionTypeName(), ownAccountTransfer
 		);
-		ConfirmStatus confirmStatus = transactionType == TransactionType.DEPOSIT
-				? ConfirmStatus.AUTO
-				: ownAccountTransfer ? ConfirmStatus.CONFIRMED : ConfirmStatus.PENDING;
-		ExcludeTag excludeTag = ownAccountTransfer ? ExcludeTag.SELF_TRANSFER : ExcludeTag.NONE;
+		ConfirmStatus confirmStatus;
+		ExcludeTag excludeTag;
+
+		if (ownAccountTransfer) {
+			confirmStatus = ConfirmStatus.CONFIRMED;
+			excludeTag = ExcludeTag.SELF_TRANSFER;
+		} else if (transactionType == TransactionType.DEPOSIT) {
+			confirmStatus = ConfirmStatus.AUTO;
+			excludeTag = ExcludeTag.NONE;
+		} else {
+			confirmStatus = ConfirmStatus.PENDING;
+			excludeTag = ExcludeTag.NONE;
+		}
 
 		return Transaction.collectAccount(
 				user,
@@ -73,28 +83,39 @@ public class TransactionFactory {
 			Card card,
 			FinanceCardTransaction financeTransaction
 	) {
-		MerchantClassification classification = financeTransaction.merchantId() == null
-				? null
-				: merchantClassificationRepository
-						.findByFinanceMerchantId(financeTransaction.merchantId())
-						.orElse(null);
-		ConfirmStatus confirmStatus = classification == null
-				? ConfirmStatus.PENDING
-				: ConfirmStatus.AUTO;
+		MerchantClassification classification = findMerchantClassification(financeTransaction.merchantId());
+		Long merchantId = null;
+		Integer subcategoryId = null;
+		ConfirmStatus confirmStatus = ConfirmStatus.PENDING;
+
+		if (classification != null) {
+			merchantId = classification.merchantId();
+			subcategoryId = classification.subcategoryId();
+			confirmStatus = ConfirmStatus.AUTO;
+		}
 
 		return Transaction.collectCard(
 				user,
 				card.getId(),
 				financeTransaction.transactionUniqueNo(),
-				classification == null ? null : classification.merchantId(),
+				merchantId,
 				financeTransaction.merchantName(),
 				financeTransaction.transactionBalance(),
 				parseDate(financeTransaction.transactionDate()),
 				parseTime(financeTransaction.transactionTime()),
-				classification == null ? null : classification.subcategoryId(),
+				subcategoryId,
 				confirmStatus,
 				cardStatus(financeTransaction.cardStatus())
 		);
+	}
+
+	private MerchantClassification findMerchantClassification(Long financeMerchantId) {
+		if (financeMerchantId == null) {
+			return null;
+		}
+		return merchantClassificationRepository
+				.findByFinanceMerchantId(financeMerchantId)
+				.orElse(null);
 	}
 
 	private TransactionType accountTransactionType(String transactionTypeName, boolean ownAccountTransfer) {
@@ -144,7 +165,10 @@ public class TransactionFactory {
 	}
 
 	private String firstNonBlank(String first, String second) {
-		return hasText(first) ? first : second;
+		if (hasText(first)) {
+			return first;
+		}
+		return second;
 	}
 
 	private boolean hasText(String value) {
