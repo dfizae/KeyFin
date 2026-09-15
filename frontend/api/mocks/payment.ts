@@ -90,6 +90,7 @@ function toCalendarItem(expense: MockFixedExpense): CalendarItemDto {
   return {
     type: isSynced(expense) ? "CARD_SUBSCRIPTION" : "FIXED",
     fixedExpenseId: expense.id,
+    cardId: null,
     name: expense.name,
     expenseType: expense.expenseType,
     amount: expense.amount,

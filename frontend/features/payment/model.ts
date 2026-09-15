@@ -5,8 +5,9 @@ import { formatKRW, fromServerWon, toWon, type KRW } from "@/lib/money";
  * GET /payments/calendar?month=YYYYMM 계약 (docs/api-contract.md PAYMENT, FR-PAY-01·02).
  * FIXED = 직접 등록한 고정지출(출금 계좌에서 나감) / CARD_SUBSCRIPTION = 금융망에서 동기화한 카드 정기결제(카드 대금에 포함돼
  * withdrawalAccountId 가 null) / CARD_BILL = 카드 청구(FR-PAY-02). 같은 날 순서는 서버가 정해 보내므로 다시 정렬하지 않는다.
- * prepared·shortage 는 서버 파생값이라 검증만 하고 다시 계산하지 않는다 — 필요 금액 계산(FR-PAY-02) 전까지는 null 이다.
- * estimated=true 는 변동형 예상액이다(공과금, 발행 전 카드 청구).
+ * prepared·shortage 는 서버 파생값이라 검증만 하고 다시 계산하지 않는다 — 출금 계좌 잔액 스냅샷을 같은 계좌의 오늘 이후 항목에
+ * 날짜순으로 차감한 판정이고(FR-PAY-02, develop 69fdacb), 출금 계좌가 없거나(CARD_SUBSCRIPTION) 지난 항목은 null, 결제 완료 청구는 true/0 이다.
+ * estimated=true 는 변동형 예상액이다(공과금, 이번 주 카드 승인 합계로 예상한 미발행 청구).
  */
 export const PAYMENT_TYPES = ["FIXED", "CARD_SUBSCRIPTION", "CARD_BILL"] as const;
 export type PaymentType = (typeof PAYMENT_TYPES)[number] | "UNKNOWN";
@@ -15,6 +16,8 @@ export type CalendarItemDto = {
   type: string;
   /** FIXED·CARD_SUBSCRIPTION 만 있다 */
   fixedExpenseId: number | null;
+  /** CARD_BILL 만 있다 (백엔드 develop 69fdacb, FR-PAY-02) */
+  cardId?: number | null;
   name: string;
   expenseType: string | null;
   amount: number;
@@ -47,6 +50,8 @@ export type CalendarEntry = {
   key: string;
   date: string;
   fixedExpenseId: number | null;
+  /** 카드 청구(CARD_BILL)의 카드. 청구 상세(P1 GET /cards/{id}/billings)로 갈 때 쓴다 */
+  cardId: number | null;
   withdrawalAccountId: number | null;
   /** 날짜의 일(1~31). 말일 보정된 값이라 고정지출의 출금일(paymentDay)과 다를 수 있다 */
   day: number;
@@ -96,6 +101,7 @@ export function toPaymentCalendar(dto: PaymentCalendarDto): PaymentCalendar {
         key: `${day.date}#${index}`,
         date: day.date,
         fixedExpenseId: item.fixedExpenseId ?? null,
+        cardId: item.cardId ?? null,
         withdrawalAccountId: item.withdrawalAccountId ?? null,
         day: Number(matched[2]),
         type: toType(item.type),
