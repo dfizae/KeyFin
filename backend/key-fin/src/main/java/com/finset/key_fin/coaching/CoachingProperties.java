@@ -29,4 +29,8 @@ public class CoachingProperties {
     private Map<Long, String> ownerIds = new HashMap<>();
     /** Enable only after the outbox migration and owner/write-token mapping are deployed. */
     private boolean sourceSyncEnabled = false;
+    /** Maximum adapter calls per scheduled tick; calls remain sequential. */
+    private int sourceSyncMaxJobsPerTick = 20;
+    /** Stop starting new jobs after this budget. An in-flight HTTP call keeps its own timeout. */
+    private Duration sourceSyncTimeBudget = Duration.ofSeconds(10);
 }

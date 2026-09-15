@@ -128,7 +128,7 @@ class CoachingSourceOutboxTest {
             assertEquals(1,jdbc.sql("SELECT COUNT(*) FROM transactions").query(Integer.class).single());
             return new CoachingSourceAdapter.SyncResult("synchronized",1,null,false);
         });
-        new CoachingSourceWorker(outbox,adapter).tick();
+        new CoachingSourceWorker(outbox,adapter,new CoachingProperties()).tick();
         verify(adapter).synchronize(eq(1L),any(),anyString());
         assertEquals(1,jdbc.sql("SELECT completed_generation FROM coaching_source_outbox").query(Integer.class).single());
     }
@@ -136,7 +136,7 @@ class CoachingSourceOutboxTest {
         tx.executeWithoutResult(status->EntityManagerFactoryUtils.getTransactionalEntityManager(factory).persist(payment()));
         var adapter=mock(CoachingSourceAdapter.class);
         when(adapter.synchronize(eq(1L),any(),anyString())).thenThrow(new IllegalStateException("synthetic upstream failure"));
-        new CoachingSourceWorker(outbox,adapter).tick();
+        new CoachingSourceWorker(outbox,adapter,new CoachingProperties()).tick();
         assertEquals(1,jdbc.sql("SELECT COUNT(*) FROM transactions").query(Integer.class).single());
         assertEquals(0,jdbc.sql("SELECT completed_generation FROM coaching_source_outbox").query(Integer.class).single());
         assertEquals("SOURCE_SYNC_FAILURE",jdbc.sql("SELECT last_error_code FROM coaching_source_outbox").query(String.class).single());

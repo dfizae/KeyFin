@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -77,10 +78,13 @@ public class CoachingSourceOutbox {
                 .param("userId", job.userId()).param("token", job.leaseToken()).update();
     }
 
-    public void resume(Job job) {
+    public void resume(Job job, Instant now) {
+        // The existing TIMESTAMP has second precision. Explicitly floor it so databases that
+        // round fractional seconds cannot postpone immediately pending work into the future.
         jdbc.sql("""
-                UPDATE coaching_source_outbox SET lease_token=NULL,lease_until=NULL,available_at=CURRENT_TIMESTAMP
+                UPDATE coaching_source_outbox SET lease_token=NULL,lease_until=NULL,available_at=:now
                 WHERE user_id=:userId AND lease_token=:token
-                """).param("userId", job.userId()).param("token", job.leaseToken()).update();
+                """).param("now", Timestamp.from(now.truncatedTo(ChronoUnit.SECONDS)))
+                .param("userId", job.userId()).param("token", job.leaseToken()).update();
     }
 }
