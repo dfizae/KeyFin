@@ -208,6 +208,20 @@ public class Transaction extends BaseEntity {
 		this.confirmStatus = ConfirmStatus.CONFIRMED;
 	}
 
+	public void markAsSelfTransfer() {
+		if (accountId == null || status == TransactionStatus.CANCELED) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+		if (confirmStatus == ConfirmStatus.CONFIRMED && excludeTag != ExcludeTag.SELF_TRANSFER) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+		this.transactionType = TransactionType.TRANSFER;
+		this.subcategoryId = null;
+		this.excludeTag = ExcludeTag.SELF_TRANSFER;
+		this.adjustedAmount = null;
+		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
 	private void validateClassifiable() {
 		if (transactionType == TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
 			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);

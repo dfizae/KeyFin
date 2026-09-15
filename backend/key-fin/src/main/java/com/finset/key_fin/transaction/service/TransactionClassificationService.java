@@ -44,8 +44,8 @@ public class TransactionClassificationService {
 		// TODO(yr): 거래 수집 전 전체 계좌를 동기화하여 신규 계좌도 본인 계좌 이체 판정에 포함한다.
 		boolean ownAccountTransfer = transfer
 				&& hasText(financeTransaction.transactionAccountNo())
-				&& accountRepository.existsByUserIdAndFinAccountNo(
-						user.getId(), financeTransaction.transactionAccountNo());
+				&& accountRepository.findByUserIdAndFinAccountNoAndManagedTrue(
+						user.getId(), financeTransaction.transactionAccountNo()).isPresent();
 
 		TransactionType transactionType = accountTransactionType(
 				financeTransaction.transactionTypeName(), ownAccountTransfer

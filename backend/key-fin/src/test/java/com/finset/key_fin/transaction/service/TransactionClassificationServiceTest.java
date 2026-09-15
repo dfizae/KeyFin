@@ -86,8 +86,8 @@ class TransactionClassificationServiceTest {
 
 	@Test
 	void 연결된_본인_계좌_이체는_SELF_TRANSFER로_변환한다() {
-		given(accountRepository.existsByUserIdAndFinAccountNo(USER_ID, "0204667768182760"))
-				.willReturn(true);
+		given(accountRepository.findByUserIdAndFinAccountNoAndManagedTrue(USER_ID, "0204667768182760"))
+				.willReturn(Optional.of(account));
 
 		Transaction transaction = transactionClassificationService.fromAccount(
 				user, account, accountTransaction("2", "출금(이체)", "0204667768182760")
@@ -100,8 +100,8 @@ class TransactionClassificationServiceTest {
 
 	@Test
 	void 타인_계좌_출금_이체는_PENDING으로_변환한다() {
-		given(accountRepository.existsByUserIdAndFinAccountNo(USER_ID, "9999999999999999"))
-				.willReturn(false);
+		given(accountRepository.findByUserIdAndFinAccountNoAndManagedTrue(USER_ID, "9999999999999999"))
+				.willReturn(Optional.empty());
 
 		Transaction transaction = transactionClassificationService.fromAccount(
 				user, account, accountTransaction("2", "출금(이체)", "9999999999999999")
