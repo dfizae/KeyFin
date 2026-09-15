@@ -20,6 +20,8 @@
 
 [R18 동시 요청 개선과 MR 범위 정리](docs/concurrency-improvement-r18.md)는 온라인 배치 후보의 성공·악화 결과, 월별 소비 기준 진단, 비 AI 변경 제외와 충돌 해소 근거를 정리합니다. 앱·백엔드 담당자에게 전달할 내용은 [외부 호출 인계 계약](docs/app-integration.md)에 있습니다.
 
+[R19 중복 추론 제거와 실행 환경 비교](docs/performance-forecast-r19.md)는 명시적 예측·위험 요청의 호출 수 감소와 GPU 동시 요청 전후 비교입니다. [R19 예측 추가학습·최종 평가](docs/forecast-retraining-r19.md)는 원장 정답으로 추가학습 후보를 검증하고 기준모델을 넘지 못해 채택하지 않은 근거입니다.
+
 ## 빠르게 실행하기
 
 Python 3.11~3.13과 `uv`가 필요합니다. 저장소 루트에서 PowerShell로 실행합니다.
