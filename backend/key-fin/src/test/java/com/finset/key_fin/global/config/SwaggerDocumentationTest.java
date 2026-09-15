@@ -20,6 +20,46 @@ class SwaggerDocumentationTest extends SpringIntegrationTestSupport {
 	private MockMvc mockMvc;
 
 	@Test
+	void documentsItemPatchWithRequiredBooleanAndSharedEquipment() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.parameters[*].name")
+						.value(containsInAnyOrder("slotType")))
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.parameters[0].required").value(false))
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.parameters[0].schema.enum")
+						.value(containsInAnyOrder("HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR")))
+				.andExpect(jsonPath("$.paths['/api/v1/items'].get.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}/equip']").doesNotExist())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}']").value(aMapWithSize(1)))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.parameters[*].name")
+						.value(containsInAnyOrder("userItemId")))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.requestBody.required").value(true))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.requestBody.content['application/json'].schema['$ref']")
+						.value("#/components/schemas/ItemEquipmentUpdateRequest"))
+				.andExpect(jsonPath("$.components.schemas.ItemEquipmentUpdateRequest.required")
+						.value(containsInAnyOrder("equipped")))
+				.andExpect(jsonPath("$.components.schemas.ItemEquipmentUpdateRequest.properties").value(aMapWithSize(1)))
+				.andExpect(jsonPath("$.components.schemas.ItemEquipmentUpdateRequest.properties.equipped.type").value("boolean"))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.requestBody.content['application/json'].examples['장착·교체'].value.equipped")
+						.value(true))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.requestBody.content['application/json'].examples['해제'].value.equipped")
+						.value(false))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.responses['200'].content['application/json'].schema['$ref']")
+						.value("#/components/schemas/BaseResponseAvatarEquipmentResponse"))
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.responses['400']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/items/{userItemId}'].patch.responses['404']").exists())
+				.andExpect(jsonPath("$.components.schemas.EquippedItemResponse.properties")
+						.value(aMapWithSize(4)))
+				.andExpect(jsonPath("$.components.schemas.EquippedItemResponse.required")
+						.value(containsInAnyOrder("userItemId", "itemId", "slotType", "assetKey")))
+				.andExpect(jsonPath("$.components.schemas.AvatarEquipmentResponse.properties.equipped.items['$ref']")
+						.value("#/components/schemas/EquippedItemResponse"))
+				.andExpect(jsonPath("$.components.schemas.AvatarResponse.properties.equipped.items['$ref']")
+						.value("#/components/schemas/EquippedItemResponse"));
+	}
+
+	@Test
 	void documentsFinCoinBalanceWithoutQueryParameters() throws Exception {
 		mockMvc.perform(get("/v3/api-docs"))
 				.andExpect(status().isOk())

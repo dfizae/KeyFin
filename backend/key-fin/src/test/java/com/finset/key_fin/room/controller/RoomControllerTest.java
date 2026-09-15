@@ -5,6 +5,7 @@ import com.finset.key_fin.room.dto.response.RoomResponse;
 import com.finset.key_fin.room.entity.FurniturePlacementDirection;
 import com.finset.key_fin.room.entity.FurniturePlacementStatus;
 import com.finset.key_fin.item.entity.ItemSlotType;
+import com.finset.key_fin.item.dto.response.EquippedItemResponse;
 import com.finset.key_fin.room.service.RoomService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +55,7 @@ class RoomControllerTest {
 					.andExpect(jsonPath("$.data.theme").doesNotHaveJsonPath())
 					.andExpect(jsonPath("$.data.avatar.equipped[0].slotType").value("HEAD"))
 					.andExpect(jsonPath("$.data.avatar.equipped[0].itemId").value(1))
+					.andExpect(jsonPath("$.data.avatar.equipped[0].userItemId").value(101))
 					.andExpect(jsonPath("$.data.avatar.reaction").doesNotExist())
 					.andExpect(jsonPath("$.data.furnitures[0].itemId").value(4))
 					.andExpect(jsonPath("$.data.furnitures[0].placementStatus").value("FLOOR"))
@@ -74,9 +76,9 @@ class RoomControllerTest {
 		return new RoomResponse(
 				new RoomResponse.AvatarResponse(
 						List.of(
-								new RoomResponse.EquippedItemResponse(ItemSlotType.HEAD, 1L, "hair_default"),
-								new RoomResponse.EquippedItemResponse(ItemSlotType.FACE, 2L, "face_default"),
-								new RoomResponse.EquippedItemResponse(ItemSlotType.UPPER_BODY, 3L, "outfit_default")
+								new EquippedItemResponse(101L, 1L, ItemSlotType.HEAD, "hat_blue"),
+								new EquippedItemResponse(102L, 2L, ItemSlotType.FACE, "glasses_round"),
+								new EquippedItemResponse(103L, 3L, ItemSlotType.UPPER_BODY, "shirt_blue")
 						),
 						null
 				),

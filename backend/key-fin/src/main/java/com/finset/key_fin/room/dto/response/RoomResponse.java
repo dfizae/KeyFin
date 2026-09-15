@@ -3,6 +3,7 @@ package com.finset.key_fin.room.dto.response;
 import com.finset.key_fin.room.entity.FurniturePlacementDirection;
 import com.finset.key_fin.room.entity.FurniturePlacementStatus;
 import com.finset.key_fin.item.entity.ItemSlotType;
+import com.finset.key_fin.item.dto.response.EquippedItemResponse;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,13 +20,6 @@ public record RoomResponse(
 	public record AvatarResponse(
 			List<EquippedItemResponse> equipped,
 			ReactionResponse reaction
-	) {
-	}
-
-	public record EquippedItemResponse(
-			ItemSlotType slotType,
-			Long itemId,
-			String assetKey
 	) {
 	}
 

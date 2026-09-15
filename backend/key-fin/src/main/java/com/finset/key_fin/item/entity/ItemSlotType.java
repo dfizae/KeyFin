@@ -8,5 +8,9 @@ public enum ItemSlotType {
 	SOCKS,
 	FOOTWEAR,
 	WALL,
-	FLOOR
+	FLOOR;
+
+	public boolean isAvatarSlot() {
+		return this != WALL && this != FLOOR;
+	}
 }
