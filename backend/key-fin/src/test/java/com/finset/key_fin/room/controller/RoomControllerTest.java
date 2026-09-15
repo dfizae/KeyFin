@@ -2,8 +2,9 @@ package com.finset.key_fin.room.controller;
 
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.room.dto.response.RoomResponse;
-import com.finset.key_fin.room.entity.FurniturePlacementDirection;
-import com.finset.key_fin.room.entity.FurniturePlacementStatus;
+import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
+import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
+import com.finset.key_fin.furniture.dto.response.PlacedFurnitureResponse;
 import com.finset.key_fin.item.entity.ItemSlotType;
 import com.finset.key_fin.item.dto.response.EquippedItemResponse;
 import com.finset.key_fin.room.service.RoomService;
@@ -58,6 +59,7 @@ class RoomControllerTest {
 					.andExpect(jsonPath("$.data.avatar.equipped[0].userItemId").value(101))
 					.andExpect(jsonPath("$.data.avatar.reaction").doesNotExist())
 					.andExpect(jsonPath("$.data.furnitures[0].itemId").value(4))
+					.andExpect(jsonPath("$.data.furnitures[0].userFurnitureId").value(201))
 					.andExpect(jsonPath("$.data.furnitures[0].placementStatus").value("FLOOR"))
 					.andExpect(jsonPath("$.data.furnitures[0].placementDirection").value("FRONT_RIGHT"))
 					.andExpect(jsonPath("$.data.furnitures[0].positionX").value(165.000))
@@ -83,7 +85,8 @@ class RoomControllerTest {
 						null
 				),
 				List.of(
-						new RoomResponse.FurnitureResponse(
+						new PlacedFurnitureResponse(
+								201L,
 								4L,
 								ItemSlotType.FLOOR,
 								"sofa_default",

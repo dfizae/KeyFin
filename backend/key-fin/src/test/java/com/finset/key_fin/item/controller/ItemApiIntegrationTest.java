@@ -1,7 +1,7 @@
 package com.finset.key_fin.item.controller;
 
 import com.finset.key_fin.auth.jwt.JwtTokenProvider;
-import com.finset.key_fin.room.repository.UserFurnitureRepository;
+import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
