@@ -2,8 +2,12 @@ package com.finset.key_fin.transaction.entity;
 
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.transaction.exception.TransactionErrorCode;
+import com.finset.key_fin.user.entity.User;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+
+import java.time.LocalDate;
+import java.time.LocalTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -94,10 +98,48 @@ class TransactionTest {
 								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
 	}
 
+	@Test
+	void 계좌_거래를_본인_계좌_이체로_변경한다() {
+		Transaction transaction = accountTransaction(ConfirmStatus.PENDING);
+
+		transaction.markAsSelfTransfer();
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.TRANSFER);
+		assertThat(transaction.getSubcategoryId()).isNull();
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.SELF_TRANSFER);
+		assertThat(transaction.getAdjustedAmount()).isNull();
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
+	void 사용자가_확정한_거래는_본인_계좌_이체로_자동_변경하지_않는다() {
+		Transaction transaction = accountTransaction(ConfirmStatus.CONFIRMED);
+
+		assertThatThrownBy(transaction::markAsSelfTransfer)
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
+	}
+
 	private Transaction cardTransaction(long amount) {
 		Transaction transaction = new Transaction();
 		ReflectionTestUtils.setField(transaction, "transactionType", TransactionType.CARD);
 		ReflectionTestUtils.setField(transaction, "amount", amount);
 		return transaction;
+	}
+
+	private Transaction accountTransaction(ConfirmStatus confirmStatus) {
+		return Transaction.collectAccount(
+				User.create("qwer@qwer.com", "password", "김예린"),
+				1L,
+				"101",
+				TransactionType.WITHDRAW,
+				"계좌 거래",
+				10_000L,
+				LocalDate.of(2026, 9, 15),
+				LocalTime.of(10, 30),
+				confirmStatus,
+				ExcludeTag.NONE
+		);
 	}
 }

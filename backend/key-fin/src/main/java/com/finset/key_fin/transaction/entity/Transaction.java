@@ -21,6 +21,7 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Objects;
 
 @Getter
 @Entity
@@ -89,6 +90,82 @@ public class Transaction extends BaseEntity {
 	@Column(length = 255)
 	private String memo;
 
+	public static Transaction collectAccount(
+			User user,
+			Long accountId,
+			String financeTransactionUniqueNo,
+			TransactionType transactionType,
+			String transactionSummary,
+			long amount,
+			LocalDate transactionDate,
+			LocalTime transactionTime,
+			ConfirmStatus confirmStatus,
+			ExcludeTag excludeTag
+	) {
+		Transaction transaction = collected(
+				user, financeTransactionUniqueNo, transactionType, transactionSummary,
+				amount, transactionDate, transactionTime, confirmStatus, excludeTag
+		);
+		transaction.accountId = Objects.requireNonNull(accountId, "accountId must not be null");
+		return transaction;
+	}
+
+	public static Transaction collectCard(
+			User user,
+			Long cardId,
+			String financeTransactionUniqueNo,
+			Long merchantId,
+			String merchantName,
+			long amount,
+			LocalDate transactionDate,
+			LocalTime transactionTime,
+			Integer subcategoryId,
+			ConfirmStatus confirmStatus,
+			TransactionStatus status
+	) {
+		Transaction transaction = collected(
+				user, financeTransactionUniqueNo, TransactionType.CARD, merchantName,
+				amount, transactionDate, transactionTime, confirmStatus, ExcludeTag.NONE
+		);
+		transaction.cardId = Objects.requireNonNull(cardId, "cardId must not be null");
+		transaction.merchantId = merchantId;
+		transaction.subcategoryId = subcategoryId;
+		transaction.status = Objects.requireNonNull(status, "status must not be null");
+		return transaction;
+	}
+
+	private static Transaction collected(
+			User user,
+			String financeTransactionUniqueNo,
+			TransactionType transactionType,
+			String merchantNameRaw,
+			long amount,
+			LocalDate transactionDate,
+			LocalTime transactionTime,
+			ConfirmStatus confirmStatus,
+			ExcludeTag excludeTag
+	) {
+		if (financeTransactionUniqueNo == null || financeTransactionUniqueNo.isBlank()) {
+			throw new IllegalArgumentException("financeTransactionUniqueNo must not be blank");
+		}
+		if (amount <= 0) {
+			throw new IllegalArgumentException("amount must be positive");
+		}
+		Transaction transaction = new Transaction();
+		transaction.user = Objects.requireNonNull(user, "user must not be null");
+		transaction.source = TransactionSource.LIVE;
+		transaction.finTransactionUniqueNo = financeTransactionUniqueNo;
+		transaction.transactionType = Objects.requireNonNull(transactionType, "transactionType must not be null");
+		transaction.merchantNameRaw = merchantNameRaw;
+		transaction.amount = amount;
+		transaction.transactionDate = Objects.requireNonNull(transactionDate, "transactionDate must not be null");
+		transaction.transactionTime = Objects.requireNonNull(transactionTime, "transactionTime must not be null");
+		transaction.confirmStatus = Objects.requireNonNull(confirmStatus, "confirmStatus must not be null");
+		transaction.excludeTag = Objects.requireNonNull(excludeTag, "excludeTag must not be null");
+		transaction.status = TransactionStatus.NORMAL;
+		return transaction;
+	}
+
 	public void confirmSubcategory(int subcategoryId) {
 		validateClassifiable();
 		if (subcategoryId <= 0) {
@@ -127,6 +204,20 @@ public class Transaction extends BaseEntity {
 		}
 		this.subcategoryId = subcategoryId;
 		this.excludeTag = ExcludeTag.RESTORE;
+		this.adjustedAmount = null;
+		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
+	public void markAsSelfTransfer() {
+		if (accountId == null || status == TransactionStatus.CANCELED) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+		if (confirmStatus == ConfirmStatus.CONFIRMED && excludeTag != ExcludeTag.SELF_TRANSFER) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
+		this.transactionType = TransactionType.TRANSFER;
+		this.subcategoryId = null;
+		this.excludeTag = ExcludeTag.SELF_TRANSFER;
 		this.adjustedAmount = null;
 		this.confirmStatus = ConfirmStatus.CONFIRMED;
 	}
