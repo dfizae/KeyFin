@@ -19,6 +19,7 @@ import java.util.List;
 
 import static com.finset.key_fin.item.entity.ItemSlotType.UPPER_BODY;
 import static org.mockito.Mockito.*;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
@@ -57,26 +58,47 @@ class ItemControllerTest {
 	}
 
 	@Test
-	void changesEquipmentWithoutRequestBody() throws Exception {
-		when(service.equip(1L, 3L)).thenReturn(new AvatarEquipmentResponse(
+	void changesEquipmentUsingRequiredRequestBody() throws Exception {
+		when(service.updateEquipment(1L, 3L, true)).thenReturn(new AvatarEquipmentResponse(
 				List.of(new EquippedItemResponse(3L, 103L, UPPER_BODY, "shirt"))));
-		when(service.unequip(1L, 3L)).thenReturn(new AvatarEquipmentResponse(List.of()));
-		mvc.perform(put("/api/v1/items/3/equip"))
+		when(service.updateEquipment(1L, 3L, false)).thenReturn(new AvatarEquipmentResponse(List.of()));
+		mvc.perform(patch("/api/v1/items/3").contentType(APPLICATION_JSON).content("{\"equipped\":true}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.equipped[0].userItemId").value(3));
-		mvc.perform(delete("/api/v1/items/3/equip"))
+		mvc.perform(patch("/api/v1/items/3").contentType(APPLICATION_JSON).content("{\"equipped\":false}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.equipped").isEmpty());
+		verify(service).updateEquipment(1L, 3L, true);
+		verify(service).updateEquipment(1L, 3L, false);
 	}
 
 	@ParameterizedTest
 	@ValueSource(strings = {"0", "-1", "text", "9223372036854775808"})
 	void rejectsInvalidIds(String id) throws Exception {
-		for (var request : List.of(put("/api/v1/items/" + id + "/equip"),
-				delete("/api/v1/items/" + id + "/equip"))) {
-			mvc.perform(request).andExpect(status().isBadRequest())
+		for (boolean equipped : List.of(true, false)) {
+			mvc.perform(patch("/api/v1/items/" + id).contentType(APPLICATION_JSON)
+					.content("{\"equipped\":" + equipped + "}"))
+					.andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.code").value("COMMON_001"));
 		}
+		verifyNoInteractions(service);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"{}", "{\"equipped\":null}"})
+	void rejectsMissingEquipmentState(String body) throws Exception {
+		mvc.perform(patch("/api/v1/items/3").contentType(APPLICATION_JSON).content(body))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
+		verifyNoInteractions(service);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"", "{", "null", "{\"equipped\":[]}"})
+	void rejectsMissingOrUnreadableBody(String body) throws Exception {
+		mvc.perform(patch("/api/v1/items/3").contentType(APPLICATION_JSON).content(body))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_002"));
 		verifyNoInteractions(service);
 	}
 }

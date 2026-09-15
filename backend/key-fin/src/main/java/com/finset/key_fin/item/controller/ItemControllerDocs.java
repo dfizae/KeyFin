@@ -1,6 +1,7 @@
 package com.finset.key_fin.item.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.item.dto.request.ItemEquipmentUpdateRequest;
 import com.finset.key_fin.item.dto.response.AvatarEquipmentResponse;
 import com.finset.key_fin.item.dto.response.UserItemResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -8,10 +9,12 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Positive;
 
 import java.util.List;
@@ -48,32 +51,34 @@ public interface ItemControllerDocs {
 			String slotType
 	);
 
-	@Operation(summary = "아이템 장착·교체",
-			description = "UserItem ID로 본인 소유 아이템을 장착합니다. 부위는 서버가 판단하며 같은 부위의 기존 아이템은 "
-					+ "자동 해제합니다. 이미 장착되어 있어도 성공하며 변경 후 전체 착장을 반환합니다.")
-	@ApiResponse(responseCode = "200", description = "장착 성공", useReturnTypeSchema = true,
-			content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(value = """
-					{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
-					 "data":{"equipped":[{"userItemId":101,"itemId":3,"slotType":"UPPER_BODY","assetKey":"shirt_blue"}]}}
-					""")))
-	BaseResponse<AvatarEquipmentResponse> equip(
+	@Operation(summary = "아이템 장착 상태 변경",
+			description = "equipped가 true이면 장착·교체하고 false이면 해당 아이템만 해제합니다. "
+					+ "부위는 서버가 판단하며 같은 부위의 기존 아이템은 자동 해제합니다. 보유 레코드는 유지합니다. "
+					+ "같은 상태를 반복 요청해도 성공하며 변경 후 전체 착장을 부위 순서로 반환합니다. "
+					+ "모든 부위가 해제 가능하며 목록에 없는 부위는 모바일에서 기본 에셋을 표시합니다.")
+	@ApiResponse(responseCode = "200", description = "변경 후 전체 착장", useReturnTypeSchema = true,
+			content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = {
+					@ExampleObject(name = "장착 후 착장", value = """
+							{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
+							 "data":{"equipped":[{"userItemId":101,"itemId":3,"slotType":"UPPER_BODY","assetKey":"shirt_blue"}]}}
+							"""),
+					@ExampleObject(name = "모두 해제한 착장", value = """
+							{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{"equipped":[]}}
+							""")
+			}))
+	@ApiResponse(responseCode = "400",
+			description = "잘못된 userItemId 또는 equipped 누락·null (COMMON_001), 본문 누락 또는 잘못된 JSON (COMMON_002)",
+			content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	BaseResponse<AvatarEquipmentResponse> updateEquipment(
 			@Parameter(hidden = true) Long userId,
 			@Parameter(description = "UserItem의 ID. 상품 ID가 아님",
 					schema = @Schema(type = "integer", format = "int64", minimum = "1"))
-			@Positive long userItemId
-	);
-
-	@Operation(summary = "아이템 장착 해제",
-			description = "보유 레코드는 유지하고 해당 아이템만 해제합니다. 모든 부위가 해제 가능하며 이미 해제되어 있어도 "
-					+ "성공합니다. 전체 착장 목록에 없는 부위는 모바일에서 기본 에셋을 표시합니다.")
-	@ApiResponse(responseCode = "200", description = "해제 성공", useReturnTypeSchema = true,
-			content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(value = """
-					{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{"equipped":[]}}
-					""")))
-	BaseResponse<AvatarEquipmentResponse> unequip(
-			@Parameter(hidden = true) Long userId,
-			@Parameter(description = "해제할 UserItem의 ID",
-					schema = @Schema(type = "integer", format = "int64", minimum = "1"))
-			@Positive long userItemId
+			@Positive long userItemId,
+			@RequestBody(required = true, content = @Content(mediaType = APPLICATION_JSON_VALUE,
+					schema = @Schema(implementation = ItemEquipmentUpdateRequest.class), examples = {
+							@ExampleObject(name = "장착·교체", value = "{\"equipped\":true}"),
+							@ExampleObject(name = "해제", value = "{\"equipped\":false}")
+					}))
+			@Valid ItemEquipmentUpdateRequest request
 	);
 }

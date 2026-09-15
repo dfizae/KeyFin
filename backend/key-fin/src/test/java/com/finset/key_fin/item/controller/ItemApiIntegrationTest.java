@@ -21,6 +21,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -35,6 +36,11 @@ class ItemApiIntegrationTest extends SpringIntegrationTestSupport {
 
 	private MockHttpServletRequestBuilder auth(MockHttpServletRequestBuilder request, long userId) {
 		return request.header("Authorization", "Bearer " + tokens.generateAccessToken(userId));
+	}
+
+	private MockHttpServletRequestBuilder equipmentRequest(String id, boolean equipped) {
+		return patch("/api/v1/items/" + id).contentType(APPLICATION_JSON)
+				.content("{\"equipped\":" + equipped + "}");
 	}
 
 	@Test
@@ -72,22 +78,22 @@ class ItemApiIntegrationTest extends SpringIntegrationTestSupport {
 	void replacesClothesAndReturnsFullEquipmentMatchingRoomThenAllowsRemovingEverything() throws Exception {
 		// 비활성 상품도 이미 보유했다면 장착할 수 있다.
 		for (int attempt = 0; attempt < 2; attempt++) {
-			mvc.perform(auth(put("/api/v1/items/7202/equip"), 971))
+			mvc.perform(auth(equipmentRequest("7202", true), 971))
 					.andExpect(status().isOk())
 					.andExpect(jsonPath("$.data.equipped[*].userItemId", contains(7203, 7202)))
 					.andExpect(jsonPath("$.data.equipped[*].slotType", contains("HEAD", "UPPER_BODY")));
 		}
 		// 이전 상의 해제 요청은 교체된 상의를 해제하지 않는다.
-		mvc.perform(auth(delete("/api/v1/items/7201/equip"), 971))
+		mvc.perform(auth(equipmentRequest("7201", false), 971))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.equipped[*].userItemId", contains(7203, 7202)));
 		mvc.perform(auth(get("/api/v1/room"), 971)).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.avatar.equipped[*].userItemId", contains(7203, 7202)))
 				.andExpect(jsonPath("$.data.avatar.equipped[1].assetKey").value("shirt_b"));
-		mvc.perform(auth(delete("/api/v1/items/7202/equip"), 971))
+		mvc.perform(auth(equipmentRequest("7202", false), 971))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data.equipped[*].userItemId", contains(7203)));
 		for (int attempt = 0; attempt < 2; attempt++) {
-			mvc.perform(auth(delete("/api/v1/items/7203/equip"), 971))
+			mvc.perform(auth(equipmentRequest("7203", false), 971))
 					.andExpect(status().isOk()).andExpect(jsonPath("$.data.equipped").isEmpty());
 		}
 		mvc.perform(auth(get("/api/v1/room"), 971))
@@ -101,10 +107,10 @@ class ItemApiIntegrationTest extends SpringIntegrationTestSupport {
 	@ParameterizedTest
 	@CsvSource({"7203,HEAD", "7204,FACE", "7201,UPPER_BODY", "7205,LOWER_BODY", "7206,SOCKS", "7207,FOOTWEAR"})
 	void everyPartCanBeEquippedAndRemoved(long id, String slot) throws Exception {
-		mvc.perform(auth(put("/api/v1/items/" + id + "/equip"), 971)).andExpect(status().isOk());
+		mvc.perform(auth(equipmentRequest(String.valueOf(id), true), 971)).andExpect(status().isOk());
 		assertThat(jdbc.sql("SELECT equipped_slot FROM user_items WHERE id = :id").param("id", id)
 				.query(String.class).single()).isEqualTo(slot);
-		mvc.perform(auth(delete("/api/v1/items/" + id + "/equip"), 971)).andExpect(status().isOk());
+		mvc.perform(auth(equipmentRequest(String.valueOf(id), false), 971)).andExpect(status().isOk());
 		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_items WHERE id = :id AND equipped_slot IS NULL")
 				.param("id", id).query(Long.class).single()).isEqualTo(1);
 	}
@@ -117,20 +123,44 @@ class ItemApiIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@ParameterizedTest
-	@ValueSource(strings = {"0", "-1", "text"})
+	@ValueSource(strings = {"0", "-1", "text", "9223372036854775808"})
 	void rejectsInvalidIds(String id) throws Exception {
-		for (var request : List.of(put("/api/v1/items/" + id + "/equip"),
-				delete("/api/v1/items/" + id + "/equip"))) {
+		for (var request : List.of(equipmentRequest(id, true), equipmentRequest(id, false))) {
 			mvc.perform(auth(request, 971)).andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.code").value("COMMON_001"));
 		}
 	}
 
 	@ParameterizedTest
+	@ValueSource(strings = {"{}", "{\"equipped\":null}"})
+	void rejectsMissingEquipmentStateWithoutUnequipping(String body) throws Exception {
+		mvc.perform(auth(patch("/api/v1/items/7201").contentType(APPLICATION_JSON).content(body), 971))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("COMMON_001"));
+		assertThat(jdbc.sql("SELECT equipped_slot FROM user_items WHERE id = 7201")
+				.query(String.class).single()).isEqualTo("UPPER_BODY");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"", "{", "null", "{\"equipped\":[]}"})
+	void rejectsMissingOrUnreadableBody(String body) throws Exception {
+		mvc.perform(auth(patch("/api/v1/items/7201").contentType(APPLICATION_JSON).content(body), 971))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("COMMON_002"));
+	}
+
+	@Test
+	void legacyEquipEndpointsAreRemoved() throws Exception {
+		for (var request : List.of(put("/api/v1/items/7202/equip"), delete("/api/v1/items/7201/equip"))) {
+			mvc.perform(auth(request, 971)).andExpect(status().isNotFound());
+		}
+		mvc.perform(auth(get("/api/v1/room"), 971)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.avatar.equipped[*].userItemId", contains(7203, 7201)));
+	}
+
+	@ParameterizedTest
 	@ValueSource(longs = {7208, 999999})
 	void foreignAndMissingItemsAreIndistinguishable(long id) throws Exception {
-		for (var request : List.of(put("/api/v1/items/" + id + "/equip"),
-				delete("/api/v1/items/" + id + "/equip"))) {
+		for (var request : List.of(equipmentRequest(String.valueOf(id), true),
+				equipmentRequest(String.valueOf(id), false))) {
 			mvc.perform(auth(request, 971)).andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.code").value("ITEM_001"));
 		}
@@ -140,7 +170,7 @@ class ItemApiIntegrationTest extends SpringIntegrationTestSupport {
 	@ValueSource(longs = {974, 999999})
 	void rejectsDeletedAndMissingUsers(long id) throws Exception {
 		for (var request : List.of(get("/api/v1/items"), get("/api/v1/room"),
-				put("/api/v1/items/7201/equip"), delete("/api/v1/items/7201/equip"))) {
+				equipmentRequest("7201", true), equipmentRequest("7201", false))) {
 			mvc.perform(auth(request, id)).andExpect(status().isNotFound())
 					.andExpect(jsonPath("$.code").value("USER_001"));
 		}
@@ -149,8 +179,8 @@ class ItemApiIntegrationTest extends SpringIntegrationTestSupport {
 	@Test
 	void allNewEndpointsRequireAccessTokens() throws Exception {
 		for (String token : List.of("", "not-a-jwt", tokens.generateRefreshToken(971L))) {
-			for (var request : List.of(get("/api/v1/items"), put("/api/v1/items/7201/equip"),
-					delete("/api/v1/items/7201/equip"))) {
+			for (var request : List.of(get("/api/v1/items"), equipmentRequest("7201", true),
+					equipmentRequest("7201", false))) {
 				if (!token.isEmpty()) request.header("Authorization", "Bearer " + token);
 				mvc.perform(request).andExpect(status().isUnauthorized());
 			}

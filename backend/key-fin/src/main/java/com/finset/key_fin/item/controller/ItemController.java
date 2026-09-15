@@ -1,15 +1,18 @@
 package com.finset.key_fin.item.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.item.dto.request.ItemEquipmentUpdateRequest;
 import com.finset.key_fin.item.dto.response.AvatarEquipmentResponse;
 import com.finset.key_fin.item.dto.response.UserItemResponse;
 import com.finset.key_fin.item.service.ItemService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -33,21 +36,13 @@ public class ItemController implements ItemControllerDocs {
 		return BaseResponse.ok(itemService.getItems(userId, slotType));
 	}
 
-	@PutMapping(value = "/{userItemId}/equip", produces = APPLICATION_JSON_VALUE)
+	@PatchMapping(value = "/{userItemId}", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
 	@Override
-	public BaseResponse<AvatarEquipmentResponse> equip(
+	public BaseResponse<AvatarEquipmentResponse> updateEquipment(
 			@AuthenticationPrincipal Long userId,
-			@PathVariable long userItemId
+			@Positive @PathVariable long userItemId,
+			@Valid @RequestBody ItemEquipmentUpdateRequest request
 	) {
-		return BaseResponse.ok(itemService.equip(userId, userItemId));
-	}
-
-	@DeleteMapping(value = "/{userItemId}/equip", produces = APPLICATION_JSON_VALUE)
-	@Override
-	public BaseResponse<AvatarEquipmentResponse> unequip(
-			@AuthenticationPrincipal Long userId,
-			@PathVariable long userItemId
-	) {
-		return BaseResponse.ok(itemService.unequip(userId, userItemId));
+		return BaseResponse.ok(itemService.updateEquipment(userId, userItemId, request.equipped()));
 	}
 }

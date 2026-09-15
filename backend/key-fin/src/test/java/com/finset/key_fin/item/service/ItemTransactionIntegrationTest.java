@@ -41,7 +41,7 @@ class ItemTransactionIntegrationTest extends SpringIntegrationTestSupport {
 	void failureBeforeCommitRollsBackBothSidesOfReplacement() {
 		var tx = new TransactionTemplate(transactions);
 		assertThatThrownBy(() -> tx.executeWithoutResult(status -> {
-			service.equip(971L, 7202L);
+			service.updateEquipment(971L, 7202L, true);
 			assertThat(currentTop()).isEqualTo(7202L);
 			throw new IllegalStateException("failure before commit");
 		})).isInstanceOf(IllegalStateException.class);
@@ -80,7 +80,7 @@ class ItemTransactionIntegrationTest extends SpringIntegrationTestSupport {
 			var remove = executor.submit(() -> {
 				ready.countDown();
 				if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
-				return service.unequip(971L, 7201L);
+				return service.updateEquipment(971L, 7201L, false);
 			});
 			assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
 			start.countDown();
@@ -94,7 +94,7 @@ class ItemTransactionIntegrationTest extends SpringIntegrationTestSupport {
 			throws InterruptedException {
 		ready.countDown();
 		if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("start timeout");
-		return service.equip(971L, id);
+		return service.updateEquipment(971L, id, true);
 	}
 
 	private long currentTop() {

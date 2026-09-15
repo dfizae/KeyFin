@@ -79,7 +79,7 @@ class ItemServiceTest {
 			return null;
 		}).doNothing().when(items).flush();
 
-		var response = service.equip(1L, 2L);
+		var response = service.updateEquipment(1L, 2L, true);
 		assertThat(target.getEquippedSlot()).isEqualTo(UPPER_BODY);
 		assertThat(response.equipped()).extracting(EquippedItemResponse::userItemId).containsExactly(5L, 2L);
 		var order = inOrder(users, items);
@@ -95,7 +95,7 @@ class ItemServiceTest {
 		UserItem target = owned(2L, HEAD, true);
 		when(items.findByIdAndUserId(2L, 1L)).thenReturn(Optional.of(target));
 		when(items.findByUserIdAndEquippedSlotIsNotNull(1L)).thenReturn(List.of(target));
-		assertThat(service.equip(1L, 2L).equipped()).hasSize(1);
+		assertThat(service.updateEquipment(1L, 2L, true).equipped()).hasSize(1);
 		verify(items, never()).flush();
 		verify(items, never()).findByUserIdAndEquippedSlot(anyLong(), any());
 	}
@@ -106,7 +106,7 @@ class ItemServiceTest {
 		UserItem replacement = owned(3L, UPPER_BODY, true);
 		when(items.findByIdAndUserId(2L, 1L)).thenReturn(Optional.of(old));
 		when(items.findByUserIdAndEquippedSlotIsNotNull(1L)).thenReturn(List.of(replacement));
-		assertThat(service.unequip(1L, 2L).equipped()).extracting(EquippedItemResponse::userItemId)
+		assertThat(service.updateEquipment(1L, 2L, false).equipped()).extracting(EquippedItemResponse::userItemId)
 				.containsExactly(3L);
 		assertThat(replacement.isEquipped()).isTrue();
 		verify(items, never()).flush();
@@ -117,19 +117,17 @@ class ItemServiceTest {
 		UserItem target = owned(2L, LOWER_BODY, true);
 		when(items.findByIdAndUserId(2L, 1L)).thenReturn(Optional.of(target));
 		when(items.findByUserIdAndEquippedSlotIsNotNull(1L)).thenReturn(List.of());
-		assertThat(service.unequip(1L, 2L).equipped()).isEmpty();
+		assertThat(service.updateEquipment(1L, 2L, false).equipped()).isEmpty();
 		assertThat(target.isEquipped()).isFalse();
 		verify(items).flush();
 	}
 
 	@Test
 	void missingOrForeignItemReturnsSameError() {
-		for (boolean equip : List.of(true, false)) {
-			assertThatThrownBy(() -> {
-				if (equip) service.equip(1L, 99L);
-				else service.unequip(1L, 99L);
-			}).isInstanceOfSatisfying(BusinessException.class,
-					e -> assertThat(e.getErrorCode()).isEqualTo(ItemErrorCode.USER_ITEM_NOT_FOUND));
+		for (boolean equipped : List.of(true, false)) {
+			assertThatThrownBy(() -> service.updateEquipment(1L, 99L, equipped))
+					.isInstanceOfSatisfying(BusinessException.class,
+							e -> assertThat(e.getErrorCode()).isEqualTo(ItemErrorCode.USER_ITEM_NOT_FOUND));
 		}
 		verify(items, never()).flush();
 	}
@@ -139,8 +137,8 @@ class ItemServiceTest {
 		assertThatThrownBy(() -> service.getItems(9L, null)).isInstanceOfSatisfying(BusinessException.class,
 				e -> assertThat(e.getErrorCode()).isEqualTo(UserErrorCode.USER_NOT_FOUND));
 		assertThatThrownBy(() -> service.getEquipment(9L)).isInstanceOf(BusinessException.class);
-		assertThatThrownBy(() -> service.equip(9L, 1L)).isInstanceOf(BusinessException.class);
-		assertThatThrownBy(() -> service.unequip(9L, 1L)).isInstanceOf(BusinessException.class);
+		assertThatThrownBy(() -> service.updateEquipment(9L, 1L, true)).isInstanceOf(BusinessException.class);
+		assertThatThrownBy(() -> service.updateEquipment(9L, 1L, false)).isInstanceOf(BusinessException.class);
 		verifyNoInteractions(items);
 	}
 }

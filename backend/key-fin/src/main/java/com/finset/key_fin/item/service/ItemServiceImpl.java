@@ -44,31 +44,23 @@ public class ItemServiceImpl implements ItemService {
 
 	@Transactional
 	@Override
-	public AvatarEquipmentResponse equip(long userId, long userItemId) {
+	public AvatarEquipmentResponse updateEquipment(long userId, long userItemId, boolean equipped) {
 		lockActiveUser(userId);
 		UserItem target = findOwnedItem(userId, userItemId);
-		if (!target.isEquipped()) {
+		if (target.isEquipped() == equipped) {
+			return currentEquipment(userId);
+		}
+		if (equipped) {
 			userItemRepository.findByUserIdAndEquippedSlot(userId, target.getItem().getSlotType())
 					.ifPresent(previous -> {
 						previous.unequip();
-						// 기존 슬롯을 먼저 비워 Hibernate UPDATE 순서와 무관하게 유일 제약을 지킨다.
 						userItemRepository.flush();
 					});
 			target.equip();
-			userItemRepository.flush();
-		}
-		return currentEquipment(userId);
-	}
-
-	@Transactional
-	@Override
-	public AvatarEquipmentResponse unequip(long userId, long userItemId) {
-		lockActiveUser(userId);
-		UserItem target = findOwnedItem(userId, userItemId);
-		if (target.isEquipped()) {
+		} else {
 			target.unequip();
-			userItemRepository.flush();
 		}
+		userItemRepository.flush();
 		return currentEquipment(userId);
 	}
 
@@ -91,7 +83,6 @@ public class ItemServiceImpl implements ItemService {
 	}
 
 	private void lockActiveUser(long userId) {
-		// 아이템이 하나도 장착되지 않은 경우에도 사용자 단위로 모든 변경을 직렬화한다.
 		userRepository.findActiveByIdForUpdate(userId)
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 	}

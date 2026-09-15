@@ -7,6 +7,5 @@ import java.util.List;
 public interface ItemService {
 	List<UserItemResponse> getItems(long userId, String slotType);
 	AvatarEquipmentResponse getEquipment(long userId);
-	AvatarEquipmentResponse equip(long userId, long userItemId);
-	AvatarEquipmentResponse unequip(long userId, long userItemId);
+	AvatarEquipmentResponse updateEquipment(long userId, long userItemId, boolean equipped);
 }
