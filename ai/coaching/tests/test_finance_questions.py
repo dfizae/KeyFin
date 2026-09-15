@@ -32,7 +32,10 @@ def test_definition_contains_answer_and_verified_reference() -> None:
     [
         '{"status":"answered","fact_ids":["invented"]}',
         '{"status":"answered","fact_ids":[]}',
-        '{"status":"needs_source","fact_ids":["compound_interest"]}',
+        '{"status":"needs_data","fact_ids":["compound_interest"]}',
+        '{"status":"answered","fact_ids":["compound_interest"],"missing":["calculation"]}',
+        '{"status":"needs_source","fact_ids":[],"missing":["invented"]}',
+        '{"status":"needs_source","fact_ids":[],"missing":["tax_terms","tax_terms"]}',
         '{"status":"answered","fact_ids":["compound_interest","compound_interest"]}',
         '{"status":"answered","fact_ids":["compound_interest"],"text":"잔액은 999원"}',
     ],
@@ -42,6 +45,33 @@ def test_untrusted_selection_never_invents_financial_answer(raw: str) -> None:
     assert answer.source == "template"
     assert answer.fallback_reason == "invalid_finance_selection"
     assert not answer.reference_ids
+
+
+def test_partial_concept_keeps_incomplete_status_and_specific_missing_conditions() -> None:
+    answer = selected_finance_wording(
+        '{"status":"needs_source","fact_ids":["interest_types"],"missing":["latest_source","contract_terms"]}',
+        "test", evidence=finance_evidence("고정금리와 변동금리 차이와 오늘 은행별 금리를 알려줘."),
+    )
+    assert answer.answer_status == "needs_source"
+    assert answer.reference_ids == ("interest_types",)
+    assert "고정금리" in answer.text
+    assert "변동금리" in answer.text
+    assert "확정할 수 없습니다" in answer.text
+    assert "최신 공식 공시" in answer.text
+    assert "개인 계약" in answer.text
+    assert answer.source == "llm"
+    assert answer.fallback_reason is None
+
+
+def test_missing_tax_and_calculation_never_generate_numeric_result() -> None:
+    answer = selected_finance_wording(
+        '{"status":"needs_source","fact_ids":[],"missing":["tax_terms","calculation"]}', "test",
+    )
+    assert answer.answer_status == "needs_source"
+    assert not answer.reference_ids
+    assert "세율" in answer.text
+    assert "계산 방식" in answer.text
+    assert not any(character.isdigit() for character in answer.text)
 
 
 @pytest.mark.anyio

@@ -38,6 +38,90 @@ def test_valid_but_unretrieved_id_cannot_answer_question() -> None:
     assert reply.fallback_reason == "invalid_finance_selection"
 
 
+@pytest.mark.parametrize("question", [
+    "이자에도 다시 이자가 붙는 방식은 뭐야?",
+    "지난번 받은 이자를 원래 맡긴 돈에 더해서 다음 이자를 계산하는 건 무슨 방식이야?",
+])
+def test_body_retrieval_finds_concept_without_exact_name(question: str) -> None:
+    assert "compound_interest" in {fact.id for fact in retrieve_facts(question)}
+
+
+def test_small_catalog_can_recall_semantic_subject_with_few_shared_characters() -> None:
+    facts = retrieve_facts("취업해서 소득이 늘어난 뒤 금리를 낮춰 달라고 요청하면 반드시 받아줘야 해?")
+    assert "rate_reduction_request" in {fact.id for fact in facts}
+    assert len(facts) <= 32
+
+
+def test_specific_followup_keeps_subject_when_generic_words_match_another_record() -> None:
+    history = (ChatMessage(role="user", content="복리가 뭐야?"),)
+    assert "compound_interest" in {
+        fact.id for fact in retrieve_facts("그럼 이자는 원금에 합쳐져?", history)
+    }
+    assert "compound_interest" in {
+        fact.id for fact in retrieve_facts("그럼 그건 어떻게 계산해?", history)
+    }
+
+
+def test_explicit_two_subjects_cannot_be_reported_as_answered_with_one_missing() -> None:
+    evidence = finance_evidence("복리와 고정금리·변동금리의 차이를 각각 설명해줘.")
+    partial = selected_finance_wording(
+        '{"status":"answered","fact_ids":["interest_types"]}', "test", evidence=evidence,
+    )
+    assert partial.answer_status == "unavailable"
+    assert partial.fallback_reason == "incomplete_finance_selection"
+    complete = selected_finance_wording(
+        '{"status":"answered","fact_ids":["compound_interest","interest_types"]}', "test", evidence=evidence,
+    )
+    assert complete.answer_status == "answered"
+    assert "이자에도 이자" in complete.text
+    assert "고정금리" in complete.text
+
+
+def test_anaphoric_topic_change_does_not_require_or_retain_history() -> None:
+    history = (ChatMessage(role="user", content="복리가 뭐야?"),)
+    assert retrieve_facts("그거 말고 바젤3가 뭐야?", history) == ()
+    for context in ((), history):
+        ids = {fact.id for fact in retrieve_facts("그거 말고 리볼빙이 뭐야?", context)}
+        assert "revolving" in ids
+        assert "compound_interest" not in ids
+    changed = (ChatMessage(role="user", content="복리 대신 리볼빙이 뭐야?"),)
+    assert "compound_interest" not in {fact.id for fact in retrieve_facts("그럼 더 설명해줘", changed)}
+
+
+@pytest.mark.parametrize(("question", "selected"), [
+    ("복리와 고정금리를 각각 원리금 관점에서 설명해줘.", ["compound_interest", "interest_types"]),
+    ("대출 원리금 이야기는 빼고 복리와 고정금리를 각각 설명해줘.", ["compound_interest", "interest_types"]),
+    ("ETF의 총보수와 거래 수수료는 각각 어떤 의미야?", ["fund_fees"]),
+    ("복리와 고정금리를 각각 설명해줘. 대출 원리금 이야기는 빼고.", ["compound_interest", "interest_types"]),
+])
+def test_context_modifiers_are_not_mandatory_extra_answers(question: str, selected: list[str]) -> None:
+    reply = selected_finance_wording(
+        json.dumps({"status": "answered", "fact_ids": selected}), "test", evidence=finance_evidence(question),
+    )
+    assert reply.answer_status == "answered"
+
+
+def test_possessive_definition_still_requires_both_named_subjects() -> None:
+    reply = selected_finance_wording(
+        '{"status":"answered","fact_ids":["compound_interest"]}', "test",
+        evidence=finance_evidence("복리와 고정금리의 뜻을 각각 설명해줘."),
+    )
+    assert reply.answer_status == "unavailable"
+    assert reply.fallback_reason == "incomplete_finance_selection"
+
+
+def test_unknown_retrieved_id_falls_back_without_exception() -> None:
+    evidence = finance_evidence("복리가 뭐야?")
+    facts = json.loads(evidence.facts_json)
+    facts["knowledge_facts"].append({"id": "unknown_approved_id"})
+    reply = selected_finance_wording(
+        '{"status":"answered","fact_ids":["compound_interest"]}', "test",
+        evidence=evidence.model_copy(update={"facts_json": json.dumps(facts)}),
+    )
+    assert reply.answer_status == "unavailable"
+    assert reply.fallback_reason == "invalid_finance_selection"
+
+
 def test_unknown_subject_does_not_borrow_past_topic() -> None:
     history = (ChatMessage(role="user", content="복리가 뭐야?"),)
     assert retrieve_facts("오늘 날씨 알려줘", history) == ()

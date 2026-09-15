@@ -44,7 +44,7 @@ class CaseResult(Frozen):
 
 
 class Report(Frozen):
-    version: Literal["knowledge-personal-coverage/2"] = "knowledge-personal-coverage/2"
+    version: Literal["knowledge-personal-coverage/3"] = "knowledge-personal-coverage/3"
     backend: Backend
     catalog_sha256: str
     cases: tuple[CaseResult, ...]

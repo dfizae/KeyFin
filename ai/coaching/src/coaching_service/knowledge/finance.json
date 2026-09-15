@@ -1,5 +1,5 @@
 {
-  "version": "finance-knowledge/2026-09-14-v2",
+  "version": "finance-knowledge/2026-09-15-v3",
   "facts": [
     {
       "id": "compound_interest",
@@ -151,7 +151,7 @@
     {
       "id": "needs_wants",
       "title": "필수 지출과 선택 지출",
-      "text": "필수 지출은 생활과 일을 유지하는 데 필요한 지출이고, 선택 지출은 있으면 좋지만 반드시 필요한 것은 아닌 지출입니다. 같은 품목도 상황에 따라 구분이 달라질 수 있으므로 자신의 생활 조건과 목표에 비추어 판단합니다.",
+      "text": "필수 지출은 생활과 일을 유지하는 데 필요한 지출이고, 선택 지출은 있으면 좋지만 반드시 필요한 것은 아닌 지출입니다. 이 구분은 예산에서 어떤 지출을 선택할지 판단하는 데 도움을 줍니다. 같은 품목도 상황에 따라 구분이 달라질 수 있으므로 자신의 생활 조건과 목표에 비추어 판단합니다.",
       "source_title": "CFPB 필요와 욕구의 예산",
       "source_url": "https://www.consumerfinance.gov/consumer-tools/educator-tools/youth-financial-education/teach/activities/budgeting-needs-and-wants/",
       "aliases": [
@@ -161,7 +161,7 @@
         "욕구",
         "충동구매"
       ],
-      "reviewed_on": "2026-09-14",
+      "reviewed_on": "2026-09-15",
       "review_due": "2027-03-14",
       "jurisdiction": "general_concept"
     },
