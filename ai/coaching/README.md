@@ -1,6 +1,6 @@
 # FDT 코칭 API
 
-거래 이벤트를 저장하고 예산 초과 징후를 감지하며, 코칭 카드·대화·수치 분석 결과를 제공하는 Python API입니다. **금액과 예측 구간은 팀 FDT가 계산하고, LLM은 분류와 설명을 담당합니다.** 독립 API와 앱·백엔드의 코칭 연결 코드가 있으며, 운영 인증 설정·실제 금융 데이터 동기화·푸시 전송망의 통합 검증은 남아 있습니다.
+거래 이벤트를 저장하고 예산 초과 징후를 감지하며, 코칭 카드·대화·수치 분석 결과를 제공하는 독립 Python API입니다. **금액과 예측 구간은 팀 FDT가 계산하고, LLM은 분류와 설명을 담당합니다.** 현재 AI MR은 `ai/coaching` API만 제공하며 앱·백엔드·원천 데이터 어댑터·푸시 전송기는 외부 호출 계층이 소유합니다.
 
 [AI·FDT 구조도](docs/architecture.md)에서 전체 구성, FDT 내부 계산, 차트 생성 순서를 Mermaid로 볼 수 있습니다.
 
@@ -10,15 +10,15 @@
 
 [금융 질문·소비 조회·예측 대화](docs/chat.md)에서 거래 연결 없이 대화를 시작하는 방법과 새 응답 형식을 확인합니다. [응답 검증 보고서](docs/chat-response-validation.md)는 같은 질문의 수정 전후 GPU 결과를 비교합니다.
 
-[R14 전체 연결 검증](docs/end-to-end-validation.md)에서 공식 자료 검색·개인 현황·앱 연결·예측 사전등록의 구현 범위와 실제 GPU 실행 결과, 남은 운영 조건을 확인합니다.
+[R14 전체 연결 검증](docs/end-to-end-validation.md)에서 공식 자료 검색·개인 현황·예측 사전등록의 AI 구현 범위와 실제 GPU 실행 결과를 확인합니다. 당시 앱·백엔드 연결 실험은 현재 AI MR에서 제외된 과거 검증으로 구분해 기록했습니다.
 
 [R15 기간 합계 예측 개선](docs/aggregate-forecast-r15.md)은 새 GPU 추가학습 4회와 별도 과거 원장의 최종 평가 결과입니다. 7일 총출금 MAE는 34.47%, 30일은 8.38% 감소했으며 실제 고객 소비 예측 및 FDT 교체 여부와 구분합니다. [월별 평가 API](docs/forecast-validation.md)는 원래 편성·실제 소비·예측을 같은 달 기준으로 비교합니다.
 
-[R15 구현·성능 개선 결과](docs/coaching-completion-r15.md)에서 원천 동기화·월별 평가·후속 질문 개선의 최종 검증과 Jira 104·110의 남은 완료 조건을 함께 확인합니다.
-
-[R16 거래 동기화 개선](docs/source-sync-improvement-r16.md)은 Jira 110의 적체·실패 복구 개선입니다. 60개 요청의 스케줄 실행 횟수 비교, 잘못된 완료 판정 방지, 실제 스케줄러 검증을 담았습니다.
+[R15 구현·성능 개선 결과](docs/coaching-completion-r15.md)에서 월별 평가·후속 질문 개선의 최종 검증과 Jira 104·110의 남은 완료 조건을 함께 확인합니다. 원천 동기화와 앱·Spring 실험은 현재 AI MR에서 제외된 과거 검증으로 표시했습니다.
 
 [R17 단일 GPU 응답시간](docs/inference-capacity-r17.md)은 같은 배포 모델로 동시 요청 1·2·4·8건을 실제 측정한 결과입니다. 한 장에서 실행됐으며 동시 8건의 중앙값은 16.64초였습니다. 메모리·응답 출처·기간 일치와 배정 확인의 한계를 함께 기록했습니다.
+
+[R18 동시 요청 개선과 MR 범위 정리](docs/concurrency-improvement-r18.md)는 온라인 배치 후보의 성공·악화 결과, 월별 소비 기준 진단, 비 AI 변경 제외와 충돌 해소 근거를 정리합니다. 앱·백엔드 담당자에게 전달할 내용은 [외부 호출 인계 계약](docs/app-integration.md)에 있습니다.
 
 ## 빠르게 실행하기
 
@@ -46,7 +46,7 @@ uv run uvicorn coaching_service.api:from_environment --factory --host 127.0.0.1 
 3. 코칭 검토는 `POST /v1/coaching/reviews`, 대화 시작은 `POST /v1/sessions`, 질문은 `POST /v1/sessions/{session_id}/messages`를 사용합니다.
 4. `GET /v1/notifications`로 알림 대기 항목을 읽고 실제 전달 후 `POST /v1/notifications/{event_id}/ack`로 확인합니다.
 
-일반 금융 개념만 질문하려면 Twin 생성 없이 `POST /v1/finance/questions`를 호출하거나, `{}`로 세션을 만든 뒤 메시지를 보냅니다. 현재 공식 근거 27종을 검색하며 미지원·최신 정보는 자료 필요 상태로 구분합니다. [공식 근거 검색](docs/knowledge-retrieval.md), [개인 현황 조회](docs/personal-context.md), [예측 사전등록·실제값 비교](docs/forecast-validation.md), [앱·백엔드 연결](docs/app-integration.md)에 계약과 지원 범위를 정리했습니다. 메시지 응답은 `Coaching | ChatAnswer`이므로 앱에서 `receipt`의 존재를 무조건 가정하지 않습니다.
+일반 금융 개념만 질문하려면 Twin 생성 없이 `POST /v1/finance/questions`를 호출하거나, `{}`로 세션을 만든 뒤 메시지를 보냅니다. 현재 공식 근거 27종을 검색하며 미지원·최신 정보는 자료 필요 상태로 구분합니다. [공식 근거 검색](docs/knowledge-retrieval.md), [개인 현황 조회](docs/personal-context.md), [예측 사전등록·실제값 비교](docs/forecast-validation.md), [외부 호출 인계 계약](docs/app-integration.md)에 계약과 지원 범위를 정리했습니다. 메시지 응답은 `Coaching | ChatAnswer`이므로 호출 계층에서 `receipt`의 존재를 무조건 가정하지 않습니다.
 
 기존 KeyFin 차트는 `POST /v1/charts/budget-forecast`로 생성합니다. 거래를 요청에 담거나 저장된 Twin을 사용할 수 있으며, FDT 계산과 GPU 설명 추론을 거친 차트 JSON 및 원본 계산 근거를 반환합니다. [차트 연결 안내](docs/charts.md)에 요청 예시·HTML 조회·기간 및 금액 기준을 정리했습니다.
 

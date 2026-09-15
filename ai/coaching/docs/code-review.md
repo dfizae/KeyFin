@@ -17,7 +17,7 @@
 
 함수 주석은 입력 단위, 정책의 이유, 불변 조건, 실패 시점에 집중합니다. 위에서 아래로 읽을 때 계산 도중의 임시 상태와 실제 DB 반영을 구분할 수 있도록 작성했습니다.
 
-R14는 [금융 검색](knowledge-retrieval.md) → [개인 조회](personal-context.md) → [예측 검증](forecast-validation.md) → [앱·백엔드 연결](app-integration.md) 순서로 읽습니다. 실행 코드는 `src/`, 회귀는 `tests/`, 실제 GPU 평가 실행기는 `benchmarks/coaching/flow`와 `knowledge_response`, 실행 산출물은 Git에서 제외한 `artifacts/r14/`에 있습니다. 공식 금융 JSON은 평가 정답 파일이 아닌 실행용 지식 자료입니다.
+R14는 [금융 검색](knowledge-retrieval.md) → [개인 조회](personal-context.md) → [예측 검증](forecast-validation.md) → [외부 호출 인계 계약](app-integration.md) 순서로 읽습니다. 현재 리뷰 범위의 실행 코드는 `ai/coaching/src/`, 회귀는 `ai/coaching/tests/`, 실제 GPU 평가 실행기는 `ai/coaching/benchmarks/coaching/flow`와 `knowledge_response`에 있습니다. 앱·백엔드 구현은 현재 AI MR 범위가 아닙니다. 실행 산출물은 Git에서 제외한 `artifacts/r14/`에 있으며, 공식 금융 JSON은 평가 정답 파일이 아닌 실행용 지식 자료입니다.
 
 R13 대화 변경은 [대화 API 계약](chat.md)을 먼저 읽고 `dialogue.py`의 의도 분기, `chat_answers.py`의 응답 두 형식, `finance_knowledge.py`의 공식 근거·선택 검증, `spending_history.py`의 기간·소비 포함 기준을 확인합니다. `coaching.py`의 `supplementary_evidence`는 표시된 수치를 작성기에 한 번만 전달하며 원본 receipt를 변경하지 않습니다. E2E는 이 새 입력 계약을 독립적으로 재구성하고 원본 엔진 결과 대조를 계속합니다.
 

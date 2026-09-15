@@ -2,7 +2,7 @@
 
 **현재 구조는 Python 코칭 API 안의 FDT 계산 엔진, 별도 GPU 추론 프로세스, SQLite 저장소로 구성됩니다.** FDT의 `Twin`은 거래·잔액·반복 규칙·행동 통계를 표현하는 객체이고, SQLite는 이 상태와 코칭 결과를 보관합니다. 금융 예측 수치는 FDT가 계산하며 LLM은 판단·라우팅·근거 선택·보조 설명을 맡습니다.
 
-2026-09-14의 구현을 기준으로 작성했습니다. 도식의 파일명은 아래 코드 연결 표와 대응합니다. 전체 구성을 먼저 보고, FDT 내부와 차트 요청 순서로 내려가면 됩니다.
+2026-09-15 현재 AI MR의 `ai/coaching` 구현을 기준으로 작성했습니다. 도식의 외부 호출 계층은 인계 경계이며 앱·백엔드 구현이 이 MR에 포함됐다는 뜻이 아닙니다. 파일명은 아래 코드 연결 표와 대응합니다.
 
 GitLab에서 첫 로드에 `Syntax error in text`가 보이면 페이지를 새로고침해 확인합니다. 검증 중 같은 Mermaid 원문이 첫 로드에서는 실패하고 재로딩 후 정상 표시되는 경우를 관찰했습니다. 유사 현상은 [GitLab 이슈 #370176](https://gitlab.com/gitlab-org/gitlab/-/work_items/370176)에 기록되어 있으며, 이 문서 변경이 GitLab 렌더러의 간헐적 오류까지 해결한 것은 아닙니다.
 
@@ -10,10 +10,11 @@ GitLab에서 첫 로드에 `Syntax error in text`가 보이면 페이지를 새�
 
 ```mermaid
 flowchart TB
-    Caller["백엔드 이벤트·검증 클라이언트"]
-    App["앱 /coach<br/>일반 답변 · 개인 현황 · 수치 예측"]
-    Proxy["Spring /api/v1/coaching<br/>인증 사용자별 API 토큰 매핑"]
-    App --> Proxy
+    subgraph External["외부 호출 계층 · 팀원 소유 · 현재 AI MR 범위 밖"]
+        BackendCaller["원천 데이터 어댑터 / 백엔드<br/>backend 역할"]
+        UserCaller["앱 / API 프록시<br/>user 역할"]
+        Notifier["푸시 전달기<br/>notification 역할"]
+    end
 
     subgraph Service["독립 Python API 프로세스 · ai/coaching"]
         API["FastAPI 진입점<br/>api.py · routes.py · chart_routes.py<br/>인증 · 요청 스키마 · 소유자 검사"]
@@ -43,12 +44,14 @@ flowchart TB
     end
 
     DB[("SQLite<br/>Twin · 봉투 원장 · 코칭 · 세션<br/>차트 · 알림 대기 · 개인 현황<br/>예측 등록 · 실제값 정산 · 재시도 응답")]
-    Caller -->|"거래·질문·차트 요청"| API
-    Proxy -->|"대화·조회·알림 요청"| API
+    BackendCaller -->|"Twin · event · 개인 현황 · 검증 입력"| API
+    UserCaller -->|"대화 · 조회"| API
+    Notifier -->|"알림 조회 · 전송 성공 ack"| API
     Store <--> DB
     ModelClient <-->|"인증된 HTTP"| Worker
-    Output -->|"검증된 JSON 또는 HTML"| Caller
-    Output -->|"검증된 JSON"| Proxy
+    API -->|"JSON 또는 HTML"| BackendCaller
+    API -->|"JSON 또는 HTML"| UserCaller
+    API -->|"대기 알림"| Notifier
 ```
 
 `CoachingCore`가 FDT 어댑터·모델 클라이언트·저장소를 연결하고, 요청 종류에 따라 `Events`, `Dialogue`, `Charts`가 호출 순서를 정합니다. FDT는 API 프로세스 안에서 스레드 실행 제한을 두고 호출하는 Python 코드입니다. 별도 FDT HTTP 서버를 호출하는 구성이 아닙니다.
@@ -57,27 +60,27 @@ flowchart TB
 
 알림은 SQLite의 outbox에 저장한 뒤 조회·ack API로 전달 여부를 관리합니다. 실제 푸시 발송, 금융기관 데이터 자동 동기화, 자동 재시작 운영은 별도 연결이 필요합니다. 엔진이나 LLM이 실제 이체·결제를 실행하지 않습니다.
 
-앱·백엔드 코드는 [연결 계약](app-integration.md), 금융 검색은 [자료 관리](knowledge-retrieval.md), 개인 현황은 [조회 범위](personal-context.md)를 따릅니다. [예측 검증 API](forecast-validation.md)는 생성 시점의 원본 예측을 고정하고 만기가 지난 뒤 동일 기간 원거래를 별도 코드로 합산합니다. 이 기능의 구현·합성 테스트 성공은 실고객 미래 예측 정확도 확보를 의미하지 않습니다.
+앱·백엔드 구현은 현재 AI MR의 소유 범위가 아닙니다. [외부 호출 인계 계약](app-integration.md)은 이들이 Python API에 제공해야 할 인증 역할·데이터·호출 순서만 정의합니다. 금융 검색은 [자료 관리](knowledge-retrieval.md), 개인 현황은 [조회 범위](personal-context.md)를 따릅니다. [예측 검증 API](forecast-validation.md)는 생성 시점의 원본 예측을 고정하고 만기가 지난 뒤 동일 기간 원거래를 별도 코드로 합산합니다. 이 기능의 구현·합성 테스트 성공은 실고객 미래 예측 정확도 확보를 의미하지 않습니다.
 
-## R15 원천 동기화와 월별 검증
+## 외부 원천 연동 경계
 
 ```mermaid
 flowchart LR
-    TX["거래 저장·수정 JPA 트랜잭션"] --> Q[("DB outbox<br/>사용자별 변경 세대")]
-    Q --> W["커밋 후 별도 worker<br/>lease · 재시도 · 중복 대사"]
-    DB["원천 거래·확정 편성 DB"] --> A["읽기 전용 JDBC adapter<br/>기간·분류·소유권 확인"]
-    W --> A
-    A --> G{"지원하는 원천 계약인가?"}
-    G -->|지원| T["Python Twin / FDT<br/>새 결제 · 취소 · 코칭"]
-    G -->|미지원·오래된 기준일| B["blocked와 이유 반환<br/>정상 동기화로 집계하지 않음"]
-    T --> R["당시 예측 receipt 고정"]
-    P["원래 월 편성<br/>서버 최초 수신 시각"] --> V["월별 7봉투 평가"]
-    R --> V
-    O["만기 후 확정 원거래<br/>완전 수집 확인"] --> V
-    V --> M["미래 금액 오차 / 월 소비<br/>예산 사용률 / 구간 평가"]
+    Source["외부 원장 · 예산 시스템<br/>현재 AI MR 범위 밖"] --> Adapter["외부 백엔드 / 어댑터<br/>소유자 인증 · 스키마 변환 · 멱등 키"]
+    Adapter -->|"POST /v1/twin"| Twin["Python Twin 초기화"]
+    Adapter -->|"POST /v1/events"| Event["거래 · 취소 반영"]
+    Adapter -->|"POST /v1/personal/context"| Context["개인 현황 저장"]
+    Adapter -->|"POST /v1/forecast-validation/..."| Validation["예측 등록 · 만기 정산"]
+    Twin --> Store[("AI SQLite 저장소")]
+    Event --> Store
+    Context --> Store
+    Validation --> Store
+    Event --> Notice["AI 알림 outbox"]
+    Notice -->|"GET /v1/notifications"| Delivery["외부 알림 전달기"]
+    Delivery -->|"전송 성공 후 ack"| Notice
 ```
 
-outbox와 worker는 명시적으로 설정해야 활성화되며 원격 AI 장애가 원천 거래의 DB 커밋에 전파되지 않습니다. 현재 source adapter는 현금 마감 잔액을 만들어내지 않고 스냅샷을 비워 둡니다. 부분환불·분류 재대사·비표준 월 주기 등 지원 여부는 [앱 연결 계약](app-integration.md)을 따릅니다. 원천 DB에 편성 승인 시각이 없으므로 현재 편성을 과거 사전등록으로 자동 변환하지 않습니다.
+Python API는 외부 원천 DB를 직접 조회하지 않으며 Spring·JDBC·JPA 원천 어댑터나 외부 재시도 worker를 포함하지 않습니다. 외부 호출 계층이 권위 있는 소유자와 원천 데이터를 확정해 API 스키마로 변환해야 합니다. AI API가 보유한 outbox는 코칭 알림의 조회·ack 저장소이며 실제 푸시 전송은 수행하지 않습니다. 이전 R15의 외부 원천 동기화 실험은 [과거 검증 보고서](coaching-completion-r15.md)에 현재 MR 제외 범위를 명시해 보존합니다.
 
 [R15 GPU 연구](aggregate-forecast-r15.md)의 추가학습 모델은 위 제품 실행 경로와 별도의 후보입니다. 과거 체코 총출금 개선을 한국 7봉투 FDT 교체나 실고객 검증 완료로 연결하지 않습니다.
 
