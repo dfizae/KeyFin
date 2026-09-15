@@ -144,7 +144,20 @@ class FinanceCardRestClientTest {
 						.contentType(MediaType.APPLICATION_JSON)
 						.body("{" + SUCCESS_HEADER + """
 								, "REC": [{"cardNo": "1003198565339181", "cvc": "14", "cardIssuerCode": "1003",
-								           "cardIssuerName": "롯데카드", "cardName": "디지로카 SEOUL"}]}
+								           "cardIssuerName": "롯데카드", "cardName": "디지로카 SEOUL", "withdrawalDate": "4"}]}
+								"""));
+
+		assertFinanceError(FinanceErrorCode.INVALID_RESPONSE, () -> client.findCards(USER_KEY));
+	}
+
+	@Test
+	void 출금_요일이_1에서_7이_아니면_잘못된_응답으로_처리한다() {
+		server.expect(requestTo(CARD_LIST_URL))
+				.andRespond(withStatus(HttpStatus.OK)
+						.contentType(MediaType.APPLICATION_JSON)
+						.body("{" + SUCCESS_HEADER + """
+								, "REC": [{"cardNo": "1003198565339181", "cvc": "143", "cardIssuerCode": "1003",
+								           "cardIssuerName": "롯데카드", "cardName": "디지로카 SEOUL", "withdrawalDate": "8"}]}
 								"""));
 
 		assertFinanceError(FinanceErrorCode.INVALID_RESPONSE, () -> client.findCards(USER_KEY));

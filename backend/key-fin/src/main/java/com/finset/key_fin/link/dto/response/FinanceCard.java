@@ -15,6 +15,10 @@ public record FinanceCard(
 		String withdrawalDate
 ) {
 
+	public int withdrawalWeekday() {
+		return Integer.parseInt(withdrawalDate);
+	}
+
 	@Override
 	public String toString() {
 		return "FinanceCard[cardNo=" + maskCardNo()

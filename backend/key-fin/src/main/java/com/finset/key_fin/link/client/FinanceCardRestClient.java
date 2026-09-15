@@ -89,9 +89,14 @@ public class FinanceCardRestClient implements FinanceCardClient {
 		if (isBlank(card.cardNo())
 				|| card.cvc() == null || card.cvc().length() != CVC_LENGTH
 				|| isBlank(card.cardIssuerCode())
-				|| isBlank(card.cardName())) {
+				|| isBlank(card.cardName())
+				|| !isWeekday(card.withdrawalDate())) {
 			throw new BusinessException(FinanceErrorCode.INVALID_RESPONSE);
 		}
+	}
+
+	private static boolean isWeekday(String value) {
+		return value != null && value.length() == 1 && value.charAt(0) >= '1' && value.charAt(0) <= '7';
 	}
 
 	private static boolean isBlank(String value) {

@@ -2,22 +2,24 @@ import { ContractMismatchError } from "@/lib/contract";
 import { compareKRW, fromServerWon, toWon, type KRW } from "@/lib/money";
 
 /**
- * GET/PUT /settings 계약 (docs/api-contract.md USER, FR-PAY-04).
+ * GET/PUT /settings/transfer 계약 (docs/api-contract.md USER, FR-PAY-04).
  * 이체 동의와 한도는 이체 실행 직전 서버가 다시 검사하는 값이라 화면은 보내고 받은 값만 보여준다.
+ * 한도가 null 이면 미설정이다(가입 직후 기본값).
  */
 export type TransferSettingsDto = {
   transferConsent: boolean;
-  transferLimitOnce: number;
-  transferLimitDaily: number;
+  transferLimitOnce: number | null;
+  transferLimitDaily: number | null;
 };
 
 export type TransferSettings = {
   consent: boolean;
-  limitOnce: KRW;
-  limitDaily: KRW;
+  limitOnce: KRW | null;
+  limitDaily: KRW | null;
 };
 
-function won(value: number, field: string): KRW {
+function limit(value: number | null, field: string): KRW | null {
+  if (value === null) return null;
   try {
     return fromServerWon(value);
   } catch {
@@ -29,12 +31,12 @@ export function toTransferSettings(dto: TransferSettingsDto): TransferSettings {
   if (typeof dto.transferConsent !== "boolean") throw new ContractMismatchError("transferConsent");
   return {
     consent: dto.transferConsent,
-    limitOnce: won(dto.transferLimitOnce, "transferLimitOnce"),
-    limitDaily: won(dto.transferLimitDaily, "transferLimitDaily"),
+    limitOnce: limit(dto.transferLimitOnce, "transferLimitOnce"),
+    limitDaily: limit(dto.transferLimitDaily, "transferLimitDaily"),
   };
 }
 
-/** 설정 화면의 입력값. 금액은 입력 중 상태를 그대로 두려고 문자열이다 */
+/** 설정 화면의 입력값. 금액은 입력 중 상태를 그대로 두려고 문자열이고, 미설정 한도는 빈 칸이다 */
 export type TransferSettingsForm = {
   consent: boolean;
   limitOnce: string;
@@ -42,13 +44,13 @@ export type TransferSettingsForm = {
 };
 
 export function toSettingsForm(settings: TransferSettings): TransferSettingsForm {
-  return { consent: settings.consent, limitOnce: settings.limitOnce, limitDaily: settings.limitDaily };
+  return { consent: settings.consent, limitOnce: settings.limitOnce ?? "", limitDaily: settings.limitDaily ?? "" };
 }
 
 /**
  * 저장할 수 없는 이유. 없으면 null.
  * 동의를 끄면 한도는 쓰이지 않으니 검사하지 않는다. 1회 한도가 1일 한도보다 클 수 없다는 규칙은
- * 서버 검증 문구를 아직 못 받아 화면 판단으로 둔다 (TBD).
+ * 서버도 같은 방향으로 검사한다(USER_005).
  */
 export function settingsFormError(form: TransferSettingsForm): string | null {
   if (!form.consent) return null;
@@ -62,12 +64,16 @@ export function settingsFormError(form: TransferSettingsForm): string | null {
 export function isSettingsDirty(form: TransferSettingsForm, settings: TransferSettings): boolean {
   return (
     form.consent !== settings.consent ||
-    form.limitOnce !== settings.limitOnce ||
-    form.limitDaily !== settings.limitDaily
+    form.limitOnce !== (settings.limitOnce ?? "") ||
+    form.limitDaily !== (settings.limitDaily ?? "")
   );
 }
 
-/** 화면 값 → PUT /settings 요청. 동의를 꺼도 한도는 서버가 들고 있어야 해서 그대로 보낸다 */
+function toServerLimit(value: KRW | null): number | null {
+  return value === null ? null : Number(toWon(value));
+}
+
+/** 화면 값 → PUT /settings/transfer 요청. 동의를 꺼도 한도는 서버가 들고 있어야 해서 원래 값(미설정이면 null)을 그대로 보낸다 */
 export function toTransferSettingsRequest(form: TransferSettingsForm, current: TransferSettings): TransferSettingsDto {
   const error = settingsFormError(form);
   if (error !== null) throw new Error(error);
@@ -75,7 +81,7 @@ export function toTransferSettingsRequest(form: TransferSettingsForm, current: T
   const limitDaily = form.consent ? form.limitDaily : current.limitDaily;
   return {
     transferConsent: form.consent,
-    transferLimitOnce: Number(toWon(limitOnce)),
-    transferLimitDaily: Number(toWon(limitDaily)),
+    transferLimitOnce: toServerLimit(limitOnce),
+    transferLimitDaily: toServerLimit(limitDaily),
   };
 }

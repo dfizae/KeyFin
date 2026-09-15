@@ -72,14 +72,18 @@ public class AssetSyncService {
 				.collect(Collectors.toMap(Card::getFinCardNo, Function.identity())));
 		List<Card> newCards = financeCards.stream()
 				.filter(card -> !cardsByNo.containsKey(card.cardNo()))
-				.map(card -> Card.sync(
-						user,
-						card.cardNo(),
-						card.cvc(),
-						card.cardIssuerCode(),
-						card.cardName(),
-						accountsByNo.get(card.withdrawalAccountNo())
-				))
+				.map(card -> {
+					Card synced = Card.sync(
+							user,
+							card.cardNo(),
+							card.cvc(),
+							card.cardIssuerCode(),
+							card.cardName(),
+							accountsByNo.get(card.withdrawalAccountNo())
+					);
+					synced.updateWithdrawalWeekday(card.withdrawalWeekday());
+					return synced;
+				})
 				.toList();
 		cardRepository.saveAll(newCards)
 				.forEach(card -> cardsByNo.put(card.getFinCardNo(), card));

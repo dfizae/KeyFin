@@ -10,11 +10,17 @@ import {
 import { ContractMismatchError } from "@/lib/contract";
 
 const settings = toTransferSettings(transferSettingsMock());
+const unset = toTransferSettings({ transferConsent: true, transferLimitOnce: null, transferLimitDaily: null });
 
 describe("toTransferSettings", () => {
   it("한도를 KRW 로 바꾸고 계약과 다른 값은 불일치로 본다", () => {
     expect(settings).toEqual({ consent: true, limitOnce: "500000", limitDaily: "1000000" });
     expect(() => toTransferSettings({ ...transferSettingsMock(), transferLimitOnce: 1.5 })).toThrow(ContractMismatchError);
+  });
+
+  it("한도 null 은 미설정이라 그대로 두고 입력칸은 비운다", () => {
+    expect(unset).toEqual({ consent: true, limitOnce: null, limitDaily: null });
+    expect(toSettingsForm(unset)).toEqual({ consent: true, limitOnce: "", limitDaily: "" });
   });
 });
 
@@ -27,6 +33,7 @@ describe("settingsFormError", () => {
     expect(settingsFormError({ ...form, limitDaily: "0" })).toContain("1일 한도");
     expect(settingsFormError({ ...form, limitOnce: "2000000" })).toContain("1일 한도보다");
     expect(settingsFormError({ consent: false, limitOnce: "", limitDaily: "" })).toBeNull();
+    expect(settingsFormError(toSettingsForm(unset))).toContain("1회 한도");
   });
 });
 
@@ -51,6 +58,16 @@ describe("isSettingsDirty · toTransferSettingsRequest", () => {
       transferLimitDaily: 1000000,
     });
     expect(() => toTransferSettingsRequest({ ...form, limitOnce: "0" }, settings)).toThrow();
+  });
+
+  it("한도가 미설정이면 빈 입력은 바뀐 게 아니고, 동의를 끄고 저장하면 null 을 그대로 보낸다", () => {
+    const unsetForm = toSettingsForm(unset);
+    expect(isSettingsDirty(unsetForm, unset)).toBe(false);
+    expect(toTransferSettingsRequest({ ...unsetForm, consent: false }, unset)).toEqual({
+      transferConsent: false,
+      transferLimitOnce: null,
+      transferLimitDaily: null,
+    });
   });
 });
 
