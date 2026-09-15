@@ -27,10 +27,15 @@ API와 모델 추론 프로세스는 분리합니다. API는 `uv.lock`으로 설
 | `COACH_GPU_MODEL_REGISTRY` | 개인 모델 등록 JSON 파일의 절대 경로 |
 | `COACH_GPU_MODEL` | `base8` 또는 `latest27_nf4` |
 | `COACH_GPU_PORT` | loopback 수신 포트, 기본 `18743` |
+| `COACH_GPU_BATCH_SIZE` | 기본 `0`(기존 순차 처리). `1`~`4`는 토큰 검사 분리·제한된 온라인 배치를 명시적으로 활성화 |
 
 작업 디렉터리에 충분히 긴 무작위 `worker.token`을 만들고 파일 권한을 `0600`으로 설정합니다. 토큰과 작업 디렉터리 소유자는 실행자와 같아야 합니다. 단일 장치 선택이 없거나 허용 목록과 다르면 시작을 거부합니다. 이 검사는 관리자의 스케줄러나 권한 통제를 대신하지 않습니다.
 
-설정한 환경을 사용하는 Python으로 서비스 디렉터리에서 `python scripts/gpu_worker.py`를 실행합니다. `GPU_WORKER_MODEL_READY` 이후 `GET /health`로 모델·revision·한도를 확인합니다. 인증된 `POST /v1/tokenize`와 `POST /v1/chat/completions`를 제공합니다. 동시 생성은 1개, 대기 슬롯을 포함한 요청은 2개로 제한합니다. 처리량 배치 실험의 수치를 이 온라인 동시성 설정의 성능으로 그대로 사용하지 않습니다.
+설정한 환경을 사용하는 Python으로 서비스 디렉터리에서 `python scripts/gpu_worker.py`를 실행합니다. `GPU_WORKER_MODEL_READY` 이후 `GET /health`로 모델·revision·한도를 확인합니다. 인증된 `POST /v1/tokenize`와 `POST /v1/chat/completions`를 제공합니다. 기본값 `0`은 기존처럼 생성 1개·대기 포함 요청 2개입니다.
+
+배치를 켜도 GPU `generate` 호출은 한 번에 하나만 실행합니다. 같은 출력 토큰 상한의 FIFO 요청을 최대 8ms 동안 모으고, 가장 긴 입력과 출력 상한의 합에 배치 크기를 곱한 값이 16,384토큰 이하여야 합칩니다. 배치 모드의 대기 포함 요청 상한은 16개이며 포화 시 429를 반환합니다. CPU 토큰 검사는 별도 tokenizer 복사본으로 처리합니다. 입력 8,192토큰·출력 1,536토큰 상한과 프롬프트 지문 검증은 그대로입니다.
+
+연결이 끊긴 요청은 대기열에서 취소합니다. 이미 시작한 CUDA 호출은 강제로 중단하지 않고 결과를 버리므로, 실행 중인 다른 요청을 손상시키지 않습니다. 생성 실패는 해당 배치에 503으로 반환하고 다음 배치를 처리합니다. 큰 배치가 항상 빠르지는 않으므로 [실측 비교와 채택 판단](concurrency-improvement-r18.md)을 읽고 서비스의 실제 부하로 다시 확인합니다.
 
 ## API에서 모델 연결
 

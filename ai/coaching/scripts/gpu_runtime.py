@@ -9,11 +9,24 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from pathlib import Path
+from threading import RLock
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 from gpu_models import generate, load_model
-from gpu_worker import CompletionRequest, Generated, Metadata, PromptCount, generation_messages
+
+if TYPE_CHECKING:
+    from .gpu_contracts import CompletionRequest, Generated, Metadata, PromptCount
+    from .gpu_worker import generation_messages
+else:  # noqa: PLR5501 - Keep the TYPE_CHECKING runtime boundary for basedpyright.
+    if __package__:
+        from .gpu_contracts import CompletionRequest, Generated, Metadata, PromptCount
+        from .gpu_worker import generation_messages
+    else:
+        from gpu_contracts import CompletionRequest, Generated, Metadata, PromptCount
+        from gpu_worker import generation_messages
 
 
 class PinnedBackend:
@@ -23,6 +36,10 @@ class PinnedBackend:
         if tag not in {"base8", "latest27_nf4"}:
             raise ValueError("unsupported_model_tag")
         self.model, self.tokenizer, entry = load_model(tag)
+        # Rust tokenizers mutate padding/truncation configuration during batch encoding.
+        # CPU preflight uses its own clone so it can run while the GPU is generating.
+        self.count_tokenizer = deepcopy(self.tokenizer)
+        self.count_lock = RLock()
         self.metadata = Metadata(
             model=tag,
             model_id=entry.model_id,
@@ -43,35 +60,37 @@ class PinnedBackend:
         chat = [
             {"role": message.role, "content": message.content} for message in generation_messages(request)
         ]
-        prompt = self.tokenizer.apply_chat_template(
-            chat,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=False,
-        )
-        token_ids = self.tokenizer.encode(prompt)
+        with self.count_lock:
+            prompt = self.count_tokenizer.apply_chat_template(
+                chat, tokenize=False, add_generation_prompt=True, enable_thinking=False,
+            )
+            token_ids = self.count_tokenizer.encode(prompt)
         identity = json.dumps([self.metadata.model_id, self.metadata.revision, token_ids])
         return PromptCount(
             prompt_tokens=len(token_ids), prompt_sha256=hashlib.sha256(identity.encode()).hexdigest(),
         )
 
     def complete(self, request: CompletionRequest) -> Generated:
-        """결정적 디코딩을 사용하고 실제 생성의 입력 토큰 수도 사전 검사와 대조한다."""
-        count = self.measure(request)
-        if count.prompt_tokens > self.metadata.max_input_tokens:
+        """Single-request callers use the same batch implementation and guards."""
+        return self.complete_batch([request])[0]
+
+    def complete_batch(self, requests: list[CompletionRequest]) -> list[Generated]:
+        """각 요청의 토큰·출력 상한을 유지하며 한 번의 generate로 독립 답변을 만든다."""
+        if not requests or len({request.max_tokens for request in requests}) != 1:
+            raise ValueError("incompatible_generation_batch")
+        counts = [self.measure(request) for request in requests]
+        if any(count.prompt_tokens > self.metadata.max_input_tokens for count in counts):
             raise HTTPException(status_code=413, detail="input_token_limit")
-        chat = [
-            {"role": message.role, "content": message.content} for message in generation_messages(request)
-        ]
+        chats = [[{"role": message.role, "content": message.content}
+                  for message in generation_messages(request)] for request in requests]
         texts, seconds, input_tokens, output_tokens = generate(
             self.model,
             self.tokenizer,
-            [chat],
-            max_tokens=request.max_tokens,
+            chats,
+            max_tokens=requests[0].max_tokens,
             thinking=False,
         )
-        if input_tokens[0] != count.prompt_tokens:
+        if input_tokens != [count.prompt_tokens for count in counts]:
             raise HTTPException(status_code=500, detail="tokenizer_count_mismatch")
-        return Generated(
-            text=texts[0], prompt_tokens=input_tokens[0], completion_tokens=output_tokens[0], seconds=seconds
-        )
+        return [Generated(text=text, prompt_tokens=inputs, completion_tokens=outputs, seconds=seconds)
+                for text, inputs, outputs in zip(texts, input_tokens, output_tokens, strict=True)]

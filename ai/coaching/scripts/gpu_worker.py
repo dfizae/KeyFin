@@ -13,90 +13,48 @@ import os
 import secrets
 import stat
 import time
-from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Protocol
+from typing import TYPE_CHECKING, Annotated, Literal
 
 import anyio
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import Field
 from starlette.responses import JSONResponse, Response
+
+# Package imports support tests; standalone imports support the pinned GPU process.
+if TYPE_CHECKING:
+    from . import gpu_contracts as contracts
+    from .gpu_execution import WorkerExecution
+else:  # noqa: PLR5501 - Keep the TYPE_CHECKING runtime boundary for basedpyright.
+    if __package__:
+        from . import gpu_contracts as contracts
+        from .gpu_execution import WorkerExecution
+    else:
+        import gpu_contracts as contracts
+        from gpu_execution import WorkerExecution
 
 if TYPE_CHECKING:
     from starlette.middleware.base import RequestResponseEndpoint
 
-
-class Frozen(BaseModel):
-    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
+    from .gpu_batching import BatchComplete
 
 
-class Message(Frozen):
-    role: Literal["system", "user", "assistant"]
-    content: str = Field(min_length=1, max_length=32000)
-
-
-class SchemaRequest(Frozen):
-    name: str
-    strict: bool = True
-    schema_: JsonValue = Field(alias="schema")
-
-
-class ResponseFormat(Frozen):
-    type: Literal["json_object", "json_schema", "text"]
-    json_schema: SchemaRequest | None = None
-
-
-class CompletionRequest(Frozen):
-    model: str
-    messages: tuple[Message, ...] = Field(min_length=1, max_length=16)
-    max_tokens: int = Field(default=256, ge=1, le=1536)
-    temperature: Literal[0] = 0
-    stream: Literal[False] = False
-    response_format: ResponseFormat | None = None
-
-
-class Metadata(Frozen):
-    model: str
-    model_id: str
-    revision: str
-    config_sha256: str
-    runtime_sha256: str
-    quantization: str
-    logical_gpu: Literal[0] = 0
-    max_input_tokens: Literal[8192] = 8192
-    max_output_tokens: Literal[1536] = 1536
-    grammar_enforced: Literal[False] = False
-    response_format_handling: Literal["schema_in_prompt"] = "schema_in_prompt"
-    tokenizer_contract: Literal["coaching-token-budget/1"] = "coaching-token-budget/1"
-
-
-class PromptCount(Frozen):
-    prompt_tokens: int = Field(ge=1)
-    prompt_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+Backend = contracts.Backend
+CompletionRequest = contracts.CompletionRequest
+Frozen = contracts.Frozen
+Generated = contracts.Generated
+Message = contracts.Message
+Metadata = contracts.Metadata
+PromptCount = contracts.PromptCount
+ResponseFormat = contracts.ResponseFormat
+SchemaRequest = contracts.SchemaRequest
 
 
 class TokenBudget(PromptCount):
     request_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     max_input_tokens: int = Field(ge=1)
     max_output_tokens: int = Field(ge=1)
-
-
-@dataclass(frozen=True, slots=True)
-class Generated:
-    text: str
-    prompt_tokens: int
-    completion_tokens: int
-    seconds: float
-
-
-class Backend(Protocol):
-    @property
-    def metadata(self) -> Metadata: ...
-
-    def complete(self, request: CompletionRequest) -> Generated: ...
-
-    def measure(self, request: CompletionRequest) -> PromptCount: ...
 
 
 class Choice(Frozen):
@@ -166,17 +124,14 @@ def validate_prompt_count(count: PromptCount, metadata: Metadata, expected: str 
         raise HTTPException(status_code=409, detail="tokenizer_preflight_changed")
 
 
-def create_app(backend: Backend, token: str) -> FastAPI:
-    """토큰 검사 또는 생성 작업 1개와 대기 요청 1개만 허용하고 나머지는 429다.
-
-    슬롯은 토큰 검사·추론 성공/실패 모두에서 해제한다. 이 동시성 정책은 현재
-    단일 backend의 자원 보호용이며 배치 추론 성능을 보장하는 설정은 아니다.
-    """
+def create_app(
+    backend: Backend, token: str, *, batch_complete: BatchComplete | None = None, max_batch_size: int = 1,
+) -> FastAPI:
+    """GPU 생성은 직렬 소유하고, 지원 backend에서만 제한된 요청 배치를 사용한다."""
     if len(token) < 32:
         raise ValueError("token_too_short")
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    slots = anyio.CapacityLimiter(2)
-    gpu = anyio.CapacityLimiter(1)
+    execution = WorkerExecution(backend, batch_complete, max_batch_size, validate_prompt_count)
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=execution.lifespan)
     _ = app.middleware("http")(bound_body)
 
     async def health() -> Metadata:
@@ -194,7 +149,7 @@ def create_app(backend: Backend, token: str) -> FastAPI:
         if sum(len(message.content) for message in generation_messages(request)) > 48000:
             raise HTTPException(status_code=413, detail="input_character_limit")
         try:
-            slots.acquire_nowait()
+            execution.slots.acquire_nowait()
         except anyio.WouldBlock as exc:
             raise HTTPException(status_code=429, detail="queue_full") from exc
 
@@ -209,10 +164,9 @@ def create_app(backend: Backend, token: str) -> FastAPI:
         """
         admit(request, authorization)
         try:
-            async with gpu:
-                count = await anyio.to_thread.run_sync(backend.measure, request)
+            count = await execution.measure(request)
         finally:
-            slots.release()
+            execution.slots.release()
         return TokenBudget(
             prompt_tokens=count.prompt_tokens, prompt_sha256=count.prompt_sha256,
             request_sha256=hashlib.sha256(await raw.body()).hexdigest(),
@@ -221,18 +175,15 @@ def create_app(backend: Backend, token: str) -> FastAPI:
         )
 
     async def complete(
-        request: CompletionRequest,
+        request: CompletionRequest, raw: Request,
         authorization: Annotated[str | None, Header()] = None,
         x_coaching_prompt_sha256: Annotated[str | None, Header()] = None,
     ) -> CompletionResponse:
         admit(request, authorization)
         try:
-            async with gpu:
-                count = await anyio.to_thread.run_sync(backend.measure, request)
-                validate_prompt_count(count, backend.metadata, x_coaching_prompt_sha256)
-                result = await anyio.to_thread.run_sync(backend.complete, request)
+            result = await execution.connected_complete(request, x_coaching_prompt_sha256, raw.receive)
         finally:
-            slots.release()
+            execution.slots.release()
         return CompletionResponse(
             id="chatcmpl-" + secrets.token_hex(12),
             created=int(time.time()),
@@ -269,6 +220,10 @@ def main() -> None:
     port = int(os.environ.get("COACH_GPU_PORT", "18743"))
     if not 1024 <= port <= 65535:
         raise RuntimeError("worker_port_invalid")
+    # 온라인 배치는 실제 부하 비교를 통과한 환경에서만 명시적으로 켠다.
+    batch_size = int(os.environ.get("COACH_GPU_BATCH_SIZE", "0"))
+    if not 0 <= batch_size <= 4:
+        raise RuntimeError("worker_batch_size_invalid")
     token_path = root / "worker.token"
     file_stat = token_path.stat()
     if stat.S_IMODE(file_stat.st_mode) != 0o600 or file_stat.st_uid != os.getuid():
@@ -281,12 +236,16 @@ def main() -> None:
     )
     print("GPU_WORKER_MODEL_READY", flush=True)
     uvicorn.run(
-        create_app(backend, token_path.read_text().strip()),
+        create_app(
+            backend, token_path.read_text().strip(),
+            batch_complete=backend.complete_batch if batch_size else None,
+            max_batch_size=max(1, batch_size),
+        ),
         host="127.0.0.1",
         port=port,
         access_log=False,
         log_level="warning",
-        limit_concurrency=8,
+        limit_concurrency=32 if batch_size else 8,
         timeout_keep_alive=5,
     )
 
