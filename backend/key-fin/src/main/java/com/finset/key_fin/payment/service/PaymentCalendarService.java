@@ -49,17 +49,8 @@ public class PaymentCalendarService {
 
 	@Transactional(readOnly = true)
 	public PaymentCalendarResponse getCalendar(long userId, YearMonth month) {
-		LocalDate today = LocalDate.now(clock);
-		List<Entry> entries = new ArrayList<>();
-		for (FixedExpense expense : fixedExpenseRepository.findAllByUserIdAndActiveTrueOrderByIdAsc(userId)) {
-			entries.add(new Entry(expense.paymentDateIn(month), Item.of(expense)));
-		}
-		entries.addAll(cardBillEntries(userId, month, today));
-
-		Map<Long, Long> balances = accountRepository.findAllByUserId(userId).stream()
-				.collect(Collectors.toMap(Account::getId, Account::getBalance));
 		Map<LocalDate, List<Item>> byDate = new TreeMap<>();
-		for (Entry entry : requiredAmountService.judge(entries, balances, today)) {
+		for (Entry entry : judgedEntries(userId, month)) {
 			if (YearMonth.from(entry.date()).equals(month)) {
 				byDate.computeIfAbsent(entry.date(), date -> new ArrayList<>()).add(entry.item());
 			}
@@ -68,6 +59,20 @@ public class PaymentCalendarService {
 				.map(entry -> new Day(entry.getKey(), entry.getValue().stream().sorted(ITEM_ORDER).toList()))
 				.toList();
 		return new PaymentCalendarResponse(month.format(MONTH_FORMAT), days);
+	}
+
+	/** 고정지출·카드 청구 항목을 모아 잔액 판정까지 마친 목록. 달력 월 밖 날짜(전월 말 청구서 등)도 섞여 있다. */
+	@Transactional(readOnly = true)
+	public List<Entry> judgedEntries(long userId, YearMonth month) {
+		LocalDate today = LocalDate.now(clock);
+		List<Entry> entries = new ArrayList<>();
+		for (FixedExpense expense : fixedExpenseRepository.findAllByUserIdAndActiveTrueOrderByIdAsc(userId)) {
+			entries.add(new Entry(expense.paymentDateIn(month), Item.of(expense)));
+		}
+		entries.addAll(cardBillEntries(userId, month, today));
+		Map<Long, Long> balances = accountRepository.findAllByUserId(userId).stream()
+				.collect(Collectors.toMap(Account::getId, Account::getBalance));
+		return requiredAmountService.judge(entries, balances, today);
 	}
 
 	private List<Entry> cardBillEntries(long userId, YearMonth month, LocalDate today) {
@@ -85,7 +90,7 @@ public class PaymentCalendarService {
 			LocalDate date = billing.isPaid()
 					? billing.getPaidAt().toLocalDate()
 					: billing.withdrawalDate(card.getWithdrawalWeekday());
-			entries.add(new Entry(date, Item.of(billing, card.getCardName(), accountIdOf(card))));
+			entries.add(new Entry(date, Item.of(billing, card.getCardName(), accountIdOf(card)), billing.getId()));
 		}
 		LocalDate cycleMonday = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 		LocalDate nextBillingDate = cycleMonday.plusWeeks(1);
