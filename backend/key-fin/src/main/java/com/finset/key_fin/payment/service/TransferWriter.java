@@ -64,17 +64,22 @@ public class TransferWriter {
 		auditLogRepository.save(AuditLog.transfer(userId, AuditAction.HOLD, transferId, basis));
 	}
 
+	/** 행 잠금 — 같은 제안을 동시에 승인하면 두 번째는 첫 커밋을 기다린 뒤 APPROVED를 보고 409. */
 	@Transactional
 	public void approve(long userId, long transferId, String institutionTxNo) {
-		PrepareTransfer transfer = prepareTransferRepository.findByIdAndUserId(transferId, userId)
-				.orElseThrow(() -> new BusinessException(PaymentErrorCode.TRANSFER_NOT_FOUND));
+		PrepareTransfer transfer = lockedTransfer(userId, transferId);
+		if (!transfer.isProposed()) {
+			throw new BusinessException(PaymentErrorCode.TRANSFER_NOT_PROPOSED);
+		}
 		transfer.approve(institutionTxNo);
 	}
 
 	@Transactional
 	public TransferApproveResponse complete(long userId, long transferId, FinanceTransferResult result, LocalDateTime now) {
-		PrepareTransfer transfer = prepareTransferRepository.findByIdAndUserId(transferId, userId)
-				.orElseThrow(() -> new BusinessException(PaymentErrorCode.TRANSFER_NOT_FOUND));
+		PrepareTransfer transfer = lockedTransfer(userId, transferId);
+		if (!transfer.isApproved()) {
+			return response(transfer);
+		}
 		if (result.isSuccess()) {
 			transfer.markExecuted(now);
 			auditLogRepository.save(AuditLog.transfer(userId, AuditAction.EXECUTE, transferId,
@@ -88,6 +93,15 @@ public class TransferWriter {
 			auditLogRepository.save(AuditLog.transfer(userId, AuditAction.FAIL, transferId,
 					reason + " — 기관거래고유번호 " + transfer.getInstitutionTxNo() + ", 금액 " + transfer.getRequiredAmount()));
 		}
+		return response(transfer);
+	}
+
+	private PrepareTransfer lockedTransfer(long userId, long transferId) {
+		return prepareTransferRepository.findByIdAndUserIdForUpdate(transferId, userId)
+				.orElseThrow(() -> new BusinessException(PaymentErrorCode.TRANSFER_NOT_FOUND));
+	}
+
+	private static TransferApproveResponse response(PrepareTransfer transfer) {
 		return new TransferApproveResponse(transfer.getId(), transfer.getStatus(), transfer.getExecutedAt(), transfer.getFailReason());
 	}
 }

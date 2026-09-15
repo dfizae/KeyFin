@@ -52,6 +52,8 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 	private PrepareTransferRepository prepareTransferRepository;
 	@Autowired
 	private AuditLogRepository auditLogRepository;
+	@Autowired
+	private TransferWriter transferWriter;
 	@MockitoBean
 	private FinanceTransferClient financeTransferClient;
 
@@ -159,6 +161,16 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 		List<TransferResponse> all = transferService.list(USER, null);
 		assertThat(all).hasSize(7);
 		assertThat(all.get(0).id()).isEqualTo(9909L);
+	}
+
+	@Test
+	@DisplayName("이미 종결된 건에 complete가 다시 오면 아무것도 쓰지 않고 현재 상태를 돌려준다(중복 감사 없음)")
+	void completeIsIdempotentOnFinalState() {
+		TransferApproveResponse response = transferWriter.complete(
+				USER, 9904L, FinanceTransferResult.EXECUTED, java.time.LocalDateTime.now());
+
+		assertThat(response.status()).isEqualTo(TransferStatus.EXECUTED);
+		assertThat(auditOf(9904L)).isEmpty();
 	}
 
 	private List<AuditLog> auditOf(long transferId) {
