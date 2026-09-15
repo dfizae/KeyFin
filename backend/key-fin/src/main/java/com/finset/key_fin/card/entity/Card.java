@@ -15,6 +15,8 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.Generated;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
@@ -49,6 +51,10 @@ public class Card {
 	@ManyToOne(fetch = FetchType.LAZY)
 	@JoinColumn(name = "withdrawal_account_id")
 	private Account withdrawalAccount;
+
+	@JdbcTypeCode(SqlTypes.TINYINT)
+	@Column(name = "withdrawal_weekday")
+	private Integer withdrawalWeekday;
 
 	@Column(name = "is_managed", nullable = false)
 	private boolean managed;
@@ -95,6 +101,13 @@ public class Card {
 
 	public void unlink() {
 		managed = false;
+	}
+
+	public void updateWithdrawalWeekday(int withdrawalWeekday) {
+		if (withdrawalWeekday < 1 || withdrawalWeekday > 7) {
+			throw new IllegalArgumentException("withdrawalWeekday must be 1..7");
+		}
+		this.withdrawalWeekday = withdrawalWeekday;
 	}
 
 	private static String requireText(String value, String name) {

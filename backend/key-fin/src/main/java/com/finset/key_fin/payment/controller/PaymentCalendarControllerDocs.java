@@ -27,8 +27,8 @@ public interface PaymentCalendarControllerDocs {
 			summary = "정기 지출 통합 일정(캘린더)",
 			description = "달력 월(yyyyMM, 생략 시 이번 달)의 출금 예정을 날짜별로 반환합니다. "
 					+ "호출 시 금융망 정기결제 목록을 먼저 동기화하며, 동기화가 실패해도 저장된 항목으로 응답합니다. "
-					+ "type: FIXED = 직접 등록한 고정지출(출금 계좌에서 나감) / CARD_SUBSCRIPTION = 금융망 카드 정기결제(카드 청구에 포함, withdrawalAccountId null) / CARD_BILL = 카드 청구(추후). "
-					+ "출금일이 없는 달(29~31일)은 말일로 보정. estimated=true는 변동형 예상액. prepared·shortage는 필요 금액 계산(FR-PAY-02) 구현 전까지 null. "
+					+ "type: FIXED = 직접 등록한 고정지출(출금 계좌에서 나감) / CARD_SUBSCRIPTION = 금융망 카드 정기결제(카드 청구에 포함, withdrawalAccountId null) / CARD_BILL = 카드 청구(발행된 주 단위 청구서는 정확 금액, 이번 주 승인 합계는 estimated=true로 다음 출금일에 표시; cardId 포함). "
+					+ "출금일이 없는 달(29~31일)은 말일로 보정. estimated=true는 변동형 예상액·미발행 청구 예정액. prepared/shortage는 출금 계좌 잔액 스냅샷을 같은 계좌의 오늘 이후 항목에 날짜순으로 차감한 판정(FR-PAY-02) — 출금 계좌 없음·과거 항목은 null, 결제완료 청구는 true/0. "
 					+ "같은 날 정렬: FIXED → CARD_SUBSCRIPTION, 금액 내림차순.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
@@ -41,7 +41,7 @@ public interface PaymentCalendarControllerDocs {
 							schema = @Schema(implementation = BaseResponse.class),
 							examples = @ExampleObject(
 									name = "9월 일정",
-									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"month\":\"202609\",\"days\":[{\"date\":\"2026-09-15\",\"items\":[{\"type\":\"FIXED\",\"fixedExpenseId\":7,\"name\":\"월세\",\"expenseType\":\"RENT\",\"amount\":550000,\"estimated\":false,\"withdrawalAccountId\":3,\"prepared\":null,\"shortage\":null},{\"type\":\"CARD_SUBSCRIPTION\",\"fixedExpenseId\":8,\"name\":\"FLO\",\"expenseType\":\"SUBSCRIPTION\",\"amount\":8900,\"estimated\":false,\"withdrawalAccountId\":null,\"prepared\":null,\"shortage\":null}]},{\"date\":\"2026-09-30\",\"items\":[{\"type\":\"FIXED\",\"fixedExpenseId\":9,\"name\":\"통신비\",\"expenseType\":\"UTILITY\",\"amount\":45000,\"estimated\":true,\"withdrawalAccountId\":3,\"prepared\":null,\"shortage\":null}]}]}}"
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"month\":\"202609\",\"days\":[{\"date\":\"2026-09-15\",\"items\":[{\"type\":\"FIXED\",\"fixedExpenseId\":7,\"cardId\":null,\"name\":\"월세\",\"expenseType\":\"RENT\",\"amount\":550000,\"estimated\":false,\"withdrawalAccountId\":3,\"prepared\":true,\"shortage\":0},{\"type\":\"CARD_SUBSCRIPTION\",\"fixedExpenseId\":8,\"cardId\":null,\"name\":\"FLO\",\"expenseType\":\"SUBSCRIPTION\",\"amount\":8900,\"estimated\":false,\"withdrawalAccountId\":null,\"prepared\":null,\"shortage\":null}]},{\"date\":\"2026-09-16\",\"items\":[{\"type\":\"CARD_BILL\",\"fixedExpenseId\":null,\"cardId\":2,\"name\":\"KB 국민카드\",\"expenseType\":\"CARD_BILL\",\"amount\":83900,\"estimated\":true,\"withdrawalAccountId\":3,\"prepared\":false,\"shortage\":33900}]},{\"date\":\"2026-09-30\",\"items\":[{\"type\":\"FIXED\",\"fixedExpenseId\":9,\"cardId\":null,\"name\":\"통신비\",\"expenseType\":\"UTILITY\",\"amount\":45000,\"estimated\":true,\"withdrawalAccountId\":3,\"prepared\":false,\"shortage\":45000}]}]}}"
 							)
 					)
 			),

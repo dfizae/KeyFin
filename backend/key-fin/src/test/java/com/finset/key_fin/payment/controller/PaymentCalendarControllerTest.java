@@ -57,8 +57,8 @@ class PaymentCalendarControllerTest {
 		when(paymentCalendarService.getCalendar(1L, YearMonth.of(2026, 10))).thenReturn(new PaymentCalendarResponse(
 				"202610",
 				List.of(new Day(LocalDate.of(2026, 10, 15), List.of(
-						new Item(CalendarItemType.FIXED, 7L, "월세", ExpenseType.RENT, 550000, false, 3L, null, null),
-						new Item(CalendarItemType.CARD_SUBSCRIPTION, 8L, "FLO", ExpenseType.SUBSCRIPTION, 8900, false, null, null, null))))));
+						new Item(CalendarItemType.FIXED, 7L, null, "월세", ExpenseType.RENT, 550000, false, 3L, null, null),
+						new Item(CalendarItemType.CARD_SUBSCRIPTION, 8L, null, "FLO", ExpenseType.SUBSCRIPTION, 8900, false, null, null, null))))));
 
 		mockMvc.perform(get("/api/v1/payments/calendar").param("month", "202610"))
 				.andExpect(status().isOk())

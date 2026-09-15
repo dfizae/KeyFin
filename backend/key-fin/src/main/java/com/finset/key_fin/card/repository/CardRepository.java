@@ -11,6 +11,8 @@ public interface CardRepository extends JpaRepository<Card, Long> {
 
 	List<Card> findAllByUserId(Long userId);
 
+	List<Card> findAllByUserIdAndManagedTrueOrderByIdAsc(Long userId);
+
 	List<Card> findAllByIdInAndUserId(Collection<Long> ids, Long userId);
 
 	Optional<Card> findByIdAndUserId(Long id, Long userId);
