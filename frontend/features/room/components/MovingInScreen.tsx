@@ -3,9 +3,10 @@ import * as React from "react";
 import { Image, View } from "react-native";
 
 import { LottieLoop } from "@/components/ui/lottie-loop";
+import { Sprite } from "@/components/ui/sprite";
 import { Text } from "@/components/ui/text";
 import { useCurrentBudget } from "@/features/budget/api/queries";
-import { CHARACTER_CELEBRATE } from "@/features/room/assets";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { useRoom } from "@/features/room/api/queries";
 import { cn } from "@/lib/utils";
 
@@ -52,7 +53,7 @@ function MovingInScreen() {
           <LottieLoop source={SPARKLES} width={SPARKLES_STYLE.width} height={SPARKLES_STYLE.height} />
         </View>
         <View className="items-center justify-center overflow-hidden rounded-full bg-muted" style={CIRCLE_STYLE}>
-          <Image source={CHARACTER_CELEBRATE} style={CHARACTER_STYLE} resizeMode="contain" accessibilityRole="image" />
+          <Sprite frames={CHARACTER_FRAMES.celebrate} style={CHARACTER_STYLE} accessibilityLabel="입주하는 캐릭터" />
         </View>
       </View>
 

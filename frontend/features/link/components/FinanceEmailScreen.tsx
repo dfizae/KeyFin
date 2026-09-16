@@ -2,17 +2,19 @@ import { useRouter } from "expo-router";
 import { CircleAlert, Info } from "lucide-react-native";
 import * as React from "react";
 import { KeyboardAvoidingView, Platform, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Input } from "@/components/ui/input";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useConnectFinance } from "@/features/link/api/queries";
 import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/errors";
 import { canSubmitFinanceEmail, FINANCE_EMAIL_MAX_LENGTH } from "@/features/link/model";
-import { CHARACTER_SCAN } from "@/features/room/assets";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { cn } from "@/lib/utils";
 
 /** 금융망 연결이 끝나야 후보 목록이 나오므로 곧바로 PAGE-04(계좌·카드 연결)로 보낸다 */
@@ -21,6 +23,7 @@ const NEXT_ROUTE = "/onboarding/asset-select";
 // Pencil 금융망 이메일 · 캐릭터 대안 (PqGvX) · finance-email/error (B6jV5).
 function FinanceEmailScreen() {
   const router = useRouter();
+  const intro = useIntroReveal("finance-email");
   const connect = useConnectFinance();
 
   const [email, setEmail] = React.useState("");
@@ -36,15 +39,19 @@ function FinanceEmailScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScreenHeader flat title="금융망 이메일 확인" onBack={() => router.canGoBack() && router.back()} />
+      <Animated.View style={intro.revealStyle}>
+        <ScreenHeader flat title="금융망 이메일 확인" />
+      </Animated.View>
 
       <View className="flex-1 justify-between px-6 pb-8">
         <View className="gap-8">
           <CoachRow
-            character={CHARACTER_SCAN}
+            intro={intro}
+            frames={CHARACTER_FRAMES.scan}
             message={"금융망 이메일로 계좌·카드를 찾아올게요.\nKeyFin 가입 이메일과 달라도 괜찮아요."}
           />
 
+          <Animated.View style={intro.revealStyle}>
           <View className="gap-4">
             <View className="gap-1.5">
               <Text className="text-caption text-card-foreground">금융망 이메일</Text>
@@ -77,8 +84,10 @@ function FinanceEmailScreen() {
               <Text className="flex-1 text-caption text-foreground">회원가입에 쓴 이메일과 다를 수 있어요.</Text>
             </View>
           </View>
+          </Animated.View>
         </View>
 
+        <Animated.View style={intro.revealStyle}>
         <Button
           size="lg"
           className="h-button-lg rounded-lg"
@@ -88,6 +97,7 @@ function FinanceEmailScreen() {
         >
           <Text>{connect.isPending ? "연결하는 중…" : "연결하기"}</Text>
         </Button>
+        </Animated.View>
       </View>
     </KeyboardAvoidingView>
   );

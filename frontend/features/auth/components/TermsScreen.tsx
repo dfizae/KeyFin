@@ -2,16 +2,18 @@ import { useRouter } from "expo-router";
 import { Circle, CircleCheckBig } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { canAgreeToTerms, TERMS_ITEMS } from "@/features/auth/model";
 import { useAuthStore } from "@/features/auth/store";
-import { CHARACTER_PHONE } from "@/features/room/assets";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { saveTermsAgreed } from "@/lib/session-storage";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,7 @@ const CLAUSES = [
 // Pencil 약관 동의 · 캐릭터 대안 (f0WyT). 서버 호출이 없어 동의는 기기에만 남긴다.
 function TermsScreen() {
   const router = useRouter();
+  const intro = useIntroReveal("terms");
   const user = useAuthStore((state) => state.user);
   const agreeToTerms = useAuthStore((state) => state.agreeToTerms);
 
@@ -60,14 +63,19 @@ function TermsScreen() {
 
   return (
     <Screen>
-      <ScreenHeader flat title="약관에 동의해 주세요" onBack={() => router.canGoBack() && router.back()} />
+      <Animated.View style={intro.revealStyle}>
+        <ScreenHeader flat title="약관에 동의해 주세요" />
+      </Animated.View>
 
       <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 px-6">
         <CoachRow
-          character={CHARACTER_PHONE}
+          intro={intro}
+          frames={CHARACTER_FRAMES.phone}
           message={"약관은 제가 미리 읽어 봤어요.\n필수 2개만 체크하면 바로 시작할 수 있어요."}
         />
 
+        <Animated.View style={intro.revealStyle}>
+        <View className="gap-5">
         <View className="gap-2.5 rounded-lg bg-muted p-4">
           {CLAUSES.map((clause) => (
             <View key={clause.title} className="gap-1">
@@ -111,8 +119,11 @@ function TermsScreen() {
             })}
           </View>
         </View>
+        </View>
+        </Animated.View>
       </ScreenScrollView>
 
+      <Animated.View style={intro.revealStyle}>
       <View className="px-6 pb-8 pt-3">
         <Button
           size="lg"
@@ -124,6 +135,7 @@ function TermsScreen() {
           <Text>동의하고 계속하기</Text>
         </Button>
       </View>
+      </Animated.View>
     </Screen>
   );
 }

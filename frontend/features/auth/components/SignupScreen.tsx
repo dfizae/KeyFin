@@ -2,10 +2,12 @@ import { useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
 import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Input } from "@/components/ui/input";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
@@ -13,7 +15,7 @@ import { Text } from "@/components/ui/text";
 import { useSignup } from "@/features/auth/api/queries";
 import { authErrorMessage } from "@/features/auth/errors";
 import { canSubmitSignup } from "@/features/auth/model";
-import { CHARACTER_WAVE } from "@/features/room/assets";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { cn } from "@/lib/utils";
 
 const LOGIN_ROUTE = "/(auth)/login";
@@ -24,6 +26,7 @@ const EMAIL_ERROR_CODES = ["USER_002"];
 // Pencil 회원가입 · 캐릭터 대안 (b66wKg) · signup/error (UdUD7) · signup/pending (b1O9sc).
 function SignupScreen() {
   const router = useRouter();
+  const intro = useIntroReveal("signup");
   const signup = useSignup();
 
   const [name, setName] = React.useState("");
@@ -47,11 +50,14 @@ function SignupScreen() {
   return (
     <Screen>
     <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScreenHeader flat title="회원가입" onBack={() => router.back()} />
+      <Animated.View style={intro.revealStyle}>
+        <ScreenHeader flat title="회원가입" onBack={() => router.back()} />
+      </Animated.View>
 
       <ScreenScrollView className="flex-1" contentContainerClassName="gap-8 px-6" keyboardShouldPersistTaps="handled">
-        <CoachRow character={CHARACTER_WAVE} message={"이메일과 비밀번호만 있으면 돼요.\n방 열쇠를 만들어 드릴게요!"} />
+        <CoachRow intro={intro} frames={CHARACTER_FRAMES.wave} message={"이메일과 비밀번호만 있으면 돼요.\n방 열쇠를 만들어 드릴게요!"} />
 
+        <Animated.View style={intro.revealStyle}>
         <View className="gap-4">
           <Field label="이름">
             <Input
@@ -105,8 +111,10 @@ function SignupScreen() {
 
           {errorMessage !== null && !isEmailError ? <InlineError message={errorMessage} /> : null}
         </View>
+        </Animated.View>
       </ScreenScrollView>
 
+      <Animated.View style={intro.revealStyle}>
       <View className="gap-4 px-6 pb-8">
         <Button
           size="lg"
@@ -125,6 +133,7 @@ function SignupScreen() {
           </Pressable>
         </View>
       </View>
+      </Animated.View>
     </KeyboardAvoidingView>
     </Screen>
   );

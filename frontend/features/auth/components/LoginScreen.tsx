@@ -2,18 +2,21 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { isMocked } from "@/api/client";
 import { MOCK_LOGIN_EMAIL, MOCK_PASSWORD } from "@/api/mocks/auth";
 import { Button } from "@/components/ui/button";
 import { Floating } from "@/components/ui/floating";
+import { Sprite } from "@/components/ui/sprite";
 import { Icon } from "@/components/ui/icon";
+import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useLogin } from "@/features/auth/api/queries";
 import { authErrorMessage } from "@/features/auth/errors";
 import { canSubmitLogin, parseReturnTo } from "@/features/auth/model";
-import { CHARACTER_WAVE } from "@/features/room/assets";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { cn } from "@/lib/utils";
 
 /** Pencil 로그인 · 캐릭터 대안(QmtGU) 의 Main Logo 1 에서 태그라인을 뺀 아이콘+워드마크를 3배로 내보낸 이미지 */
@@ -35,6 +38,7 @@ const MOCK_PREFILL = __DEV__ && isMocked("auth") ? { email: MOCK_LOGIN_EMAIL, pa
 function LoginScreen() {
   const router = useRouter();
   const login = useLogin();
+  const intro = useIntroReveal("login");
 
   // 가입 직후 돌아오면 방금 만든 이메일을 채워 두고 안내를 한 줄 보여준다.
   const { signedUpEmail, returnTo } = useLocalSearchParams<{ signedUpEmail?: string; returnTo?: string }>();
@@ -54,20 +58,28 @@ function LoginScreen() {
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pt-4" keyboardShouldPersistTaps="handled">
-        <Image source={WORDMARK} style={WORDMARK_STYLE} resizeMode="contain" accessibilityRole="image" accessibilityLabel="KeyFin" />
+        <Animated.View style={intro.revealStyle}>
+          <Image source={WORDMARK} style={WORDMARK_STYLE} resizeMode="contain" accessibilityRole="image" accessibilityLabel="KeyFin" />
+        </Animated.View>
 
         <View className="items-center gap-5">
-          <Floating>
-            <Image source={CHARACTER_WAVE} style={CHARACTER_STYLE} resizeMode="contain" accessible={false} />
-          </Floating>
-          <View className="items-center gap-1.5">
-            <Text className="text-h1 text-foreground" accessibilityRole="header">
-              안녕하세요!
-            </Text>
-            <Text className="text-body-sm text-card-foreground">로그인하면 방으로 바로 들어가요</Text>
-          </View>
+          <Animated.View ref={intro.characterRef} onLayout={intro.onCharacterLayout} style={intro.characterStyle}>
+            <Floating>
+              <Sprite frames={CHARACTER_FRAMES.wave} style={CHARACTER_STYLE} />
+            </Floating>
+          </Animated.View>
+          <Animated.View style={intro.revealStyle}>
+            <View className="items-center gap-1.5">
+              <Text className="text-h1 text-foreground" accessibilityRole="header">
+                안녕하세요!
+              </Text>
+              <Text className="text-body-sm text-card-foreground">로그인하면 방으로 바로 들어가요</Text>
+            </View>
+          </Animated.View>
         </View>
 
+        <Animated.View style={intro.revealStyle}>
+        <View className="gap-7">
         {signedUpEmail === undefined ? null : (
           <View className="rounded-lg bg-positive-muted px-4 py-3" accessibilityLiveRegion="polite">
             <Text className="text-body-sm text-foreground">가입이 완료됐어요. 로그인해 주세요.</Text>
@@ -75,7 +87,7 @@ function LoginScreen() {
         )}
         {MOCK_PREFILL !== null && signedUpEmail === undefined ? (
           <View className="rounded-lg bg-muted px-4 py-3">
-            <Text className="text-body-sm text-card-foreground">개발용 목 계정이 채워져 있어요. 로그인만 누르면 돼요.</Text>
+            <Text className="text-left text-body-sm text-card-foreground">{"개발용 목 계정이 채워져 있어요.\n로그인만 누르면 돼요."}</Text>
           </View>
         ) : null}
 
@@ -121,8 +133,11 @@ function LoginScreen() {
             </View>
           )}
         </View>
+        </View>
+        </Animated.View>
       </ScrollView>
 
+      <Animated.View style={intro.revealStyle}>
       <View className="gap-4 px-6 pb-8 pt-4">
         <Button
           size="lg"
@@ -146,6 +161,7 @@ function LoginScreen() {
           </Pressable>
         </View>
       </View>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
