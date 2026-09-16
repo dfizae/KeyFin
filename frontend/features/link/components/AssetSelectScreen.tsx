@@ -1,13 +1,14 @@
 import { useRouter } from "expo-router";
 import { Circle, CircleCheckBig, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useCreateLinks, useLinkCandidates } from "@/features/link/api/queries";
@@ -72,7 +73,7 @@ function AssetSelectScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <AssetSelectHeader
         allSelected={areAllLinksSelected(data, selected)}
         disabled={candidates.data === undefined || hasNoLinkCandidates(data)}
@@ -101,7 +102,7 @@ function AssetSelectScreen() {
             />
           </View>
         ) : (
-          <ScrollView className="flex-1" contentContainerClassName="gap-5 pb-6">
+          <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 pb-6">
             {data.accounts.length > 0 ? (
               <LinkSection title="계좌" count={data.accounts.length}>
                 {data.accounts.map((account) => (
@@ -127,7 +128,7 @@ function AssetSelectScreen() {
                 ))}
               </LinkSection>
             ) : null}
-          </ScrollView>
+          </ScreenScrollView>
         )}
       </View>
 
@@ -147,7 +148,7 @@ function AssetSelectScreen() {
           <Text>{createLinks.isPending ? "연결하는 중…" : label}</Text>
         </Button>
       </View>
-    </View>
+    </Screen>
   );
 }
 
@@ -163,6 +164,7 @@ function AssetSelectHeader({ allSelected, disabled, onToggleAll }: AssetSelectHe
 
   return (
     <ScreenHeader
+      flat
       title="연결할 자산 선택"
       onBack={() => router.canGoBack() && router.back()}
       right={

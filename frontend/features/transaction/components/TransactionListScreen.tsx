@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronLeft, ChevronRight, Receipt, WifiOff } from "lucide-react-native";
-import { FlatList, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenFlatList } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
@@ -35,7 +36,7 @@ function TransactionListScreen() {
   const setFilter = (next: FilterParams) => router.setParams(next);
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader
         title="거래 내역"
         onBack={() => (router.canGoBack() ? router.back() : router.replace(ASSETS_ROUTE))}
@@ -59,7 +60,7 @@ function TransactionListScreen() {
           action={{ label: "다시 시도", onPress: () => list.refetch(), disabled: list.isFetching }}
         />
       ) : (
-        <FlatList
+        <ScreenFlatList
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
           renderItem={({ item }) => (
@@ -86,7 +87,7 @@ function TransactionListScreen() {
           }
         />
       )}
-    </View>
+    </Screen>
   );
 }
 

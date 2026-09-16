@@ -1,10 +1,11 @@
 import { useRouter } from "expo-router";
 import { CalendarClock, ChevronRight, Plus, WifiOff } from "lucide-react-native";
-import { Pressable, RefreshControl, ScrollView, View } from "react-native";
+import { Pressable, RefreshControl, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useFixedExpenses } from "@/features/payment/api/queries";
@@ -30,7 +31,7 @@ function FixedExpenseListScreen() {
   const openCreate = () => router.push(`${FIXED_EXPENSE_ROUTE}/new`);
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader
         title="고정지출 관리"
         onBack={() => (router.canGoBack() ? router.back() : router.replace(PAYMENT_CALENDAR_ROUTE))}
@@ -64,14 +65,14 @@ function FixedExpenseListScreen() {
           action={{ label: "고정지출 등록", onPress: openCreate }}
         />
       ) : (
-        <ScrollView
-          contentContainerClassName="gap-8 px-6 pb-8 pt-2"
+        <ScreenScrollView
+          contentContainerClassName="gap-10 px-6 pb-8"
           refreshControl={<RefreshControl refreshing={expenses.isRefetching} onRefresh={() => expenses.refetch()} />}
         >
           <FixedExpenseSections expenses={expenses.data} onSelect={(id) => router.push(`${FIXED_EXPENSE_ROUTE}/${id}`)} />
-        </ScrollView>
+        </ScreenScrollView>
       )}
-    </View>
+    </Screen>
   );
 }
 
@@ -146,13 +147,13 @@ function ExpenseRow({ expense, hint, onPress }: ExpenseRowProps) {
 
   return (
     <Pressable
-      className="flex-row items-center gap-3 rounded-lg bg-accent p-4 active:opacity-70"
+      className="flex-row items-center gap-3 rounded-lg bg-card p-4 active:opacity-70 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
       accessibilityRole="button"
       accessibilityLabel={`${expense.name} ${amount}, ${detail}`}
       accessibilityHint={hint}
       onPress={onPress}
     >
-      <View className="h-10 w-10 items-center justify-center rounded-full bg-card">
+      <View className="h-10 w-10 items-center justify-center rounded-full bg-accent">
         <Icon as={expenseTypeIcon(expense.expenseType)} size={20} className="text-primary" />
       </View>
       <View className="flex-1 gap-0.5">

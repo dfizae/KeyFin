@@ -1,7 +1,8 @@
 import { Check, ChevronDown, X } from "lucide-react-native";
 import * as React from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { cn } from "@/lib/utils";
@@ -53,10 +54,7 @@ function FilterSelect({ title, options, selectedKey, disabled = false, onSelect 
         <Icon as={ChevronDown} size={16} className="text-card-foreground" />
       </Pressable>
 
-      <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
-        <View className="flex-1 justify-end">
-          <Pressable className="flex-1 bg-black/50" accessibilityRole="button" accessibilityLabel={`${title} 닫기`} onPress={() => setOpen(false)} />
-          <View className="rounded-t-xl bg-popover pb-8">
+      <BottomSheet visible={open} onClose={() => setOpen(false)} closeLabel={`${title} 닫기`}>
             <View className="flex-row items-center justify-between px-5 pt-5">
               <Text className="text-h3 text-popover-foreground" accessibilityRole="header">
                 {title}
@@ -83,9 +81,7 @@ function FilterSelect({ title, options, selectedKey, disabled = false, onSelect 
                 </React.Fragment>
               ))}
             </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      </BottomSheet>
     </>
   );
 }

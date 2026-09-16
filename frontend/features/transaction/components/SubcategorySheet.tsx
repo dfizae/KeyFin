@@ -1,9 +1,10 @@
 import { ChevronLeft, X } from "lucide-react-native";
 import * as React from "react";
-import { Modal, Pressable, ScrollView, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -56,10 +57,7 @@ function SubcategorySheet({ visible, subcategories, selectedSubcategoryId, amoun
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end">
-        <Pressable className="flex-1 bg-black/50" accessibilityRole="button" accessibilityLabel={SHEET_CLOSE_LABEL} onPress={onClose} />
-        <View className="rounded-t-xl bg-popover pb-8">
+    <BottomSheet visible={visible} onClose={onClose} closeLabel={SHEET_CLOSE_LABEL}>
           <View className="flex-row items-center justify-between px-5 pt-5">
             <View className="flex-row items-center gap-2">
               {step === "dutch" ? (
@@ -124,9 +122,7 @@ function SubcategorySheet({ visible, subcategories, selectedSubcategoryId, amoun
               />
             </ScrollView>
           )}
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 

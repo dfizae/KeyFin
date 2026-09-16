@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 
 import { TransferApprovalScreen } from "@/features/payment/components/TransferApprovalScreen";
 import { parseTransferId } from "@/features/payment/model";
@@ -9,8 +9,8 @@ export default function TransferApprovalRoute() {
   const { id } = useLocalSearchParams();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <View className="flex-1 bg-background">
       <TransferApprovalScreen transferId={parseTransferId(id)} />
-    </SafeAreaView>
+    </View>
   );
 }

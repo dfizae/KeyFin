@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 
 import { TransactionDetailScreen } from "@/features/transaction/components/TransactionDetailScreen";
 import { parseTransactionId } from "@/features/transaction/model";
@@ -9,8 +9,8 @@ export default function TransactionDetailRoute() {
   const { id } = useLocalSearchParams();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <View className="flex-1 bg-background">
       <TransactionDetailScreen transactionId={parseTransactionId(id)} />
-    </SafeAreaView>
+    </View>
   );
 }

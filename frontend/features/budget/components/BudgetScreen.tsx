@@ -1,12 +1,14 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
 import { Menu, WalletMinimal, WifiOff } from "lucide-react-native";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { FillBar } from "@/components/ui/fill-bar";
 import { Icon } from "@/components/ui/icon";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
@@ -36,22 +38,10 @@ function BudgetScreen() {
   if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
-    <View className="flex-1 bg-background">
-      <BudgetHeader />
+    <Screen>
+      <ScreenHeader title="예산관리" right={<MenuButton />} />
       <BudgetContent budget={budget} />
-    </View>
-  );
-}
-
-// Pencil Header (V1nCzt): bg-card · 하단 보더 · 아래 방향 그림자 · padding [59,24,12,24] (상단 59 는 안전 영역).
-function BudgetHeader() {
-  return (
-    <View className="flex-row items-center justify-between border-b border-border bg-card px-6 pb-3 shadow-sm shadow-black/5 dark:shadow-none">
-      <Text className="text-h1 text-foreground" accessibilityRole="header">
-        예산관리
-      </Text>
-      <MenuButton />
-    </View>
+    </Screen>
   );
 }
 
@@ -87,7 +77,7 @@ function BudgetContent({ budget }: BudgetContentProps) {
   const { total, envelopes } = budget.data;
 
   return (
-    <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pb-6">
+    <ScreenScrollView className="flex-1" contentContainerClassName="gap-10 px-6 pb-6">
       {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
       <SectionTitle heading="봉투별 잔액" count={envelopes.length} />
       {envelopes.length === 0 ? (
@@ -104,7 +94,7 @@ function BudgetContent({ budget }: BudgetContentProps) {
           ))}
         </View>
       )}
-    </ScrollView>
+    </ScreenScrollView>
   );
 }
 
@@ -130,7 +120,7 @@ function TotalCard({ total, period }: TotalCardProps) {
   const used = usedBarPercent(total.remainingRate);
 
   return (
-    <View className="gap-3 pb-1 pt-5">
+    <View className="gap-3 pb-1">
       <Text className="text-label tabular-nums text-card-foreground">{period} 남은 예산</Text>
       <CountUpAmount
         value={total.remaining}
@@ -224,7 +214,7 @@ const SKELETON_ROWS = [1, 2, 3, 4, 5, 6, 7];
 
 function BudgetSkeleton() {
   return (
-    <View className="gap-5 px-6 pt-5" accessible accessibilityLabel="불러오는 중">
+    <View className="gap-5 px-6" accessible accessibilityLabel="불러오는 중">
       <View className="gap-3">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-11 w-48" />

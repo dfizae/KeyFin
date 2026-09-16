@@ -1,10 +1,11 @@
 import { Redirect, useRouter } from "expo-router";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { Separator } from "@/components/ui/separator";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useCachedBudgetProposal } from "@/features/budget/api/queries";
@@ -38,13 +39,14 @@ function SpendingEnvelopesScreen() {
   const total = sumAmounts(envelopes.map((envelope) => envelope.monthlyAvg));
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader
+      flat
         title="카테고리별 소비 분석"
         onBack={() => (router.canGoBack() ? router.back() : router.replace(SUMMARY_ROUTE))}
       />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pb-6 pt-4">
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pb-6 pt-4">
         <AnalysisHero description="이 금액을 바탕으로 봉투별 한 달 예산을 제안해 드릴게요." />
 
         <View className="gap-3.5">
@@ -73,14 +75,14 @@ function SpendingEnvelopesScreen() {
           <Text className="text-label text-foreground">합계</Text>
           <CountUpAmount value={total} className="text-amount-md tabular-nums text-foreground" />
         </View>
-      </ScrollView>
+      </ScreenScrollView>
 
       <View className="px-6 pt-3" style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}>
         <Button size="lg" className="h-button-lg rounded-lg" onPress={() => router.push(PROPOSAL_ROUTE)}>
           <Text>예산 제안 보기</Text>
         </Button>
       </View>
-    </View>
+    </Screen>
   );
 }
 

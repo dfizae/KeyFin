@@ -2,13 +2,14 @@ import { useRouter } from "expo-router";
 import { CircleAlert, WifiOff } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { ScrollView, Switch, View } from "react-native";
+import { Switch, View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useTransferSettings, useUpdateTransferSettings } from "@/features/settings/api/queries";
@@ -35,7 +36,7 @@ function SettingsScreen() {
   const settings = useTransferSettings();
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader title="설정" onBack={() => (router.canGoBack() ? router.back() : router.replace(MY_ROUTE))} />
 
       {settings.isPending ? (
@@ -50,7 +51,7 @@ function SettingsScreen() {
       ) : (
         <TransferSettingsForm settings={settings.data} />
       )}
-    </View>
+    </Screen>
   );
 }
 
@@ -77,7 +78,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
 
   return (
     <>
-      <ScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">
+      <ScreenScrollView contentContainerClassName="gap-10 px-6 pb-8" keyboardShouldPersistTaps="handled">
         <View className="gap-3 border-b border-border pb-6 pt-2">
           <View className="flex-row items-center justify-between gap-3">
             <Text className="shrink text-h3 text-foreground">결제 준비 이체 동의</Text>
@@ -117,7 +118,7 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
             한도를 넘는 이체는 승인해도 서버가 막아요. 한도는 준비 이체에만 쓰이고 직접 하는 송금과는 관계없어요.
           </Text>
         </View>
-      </ScrollView>
+      </ScreenScrollView>
 
       <View className="gap-2 px-6 pb-8 pt-2">
         {update.isError ? (

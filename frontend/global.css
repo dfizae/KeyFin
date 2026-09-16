@@ -5,7 +5,7 @@
 
 @layer base {
   :root {
-    --color-background: 255 255 255;
+    --color-background: 252 252 252;
     --color-foreground: 52 52 52;
     --color-card: 255 255 255;
     --color-card-foreground: 52 52 52;
@@ -13,11 +13,11 @@
     --color-popover-foreground: 52 52 52;
     --color-primary: 54 41 183;
     --color-primary-foreground: 255 255 255;
-    --color-secondary: 242 241 249;
+    --color-secondary: 234 232 245;
     --color-secondary-foreground: 54 41 183;
-    --color-muted: 242 241 249;
+    --color-muted: 234 232 245;
     --color-muted-foreground: 137 137 137;
-    --color-accent: 242 241 249;
+    --color-accent: 234 232 245;
     --color-accent-foreground: 54 41 183;
     --color-destructive: 254 33 96;
     --color-destructive-foreground: 255 255 255;

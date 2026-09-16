@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useSignup } from "@/features/auth/api/queries";
@@ -44,10 +45,11 @@ function SignupScreen() {
   };
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScreenHeader title="회원가입" onBack={() => router.back()} />
+    <Screen>
+    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScreenHeader flat title="회원가입" onBack={() => router.back()} />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-8 px-6 pt-6" keyboardShouldPersistTaps="handled">
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-8 px-6" keyboardShouldPersistTaps="handled">
         <CoachRow character={CHARACTER_WAVE} message={"이메일과 비밀번호만 있으면 돼요.\n방 열쇠를 만들어 드릴게요!"} />
 
         <View className="gap-4">
@@ -103,7 +105,7 @@ function SignupScreen() {
 
           {errorMessage !== null && !isEmailError ? <InlineError message={errorMessage} /> : null}
         </View>
-      </ScrollView>
+      </ScreenScrollView>
 
       <View className="gap-4 px-6 pb-8">
         <Button
@@ -124,6 +126,7 @@ function SignupScreen() {
         </View>
       </View>
     </KeyboardAvoidingView>
+    </Screen>
   );
 }
 

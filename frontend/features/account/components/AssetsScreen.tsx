@@ -1,11 +1,13 @@
 import { useRouter } from "expo-router";
 import { CreditCard, Menu, Receipt, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
@@ -49,15 +51,11 @@ function AssetsScreen() {
   const asOf = accounts.data ? balanceAsOfLabel(accounts.data) : null;
 
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="pb-8">
-      <View className="flex-row items-center justify-between px-6 py-4">
-        <Text className="text-h1 text-foreground" accessibilityRole="header">
-          자산관리
-        </Text>
-        <MenuButton />
-      </View>
-
-      <View className="gap-1 px-6 pb-4">
+    <Screen>
+      <ScreenHeader title="자산관리" right={<MenuButton />} />
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-10 pb-8">
+      <View className="gap-4">
+      <View className="gap-1 px-6">
         <Text className="text-caption text-card-foreground">내 총 자산</Text>
         {accounts.isPending ? (
           <Skeleton className="h-11 w-48 rounded-md" />
@@ -69,7 +67,7 @@ function AssetsScreen() {
         {asOf === null ? null : <Text className="text-caption tabular-nums text-card-foreground">{asOf}</Text>}
       </View>
 
-      <View className="flex-row gap-2 px-6 pb-5" accessibilityRole="tablist">
+      <View className="flex-row gap-2 px-6" accessibilityRole="tablist">
         {ASSET_TABS.map(({ key, label }) => (
           <Pressable
             key={key}
@@ -106,10 +104,12 @@ function AssetsScreen() {
           <CardSection />
         )}
       </View>
+      </View>
 
       <UpcomingPayments />
       <RecentTransactions />
-    </ScrollView>
+      </ScreenScrollView>
+    </Screen>
   );
 }
 
@@ -122,7 +122,7 @@ function MenuButton() {
   );
 }
 
-// Pencil AccountItem (w4jgr1): accent 카드. 송금 버튼 대신 로고 타일과 마스킹 번호를 둔다.
+// Pencil AccountItem (w4jgr1): 흰 카드(tint 배경 위, 2026-09-16). 송금 버튼 대신 로고 타일과 마스킹 번호를 둔다.
 // 별칭이 있으면 제목으로 올리고 은행명은 아래로 내린다. 수입 계좌에는 뱃지를 단다.
 function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
   if (accounts.length === 0) {
@@ -133,7 +133,7 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
       {accounts.map((account) => (
         <View
           key={account.accountId}
-          className="flex-row items-center gap-3 rounded-lg bg-accent p-4"
+          className="flex-row items-center gap-3 rounded-lg bg-card p-4 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
           accessible
           accessibilityLabel={[
             account.alias ?? account.bankName,
@@ -201,7 +201,7 @@ function CardRow({ card, billing }: { card: LinkedCard; billing: CardBilling | n
 
   return (
     <View
-      className="flex-row items-center gap-3 rounded-lg bg-accent p-4"
+      className="flex-row items-center gap-3 rounded-lg bg-card p-4 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
       accessible
       accessibilityLabel={[`${card.cardName} ${card.issuerName} ${card.maskedNo}`, estimated, unpaidLabel(unpaid)]
         .filter(Boolean)
@@ -248,7 +248,7 @@ function UpcomingPayments() {
   const entries = calendar.data ? upcomingEntries(calendar.data, currentDateKey(), UPCOMING_PAYMENT_LIMIT) : [];
 
   return (
-    <View className="gap-3 p-6">
+    <View className="gap-3 px-6">
       <View className="flex-row items-center justify-between">
         <Text className="text-h2 text-foreground" accessibilityRole="header">
           이번 달 정기결제 예정
@@ -304,7 +304,7 @@ function RecentTransactions() {
   const recent = useRecentTransactions(currentMonthKey());
 
   return (
-    <View className="gap-3 px-6 pt-2">
+    <View className="gap-3 px-6">
       <View className="flex-row items-center justify-between">
         <Text className="text-h2 text-foreground" accessibilityRole="header">
           최근 거래 내역

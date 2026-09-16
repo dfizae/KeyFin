@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
 import { Circle, CircleDot, WalletMinimal, WifiOff } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -67,9 +68,9 @@ function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) 
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       {changing ? <ScreenHeader title="수입 계좌 변경" onBack={goBack} /> : null}
-      <View className={cn("flex-1 gap-5 px-6", changing ? "pt-2" : "pt-6")}>
+      <View className="flex-1 gap-5 px-6">
         <View className="gap-1.5">
           <Text className="text-h2 text-foreground" accessibilityRole="header">
             수입이 들어오는 계좌를 골라 주세요
@@ -98,7 +99,7 @@ function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) 
             />
           </View>
         ) : (
-          <ScrollView className="flex-1" contentContainerClassName="gap-2.5 pb-6" accessibilityRole="radiogroup">
+          <ScreenScrollView className="flex-1" contentContainerClassName="gap-2.5 pb-6" accessibilityRole="radiogroup">
             {options.map((option) => (
               <IncomeAccountRow
                 key={option.accountId}
@@ -108,7 +109,7 @@ function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) 
                 onSelect={() => setPickedId(option.accountId)}
               />
             ))}
-          </ScrollView>
+          </ScreenScrollView>
         )}
       </View>
 
@@ -122,7 +123,7 @@ function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) 
           <Text>{setIncomeAccount.isPending ? "지정하는 중…" : changing ? "변경" : "다음"}</Text>
         </Button>
       </View>
-    </View>
+    </Screen>
   );
 }
 

@@ -36,10 +36,10 @@ function FinanceEmailScreen() {
 
   return (
     <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScreenHeader title="금융망 이메일 확인" onBack={() => router.canGoBack() && router.back()} />
+      <ScreenHeader flat title="금융망 이메일 확인" onBack={() => router.canGoBack() && router.back()} />
 
       <View className="flex-1 justify-between px-6 pb-8">
-        <View className="gap-8 pt-6">
+        <View className="gap-8">
           <CoachRow
             character={CHARACTER_SCAN}
             message={"금융망 이메일로 계좌·카드를 찾아올게요.\nKeyFin 가입 이메일과 달라도 괜찮아요."}

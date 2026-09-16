@@ -1,13 +1,14 @@
 import { useRouter } from "expo-router";
 import { ArrowDown, Ban, CalendarClock, CircleAlert, CircleCheck, ShieldOff, WifiOff } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
@@ -93,7 +94,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader title="이체 승인" onBack={goBack} />
 
       {settings.isPending || loading ? (
@@ -121,7 +122,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
         />
       ) : (
         <>
-          <ScrollView contentContainerClassName="gap-5 px-6 pb-8">
+          <ScreenScrollView contentContainerClassName="gap-5 px-6 pb-8">
             <TransferSummary transfer={transfer} accounts={accounts.data} />
             {transfer.status === "PROPOSED" ? (
               <LimitNote once={settings.data?.limitOnce} daily={settings.data?.limitDaily} />
@@ -129,7 +130,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
               <ResultCard transfer={transfer} />
             )}
             <HistoryTimeline history={detail.data?.history ?? []} />
-          </ScrollView>
+          </ScreenScrollView>
 
           <View className="gap-2 px-6 pb-8 pt-2">
             {approve.isError ? (
@@ -198,7 +199,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
           </Dialog>
         </>
       )}
-    </View>
+    </Screen>
   );
 }
 

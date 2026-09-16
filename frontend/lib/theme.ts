@@ -4,7 +4,7 @@ import type { TextStyle } from "react-native";
 
 export const colors = {
   light: {
-    background: "#FFFFFF",
+    background: "#FCFCFC",
     foreground: "#343434",
     card: "#FFFFFF",
     "card-foreground": "#343434",
@@ -12,11 +12,11 @@ export const colors = {
     "popover-foreground": "#343434",
     primary: "#3629B7",
     "primary-foreground": "#FFFFFF",
-    secondary: "#F2F1F9",
+    secondary: "#EAE8F5",
     "secondary-foreground": "#3629B7",
-    muted: "#F2F1F9",
+    muted: "#EAE8F5",
     "muted-foreground": "#898989",
-    accent: "#F2F1F9",
+    accent: "#EAE8F5",
     "accent-foreground": "#3629B7",
     destructive: "#FE2160",
     "destructive-foreground": "#FFFFFF",

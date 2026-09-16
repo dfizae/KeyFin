@@ -1,10 +1,11 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CalendarDays, ChevronLeft, ChevronRight, WifiOff } from "lucide-react-native";
-import { FlatList, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenFlatList } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { flattenTransfers, usePaymentCalendar, useTransfers } from "@/features/payment/api/queries";
@@ -59,7 +60,7 @@ function PaymentCalendarScreen() {
   const groups = calendar.data ? groupEntriesByDate(calendar.data.entries) : [];
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader
         title="결제 캘린더"
         onBack={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
@@ -88,10 +89,10 @@ function PaymentCalendarScreen() {
           action={{ label: "다시 시도", onPress: () => calendar.refetch(), disabled: calendar.isFetching }}
         />
       ) : (
-        <FlatList
+        <ScreenFlatList
           data={groups}
           keyExtractor={(group) => group.date}
-          contentContainerClassName="gap-6 px-6 pb-8"
+          contentContainerClassName="gap-10 px-6 pb-8"
           refreshing={calendar.isRefetching}
           onRefresh={() => calendar.refetch()}
           ListHeaderComponent={<CalendarSummary calendar={calendar.data} />}
@@ -115,7 +116,7 @@ function PaymentCalendarScreen() {
           )}
         />
       )}
-    </View>
+    </Screen>
   );
 }
 
@@ -212,7 +213,7 @@ function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps)
 
   return (
     <Pressable
-      className="flex-row items-center gap-3 rounded-lg bg-accent p-4 active:opacity-70"
+      className="flex-row items-center gap-3 rounded-lg bg-card p-4 active:opacity-70 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
       accessible={!linked}
       accessibilityRole={openable ? "button" : undefined}
       accessibilityLabel={label}
@@ -220,7 +221,7 @@ function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps)
       disabled={!openable}
       onPress={onPress}
     >
-      <View className="h-10 w-10 items-center justify-center rounded-full bg-card">
+      <View className="h-10 w-10 items-center justify-center rounded-full bg-accent">
         <Icon as={calendarEntryIcon(entry)} size={20} className="text-primary" />
       </View>
       <View className="flex-1 gap-1">

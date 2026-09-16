@@ -1,10 +1,10 @@
 import { useRouter } from "expo-router";
 import { ChevronRight, User } from "lucide-react-native";
 import { Pressable, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
@@ -17,10 +17,9 @@ export default function MyRoute() {
   const userName = useAuthStore(selectUserName);
 
   return (
-    <SafeAreaView className="flex-1 bg-background px-6" edges={["top"]}>
-      <Text className="py-4 text-h1" accessibilityRole="header">
-        마이페이지
-      </Text>
+    <View className="flex-1 bg-background">
+      <ScreenHeader title="마이페이지" />
+      <View className="flex-1 bg-background px-6">
       {userName === null ? null : <Text className="text-body text-card-foreground">{userName}님</Text>}
       <View className="pt-6">
         <Pressable
@@ -38,6 +37,7 @@ export default function MyRoute() {
       <View className="pb-6">
         <LogoutButton />
       </View>
-    </SafeAreaView>
+      </View>
+    </View>
   );
 }

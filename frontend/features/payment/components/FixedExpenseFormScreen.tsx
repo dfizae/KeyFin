@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { CalendarClock, Check, CircleAlert, Lock, Trash2, WifiOff } from "lucide-react-native";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
@@ -153,10 +154,11 @@ function FixedExpenseEditor({ editId, initial, onDone }: FixedExpenseEditorProps
   };
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <Screen>
+    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
       <ScreenHeader title={isEdit ? "고정지출 수정" : "고정지출 등록"} onBack={onDone} />
 
-      <ScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">
+      <ScreenScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">
         <Field label="이름">
           <Input
             className="h-input rounded-lg"
@@ -238,7 +240,7 @@ function FixedExpenseEditor({ editId, initial, onDone }: FixedExpenseEditorProps
             <Text className="text-destructive">삭제</Text>
           </Button>
         ) : null}
-      </ScrollView>
+      </ScreenScrollView>
 
       <View className="gap-2 px-6 pb-8 pt-2">
         {saveError === null ? null : <ErrorLine message={fixedExpenseSaveErrorMessage(saveError)} />}
@@ -274,6 +276,7 @@ function FixedExpenseEditor({ editId, initial, onDone }: FixedExpenseEditorProps
         </DialogContent>
       </Dialog>
     </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
@@ -285,10 +288,10 @@ function SyncedExpenseDetail({ expense, onBack }: { expense: FixedExpense; onBac
   const amount = expense.amount === null ? "청구서 기준" : formatKRW(expense.amount);
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader title="카드 정기결제" onBack={onBack} />
-      <ScrollView contentContainerClassName="gap-6 px-6 pb-8">
-        <View className="items-center gap-2 pt-4" accessible accessibilityLabel={`${expense.name} ${amount}`}>
+      <ScreenScrollView contentContainerClassName="gap-6 px-6 pb-8">
+        <View className="items-center gap-2" accessible accessibilityLabel={`${expense.name} ${amount}`}>
           <View className="h-12 w-12 items-center justify-center rounded-full bg-accent">
             <Icon as={expenseTypeIcon(expense.expenseType)} size={24} className="text-primary" />
           </View>
@@ -310,8 +313,8 @@ function SyncedExpenseDetail({ expense, onBack }: { expense: FixedExpense; onBac
             카드사에서 관리하는 정기결제라 여기서는 바꿀 수 없어요. 카드사·서비스에서 바꾸거나 해지하면 다음 동기화 때 반영돼요.
           </Text>
         </View>
-      </ScrollView>
-    </View>
+      </ScreenScrollView>
+    </Screen>
   );
 }
 
