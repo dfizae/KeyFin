@@ -43,7 +43,7 @@ describe("toRoom", () => {
     expect(() => toRoom({ ...roomMock, coin: { balance: 1.5 } })).toThrow(ContractMismatchError);
   });
 
-  it("설치된 가구는 받아만 두고 화면 모델은 아직 쓰지 않는다 (3단계)", () => {
+  it("설치된 가구를 그대로 싣는다 — 씬 배치 변환은 furniture.ts 가 한다 (3단계)", () => {
     const room = toRoom({
       ...roomMock,
       furnitures: [
@@ -61,6 +61,19 @@ describe("toRoom", () => {
       ],
     });
 
-    expect(room).not.toHaveProperty("furnitures");
+    expect(room.furnitures).toEqual([
+      {
+        userFurnitureId: 3,
+        itemId: 21,
+        slotType: "FLOOR",
+        assetKey: "sofa_basic",
+        placementStatus: "FLOOR",
+        placementDirection: "FRONT_LEFT",
+        positionX: 165,
+        positionY: 280,
+        layer: 0,
+      },
+    ]);
+    expect(toRoom(roomMock).furnitures).toEqual([]);
   });
 });

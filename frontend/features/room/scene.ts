@@ -31,11 +31,13 @@ import {
 
 /**
  * 씬 배치. 좌표는 모두 씬 단위(327×404)이며 anchor 는 가구는 발끝(바닥에 닿는 점), 벽 오브젝트는 스프라이트 중심이다.
- * surface 가 없으면 바닥이다. 백엔드 `user_furnitures.placement_status`(FLOOR/LEFT_WALL/RIGHT_WALL)와 같은 뜻이라
- * `GET/PUT /room/layout` 이 생기면 그대로 대응시킨다. 이 파일의 DEFAULT_LAYOUT 은 그때 목 데이터로 옮긴다. (TBD, 3단계)
+ * surface 가 없으면 바닥이다. 백엔드 `user_furnitures.placement_status`(FLOOR/LEFT_WALL/RIGHT_WALL)와 같은 뜻이고
+ * 변환은 furniture.ts 가 한다. DEFAULT_LAYOUT 은 서버에 설치된 가구가 없을 때 쓰는 폴백이다(아이템 시드 전까지, 2026-09-16).
  */
 export type Placement = {
   itemId: RoomItemId;
+  /** 서버 보유 가구 id (GET /room·/furnitures). 기본 배치 폴백에는 없어 저장 대상에서 빠진다 (3단계) */
+  userFurnitureId?: number;
   anchor: ScenePoint;
   /** 깊이 보정. 카탈로그 layer 보다 우선한다 */
   layer?: number;
