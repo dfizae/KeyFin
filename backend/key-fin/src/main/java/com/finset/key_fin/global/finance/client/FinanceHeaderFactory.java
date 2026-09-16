@@ -35,29 +35,32 @@ public class FinanceHeaderFactory {
 	}
 
 	public FinanceRequestHeader create(String apiName, String userKey) {
+		return create(apiName, userKey, newTransactionUniqueNo());
+	}
+
+	/** 멱등 재시도용 — 미리 채번해 저장한 기관거래고유번호로 헤더를 만든다(이체). */
+	public FinanceRequestHeader create(String apiName, String userKey, String transactionUniqueNo) {
 		requireText(apiName, "금융망 API 이름");
 		requireText(userKey, "금융망 사용자 키");
-
+		requireText(transactionUniqueNo, "기관거래고유번호");
 		LocalDateTime now = LocalDateTime.now(clock);
-		String transmissionDate = DATE_FORMAT.format(now);
-		String transmissionTime = TIME_FORMAT.format(now);
-
 		return new FinanceRequestHeader(
 				apiName,
-				transmissionDate,
-				transmissionTime,
+				DATE_FORMAT.format(now),
+				TIME_FORMAT.format(now),
 				INSTITUTION_CODE,
 				FINTECH_APP_NO,
 				apiName,
-				newTransactionUniqueNo(transmissionDate, transmissionTime),
+				transactionUniqueNo,
 				properties.apiKey(),
 				userKey
 		);
 	}
 
-	private String newTransactionUniqueNo(String transmissionDate, String transmissionTime) {
+	public String newTransactionUniqueNo() {
+		LocalDateTime now = LocalDateTime.now(clock);
 		int sequence = ThreadLocalRandom.current().nextInt(SEQUENCE_BOUND);
-		return transmissionDate + transmissionTime + String.format("%06d", sequence);
+		return DATE_FORMAT.format(now) + TIME_FORMAT.format(now) + String.format("%06d", sequence);
 	}
 
 	private static void requireText(String value, String name) {

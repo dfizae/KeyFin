@@ -12,7 +12,10 @@ import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Item;
 @Service
 public class RequiredAmountService {
 
-	public record Entry(LocalDate date, Item item) {
+	public record Entry(LocalDate date, Item item, Long cardBillingId) {
+		public Entry(LocalDate date, Item item) {
+			this(date, item, null);
+		}
 	}
 
 	private static final Comparator<Entry> WITHDRAWAL_ORDER = Comparator
@@ -44,7 +47,7 @@ public class RequiredAmountService {
 				Entry entry = entries.get(index);
 				long amount = entry.item().amount();
 				long shortage = Math.max(0, amount - remaining);
-				judged.set(index, new Entry(entry.date(), entry.item().judged(shortage == 0, shortage)));
+				judged.set(index, new Entry(entry.date(), entry.item().judged(shortage == 0, shortage), entry.cardBillingId()));
 				remaining = Math.max(0, remaining - amount);
 			}
 		}

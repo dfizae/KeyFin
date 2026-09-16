@@ -1,128 +1,199 @@
-import type { CalendarItemDto, FixedExpenseRequest, PaymentCalendarDto } from "@/features/payment/model";
+import { ApiError } from "@/api/error";
+import type {
+  CalendarItemDto,
+  FixedExpenseDto,
+  FixedExpenseListDto,
+  FixedExpenseRequest,
+  PaymentCalendarDto,
+} from "@/features/payment/model";
 
 /**
- * GET /payments/calendar?month= 응답 예시 (docs/api-contract.md PAYMENT).
+ * GET /payments/calendar · GET/POST/PUT/DELETE /fixed-expenses 목 (docs/api-contract.md PAYMENT).
  * 값은 Pencil home/p0/calendar-open CalendarPopover (ZzspU) 와 같다: 15일 월세 550,000(부족 230,000) · 20일 넷플릭스 17,000 · 25일 통신비 55,000(예상).
  *
- * 서버처럼 상태를 들고 있다: 등록·수정·삭제(POST/PUT/DELETE /fixed-expenses)가 캘린더에 그대로 반영돼야
- * 화면 흐름을 목으로 확인할 수 있다. 카드 청구(CARD_BILL)는 사용자가 만드는 값이 아니라 고정이다.
+ * 서버처럼 상태를 들고 있다: 등록·수정·삭제가 목록과 캘린더에 그대로 반영되고, 서버와 같은 오류(PAY_001~004)를 던진다.
+ * 넷플릭스는 금융망에서 동기화된 카드 정기결제(CARD_SUBSCRIPTION)라 수정·삭제가 막힌다.
+ * prepared·shortage 는 실서버가 필요 금액 계산(FR-PAY-02) 전까지 null 을 주지만, 목은 시안 값을 유지한다(사용자 결정 2026-09-15).
  */
 type MockFixedExpense = {
   id: number;
   name: string;
+  expenseType: FixedExpenseRequest["expenseType"];
   amount: number;
+  isVariable: boolean;
   paymentDay: number;
-  withdrawalAccountId: number;
+  withdrawalAccountId: number | null;
+  /** 금융망 정기결제 id. 있으면 동기화 항목이다 */
+  finSubscriptionId: string | null;
   prepared: boolean;
   shortage: number;
 };
 
 const INITIAL_FIXED: MockFixedExpense[] = [
-  { id: 11, name: "월세", amount: 550000, paymentDay: 15, withdrawalAccountId: 1, prepared: false, shortage: 230000 },
-  { id: 12, name: "넷플릭스", amount: 17000, paymentDay: 20, withdrawalAccountId: 1, prepared: true, shortage: 0 },
+  {
+    id: 11,
+    name: "월세",
+    expenseType: "RENT",
+    amount: 550000,
+    isVariable: false,
+    paymentDay: 15,
+    withdrawalAccountId: 1,
+    finSubscriptionId: null,
+    prepared: false,
+    shortage: 230000,
+  },
+  {
+    id: 12,
+    name: "넷플릭스",
+    expenseType: "SUBSCRIPTION",
+    amount: 17000,
+    isVariable: false,
+    paymentDay: 20,
+    withdrawalAccountId: null,
+    finSubscriptionId: "SUB-0001",
+    prepared: true,
+    shortage: 0,
+  },
+  {
+    id: 13,
+    name: "통신비",
+    expenseType: "UTILITY",
+    amount: 55000,
+    isVariable: true,
+    paymentDay: 25,
+    withdrawalAccountId: 1,
+    finSubscriptionId: null,
+    prepared: true,
+    shortage: 0,
+  },
 ];
 
-const CARD_BILL: { cardId: number; name: string; amount: number; paymentDay: number } = {
-  cardId: 3,
-  name: "통신비",
-  amount: 55000,
-  paymentDay: 25,
-};
-
-let fixedExpenses: MockFixedExpense[] = [...INITIAL_FIXED];
+let fixedExpenses: MockFixedExpense[] = INITIAL_FIXED.map((expense) => ({ ...expense }));
 let nextId = 100;
+
+/** 같은 날 순서: FIXED → CARD_SUBSCRIPTION → CARD_BILL, 금액 내림차순 (서버 PaymentCalendarService) */
+const TYPE_ORDER: Record<string, number> = { FIXED: 0, CARD_SUBSCRIPTION: 1, CARD_BILL: 2 };
+
+function lastDayOf(month: string): number {
+  return new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(4)), 0)).getUTCDate();
+}
 
 function dayKey(month: string, day: number): string {
   return `${month.slice(0, 4)}-${month.slice(4)}-${String(day).padStart(2, "0")}`;
 }
 
-export function paymentCalendarMock(month: string): PaymentCalendarDto {
-  const items: { day: number; item: CalendarItemDto }[] = [
-    ...fixedExpenses.map((expense) => ({
-      day: expense.paymentDay,
-      item: {
-        type: "FIXED",
-        fixedExpenseId: expense.id,
-        name: expense.name,
-        amount: expense.amount,
-        withdrawalAccountId: expense.withdrawalAccountId,
-        prepared: expense.prepared,
-        shortage: expense.shortage,
-      } satisfies CalendarItemDto,
-    })),
-    {
-      day: CARD_BILL.paymentDay,
-      item: {
-        type: "CARD_BILL",
-        cardId: CARD_BILL.cardId,
-        name: CARD_BILL.name,
-        amount: CARD_BILL.amount,
-        estimated: true,
-        prepared: true,
-        shortage: 0,
-      } satisfies CalendarItemDto,
-    },
-  ];
+function isSynced(expense: MockFixedExpense): boolean {
+  return expense.finSubscriptionId !== null;
+}
 
+function toCalendarItem(expense: MockFixedExpense): CalendarItemDto {
+  return {
+    type: isSynced(expense) ? "CARD_SUBSCRIPTION" : "FIXED",
+    fixedExpenseId: expense.id,
+    cardId: null,
+    name: expense.name,
+    expenseType: expense.expenseType,
+    amount: expense.amount,
+    estimated: expense.isVariable,
+    withdrawalAccountId: expense.withdrawalAccountId,
+    prepared: expense.prepared,
+    shortage: expense.shortage,
+  };
+}
+
+export function paymentCalendarMock(month: string): PaymentCalendarDto {
+  const lastDay = lastDayOf(month);
   const days = new Map<string, CalendarItemDto[]>();
-  for (const { day, item } of items.sort((a, b) => a.day - b.day)) {
-    const date = dayKey(month, day);
+  for (const expense of [...fixedExpenses].sort((a, b) => a.id - b.id)) {
+    // 출금일이 없는 달(29~31)은 말일로 보정한다
+    const date = dayKey(month, Math.min(expense.paymentDay, lastDay));
     const bucket = days.get(date);
-    if (bucket) bucket.push(item);
-    else days.set(date, [item]);
+    if (bucket) bucket.push(toCalendarItem(expense));
+    else days.set(date, [toCalendarItem(expense)]);
   }
 
-  return { days: [...days].map(([date, dayItems]) => ({ date, items: dayItems })) };
+  return {
+    month,
+    days: [...days]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, items]) => ({
+        date,
+        items: items.sort((a, b) => TYPE_ORDER[a.type] - TYPE_ORDER[b.type] || b.amount - a.amount),
+      })),
+  };
+}
+
+/** GET /fixed-expenses — 활성 항목을 등록 순(id 오름차순)으로 */
+export function fixedExpenseListMock(): FixedExpenseListDto {
+  return [...fixedExpenses]
+    .sort((a, b) => a.id - b.id)
+    .map(
+      (expense): FixedExpenseDto => ({
+        id: expense.id,
+        name: expense.name,
+        expenseType: expense.expenseType,
+        amount: expense.amount,
+        isVariable: expense.isVariable,
+        paymentDay: expense.paymentDay,
+        withdrawalAccountId: expense.withdrawalAccountId,
+        synced: isSynced(expense),
+      })
+    );
+}
+
+function assertManualType(request: FixedExpenseRequest): void {
+  if ((request.expenseType as string) === "CARD_BILL") {
+    throw new ApiError(400, "PAY_004", "카드 청구는 직접 등록할 수 없습니다.");
+  }
+}
+
+/** 수정·삭제 대상. 없거나 이미 지운 항목은 404, 동기화 항목은 409 */
+function findManual(id: number): MockFixedExpense {
+  const expense = fixedExpenses.find((candidate) => candidate.id === id);
+  if (expense === undefined) throw new ApiError(404, "PAY_001", "고정지출을 찾을 수 없습니다.");
+  if (isSynced(expense)) {
+    throw new ApiError(409, "PAY_002", "금융망에서 동기화된 항목은 KeyFin에서 변경할 수 없습니다.");
+  }
+  return expense;
 }
 
 /** POST /fixed-expenses — 새 고정지출은 잔액을 모르니 준비된 것으로 둔다 */
 export function createFixedExpenseMock(request: FixedExpenseRequest): { id: number } {
+  assertManualType(request);
+  const duplicated = fixedExpenses.some(
+    (expense) =>
+      expense.name === request.name &&
+      expense.expenseType === request.expenseType &&
+      expense.amount === request.amount &&
+      expense.paymentDay === request.paymentDay &&
+      expense.withdrawalAccountId === request.withdrawalAccountId
+  );
+  if (duplicated) throw new ApiError(409, "PAY_003", "같은 내용의 고정지출이 이미 등록되어 있습니다.");
+
   nextId += 1;
-  fixedExpenses = [
-    ...fixedExpenses,
-    {
-      id: nextId,
-      name: request.name,
-      amount: request.amount,
-      paymentDay: request.paymentDay,
-      withdrawalAccountId: request.withdrawalAccountId,
-      prepared: true,
-      shortage: 0,
-    },
-  ];
+  fixedExpenses = [...fixedExpenses, { ...request, id: nextId, finSubscriptionId: null, prepared: true, shortage: 0 }];
   return { id: nextId };
 }
 
-/** PUT /fixed-expenses/{id} — 준비 상태는 서버 배치가 다시 계산하므로 목에서는 그대로 둔다 */
+/** PUT /fixed-expenses/{id} — 본문 전체로 교체한다. 준비 상태는 서버가 다시 계산하므로 목에서는 그대로 둔다 */
 export function updateFixedExpenseMock(id: number, request: FixedExpenseRequest): { id: number } {
-  fixedExpenses = fixedExpenses.map((expense) =>
-    expense.id === id
-      ? {
-          ...expense,
-          name: request.name,
-          amount: request.amount,
-          paymentDay: request.paymentDay,
-          withdrawalAccountId: request.withdrawalAccountId,
-        }
-      : expense
-  );
+  const target = findManual(id);
+  assertManualType(request);
+  fixedExpenses = fixedExpenses.map((expense) => (expense === target ? { ...expense, ...request, id } : expense));
   return { id };
 }
 
+/** DELETE /fixed-expenses/{id} — 서버는 비활성으로 바꾸고, 목록·캘린더에서는 바로 사라진다 */
 export function deleteFixedExpenseMock(id: number): void {
-  fixedExpenses = fixedExpenses.filter((expense) => expense.id !== id);
-}
-
-/** 캘린더에서 수정 화면으로 넘어갈 때 목이 들고 있는 값 (실서버에는 단건 조회가 없다 — TBD) */
-export function findFixedExpenseMock(id: number): MockFixedExpense | undefined {
-  return fixedExpenses.find((expense) => expense.id === id);
+  const target = findManual(id);
+  fixedExpenses = fixedExpenses.filter((expense) => expense !== target);
 }
 
 /** 테스트·개발 재시작용 */
 export function resetPaymentMocks(): void {
-  fixedExpenses = [...INITIAL_FIXED];
+  fixedExpenses = INITIAL_FIXED.map((expense) => ({ ...expense }));
   nextId = 100;
 }
 
-/** 이번 달 출금 예정이 없는 달 */
-export const paymentCalendarEmptyMock: PaymentCalendarDto = { days: [] };
+/** 출금 예정이 없는 달 */
+export const paymentCalendarEmptyMock: PaymentCalendarDto = { month: "202609", days: [] };

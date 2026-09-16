@@ -6,12 +6,12 @@ import { authUserMock } from "@/api/mocks/auth";
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
 import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payment";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
-import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock } from "@/api/mocks/transaction";
+import { pendingTransactionsMock, subcategoriesMock } from "@/api/mocks/transaction";
 import { useAuthStore } from "@/features/auth/store";
 import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
-import { CLASSIFY_ERROR_MESSAGE } from "@/features/transaction/errors";
+import { COACH_PLACEHOLDER, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
@@ -19,7 +19,7 @@ import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom } from "@/features/room/model";
 import { classifyTransaction, getPendingTransactions, getSubcategories } from "@/features/transaction/api/transaction.api";
-import { toClassifyResult, toPendingTransactions, toSubcategories } from "@/features/transaction/model";
+import { toPendingTransactions, toSubcategories } from "@/features/transaction/model";
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
 jest.mock("@/features/budget/api/budget.api", () => ({ getCurrentBudget: jest.fn() }));
@@ -101,76 +101,26 @@ describe("HomeScreen", () => {
     mockedGetSubcategories.mockReset();
     mockedGetSubcategories.mockResolvedValue(toSubcategories(subcategoriesMock));
     mockedClassify.mockReset();
-    mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", envelopeId: 1, remaining: "132000" });
+    mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", subcategoryId: 102, excludeTag: "NONE", adjustedAmount: null });
     mockPush.mockReset();
     mockRedirect.mockReset();
   });
 
-  // 확정 뒤 무효화로 다시 불러와도 확정한 거래가 빠지도록, 목 모듈의 상태를 그대로 쓴다.
-  function mockPendingFlow() {
-    resetTransactionMocks();
-    mockedGetPending.mockImplementation(async () => toPendingTransactions(pendingTransactionsMock()));
-    mockedClassify.mockImplementation(async ({ transactionId, request }) => toClassifyResult(classifyTransactionMock(transactionId, request)));
-  }
-
-  it("미확정 거래가 있으면 코치가 묻고, 확정을 누르면 제안된 세분류로 분류한 뒤 다음 질문으로 넘어간다", async () => {
+  it("코치를 탭하면 임시 말풍선이 열리고, 미확정 결제가 있으면 정리 화면 링크를 보여준다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    mockPendingFlow();
+    mockedGetPending.mockResolvedValue(toPendingTransactions(pendingTransactionsMock()));
     await renderHome();
-    await screen.findByText("180,000원");
+    await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
-    expect(await screen.findByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "카페 확정" }));
-
-    await waitFor(() => expect(mockedClassify).toHaveBeenCalledWith({ transactionId: 501, request: { subcategoryId: 102 } }));
-    expect(await screen.findByText("『김씨네분식 12,000원』 음식점 맞나냥?")).toBeTruthy();
-    await waitForQueriesToSettle();
+    await fireEvent.press(await screen.findByRole("button", { name: "코치" }));
+    expect(await screen.findByText(COACH_PLACEHOLDER)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("link", { name: cleanupLinkLabel(2) }));
+    expect(mockPush).toHaveBeenCalledWith("/transaction/pending");
   });
 
-  it("다른 카테고리를 누르면 세분류 시트가 열리고, 세분류나 제외 태그를 고르면 그대로 분류한다", async () => {
-    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    mockPendingFlow();
-    await renderHome();
-    await screen.findByText("180,000원");
-    await layoutRoom();
-
-    await fireEvent.press(await screen.findByRole("button", { name: "다른 카테고리" }));
-    expect(await screen.findByText("카테고리 선택")).toBeTruthy();
-    expect(await screen.findByRole("button", { name: "배달" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "카페" }).props.accessibilityState).toMatchObject({ selected: true });
-
-    await fireEvent.press(screen.getByRole("button", { name: "배달" }));
-    await waitFor(() => expect(mockedClassify).toHaveBeenCalledWith({ transactionId: 501, request: { subcategoryId: 103 } }));
-    await waitFor(() => expect(screen.queryByText("카테고리 선택")).toBeNull());
-
-    await fireEvent.press(await screen.findByRole("button", { name: "다른 카테고리" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "더치페이" }));
-    await waitFor(() => expect(mockedClassify).toHaveBeenLastCalledWith({ transactionId: 502, request: { excludeTag: "DUTCH" } }));
-    await waitForQueriesToSettle();
-  });
-
-  it("분류 저장이 실패하면 말풍선에 오류 문구를 보여주고 다시 시도할 수 있다", async () => {
-    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    mockPendingFlow();
-    mockedClassify.mockRejectedValueOnce(new Error("network"));
-    await renderHome();
-    await screen.findByText("180,000원");
-    await layoutRoom();
-
-    await fireEvent.press(await screen.findByRole("button", { name: "카페 확정" }));
-    expect(await screen.findByText(CLASSIFY_ERROR_MESSAGE)).toBeTruthy();
-    expect(screen.getByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
-
-    await fireEvent.press(screen.getByRole("button", { name: "카페 확정" }));
-    expect(await screen.findByText("『김씨네분식 12,000원』 음식점 맞나냥?")).toBeTruthy();
-    await waitForQueriesToSettle();
-  });
-
-  it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방·예산 카드를 표시한다", async () => {
+  it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방을 표시하며 예산 카드는 리스트를 탭한 시트에 있다", async () => {
     let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
     mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
@@ -183,7 +133,10 @@ describe("HomeScreen", () => {
     expect(screen.getByLabelText("코인 1,250개")).toBeTruthy();
     expect(screen.getByRole("button", { name: "알림" })).toBeTruthy();
     expect(screen.getByLabelText("캐릭터가 방에 있어요")).toBeTruthy();
+    expect(screen.queryByText("남은 예산")).toBeNull();
 
+    await layoutRoom();
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
     expect(await screen.findByText("180,000원")).toBeTruthy();
     expect(screen.getByText("남은 예산")).toBeTruthy();
     expect(screen.getByText(PERIOD)).toBeTruthy();
@@ -214,7 +167,7 @@ describe("HomeScreen", () => {
     await renderHome();
 
     expect(await screen.findByLabelText("코인 1,250개")).toBeTruthy();
-    expect(await screen.findByText("180,000원")).toBeTruthy();
+    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
     expect(mockedCheckAttendance).not.toHaveBeenCalled();
   });
 
@@ -226,14 +179,16 @@ describe("HomeScreen", () => {
 
     expect(await screen.findByLabelText("코인 1,250개")).toBeTruthy();
     await waitFor(() => expect(mockedCheckAttendance).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("180,000원")).toBeTruthy();
+    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
     expect(screen.queryByLabelText(/출석 \+/)).toBeNull();
   });
 
-  it("예산 카드에 봉투 7종 사용률 막대를 그리고 초과 봉투는 사용률이 100 을 넘는다", async () => {
+  it("예산 시트의 카드에 봉투 7종 사용률 막대를 그리고 초과 봉투는 사용률이 100 을 넘는다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
+    await layoutRoom();
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
 
     expect(await screen.findByText("봉투별 사용률")).toBeTruthy();
     expect(screen.getByLabelText("외식 사용률 68%, 남은 32,000원")).toBeTruthy();
@@ -241,11 +196,11 @@ describe("HomeScreen", () => {
     expect(screen.getByText("마트")).toBeTruthy();
   });
 
-  it("벽 보드 에셋은 잔여율을 보여주고, 탭하면 봉투별 잔액 팝오버가 열리며 링크는 예산 탭으로 간다", async () => {
+  it("벽 리스트 에셋은 잔여율을 읽어 주고, 탭하면 예산 시트가 열리며 링크는 예산 탭으로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("180,000원");
+    await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
     const board = await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" });
@@ -257,10 +212,13 @@ describe("HomeScreen", () => {
     expect(screen.getByLabelText("쇼핑 초과 8,000원 남음")).toBeTruthy();
     expect(screen.getByLabelText("외식 32,000원 남음")).toBeTruthy();
 
-    await fireEvent.press(screen.getByRole("button", { name: "예산 탭에서 자세히" }));
-    expect(mockPush).toHaveBeenCalledWith("/budget");
-
     await fireEvent.press(screen.getByRole("button", { name: "보드 닫기" }));
+    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+
+    // 링크로 나가면 시트도 닫힌다 — 돌아왔을 때 시트가 열린 채 남지 않도록.
+    await fireEvent.press(board);
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 탭에서 자세히" }));
+    expect(mockPush).toHaveBeenCalledWith("/budget");
     expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
     await waitForQueriesToSettle();
   });
@@ -280,7 +238,7 @@ describe("HomeScreen", () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("180,000원");
+    await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
     const calendar = await screen.findByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" });
@@ -307,7 +265,7 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetCalendar.mockResolvedValue(toPaymentCalendar(paymentCalendarEmptyMock));
     await renderHome();
-    await screen.findByText("180,000원");
+    await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "출금 캘린더, 9월 출금 예정 없음" }));
@@ -320,7 +278,7 @@ describe("HomeScreen", () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("180,000원");
+    await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
@@ -337,7 +295,7 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetCalendar.mockRejectedValue(new Error("network"));
     await renderHome();
-    await screen.findByText("180,000원");
+    await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
     expect(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" })).toBeTruthy();
@@ -365,14 +323,16 @@ describe("HomeScreen", () => {
     expect(mockedGetRoom).toHaveBeenCalledTimes(2);
   });
 
-  it("예산만 못 받으면 방은 그대로 두고 예산 영역에서만 재시도한다", async () => {
+  it("예산만 못 받으면 방은 그대로 두고, 리스트를 탭한 시트 안에서 재시도한다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom(roomMock));
     mockedGetBudget.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
-    expect(await screen.findByText("예산을 불러오지 못했어요")).toBeTruthy();
-    expect(screen.getByText("김재영님, 안녕하세요!")).toBeTruthy();
+    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
     expect(screen.getByLabelText("캐릭터가 방에 있어요")).toBeTruthy();
+    await layoutRoom();
+    await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 불러오지 못했어요" }));
+    expect(await screen.findByText("예산을 불러오지 못했어요")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "다시 시도" }));
     expect(await screen.findByText("180,000원")).toBeTruthy();

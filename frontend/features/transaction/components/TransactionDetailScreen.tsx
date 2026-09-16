@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, CircleAlert, Receipt } from "lucide-react-native";
+import { ChevronRight, CircleAlert, CircleHelp, Receipt } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -16,10 +16,12 @@ import {
   confirmStatusLabel,
   isIncoming,
   reclassifyBlockedReason,
+  merchantLabel,
   transactionBadge,
   transactionCategoryLabel,
   transactionDateTimeLabel,
   txTypeLabel,
+  UNCLASSIFIED_LABEL,
   type ClassifyRequest,
   type Transaction,
 } from "@/features/transaction/model";
@@ -90,6 +92,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
             visible={sheetOpen}
             subcategories={subcategories.data}
             selectedSubcategoryId={transaction.subcategoryId}
+            amount={transaction.amount}
             disabled={classify.isPending}
             onSelect={submit}
             onClose={() => setSheetOpen(false)}
@@ -114,7 +117,7 @@ function AmountSummary({ transaction }: AmountSummaryProps) {
     <View className="items-center gap-1.5 pb-2 pt-4">
       <View className="flex-row items-center gap-2">
         <Text className="shrink text-center text-label text-card-foreground" numberOfLines={2}>
-          {transaction.merchantName}
+          {merchantLabel(transaction)}
         </Text>
         {badge === null ? null : (
           <Badge variant="secondary">
@@ -161,11 +164,17 @@ function ClassificationList({ transaction, isPending, errorMessage, onReclassify
         disabled={disabled}
         onPress={onReclassify}
       >
-        <View className={cn("h-icon-tile w-icon-tile items-center justify-center rounded-md", envelopeTone(transaction.envelopeId).tile)}>
-          <Icon as={envelopeIcon(transaction.envelopeId)} size={20} className={envelopeTone(transaction.envelopeId).icon} />
-        </View>
+        {transaction.envelopeId === null ? (
+          <View className="h-icon-tile w-icon-tile items-center justify-center rounded-md bg-muted">
+            <Icon as={CircleHelp} size={20} className="text-card-foreground" />
+          </View>
+        ) : (
+          <View className={cn("h-icon-tile w-icon-tile items-center justify-center rounded-md", envelopeTone(transaction.envelopeId).tile)}>
+            <Icon as={envelopeIcon(transaction.envelopeId)} size={20} className={envelopeTone(transaction.envelopeId).icon} />
+          </View>
+        )}
         <View className="flex-1 gap-0.5">
-          <Text className="text-label text-foreground">{envelopeName(transaction.envelopeId)}</Text>
+          <Text className="text-label text-foreground">{transaction.envelopeId === null ? UNCLASSIFIED_LABEL : envelopeName(transaction.envelopeId)}</Text>
           <Text className="text-caption text-card-foreground">{transactionCategoryLabel(transaction)}</Text>
         </View>
         <Text className="text-caption text-card-foreground">{isPending ? "저장 중" : status}</Text>

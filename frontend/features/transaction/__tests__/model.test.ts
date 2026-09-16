@@ -1,12 +1,15 @@
 import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock, transactionListMock } from "@/api/mocks/transaction";
 import {
   confirmStatusLabel,
+  dutchAmountError,
   isIncoming,
+  merchantLabel,
   monthFilterLabel,
   parseTransactionFilter,
   parseTransactionId,
   reclassifyBlockedReason,
   toClassifyResult,
+  toDutchRequest,
   toPendingTransactions,
   toSubcategories,
   toTransaction,
@@ -47,14 +50,62 @@ describe("pending · subcategories · classify", () => {
     expect(toSubcategories(subcategoriesMock)[1]).toEqual({ id: 102, name: "카페", envelopeId: 1, envelopeName: "외식" });
   });
 
-  it("확정 응답의 봉투 잔액을 KRW 로 바꾼다", () => {
-    const result = toClassifyResult({ confirmStatus: "CONFIRMED", envelopeBalance: { envelopeId: 1, remaining: 132000 } });
-    expect(result).toEqual({ confirmStatus: "CONFIRMED", envelopeId: 1, remaining: "132000" });
-    expect(() => toClassifyResult({ confirmStatus: "CONFIRMED", envelopeBalance: { envelopeId: 1, remaining: 1.5 } })).toThrow(ContractMismatchError);
+  it("확정 응답(develop 2026-09-15 모양)을 화면 모델로 바꾸고 더치페이 부담액은 KRW 로 바꾼다", () => {
+    expect(toClassifyResult({ transactionId: 501, subcategoryId: 102, excludeTag: "NONE", adjustedAmount: null, confirmStatus: "CONFIRMED" })).toEqual({
+      confirmStatus: "CONFIRMED",
+      subcategoryId: 102,
+      excludeTag: "NONE",
+      adjustedAmount: null,
+    });
+    expect(toClassifyResult({ transactionId: 501, subcategoryId: null, excludeTag: "DUTCH", adjustedAmount: 15000, confirmStatus: "CONFIRMED" })).toMatchObject({
+      excludeTag: "DUTCH",
+      adjustedAmount: "15000",
+    });
+    expect(() =>
+      toClassifyResult({ transactionId: 501, subcategoryId: null, excludeTag: "DUTCH", adjustedAmount: 1.5, confirmStatus: "CONFIRMED" })
+    ).toThrow(ContractMismatchError);
+  });
+
+  it("미확정 거래는 봉투·세분류가 null 로 올 수 있고 화면은 미분류로 적는다", () => {
+    const [pending] = toPendingTransactions({
+      items: [
+        {
+          id: 9,
+          txType: "CARD",
+          merchantName: null,
+          amount: 4500,
+          txDate: "2026-09-08",
+          txTime: "14:21:00",
+          envelopeId: null,
+          subcategoryId: null,
+          subcategoryName: null,
+          confirmStatus: "PENDING",
+          excludeTag: "NONE",
+          status: "NORMAL",
+          memo: null,
+          accountId: null,
+          cardId: 7,
+          adjustedAmount: null,
+        },
+      ],
+      nextCursor: null,
+    }).items;
+
+    expect(pending).toMatchObject({ envelopeId: null, subcategoryId: null, subcategoryName: null, merchantName: null, cardId: 7, adjustedAmount: null });
+    expect(transactionCategoryLabel(pending)).toBe("미분류");
+    expect(merchantLabel(pending)).toBe("이름 없는 거래");
+  });
+
+  it("더치페이 부담액은 비거나 0이면 안 되고 결제 금액을 넘을 수 없다", () => {
+    expect(dutchAmountError("", "12000")).toContain("입력");
+    expect(dutchAmountError("0", "12000")).toContain("입력");
+    expect(dutchAmountError("12001", "12000")).toContain("넘을 수 없어요");
+    expect(dutchAmountError("12000", "12000")).toBeNull();
+    expect(toDutchRequest("6000")).toEqual({ excludeTag: "DUTCH", adjustedAmount: 6000 });
   });
 
   it("목 확정은 미확정 목록에서 그 거래를 뺀다", () => {
-    classifyTransactionMock(502, { excludeTag: "DUTCH" });
+    classifyTransactionMock(502, { excludeTag: "DUTCH", adjustedAmount: 6000 });
     expect(pendingTransactionsMock().items.map((item) => item.id)).toEqual([501]);
   });
 });

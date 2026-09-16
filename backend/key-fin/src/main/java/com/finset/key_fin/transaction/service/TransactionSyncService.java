@@ -63,6 +63,38 @@ public class TransactionSyncService {
 		saveTransactions(newTransactions, Map.of());
 	}
 
+	public void syncAccountTransactions(
+			User user,
+			Account account,
+			LocalDate startDate,
+			LocalDate endDate
+	) {
+		validatePeriod(startDate, endDate);
+		validateManagedAccount(user, account);
+		String userKey = requireFinanceUserKey(user);
+		List<Transaction> newTransactions = new ArrayList<>();
+		syncAccountTransactions(
+				user, userKey, List.of(account), startDate, endDate,
+				new HashSet<>(), newTransactions);
+		saveTransactions(newTransactions, Map.of());
+	}
+
+	public void syncCardTransactions(
+			User user,
+			Card card,
+			LocalDate startDate,
+			LocalDate endDate
+	) {
+		validatePeriod(startDate, endDate);
+		validateManagedCard(user, card);
+		String userKey = requireFinanceUserKey(user);
+		List<Transaction> newTransactions = new ArrayList<>();
+		syncCardTransactions(
+				user, userKey, List.of(card), startDate, endDate,
+				new HashSet<>(), newTransactions);
+		saveTransactions(newTransactions, Map.of());
+	}
+
 	public void syncNewlyManagedAccountHistory(
 			long userId,
 			long accountId,
@@ -206,6 +238,20 @@ public class TransactionSyncService {
 			throw new BusinessException(LinkErrorCode.ACCOUNT_NOT_FOUND);
 		}
 		return account;
+	}
+
+	private void validateManagedAccount(User user, Account account) {
+		if (user == null || account == null || !account.isManaged()
+				|| !user.getId().equals(account.getUser().getId())) {
+			throw new BusinessException(LinkErrorCode.ACCOUNT_NOT_FOUND);
+		}
+	}
+
+	private void validateManagedCard(User user, Card card) {
+		if (user == null || card == null || !card.isManaged()
+				|| !user.getId().equals(card.getUser().getId())) {
+			throw new BusinessException(LinkErrorCode.CARD_NOT_FOUND);
+		}
 	}
 
 	private String requireFinanceUserKey(User user) {

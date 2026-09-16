@@ -63,10 +63,12 @@ export function pendingTransactionsMock(): PendingTransactionsDto {
 /** 확정 응답 예시. 외식 봉투 잔액 132,000 (계약 사본 예시 값) */
 export function classifyTransactionMock(transactionId: number, request: ClassifyRequest): ClassifyResponseDto {
   classifications.set(transactionId, request);
-  const item = PENDING.find((candidate) => candidate.id === transactionId);
   return {
+    transactionId,
+    subcategoryId: "subcategoryId" in request ? request.subcategoryId : null,
+    excludeTag: "excludeTag" in request ? request.excludeTag : "NONE",
+    adjustedAmount: "adjustedAmount" in request ? request.adjustedAmount : null,
     confirmStatus: "CONFIRMED",
-    envelopeBalance: { envelopeId: "subcategoryId" in request ? Math.floor(request.subcategoryId / 100) : (item?.envelopeId ?? 1), remaining: 132000 },
   };
 }
 

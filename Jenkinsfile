@@ -115,4 +115,53 @@ pipeline {
             }
         }
     }
+
+    post {
+        always {
+            script {
+                def result = currentBuild.currentResult
+
+                def notifications = [
+                    SUCCESS: [
+                        color: 'good',
+                        title: '✅ 백엔드 테스트·배포 성공'
+                    ],
+                    FAILURE: [
+                        color: 'danger',
+                        title: '❌ 백엔드 파이프라인 실패 — 로그 확인 필요'
+                    ],
+                    UNSTABLE: [
+                        color: 'warning',
+                        title: '⚠️ 백엔드 파이프라인 불안정 — 테스트 결과 확인 필요'
+                    ],
+                    ABORTED: [
+                        color: '#808080',
+                        title: '⏹️ 백엔드 파이프라인 중단'
+                    ]
+                ]
+
+                def notification = notifications[result] ?: [
+                    color: '#808080',
+                    title: "ℹ️ 백엔드 파이프라인 종료: ${result}"
+                ]
+
+                def branch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: '확인 불가'
+                def commit = env.CI_COMMIT ?: env.GIT_COMMIT
+                def shortCommit = commit ? commit.take(8) : '확인 불가'
+
+                def message = [
+                    "**${notification.title}**",
+                    "작업: ${env.JOB_NAME} · 빌드: #${env.BUILD_NUMBER}",
+                    "브랜치: ${branch} · 커밋: ${shortCommit}",
+                    "[실행 결과](${env.BUILD_URL}) · [콘솔 로그](${env.BUILD_URL}console)"
+                ].join('\n')
+
+                mattermostSend(
+                    color: notification.color,
+                    message: message,
+                    failOnError: false
+                )
+            }
+        }
+    }
 }

@@ -1,5 +1,4 @@
-import type { UseQueryResult } from "@tanstack/react-query";
-import { Redirect, useFocusEffect, useRouter } from "expo-router";
+import { Redirect, useFocusEffect } from "expo-router";
 import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
@@ -11,18 +10,17 @@ import { Text } from "@/components/ui/text";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
-import { budgetPeriodLabel, type Budget } from "@/features/budget/model";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
-import { BudgetCard } from "@/features/home/components/BudgetCard";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
 import { HomeCalendar, HomeCalendarPanel } from "@/features/home/components/HomeCalendar";
 import { HomeCoach } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
+import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 
-/** 벽 오브젝트의 팝오버는 한 번에 하나만 연다 — 보드와 캘린더 팝오버가 겹치는 자리에 뜨기 때문이다. */
+/** 벽 오브젝트의 패널(예산 시트·캘린더 팝오버)은 한 번에 하나만 연다. */
 type RoomPanel = "board" | "calendar" | null;
 
 function HomeScreen() {
@@ -37,8 +35,10 @@ function HomeScreen() {
   // 이번 주기 예산이 확정 전이면 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12). 방·보드가 확정 예산을 기준으로 동작한다.
   if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
+  // 방이 홈의 주인공이다(사용자 결정 2026-09-15): 화면 폭 가득, 아래 예산 카드 없음. 예산은 벽의 리스트를 탭해 시트로 본다.
+  // 작은 화면에서 방이 다 안 들어갈 때만 스크롤된다.
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow pb-6" scrollEnabled={!roomZoomed}>
+    <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow justify-center pb-6" scrollEnabled={!roomZoomed}>
       {room.isPending ? <HomeSkeleton /> : null}
       {room.isError ? (
         <View className="flex-1 px-6 pt-6">
@@ -59,23 +59,21 @@ function HomeScreen() {
               onZoomedChange={setRoomZoomed}
               sceneObjects={(width) => (
                 <>
-                  <HomeWallBoard width={width} budget={budget.data} onOpen={() => setPanel("board")} />
+                  <HomeWallBoard width={width} budget={budget} onOpen={() => setPanel("board")} />
                   <HomeCalendar width={width} month={month} onOpen={() => setPanel("calendar")} />
                 </>
               )}
               panels={(width) => (
                 <>
-                  {panel === "board" ? <HomeBoardPanel width={width} budget={budget.data} onClose={() => setPanel(null)} /> : null}
                   {panel === "calendar" ? <HomeCalendarPanel width={width} month={month} onClose={() => setPanel(null)} /> : null}
                   <HomeCoach width={width} />
+                  {panel === null ? <RoomEditorOverlay /> : null}
                 </>
               )}
             />
             {attendance.isSuccess && attendance.data.granted > 0 ? <AttendanceToast granted={attendance.data.granted} /> : null}
           </View>
-          <View className="px-6 pt-6">
-            <BudgetSection budget={budget} />
-          </View>
+          <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
         </>
       ) : null}
     </ScrollView>
@@ -100,40 +98,6 @@ function useHomeAttendance(shouldCheckIn: boolean) {
   );
 
   return attendance;
-}
-
-type BudgetSectionProps = {
-  budget: UseQueryResult<Budget>;
-};
-
-/** 봉투 막대 탭 → 봉투 상세(PAGE-23) (docs/frontend-spec.md §3 홈 요소) */
-const ENVELOPE_DETAIL_ROUTE = "/budget";
-
-// 예산만 실패해도 방은 그대로 두고 이 영역에서만 재시도한다 (규칙 50 일부 실패 대응).
-function BudgetSection({ budget }: BudgetSectionProps) {
-  const router = useRouter();
-
-  if (budget.isPending) return <Skeleton className="h-40 w-full rounded-xl" />;
-  if (budget.isError) {
-    return (
-      <EmptyState
-        icon={WifiOff}
-        title="예산을 불러오지 못했어요"
-        action={{ label: "다시 시도", onPress: () => budget.refetch(), disabled: budget.isFetching }}
-        className="rounded-xl bg-card"
-      />
-    );
-  }
-  // 확정 전(PROPOSED)은 화면 위에서 확정 화면으로 보낸다. 여기까지 total 이 없는 건 모르는 상태(UNKNOWN)뿐이라 카드를 그리지 않는다.
-  if (budget.data.total === null) return null;
-  return (
-    <BudgetCard
-      total={budget.data.total}
-      envelopes={budget.data.envelopes}
-      period={budgetPeriodLabel(budget.data)}
-      onSelectEnvelope={(envelopeId) => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelopeId}`)}
-    />
-  );
 }
 
 type HomeHeaderProps = {
@@ -203,12 +167,7 @@ function HomeSkeleton() {
         </View>
         <Skeleton className="h-10 w-10 rounded-full" />
       </View>
-      <View className="px-6">
-        <Skeleton className="w-full rounded-xl" style={{ aspectRatio: ROOM_SKELETON_ASPECT_RATIO }} />
-      </View>
-      <View className="px-6 pt-6">
-        <Skeleton className="h-40 w-full rounded-xl" />
-      </View>
+      <Skeleton className="w-full rounded-xl" style={{ aspectRatio: ROOM_SKELETON_ASPECT_RATIO }} />
     </View>
   );
 }

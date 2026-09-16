@@ -5,12 +5,13 @@ import { Pressable, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { envelopeHealth, usedBarPercent, type Budget, type BudgetEnvelope, type BudgetTotal, type EnvelopeHealth } from "@/features/budget/model";
-import { getSceneScale } from "@/features/room/model";
+import { getSceneScale, popoverBelow, type SceneRect } from "@/features/room/model";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-// Pencil home/p0/board-open BoardPopover (HQKYe): 보드 에셋 아래 씬 단위 (12,100) 폭 250, bg-card · radius lg · 봉투 7행 + 링크.
-export const BOARD_POPOVER_SCENE_RECT = { x: 12, y: 100, width: 250 } as const;
+// Pencil home/p0/board-open BoardPopover (HQKYe): 보드 에셋 아래 씬 단위 폭 250, bg-card · radius lg · 봉투 7행 + 링크.
+// 자리는 시안의 (12,100) 고정값 대신 보드 스프라이트 사각형 아래로 계산한다 — 방 꾸미기에서 보드를 옮겨도 따라간다(2026-09-15).
+export const BOARD_POPOVER_WIDTH = 250;
 export const BOARD_CLOSE_LABEL = "보드 닫기";
 export const BOARD_LINK_LABEL = "예산 탭에서 자세히";
 const BUDGET_ROUTE = "/budget";
@@ -24,15 +25,18 @@ const FILL_CLASS: Record<EnvelopeHealth, string> = {
 
 type BoardPopoverProps = {
   width: number;
+  /** 팝오버가 붙는 보드 스프라이트의 씬 사각형 */
+  below: SceneRect;
   budget: Budget;
   /** "9월 1일~30일" */
   periodLabel: string;
   onClose: () => void;
 };
 
-function BoardPopover({ width, budget, periodLabel, onClose }: BoardPopoverProps) {
+function BoardPopover({ width, below, budget, periodLabel, onClose }: BoardPopoverProps) {
   const router = useRouter();
   const scale = getSceneScale(width);
+  const origin = popoverBelow(below, BOARD_POPOVER_WIDTH);
   const summary = budget.total ? totalSummary(budget.total) : "예산 미설정";
 
   return (
@@ -40,7 +44,7 @@ function BoardPopover({ width, budget, periodLabel, onClose }: BoardPopoverProps
       <Pressable className="absolute inset-0" accessibilityRole="button" accessibilityLabel={BOARD_CLOSE_LABEL} onPress={onClose} />
       <View
         className="absolute gap-2 rounded-lg border border-border bg-card p-3.5"
-        style={{ left: BOARD_POPOVER_SCENE_RECT.x * scale, top: BOARD_POPOVER_SCENE_RECT.y * scale, width: BOARD_POPOVER_SCENE_RECT.width * scale }}
+        style={{ left: origin.x * scale, top: origin.y * scale, width: BOARD_POPOVER_WIDTH * scale }}
         accessibilityLiveRegion="polite"
       >
         <View className="flex-row items-center justify-between">

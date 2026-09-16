@@ -4,7 +4,6 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import { RoomCameraProvider, useRoomCameraControl } from "@/features/room/camera";
-import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { RoomSceneLoader } from "@/features/room/components/RoomSceneLoader";
 import { selectIsEditing, useRoomStore } from "@/features/room/store";
 
@@ -24,8 +23,9 @@ type RoomViewProps = {
 };
 
 /**
- * 방 씬(캔버스)과 편집 컨트롤, 방 오브젝트·UI 오버레이를 겹쳐 놓은 홈용 뷰.
- * 핀치·드래그로 씬을 확대·이동하며, 편집 모드에서는 가구 드래그와 겹치지 않도록 카메라를 잠근다.
+ * 방 씬(캔버스)과 방 오브젝트·UI 오버레이를 겹쳐 놓은 뷰. 홈(CharacterRoom)과 방 꾸미기 화면(RoomEditScreen)이 같이 쓴다.
+ * 핀치·드래그로 씬을 확대·이동하며, 편집 모드에서는 오브젝트 드래그와 겹치지 않도록 카메라를 잠근다.
+ * 편집 진입 버튼·취소·완료는 여기 없다 — 홈은 RoomEditorOverlay, 편집 화면은 자기 헤더·하단 버튼이 맡는다(2026-09-15).
  */
 function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, onZoomedChange }: RoomViewProps) {
   const [width, setWidth] = React.useState(0);
@@ -55,7 +55,6 @@ function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, on
             </Animated.View>
           </View>
         ) : null}
-        <RoomEditorOverlay />
         {panels && width > 0 ? (
           <View className="absolute inset-0" pointerEvents="box-none">
             {panels(width)}

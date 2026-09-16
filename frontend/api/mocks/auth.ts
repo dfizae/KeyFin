@@ -16,6 +16,8 @@ export const authUserMock: AuthUser = { id: 1, name: "김재영" };
  */
 export const MOCK_PASSWORD = "qwer1234@";
 export const MOCK_TAKEN_EMAIL = "qwer@qwer.com";
+/** 목 모드 로그인 화면에 미리 채워 두는 계정(어떤 이메일이든 MOCK_PASSWORD 면 통과한다). 개발 빌드 + auth 목일 때만 쓴다 */
+export const MOCK_LOGIN_EMAIL = "test@qwer.com";
 
 type MockAccount = { email: string; password: string; user: AuthUser };
 

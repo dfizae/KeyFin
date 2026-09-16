@@ -136,22 +136,14 @@ export function useClassifyTransaction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ transactionId, request }: ClassifyVariables) => classifyTransaction({ transactionId, request }),
-    onSuccess: (result, { transactionId, txDate }) => {
+    // 확정 응답에 봉투 잔액이 없어(develop 2026-09-15) 즉시 반영은 못 하고, 현재 주기 거래면 예산을 다시 받는다.
+    onSuccess: (_result, { transactionId, txDate }) => {
       queryClient.setQueryData<PendingTransactions>(transactionKeys.pending(), (old) =>
         old ? { ...old, items: old.items.filter((item) => item.id !== transactionId) } : old
       );
-      queryClient.setQueryData<Budget>(budgetKeys.current(), (old) =>
-        old && isWithinPeriod(old, txDate)
-          ? {
-              ...old,
-              envelopes: old.envelopes.map((envelope) =>
-                envelope.envelopeId === result.envelopeId ? { ...envelope, remaining: result.remaining } : envelope
-              ),
-            }
-          : old
-      );
       void queryClient.invalidateQueries({ queryKey: transactionKeys.all });
-      void queryClient.invalidateQueries({ queryKey: budgetKeys.current() });
+      const budget = queryClient.getQueryData<Budget>(budgetKeys.current());
+      if (!budget || isWithinPeriod(budget, txDate)) void queryClient.invalidateQueries({ queryKey: budgetKeys.current() });
       void queryClient.invalidateQueries({ queryKey: roomKeys.all });
     },
   });
