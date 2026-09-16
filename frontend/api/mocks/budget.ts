@@ -121,6 +121,11 @@ export function confirmBudgetMock(budgetId: number, request: ConfirmBudgetReques
   return { budgetId, month: mockPeriod(todayKey).month, status: "CONFIRMED" };
 }
 
+/** 온보딩을 마친 사용자로 시작할 때: 이번 주기 예산이 제안액 그대로 확정된 상태 */
+export function seedConfirmedBudgetMock(): void {
+  currentBudget = { status: "CONFIRMED" };
+}
+
 /** 테스트·개발 재시작용 */
 export function resetBudgetMocks(): void {
   currentBudget = null;

@@ -1,9 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { seedOnboardedMocks } from "@/api/mocks/onboarding";
 
 import { login, logout, signup } from "@/features/auth/api/auth.api";
 import { useAuthStore } from "@/features/auth/store";
 import type { LoginRequest, SignupRequest } from "@/features/auth/model";
-import { clearTokens, loadTermsAgreed, saveSessionUser, saveTokens } from "@/lib/session-storage";
+import { clearTokens, loadOnboardingDone, loadTermsAgreed, saveSessionUser, saveTokens } from "@/lib/session-storage";
 
 /** 로그인 성공 시 토큰을 저장소에, 사용자만 스토어에 둔다 (규칙 80: 토큰은 스토어·로그에 남기지 않는다). */
 export function useLogin() {
@@ -14,7 +15,9 @@ export function useLogin() {
     onSuccess: async (session) => {
       await saveTokens({ accessToken: session.accessToken, refreshToken: session.refreshToken });
       await saveSessionUser(session.user);
-      signIn(session.user, await loadTermsAgreed(session.user.id));
+      const onboardingDone = await loadOnboardingDone(session.user.id);
+      if (onboardingDone) seedOnboardedMocks();
+      signIn(session.user, await loadTermsAgreed(session.user.id), onboardingDone);
     },
   });
 }
