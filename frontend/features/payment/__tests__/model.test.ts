@@ -1,6 +1,8 @@
+import { ApiError } from "@/api/error";
 import {
   createFixedExpenseMock,
   deleteFixedExpenseMock,
+  fixedExpenseListMock,
   paymentCalendarEmptyMock,
   paymentCalendarMock,
   resetPaymentMocks,
@@ -8,27 +10,81 @@ import {
 } from "@/api/mocks/payment";
 import { approveTransferMock, resetTransferMocks, transferListMock } from "@/api/mocks/transfer";
 import {
+  EMPTY_FIXED_EXPENSE_FORM,
   canApproveTransfer,
+  canOpenEntry,
+  findFixedExpense,
   findTransfer,
   fixedExpenseFormError,
   groupEntriesByDate,
+  isEditableEntry,
   parseCalendarMonth,
   parseFixedExpenseRoute,
   parseTransferId,
+  paymentDayLabel,
+  preparationLabel,
+  splitFixedExpenses,
+  toFixedExpenseForm,
   toFixedExpenseRequest,
+  toFixedExpenses,
   toPaymentCalendar,
   toTransfers,
   transferStatusLabel,
   upcomingEntries,
   upcomingEntry,
+  type CalendarItemDto,
+  type FixedExpenseDto,
   type FixedExpenseForm,
+  type FixedExpenseRequest,
 } from "@/features/payment/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 const MONTH = "202609";
 
+/** 계약 예시(Notion 결제 통합 일정)의 FIXED 항목. prepared·shortage 는 FR-PAY-02 전이라 null */
+function item(overrides: Partial<CalendarItemDto> = {}): CalendarItemDto {
+  return {
+    type: "FIXED",
+    fixedExpenseId: 7,
+    name: "월세",
+    expenseType: "RENT",
+    amount: 550000,
+    estimated: false,
+    withdrawalAccountId: 3,
+    prepared: null,
+    shortage: null,
+    ...overrides,
+  };
+}
+
+function fixedExpenseDto(overrides: Partial<FixedExpenseDto> = {}): FixedExpenseDto {
+  return {
+    id: 7,
+    name: "월세",
+    expenseType: "RENT",
+    amount: 550000,
+    isVariable: false,
+    paymentDay: 15,
+    withdrawalAccountId: 3,
+    synced: false,
+    ...overrides,
+  };
+}
+
+/** 목이 던진 ApiError 의 code. 안 던지면 null */
+function errorCodeOf(run: () => unknown): string | null {
+  try {
+    run();
+    return null;
+  } catch (error) {
+    return error instanceof ApiError ? error.code : "NOT_API_ERROR";
+  }
+}
+
 describe("toPaymentCalendar", () => {
-  it("날짜별 항목을 한 줄씩 펴고 금액을 KRW 로 바꾼다", () => {
+  afterEach(() => resetPaymentMocks());
+
+  it("날짜별 항목을 한 줄씩 펴고 금액·유형·준비 상태를 화면 모델로 바꾼다", () => {
     const calendar = toPaymentCalendar(paymentCalendarMock(MONTH));
 
     expect(calendar.entries).toHaveLength(3);
@@ -36,31 +92,56 @@ describe("toPaymentCalendar", () => {
       date: "2026-09-15",
       day: 15,
       type: "FIXED",
+      expenseType: "RENT",
       name: "월세",
       amount: "550000",
       estimated: false,
-      prepared: false,
-      shortage: "230000",
+      withdrawalAccountId: 1,
+      preparation: { status: "SHORTAGE", shortage: "230000" },
     });
-    expect(calendar.entries[2]).toMatchObject({ day: 25, type: "CARD_BILL", estimated: true, prepared: true, shortage: "0" });
+    expect(calendar.entries[1]).toMatchObject({
+      type: "CARD_SUBSCRIPTION",
+      expenseType: "SUBSCRIPTION",
+      withdrawalAccountId: null,
+      preparation: { status: "PREPARED" },
+    });
+    expect(calendar.entries[2]).toMatchObject({ day: 25, type: "FIXED", expenseType: "UTILITY", estimated: true });
+    expect(calendar.shortageCount).toBe(1);
+    expect(calendar.preparationKnown).toBe(true);
   });
 
-  it("prepared=false 인 건수를 센다", () => {
-    expect(toPaymentCalendar(paymentCalendarMock(MONTH)).shortageCount).toBe(1);
-    expect(toPaymentCalendar(paymentCalendarEmptyMock).shortageCount).toBe(0);
-  });
-
-  it("날짜 순으로 정렬하고 같은 날 여러 건도 각각 키를 갖는다", () => {
+  it("필요 금액 계산 전(prepared·shortage 가 null)이면 준비 상태를 null 로 두고 부족으로 세지 않는다", () => {
     const calendar = toPaymentCalendar({
+      month: MONTH,
       days: [
-        { date: "2026-09-20", items: [{ type: "FIXED", name: "넷플릭스", amount: 17000, prepared: true, shortage: 0 }] },
         {
           date: "2026-09-15",
           items: [
-            { type: "FIXED", name: "월세", amount: 550000, prepared: false, shortage: 230000 },
-            { type: "FIXED", name: "관리비", amount: 90000, prepared: true, shortage: 0 },
+            item(),
+            item({ type: "CARD_SUBSCRIPTION", fixedExpenseId: 8, name: "FLO", expenseType: "SUBSCRIPTION", amount: 8900, withdrawalAccountId: null }),
           ],
         },
+      ],
+    });
+
+    expect(calendar.entries.map((entry) => entry.preparation)).toEqual([null, null]);
+    expect(calendar.shortageCount).toBe(0);
+    expect(calendar.preparationKnown).toBe(false);
+    expect(toPaymentCalendar(paymentCalendarEmptyMock)).toEqual({ entries: [], shortageCount: 0, preparationKnown: false });
+  });
+
+  it("준비 상태 문구는 준비됨·부족 금액이고 모르면 null 이다", () => {
+    expect(preparationLabel({ status: "PREPARED" })).toBe("준비됨");
+    expect(preparationLabel({ status: "SHORTAGE", shortage: "230000" })).toBe("부족 230,000원");
+    expect(preparationLabel(null)).toBeNull();
+  });
+
+  it("날짜 순으로 정렬하고 같은 날은 서버 순서를 유지하며 각각 키를 갖는다", () => {
+    const calendar = toPaymentCalendar({
+      month: MONTH,
+      days: [
+        { date: "2026-09-20", items: [item({ name: "넷플릭스", amount: 17000 })] },
+        { date: "2026-09-15", items: [item(), item({ name: "관리비", amount: 90000 })] },
       ],
     });
 
@@ -68,21 +149,47 @@ describe("toPaymentCalendar", () => {
     expect(new Set(calendar.entries.map((entry) => entry.key)).size).toBe(3);
   });
 
-  it("계약에 없는 type 은 UNKNOWN 으로 흡수한다", () => {
+  it("계약에 없는 type 은 UNKNOWN, 모르는 expenseType 은 null 로 흡수한다", () => {
     const calendar = toPaymentCalendar({
-      days: [{ date: "2026-09-15", items: [{ type: "LOAN", name: "대출 상환", amount: 300000, prepared: true, shortage: 0 }] }],
+      month: MONTH,
+      days: [{ date: "2026-09-15", items: [item({ type: "LOAN_AUTO", expenseType: "INSURANCE" })] }],
     });
 
-    expect(calendar.entries[0].type).toBe("UNKNOWN");
+    expect(calendar.entries[0]).toMatchObject({ type: "UNKNOWN", expenseType: null });
   });
 
-  it("날짜 형식과 금액이 계약과 다르면 ContractMismatchError 를 던진다", () => {
-    expect(() =>
-      toPaymentCalendar({ days: [{ date: "2026/09/15", items: [{ type: "FIXED", name: "월세", amount: 1, prepared: true, shortage: 0 }] }] })
-    ).toThrow(ContractMismatchError);
-    expect(() =>
-      toPaymentCalendar({ days: [{ date: "2026-09-15", items: [{ type: "FIXED", name: "월세", amount: 1.5, prepared: true, shortage: 0 }] }] })
-    ).toThrow(ContractMismatchError);
+  it("날짜 형식·금액이 계약과 다르거나 부족인데 부족 금액이 없으면 ContractMismatchError 를 던진다", () => {
+    const withItem = (date: string, overrides: Partial<CalendarItemDto>) => () =>
+      toPaymentCalendar({ month: MONTH, days: [{ date, items: [item(overrides)] }] });
+
+    expect(withItem("2026/09/15", {})).toThrow(ContractMismatchError);
+    expect(withItem("2026-09-15", { amount: 1.5 })).toThrow(ContractMismatchError);
+    expect(withItem("2026-09-15", { prepared: false, shortage: null })).toThrow(ContractMismatchError);
+  });
+});
+
+describe("isEditableEntry · canOpenEntry", () => {
+  it("직접 등록한 고정지출만 수정할 수 있고, 동기화 구독은 읽기 전용으로 열리며, 카드 청구는 열 곳이 없다", () => {
+    const [fixed, subscription, bill] = toPaymentCalendar({
+      month: MONTH,
+      days: [
+        {
+          date: "2026-09-15",
+          items: [
+            item(),
+            item({ type: "CARD_SUBSCRIPTION", fixedExpenseId: 8, withdrawalAccountId: null }),
+            item({ type: "CARD_BILL", fixedExpenseId: null, expenseType: "CARD_BILL", withdrawalAccountId: null }),
+          ],
+        },
+      ],
+    }).entries;
+
+    expect(isEditableEntry(fixed)).toBe(true);
+    expect(isEditableEntry(subscription)).toBe(false);
+    expect(isEditableEntry(bill)).toBe(false);
+    expect(canOpenEntry(fixed)).toBe(true);
+    expect(canOpenEntry(subscription)).toBe(true);
+    expect(canOpenEntry(bill)).toBe(false);
   });
 });
 
@@ -115,12 +222,10 @@ describe("upcomingEntries", () => {
 describe("groupEntriesByDate", () => {
   it("같은 날짜의 항목을 한 묶음으로 만든다", () => {
     const calendar = toPaymentCalendar({
+      month: MONTH,
       days: [
-        { date: "2026-09-15", items: [
-          { type: "FIXED", fixedExpenseId: 11, name: "월세", amount: 550000, prepared: true, shortage: 0 },
-          { type: "FIXED", fixedExpenseId: 12, name: "관리비", amount: 90000, prepared: true, shortage: 0 },
-        ] },
-        { date: "2026-09-20", items: [{ type: "FIXED", fixedExpenseId: 13, name: "넷플릭스", amount: 17000, prepared: true, shortage: 0 }] },
+        { date: "2026-09-15", items: [item({ fixedExpenseId: 11 }), item({ fixedExpenseId: 12, name: "관리비" })] },
+        { date: "2026-09-20", items: [item({ fixedExpenseId: 13, name: "넷플릭스" })] },
       ],
     });
 
@@ -133,29 +238,97 @@ describe("groupEntriesByDate", () => {
   });
 });
 
-describe("고정지출 폼 (fixedExpenseFormError · toFixedExpenseRequest)", () => {
+describe("고정지출 목록 (toFixedExpenses · splitFixedExpenses · paymentDayLabel)", () => {
+  it("금액·유형을 화면 모델로 바꾸고, 자동 감지 카드 청구의 금액 null 과 모르는 유형은 null 로 둔다", () => {
+    const expenses = toFixedExpenses([
+      fixedExpenseDto(),
+      fixedExpenseDto({ id: 8, name: "FLO 개인", expenseType: "SUBSCRIPTION", amount: 7900, withdrawalAccountId: null, synced: true }),
+      fixedExpenseDto({ id: 9, name: "카드값", expenseType: "CARD_BILL", amount: null }),
+      fixedExpenseDto({ id: 10, expenseType: "INSURANCE" }),
+    ]);
+
+    expect(expenses[0]).toEqual({
+      id: 7,
+      name: "월세",
+      expenseType: "RENT",
+      amount: "550000",
+      isVariable: false,
+      paymentDay: 15,
+      withdrawalAccountId: 3,
+      synced: false,
+    });
+    expect(expenses[1]).toMatchObject({ synced: true, withdrawalAccountId: null });
+    expect(expenses[2].amount).toBeNull();
+    expect(expenses[3].expenseType).toBeNull();
+    expect(findFixedExpense(expenses, 8)?.name).toBe("FLO 개인");
+    expect(findFixedExpense(expenses, 99)).toBeNull();
+  });
+
+  it("출금일이 1~31 밖이면 ContractMismatchError 를 던진다", () => {
+    expect(() => toFixedExpenses([fixedExpenseDto({ paymentDay: 32 })])).toThrow(ContractMismatchError);
+  });
+
+  it("직접 등록한 항목과 동기화 항목을 서버 순서대로 나눈다", () => {
+    const expenses = toFixedExpenses([
+      fixedExpenseDto({ id: 7 }),
+      fixedExpenseDto({ id: 8, synced: true }),
+      fixedExpenseDto({ id: 9 }),
+    ]);
+
+    const { manual, synced } = splitFixedExpenses(expenses);
+    expect(manual.map((expense) => expense.id)).toEqual([7, 9]);
+    expect(synced.map((expense) => expense.id)).toEqual([8]);
+  });
+
+  it("29~31일은 없는 달에 말일로 나간다고 적는다", () => {
+    expect(paymentDayLabel(15)).toBe("매달 15일");
+    expect(paymentDayLabel(31)).toBe("매달 31일 (없는 달은 말일)");
+  });
+});
+
+describe("고정지출 폼 (fixedExpenseFormError · toFixedExpenseRequest · toFixedExpenseForm)", () => {
   const valid: FixedExpenseForm = { name: " 월세 ", expenseType: "RENT", amount: "550000", paymentDay: "15", withdrawalAccountId: 1 };
 
-  it("빈 이름·0원·범위 밖 출금일·계좌 미선택을 막는다", () => {
+  it("빈 이름·50자 초과·0원·범위 밖 출금일·계좌 미선택을 막는다", () => {
     expect(fixedExpenseFormError(valid)).toBeNull();
     expect(fixedExpenseFormError({ ...valid, name: "  " })).toContain("이름");
+    expect(fixedExpenseFormError({ ...valid, name: "가".repeat(50) })).toBeNull();
+    expect(fixedExpenseFormError({ ...valid, name: "가".repeat(51) })).toContain("50자");
     expect(fixedExpenseFormError({ ...valid, amount: "" })).toContain("금액");
     expect(fixedExpenseFormError({ ...valid, amount: "0" })).toContain("금액");
     expect(fixedExpenseFormError({ ...valid, paymentDay: "0" })).toContain("출금일");
     expect(fixedExpenseFormError({ ...valid, paymentDay: "32" })).toContain("출금일");
     expect(fixedExpenseFormError({ ...valid, withdrawalAccountId: null })).toContain("계좌");
+    expect(fixedExpenseFormError(EMPTY_FIXED_EXPENSE_FORM)).not.toBeNull();
   });
 
-  it("이름을 다듬고 금액·출금일을 숫자로 바꾸며 공과금만 isVariable 을 붙인다", () => {
+  it("이름을 다듬고 금액·출금일을 숫자로 바꾸며, 전체 교체라 isVariable 을 늘 명시한다(공과금만 true)", () => {
     expect(toFixedExpenseRequest(valid)).toEqual({
       name: "월세",
       expenseType: "RENT",
       amount: 550000,
+      isVariable: false,
       paymentDay: 15,
       withdrawalAccountId: 1,
     });
     expect(toFixedExpenseRequest({ ...valid, expenseType: "UTILITY" })).toMatchObject({ expenseType: "UTILITY", isVariable: true });
     expect(() => toFixedExpenseRequest({ ...valid, amount: "" })).toThrow();
+  });
+
+  it("수정 폼은 말일 보정 전 출금일을 그대로 채우고, 직접 등록할 수 없는 유형은 기본 유형으로 바꾼다", () => {
+    const [monthEnd, bill] = toFixedExpenses([
+      fixedExpenseDto({ paymentDay: 31, expenseType: "UTILITY", isVariable: true }),
+      fixedExpenseDto({ id: 9, expenseType: "CARD_BILL", amount: null }),
+    ]);
+
+    expect(toFixedExpenseForm(monthEnd)).toEqual({
+      name: "월세",
+      expenseType: "UTILITY",
+      amount: "550000",
+      paymentDay: "31",
+      withdrawalAccountId: 3,
+    });
+    expect(toFixedExpenseForm(bill)).toMatchObject({ expenseType: "SUBSCRIPTION", amount: "" });
   });
 });
 
@@ -175,25 +348,53 @@ describe("parseFixedExpenseRoute · parseCalendarMonth", () => {
   });
 });
 
-describe("고정지출 목 — 등록·수정·삭제가 캘린더에 반영된다", () => {
+describe("고정지출 목 — 서버처럼 반영하고 거절한다", () => {
   afterEach(() => resetPaymentMocks());
 
-  it("등록하면 그 달 캘린더에 새 항목이 생긴다", () => {
-    const { id } = createFixedExpenseMock({ name: "헬스장", expenseType: "SUBSCRIPTION", amount: 60000, paymentDay: 5, withdrawalAccountId: 1 });
-    const calendar = toPaymentCalendar(paymentCalendarMock(MONTH));
-    const added = calendar.entries.find((entry) => entry.fixedExpenseId === id);
+  const gym: FixedExpenseRequest = {
+    name: "헬스장",
+    expenseType: "SUBSCRIPTION",
+    amount: 60000,
+    isVariable: false,
+    paymentDay: 5,
+    withdrawalAccountId: 1,
+  };
 
-    expect(added).toMatchObject({ name: "헬스장", amount: "60000", day: 5, prepared: true });
+  it("등록하면 목록 끝과 그 달 캘린더에 새 항목이 생긴다", () => {
+    const { id } = createFixedExpenseMock(gym);
+    const calendar = toPaymentCalendar(paymentCalendarMock(MONTH));
+
+    expect(calendar.entries.find((entry) => entry.fixedExpenseId === id)).toMatchObject({ name: "헬스장", amount: "60000", day: 5 });
     expect(calendar.entries[0].day).toBe(5);
+    expect(fixedExpenseListMock().at(-1)).toMatchObject({ id, name: "헬스장", synced: false });
   });
 
-  it("수정은 이름·금액·출금일을 바꾸고 삭제는 목록에서 뺀다", () => {
-    updateFixedExpenseMock(11, { name: "월세(인상)", expenseType: "RENT", amount: 600000, paymentDay: 16, withdrawalAccountId: 1 });
+  it("수정은 본문 전체로 바꾸고 삭제는 목록·캘린더에서 뺀다", () => {
+    updateFixedExpenseMock(11, { ...gym, name: "월세(인상)", expenseType: "RENT", amount: 600000, paymentDay: 16 });
     const updated = toPaymentCalendar(paymentCalendarMock(MONTH)).entries.find((entry) => entry.fixedExpenseId === 11);
-    expect(updated).toMatchObject({ name: "월세(인상)", amount: "600000", day: 16 });
+    expect(updated).toMatchObject({ name: "월세(인상)", expenseType: "RENT", amount: "600000", day: 16 });
 
     deleteFixedExpenseMock(11);
     expect(toPaymentCalendar(paymentCalendarMock(MONTH)).entries.some((entry) => entry.fixedExpenseId === 11)).toBe(false);
+    expect(fixedExpenseListMock().some((expense) => expense.id === 11)).toBe(false);
+  });
+
+  it("동기화 항목은 409 PAY_002, 없는 항목은 404 PAY_001, 같은 내용은 409 PAY_003, 카드 청구 등록은 400 PAY_004", () => {
+    expect(errorCodeOf(() => updateFixedExpenseMock(12, gym))).toBe("PAY_002");
+    expect(errorCodeOf(() => deleteFixedExpenseMock(12))).toBe("PAY_002");
+    expect(errorCodeOf(() => deleteFixedExpenseMock(999))).toBe("PAY_001");
+
+    createFixedExpenseMock(gym);
+    expect(errorCodeOf(() => createFixedExpenseMock(gym))).toBe("PAY_003");
+    expect(errorCodeOf(() => createFixedExpenseMock({ ...gym, expenseType: "CARD_BILL" } as unknown as FixedExpenseRequest))).toBe("PAY_004");
+  });
+
+  it("출금일이 없는 달은 캘린더에서 말일로 보정하고 목록은 저장값을 그대로 준다", () => {
+    const { id } = createFixedExpenseMock({ ...gym, paymentDay: 31 });
+
+    const february = toPaymentCalendar(paymentCalendarMock("202602"));
+    expect(february.entries.find((entry) => entry.fixedExpenseId === id)?.date).toBe("2026-02-28");
+    expect(fixedExpenseListMock().find((expense) => expense.id === id)?.paymentDay).toBe(31);
   });
 });
 

@@ -1,16 +1,20 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { accountKeys } from "@/features/account/api/queries";
+import { isStaleAccountError } from "@/features/account/errors";
 import {
   approveTransfer,
   createFixedExpense,
   deleteFixedExpense,
+  getFixedExpenses,
   getPaymentCalendar,
   getTransfers,
   postponeTransfer,
   updateFixedExpense,
   type TransferListParams,
 } from "@/features/payment/api/payment.api";
-import type { CalendarEntry, PaymentCalendar } from "@/features/payment/model";
+import { isStaleFixedExpenseError } from "@/features/payment/errors";
+import { findFixedExpense } from "@/features/payment/model";
 import { roomKeys } from "@/features/room/api/queries";
 
 export const paymentKeys = {
@@ -18,6 +22,8 @@ export const paymentKeys = {
   /** 고정지출·이체 변경 시 달 구분 없이 무효화하는 키 (docs/api-guide.md §무효화) */
   calendar: () => [...paymentKeys.all, "calendar"] as const,
   calendarMonth: (month: string) => [...paymentKeys.calendar(), month] as const,
+  /** 활성 고정지출 목록(GET /fixed-expenses). 관리 화면과 수정 화면이 같이 쓴다 */
+  fixedExpenses: () => [...paymentKeys.all, "fixed-expenses"] as const,
   /** 이체 제안·이력. 승인·연기 뒤 달 구분 없이 무효화한다 */
   transfers: () => [...paymentKeys.all, "transfers"] as const,
   transferList: (params: TransferListParams) => [...paymentKeys.transfers(), params] as const,
@@ -35,17 +41,50 @@ export function usePaymentCalendar(month: string) {
   return useQuery(paymentCalendarQueryOptions(month));
 }
 
+export function fixedExpensesQueryOptions() {
+  return queryOptions({
+    queryKey: paymentKeys.fixedExpenses(),
+    queryFn: ({ signal }) => getFixedExpenses(signal),
+    staleTime: 30_000,
+  });
+}
+
+/** 고정지출 관리 화면의 목록 */
+export function useFixedExpenses() {
+  return useQuery(fixedExpensesQueryOptions());
+}
+
 /**
- * 고정지출을 바꾸면 달 구분 없이 캘린더를 무효화한다(출금일을 옮기면 다른 달로 갈 수 있다).
- * 방 캘린더 에셋도 같은 조회를 쓰므로 방 쿼리까지 함께 무효화한다 (docs/api-guide.md §5).
+ * 고정지출 수정 화면(PAGE-26)의 한 건. 단건 조회 API 가 없어 목록 조회에서 고른다(관리 화면과 캐시를 나눠 쓴다).
+ * 목록에 없으면(이미 삭제됨·잘못된 주소) data 가 null 이다.
+ */
+export function useFixedExpense(fixedExpenseId: number | null) {
+  return useQuery({
+    ...fixedExpensesQueryOptions(),
+    enabled: fixedExpenseId !== null,
+    select: (expenses) => (fixedExpenseId === null ? null : findFixedExpense(expenses, fixedExpenseId)),
+  });
+}
+
+/**
+ * 고정지출을 바꾸면 목록과, 달 구분 없이 캘린더를 무효화한다(출금일을 옮기면 다른 달로 갈 수 있다).
+ * 이체 제안이 고정지출을 참조하고 방 캘린더 에셋도 캘린더 조회를 쓰므로 둘 다 함께 무효화한다 (docs/api-guide.md §5).
+ * 이미 삭제됐거나 동기화 항목이라 거절되면(PAY_001·002) 화면이 낡은 것이라 같은 범위를, 계좌 오류(ACCOUNT_001·002)면 계좌 목록을 다시 받는다.
  */
 function useFixedExpenseMutation<TVariables>(mutationFn: (variables: TVariables) => Promise<unknown>) {
   const queryClient = useQueryClient();
+  const refreshSchedules = () => {
+    void queryClient.invalidateQueries({ queryKey: paymentKeys.fixedExpenses() });
+    void queryClient.invalidateQueries({ queryKey: paymentKeys.calendar() });
+    void queryClient.invalidateQueries({ queryKey: paymentKeys.transfers() });
+    void queryClient.invalidateQueries({ queryKey: roomKeys.all });
+  };
   return useMutation({
     mutationFn,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: paymentKeys.calendar() });
-      void queryClient.invalidateQueries({ queryKey: roomKeys.all });
+    onSuccess: refreshSchedules,
+    onError: (error) => {
+      if (isStaleFixedExpenseError(error)) refreshSchedules();
+      if (isStaleAccountError(error)) void queryClient.invalidateQueries({ queryKey: accountKeys.all });
     },
   });
 }
@@ -60,23 +99,6 @@ export function useUpdateFixedExpense() {
 
 export function useDeleteFixedExpense() {
   return useFixedExpenseMutation(deleteFixedExpense);
-}
-
-/**
- * 고정지출 수정 화면(PAGE-26)의 폼 초기값. 단건 조회 API 가 계약에 없어(docs/api-contract.md PAYMENT)
- * 캘린더 캐시에서 그 고정지출의 항목을 찾는다. 캐시에 없으면(딥링크·앱 재시작) null 이고 화면이 캘린더로 보낸다.
- * 폼을 처음 채울 때만 읽으므로 캐시를 구독하지 않는다. (TBD: GET /fixed-expenses/{id} 를 백엔드에 요청)
- */
-export function useCachedFixedExpense(fixedExpenseId: number | null): CalendarEntry | null {
-  const cache = useQueryClient().getQueryCache();
-  if (fixedExpenseId === null) return null;
-
-  for (const query of cache.findAll({ queryKey: paymentKeys.calendar() })) {
-    const calendar = query.state.data as PaymentCalendar | undefined;
-    const found = calendar?.entries.find((entry) => entry.fixedExpenseId === fixedExpenseId);
-    if (found !== undefined) return found;
-  }
-  return null;
 }
 
 export function transferListQueryOptions(params: TransferListParams) {

@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { CalendarClock, CreditCard, Menu, Receipt, WalletMinimal } from "lucide-react-native";
+import { CreditCard, Menu, Receipt, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -14,6 +14,7 @@ import { useLinkCandidates } from "@/features/link/api/queries";
 import { BankLogoTile } from "@/features/link/components/BankLogoTile";
 import { CandidatesErrorState } from "@/features/link/components/CandidatesErrorState";
 import { usePaymentCalendar } from "@/features/payment/api/queries";
+import { calendarEntryIcon } from "@/features/payment/catalog";
 import { upcomingEntries, type CalendarEntry } from "@/features/payment/model";
 import { RECENT_TRANSACTION_COUNT, useRecentTransactions } from "@/features/transaction/api/queries";
 import { TransactionRow } from "@/features/transaction/components/TransactionRow";
@@ -239,7 +240,7 @@ function PaymentRow({ entry }: { entry: CalendarEntry }) {
     <View className="flex-row items-center justify-between gap-3 py-2" accessible accessibilityLabel={`${entry.name} ${date} ${amount}`}>
       <View className="flex-1 flex-row items-center gap-3">
         <View className="h-9 w-9 items-center justify-center rounded-full bg-accent">
-          <Icon as={entry.type === "CARD_BILL" ? CreditCard : CalendarClock} size={18} className="text-primary" />
+          <Icon as={calendarEntryIcon(entry)} size={18} className="text-primary" />
         </View>
         <View className="flex-1 gap-0.5">
           <Text className="text-h3 text-foreground" numberOfLines={1}>
