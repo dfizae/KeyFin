@@ -44,6 +44,9 @@ function rateOf(remaining: number, confirmed: number): number | null {
   return confirmed === 0 ? null : Math.floor((remaining * 100) / confirmed);
 }
 
+/** 비상금은 아직 설정 화면(P1)이 없어 미설정으로 둔다 — amount 0 이면 서버도 미설정으로 본다 */
+const EMERGENCY_UNSET = { amount: 0, spent: 0, remaining: 0 };
+
 /** 확정 예산 응답 예시(노션 예산·잔액 조회 CONFIRMED). amounts 가 없으면 제안액을 그대로 확정한 것으로 본다 */
 export function budgetConfirmedMock(todayKey: string, amounts?: Record<number, number>): BudgetDto {
   const envelopes: BudgetEnvelopeDto[] = ENVELOPES.map(({ envelopeId, name, proposedAmount, spent }) => {
@@ -59,6 +62,7 @@ export function budgetConfirmedMock(todayKey: string, amounts?: Record<number, n
     status: "CONFIRMED",
     total: { confirmed, spent, remaining: confirmed - spent, remainingRate: rateOf(confirmed - spent, confirmed) },
     envelopes,
+    emergency: EMERGENCY_UNSET,
   };
 }
 
@@ -78,6 +82,7 @@ export function budgetProposedMock(todayKey: string): BudgetDto {
       remaining: null,
       remainingRate: null,
     })),
+    emergency: EMERGENCY_UNSET,
   };
 }
 

@@ -41,8 +41,12 @@ export type BudgetDto = {
   status: string;
   total: BudgetTotalDto | null;
   envelopes: BudgetEnvelopeDto[];
-  emergency?: { amount: number; spent: number; remaining: number } | null;
+  /** 비상금 가상 풀. PROPOSED·CONFIRMED 모두 항상 온다 (백엔드 a95d9e1, 2026-09-16 대조) */
+  emergency: BudgetEmergencyDto;
 };
+
+/** amount 0 = 미설정. spent 는 주기 안 EMERGENCY 태그 거래 합이고 remaining 은 음수가 될 수 있다 */
+export type BudgetEmergencyDto = { amount: number; spent: number; remaining: number };
 
 export type BudgetEnvelope = {
   envelopeId: number;
@@ -63,6 +67,14 @@ export type BudgetTotal = {
   remainingRate: number | null;
 };
 
+export type BudgetEmergency = {
+  /** "0" 이면 미설정이다 */
+  amount: KRW;
+  spent: KRW;
+  /** amount − spent. 넘겨 썼으면 음수 */
+  remaining: KRW;
+};
+
 export type Budget = {
   budgetId: number;
   month: string;
@@ -73,6 +85,8 @@ export type Budget = {
   /** 승인 전이면 null */
   total: BudgetTotal | null;
   envelopes: BudgetEnvelope[];
+  /** 비상금 풀(P1 설정 화면 전까지 화면에 쓰는 곳은 없다). amount "0" 이면 미설정 */
+  emergency: BudgetEmergency;
 };
 
 /** 화면 표시용 상태. over = 남은 예산 음수, warning = 잔여율 30% 미만(잔액 구간 알림 30% 와 같은 기준), good = 나머지 */
@@ -148,6 +162,17 @@ export function toBudget(dto: BudgetDto): Budget {
         remainingRate: optionalRate(envelope.remainingRate, "envelopes.remainingRate"),
       };
     }),
+    emergency: toEmergency(dto.emergency),
+  };
+}
+
+/** 응답에 비상금이 없으면(구 서버) 미설정으로 본다 */
+function toEmergency(dto: BudgetEmergencyDto | null | undefined): BudgetEmergency {
+  if (dto === null || dto === undefined) return { amount: "0", spent: "0", remaining: "0" };
+  return {
+    amount: won(dto.amount, "emergency.amount"),
+    spent: won(dto.spent, "emergency.spent"),
+    remaining: won(dto.remaining, "emergency.remaining"),
   };
 }
 
