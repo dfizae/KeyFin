@@ -22,6 +22,7 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.global.exception.CommonErrorCode;
 import com.finset.key_fin.payment.client.FinanceTransferClient;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult.Status;
@@ -165,6 +166,42 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 		assertThat(all.items()).hasSize(7);
 		assertThat(all.items().get(0).id()).isEqualTo(9909L);
 		assertThat(all.nextCursor()).isNull();
+	}
+
+	@Test
+	@DisplayName("페이징: size+1 읽기로 다음 페이지 유무를 판단하고, 커서(마지막 id)로 이어 가면 중복·누락 없이 전체를 순회한다")
+	void pagesWithCursor() {
+		TransferListResponse first = transferService.list(USER, null, null, null, 3);
+		assertThat(first.items()).extracting(TransferResponse::id).containsExactly(9909L, 9906L, 9905L);
+		assertThat(first.nextCursor()).isEqualTo(9905L);
+
+		TransferListResponse second = transferService.list(USER, null, null, first.nextCursor(), 3);
+		assertThat(second.items()).extracting(TransferResponse::id).containsExactly(9904L, 9903L, 9902L);
+		assertThat(second.nextCursor()).isEqualTo(9902L);
+
+		TransferListResponse last = transferService.list(USER, null, null, second.nextCursor(), 3);
+		assertThat(last.items()).extracting(TransferResponse::id).containsExactly(9901L);
+		assertThat(last.nextCursor()).isNull();
+	}
+
+	@Test
+	@DisplayName("필터: month는 대상 출금일 기준이며 status와 함께 적용된다. 다른 사용자 행은 보이지 않고, 잘못된 month·size·cursor는 COMMON_001")
+	void filtersAndValidates() {
+		assertThat(transferService.list(USER, null, "202609", null, null).items()).hasSize(7);
+		assertThat(transferService.list(USER, null, "202610", null, null).items()).isEmpty();
+		assertThat(transferService.list(USER, TransferStatus.EXECUTED, "202609", null, null).items())
+				.extracting(TransferResponse::id).containsExactly(9906L, 9904L);
+		assertThat(transferService.list(987L, null, null, null, null).items())
+				.extracting(TransferResponse::id).containsExactly(9907L);
+
+		for (Runnable call : List.<Runnable>of(
+				() -> transferService.list(USER, null, "2026-09", null, null),
+				() -> transferService.list(USER, null, null, null, 0),
+				() -> transferService.list(USER, null, null, null, 101),
+				() -> transferService.list(USER, null, null, 0L, null))) {
+			assertThatThrownBy(call::run).isInstanceOf(BusinessException.class)
+					.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT_VALUE);
+		}
 	}
 
 	@Test

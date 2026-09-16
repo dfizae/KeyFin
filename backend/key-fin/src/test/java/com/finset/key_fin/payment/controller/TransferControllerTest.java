@@ -73,6 +73,18 @@ class TransferControllerTest {
 	}
 
 	@Test
+	void forwardsPagingParamsAndReturnsNextCursor() throws Exception {
+		when(transferService.list(1L, TransferStatus.EXECUTED, "202609", 9905L, 3))
+				.thenReturn(new TransferListResponse(List.of(), 9902L));
+
+		mockMvc.perform(get("/api/v1/transfers")
+						.param("status", "EXECUTED").param("month", "202609").param("cursor", "9905").param("size", "3"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.items").isEmpty())
+				.andExpect(jsonPath("$.data.nextCursor").value(9902));
+	}
+
+	@Test
 	void listsAllWhenStatusOmitted() throws Exception {
 		when(transferService.list(1L, null, null, null, null)).thenReturn(new TransferListResponse(List.of(), null));
 
