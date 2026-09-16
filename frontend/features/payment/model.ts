@@ -367,43 +367,66 @@ export function parseCalendarMonth(value: string | string[] | undefined, current
 }
 
 /**
- * GET /transfers 계약 (docs/api-contract.md PAYMENT, FR-PAY-03·08).
+ * GET /transfers 계약 (노션 "이체 제안·이력 조회" = 백엔드 feature/41-approval-transfer(f75c20a) 코드, 2026-09-16 대조).
+ * **`data` 가 배열이다** — items 래퍼가 없다. 쿼리는 status 하나뿐이고 month 필터는 없다.
  * 상태는 PROPOSED → APPROVED → EXECUTED / FAILED / CANCELED 이고 모르는 값은 UNKNOWN 으로 흡수한다 (규칙 80).
+ * 제안은 08:30 배치가 만든다: 출금일이 오늘·내일이고 부족액이 있는 항목마다 1건(수입 계좌 → 출금 계좌).
  */
 export const TRANSFER_STATUSES = ["PROPOSED", "APPROVED", "EXECUTED", "FAILED", "CANCELED"] as const;
 export type TransferStatus = (typeof TRANSFER_STATUSES)[number] | "UNKNOWN";
 
+/** 제안이 대신 내주는 출금 건. 캘린더 항목 유형과 같은 값이다 */
+export const TRANSFER_PURPOSE_TYPES = ["FIXED", "CARD_BILL"] as const;
+export type TransferPurposeType = (typeof TRANSFER_PURPOSE_TYPES)[number] | "UNKNOWN";
+
 export type TransferDto = {
   id: number;
   status: string;
-  /** "2026-09-15" */
+  /** "2026-09-14" 실행 예정일(= 제안한 날) */
   scheduledDate: string;
+  /** "2026-09-15" 대상 출금일. 고정지출·화~일 출금 카드는 하루 뒤, 월요일 출금 카드는 같은 날 */
+  dueDate: string;
   requiredAmount: number;
   fromAccountId: number;
   toAccountId: number;
-  /** 실행된 이체만 "2026-09-14T07:12:00" */
+  purpose: {
+    type: string;
+    /** FIXED 만 */
+    fixedExpenseId: number | null;
+    /** CARD_BILL 만 */
+    cardBillingId: number | null;
+    name: string;
+  };
+  /** EXECUTED 만 "2026-09-14T09:12:00" */
   executedAt?: string | null;
-  /** 실패한 이체만 */
+  /** FAILED 는 금융망 코드+사유, CANCELED 는 출금일 경과·부족액 해소 */
   failReason?: string | null;
-  purpose: { type: string; name: string };
+  /** "2026-09-14T08:30:12" */
+  createdAt: string;
 };
 
-export type TransferListDto = { items: TransferDto[] };
+/** 목록 응답의 `data` 자체 */
+export type TransferListDto = TransferDto[];
 
 export type Transfer = {
   id: number;
   status: TransferStatus;
   scheduledDate: string;
+  /** 화면에 "언제 나갈 돈인지" 로 쓰는 날짜는 이쪽이다 */
+  dueDate: string;
   requiredAmount: KRW;
   fromAccountId: number;
   toAccountId: number;
   executedAt: string | null;
   failReason: string | null;
+  createdAt: string;
   purposeName: string;
-  purposeType: string;
+  purposeType: TransferPurposeType;
+  purposeFixedExpenseId: number | null;
+  purposeCardBillingId: number | null;
 };
 
-export type ApproveTransferDto = { status: string; executedAt: string };
+export type ApproveTransferDto = { id: number; status: string; executedAt?: string | null; failReason?: string | null };
 
 const TRANSFER_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -411,32 +434,50 @@ function toTransferStatus(raw: string): TransferStatus {
   return (TRANSFER_STATUSES as readonly string[]).includes(raw) ? (raw as TransferStatus) : "UNKNOWN";
 }
 
+function toTransferPurposeType(raw: string): TransferPurposeType {
+  return (TRANSFER_PURPOSE_TYPES as readonly string[]).includes(raw) ? (raw as TransferPurposeType) : "UNKNOWN";
+}
+
 export function toTransfer(dto: TransferDto): Transfer {
   if (!TRANSFER_DATE.test(dto.scheduledDate)) throw new ContractMismatchError("scheduledDate");
+  if (!TRANSFER_DATE.test(dto.dueDate)) throw new ContractMismatchError("dueDate");
   return {
     id: dto.id,
     status: toTransferStatus(dto.status),
     scheduledDate: dto.scheduledDate,
+    dueDate: dto.dueDate,
     requiredAmount: won(dto.requiredAmount, "requiredAmount"),
     fromAccountId: dto.fromAccountId,
     toAccountId: dto.toAccountId,
     executedAt: dto.executedAt ?? null,
     failReason: dto.failReason ?? null,
+    createdAt: dto.createdAt,
     purposeName: dto.purpose.name,
-    purposeType: dto.purpose.type,
+    purposeType: toTransferPurposeType(dto.purpose.type),
+    purposeFixedExpenseId: dto.purpose.fixedExpenseId ?? null,
+    purposeCardBillingId: dto.purpose.cardBillingId ?? null,
   };
 }
 
 export function toTransfers(dto: TransferListDto): Transfer[] {
-  return dto.items.map(toTransfer);
+  return dto.map(toTransfer);
 }
 
 export function findTransfer(transfers: Transfer[], id: number): Transfer | null {
   return transfers.find((transfer) => transfer.id === id) ?? null;
 }
 
-/** 승인·연기를 보낼 수 있는 상태는 제안뿐이다. 나머지는 서버가 이미 끝냈거나 진행 중이다 */
+/**
+ * 승인을 보낼 수 있는 상태. PROPOSED 는 안전장치 4검사를 거쳐 새로 실행하고,
+ * APPROVED 는 금융망 응답이 유실된 건이라 **같은 기관거래고유번호로 재시도**한다(서버가 검사를 건너뛴다).
+ * 이미 성공했던 이체면 금융망이 중복(H1007)으로 답해 EXECUTED 가 되므로 이중 이체가 되지 않는다.
+ */
 export function canApproveTransfer(transfer: Transfer): boolean {
+  return transfer.status === "PROPOSED" || transfer.status === "APPROVED";
+}
+
+/** 연기는 승인 대기(PROPOSED)만 받는다. 실행 중(APPROVED)에 보내면 409 PAY_006 이다 */
+export function canPostponeTransfer(transfer: Transfer): boolean {
   return transfer.status === "PROPOSED";
 }
 

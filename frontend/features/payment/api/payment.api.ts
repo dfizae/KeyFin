@@ -23,7 +23,7 @@ import {
   type TransferListDto,
   type TransferStatus,
 } from "@/features/payment/model";
-import { serverClock, toKSTDateKey } from "@/lib/date";
+import { currentMonthKey, serverClock, toKSTDateKey } from "@/lib/date";
 
 /**
  * GET /payments/calendar?month=YYYYMM — 날짜별 출금 예정과 준비 상태 (docs/api-contract.md PAYMENT, FR-PAY-01·02).
@@ -68,19 +68,21 @@ export async function deleteFixedExpense(id: number): Promise<void> {
 }
 
 export type TransferListParams = {
-  /** "YYYYMM" */
-  month: string;
+  /** 생략하면 전체를 최신순으로 받는다. 월 필터는 계약에 없다 */
   status?: TransferStatus;
 };
 
-/** GET /transfers — 준비 이체 제안·이력 (FR-PAY-03·08). 단건 조회가 없어 화면이 목록에서 id 를 찾는다 */
-export async function getTransfers({ month, status }: TransferListParams, signal?: AbortSignal): Promise<Transfer[]> {
-  if (isMocked("payment")) return toTransfers(await withMockLatency(transferListMock(month, status), signal));
-  const { data } = await api.get<TransferListDto>("/transfers", { params: { month, status }, signal });
+/**
+ * GET /transfers — 준비 이체 제안·이력 (FR-PAY-03·08). 단건 조회가 없어 화면이 목록에서 id 를 찾는다.
+ * 응답 `data` 는 배열이다(items 래퍼 없음, 백엔드 TransferController.list).
+ */
+export async function getTransfers({ status }: TransferListParams, signal?: AbortSignal): Promise<Transfer[]> {
+  if (isMocked("payment")) return toTransfers(await withMockLatency(transferListMock(currentMonthKey(), status), signal));
+  const { data } = await api.get<TransferListDto>("/transfers", { params: { status }, signal });
   return toTransfers(data);
 }
 
-export type ApproveTransferResult = { status: TransferStatus; executedAt: string };
+export type ApproveTransferResult = { id: number; status: TransferStatus; executedAt: string | null };
 
 /**
  * POST /transfers/{id}/approve — 돈이 실제로 움직인다.
@@ -91,10 +93,10 @@ export async function approveTransfer(transferId: number): Promise<ApproveTransf
   if (isMocked("payment")) {
     const now = `${toKSTDateKey(new Date(serverClock.now()))}T07:12:00`;
     const mock = await withMockLatency(approveTransferMock(transferId, now));
-    return { status: "EXECUTED", executedAt: mock.executedAt };
+    return { id: mock.id, status: "EXECUTED", executedAt: mock.executedAt ?? null };
   }
   const { data } = await api.post<ApproveTransferDto>(`/transfers/${transferId}/approve`, undefined, { timeout: TIMEOUT_MONEY_MS });
-  return { status: "EXECUTED", executedAt: data.executedAt };
+  return { id: data.id, status: "EXECUTED", executedAt: data.executedAt ?? null };
 }
 
 /** POST /transfers/{id}/postpone — 응답 본문 없음. 제안은 PROPOSED 로 남는다 */

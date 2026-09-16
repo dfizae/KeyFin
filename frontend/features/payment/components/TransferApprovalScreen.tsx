@@ -13,10 +13,17 @@ import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
 import type { LinkedAccount } from "@/features/account/model";
 import { useApproveTransfer, usePostponeTransfer, useTransfers } from "@/features/payment/api/queries";
-import { isUnconfirmedTransferError, transferApproveErrorMessage, transferPostponeErrorMessage } from "@/features/payment/errors";
-import { canApproveTransfer, findTransfer, transferStatusLabel, type Transfer } from "@/features/payment/model";
+import {
+  isRetryableTransferError,
+  isStaleTransferError,
+  isTransferSettingsError,
+  isUnconfirmedTransferError,
+  transferApproveErrorMessage,
+  transferPostponeErrorMessage,
+} from "@/features/payment/errors";
+import { canApproveTransfer, canPostponeTransfer, findTransfer, transferStatusLabel, type Transfer } from "@/features/payment/model";
 import { useTransferSettings } from "@/features/settings/api/queries";
-import { currentMonthKey, formatDateTime, formatMonthDay, parseKSTDateKey, parseKSTLocalDateTime } from "@/lib/date";
+import { formatDateTime, formatMonthDay, parseKSTDateKey, parseKSTLocalDateTime } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
@@ -38,7 +45,7 @@ type TransferApprovalScreenProps = {
 function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
   const router = useRouter();
   const settings = useTransferSettings();
-  const transfers = useTransfers({ month: currentMonthKey() });
+  const transfers = useTransfers({});
   const accounts = useAccounts();
   const approve = useApproveTransfer();
   const postpone = usePostponeTransfer();
@@ -51,6 +58,12 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
     if (router.canGoBack()) router.back();
     else router.replace(HOME_ROUTE);
   };
+
+  const refresh = () => {
+    void transfers.refetch();
+  };
+
+  const openSettings = () => router.push(SETTINGS_ROUTE);
 
   const runApprove = () => {
     if (transfer === null || isPending) return;
@@ -103,41 +116,40 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
 
           <View className="gap-2 px-6 pb-8 pt-2">
             {approve.isError ? (
+              <ErrorLine message={transferApproveErrorMessage(approve.error)} action={approveErrorAction(approve.error, refresh, openSettings)} />
+            ) : null}
+            {postpone.isError ? (
               <ErrorLine
-                message={transferApproveErrorMessage(approve.error)}
-                action={
-                  isUnconfirmedTransferError(approve.error)
-                    ? { label: "상태 새로 고침", onPress: () => transfers.refetch() }
-                    : null
-                }
+                message={transferPostponeErrorMessage(postpone.error)}
+                action={isStaleTransferError(postpone.error) ? { label: "상태 새로 고침", onPress: refresh } : null}
               />
             ) : null}
-            {postpone.isError ? <ErrorLine message={transferPostponeErrorMessage(postpone.error)} action={null} /> : null}
 
             {canApproveTransfer(transfer) ? (
-              <>
-                <Button
-                  size="lg"
-                  className="h-button-lg rounded-lg"
-                  disabled={isPending}
-                  accessibilityState={{ disabled: isPending }}
-                  accessibilityLabel="이체하기"
-                  onPress={() => setConfirmOpen(true)}
-                >
-                  <Text>{approve.isPending ? "이체하는 중" : "이체하기"}</Text>
-                </Button>
-                <Button
-                  variant="outline"
-                  className="h-button-md rounded-lg"
-                  disabled={isPending}
-                  accessibilityState={{ disabled: isPending }}
-                  accessibilityLabel="나중에"
-                  onPress={runPostpone}
-                >
-                  <Text>{postpone.isPending ? "미루는 중" : "나중에"}</Text>
-                </Button>
-              </>
-            ) : (
+              <Button
+                size="lg"
+                className="h-button-lg rounded-lg"
+                disabled={isPending}
+                accessibilityState={{ disabled: isPending }}
+                accessibilityLabel={approveLabel(transfer)}
+                onPress={() => setConfirmOpen(true)}
+              >
+                <Text>{approve.isPending ? "이체하는 중" : approveLabel(transfer)}</Text>
+              </Button>
+            ) : null}
+            {canPostponeTransfer(transfer) ? (
+              <Button
+                variant="outline"
+                className="h-button-md rounded-lg"
+                disabled={isPending}
+                accessibilityState={{ disabled: isPending }}
+                accessibilityLabel="나중에"
+                onPress={runPostpone}
+              >
+                <Text>{postpone.isPending ? "미루는 중" : "나중에"}</Text>
+              </Button>
+            ) : null}
+            {canApproveTransfer(transfer) ? null : (
               <Button variant="secondary" className="h-button-lg rounded-lg" onPress={() => router.replace(CALENDAR_ROUTE)}>
                 <Text>결제 캘린더 보기</Text>
               </Button>
@@ -151,7 +163,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
                 <DialogDescription className="text-body-sm text-card-foreground">
                   {accountLabel(accounts.data, transfer.fromAccountId)} → {accountLabel(accounts.data, transfer.toAccountId)}
                   {"\n"}
-                  {formatMonthDay(parseKSTDateKey(transfer.scheduledDate))} {transfer.purposeName} 출금에 쓸 돈이에요.
+                  {formatMonthDay(parseKSTDateKey(transfer.dueDate))} {transfer.purposeName} 출금에 쓸 돈이에요.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -168,6 +180,23 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
       )}
     </View>
   );
+}
+
+/**
+ * 안전장치(403 PAY_007~010)는 설정을 고쳐야 풀리고, 미확인·어긋남·금융망 장애는 서버 상태를 다시 받아야 다음 수가 보인다.
+ * 잔액 부족·은행 한도(422)는 제안이 FAILED 로 끝나 화면에서 할 일이 없다.
+ */
+function approveErrorAction(error: unknown, refresh: () => void, openSettings: () => void): ErrorLineProps["action"] {
+  if (isTransferSettingsError(error)) return { label: "이체 설정 열기", onPress: openSettings };
+  if (isUnconfirmedTransferError(error) || isStaleTransferError(error) || isRetryableTransferError(error)) {
+    return { label: "상태 새로 고침", onPress: refresh };
+  }
+  return null;
+}
+
+/** 실행 중(APPROVED)인 건의 승인은 같은 기관거래고유번호로 재시도하는 것이라 문구를 나눈다 */
+function approveLabel(transfer: Transfer): string {
+  return transfer.status === "APPROVED" ? "다시 시도" : "이체하기";
 }
 
 /** 계좌 이름은 GET /accounts 에서 찾고, 못 찾으면 id 만 보여준다. 계좌번호는 마스킹된 값뿐이다 (규칙 80) */
@@ -188,7 +217,7 @@ function TransferSummary({ transfer, accounts }: TransferSummaryProps) {
     <View className="gap-4 pb-1 pt-3">
       <View className="gap-1">
         <Text className="text-caption text-card-foreground">
-          {formatMonthDay(parseKSTDateKey(transfer.scheduledDate))} · {transfer.purposeName}
+          {formatMonthDay(parseKSTDateKey(transfer.dueDate))} 출금 · {transfer.purposeName}
         </Text>
         <Text className="text-h2 text-foreground">준비할 금액</Text>
       </View>
@@ -261,11 +290,13 @@ function ResultCard({ transfer }: ResultCardProps) {
       {failed ? (
         <>
           <Text className="text-body-sm text-destructive">{transfer.failReason ?? "실패 사유를 받지 못했어요."}</Text>
-          <Text className="text-caption text-card-foreground">다시 시도는 준비 중이에요. 계좌 잔액을 확인한 뒤 결제일 전에 직접 옮겨 주세요.</Text>
+          <Text className="text-caption text-card-foreground">계좌 잔액·은행 한도를 확인한 뒤 결제일 전에 직접 옮겨 주세요.</Text>
         </>
       ) : null}
       {transfer.status === "APPROVED" ? (
-        <Text className="text-body-sm text-card-foreground">승인을 받아 실행하는 중이에요. 결과가 나오면 알림으로 알려드려요.</Text>
+        <Text className="text-body-sm text-card-foreground">
+          승인은 됐는데 결과를 받지 못했어요. [다시 시도] 를 누르면 같은 건으로 확인해요 — 이미 옮겨졌으면 두 번 나가지 않아요.
+        </Text>
       ) : null}
       {transfer.status === "CANCELED" || transfer.status === "UNKNOWN" ? (
         <Text className="text-body-sm text-card-foreground">이 제안은 더 이상 실행되지 않아요.</Text>
