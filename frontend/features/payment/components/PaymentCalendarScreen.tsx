@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { usePaymentCalendar, useTransfers } from "@/features/payment/api/queries";
+import { flattenTransfers, usePaymentCalendar, useTransfers } from "@/features/payment/api/queries";
 import { calendarEntryIcon } from "@/features/payment/catalog";
 import { CALENDAR_EMPTY_MESSAGE, ESTIMATED_SUFFIX } from "@/features/payment/components/CalendarPopover";
 import {
@@ -54,8 +54,8 @@ function PaymentCalendarScreen() {
   const params = useLocalSearchParams();
   const month = parseCalendarMonth(params.month, currentMonthKey());
   const calendar = usePaymentCalendar(month);
-  // 이체 승인 화면(PAGE-25)과 같은 키({})라 뱃지를 눌러 들어가면 목록이 캐시에서 바로 잡힌다. 못 받아도 캘린더는 그대로 보이고 뱃지만 눌리지 않는다.
-  const transfers = useTransfers({});
+  // 이 달(대상 출금일 기준) 제안만 받는다 — 출금 건당 1건이라 첫 쪽(20건)에 다 들어온다. 못 받아도 캘린더는 그대로 보이고 뱃지만 눌리지 않는다.
+  const transfers = useTransfers({ month });
   const groups = calendar.data ? groupEntriesByDate(calendar.data.entries) : [];
 
   return (
@@ -106,7 +106,7 @@ function PaymentCalendarScreen() {
           renderItem={({ item }) => (
             <DayGroup
               group={item}
-              transfers={transfers.data ?? []}
+              transfers={flattenTransfers(transfers.data)}
               onSelect={(entry) => {
                 if (canOpenEntry(entry)) router.push(`${FIXED_EXPENSE_ROUTE}/${entry.fixedExpenseId}`);
               }}

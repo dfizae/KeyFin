@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { ArrowDown, CalendarClock, CircleAlert, CircleCheck, ShieldOff, WifiOff } from "lucide-react-native";
+import { ArrowDown, Ban, CalendarClock, CircleAlert, CircleCheck, ShieldOff, WifiOff } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, ScrollView, View } from "react-native";
 
@@ -12,7 +12,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
 import type { LinkedAccount } from "@/features/account/model";
-import { useApproveTransfer, usePostponeTransfer, useTransfers } from "@/features/payment/api/queries";
+import { useApproveTransfer, usePostponeTransfer, useTransfer } from "@/features/payment/api/queries";
 import {
   isIncomeAccountError,
   isRetryableTransferError,
@@ -22,7 +22,15 @@ import {
   transferApproveErrorMessage,
   transferPostponeErrorMessage,
 } from "@/features/payment/errors";
-import { canApproveTransfer, canPostponeTransfer, findTransfer, transferStatusLabel, type Transfer } from "@/features/payment/model";
+import {
+  canApproveTransfer,
+  canPostponeTransfer,
+  transferHistoryLabel,
+  transferStatusLabel,
+  type Transfer,
+  type TransferHistoryAction,
+  type TransferHistoryEntry,
+} from "@/features/payment/model";
 import { useTransferSettings } from "@/features/settings/api/queries";
 import { formatDateTime, formatMonthDay, parseKSTDateKey, parseKSTLocalDateTime } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
@@ -48,13 +56,17 @@ type TransferApprovalScreenProps = {
 function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
   const router = useRouter();
   const settings = useTransferSettings();
-  const transfers = useTransfers({});
+  // 단건 조회(GET /transfers/{id}, -62). 목록 첫 쪽에 없는 제안도 딥링크·푸시로 열린다. id 가 틀리면 조회하지 않는다.
+  const detail = useTransfer(transferId);
   const accounts = useAccounts();
   const approve = useApproveTransfer();
   const postpone = usePostponeTransfer();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const transfer = transferId === null ? null : findTransfer(transfers.data ?? [], transferId);
+  const transfer = detail.data?.transfer ?? null;
+  const loading = transferId !== null && detail.isPending;
+  // 404(PAY_005)는 "없는 제안" 이라 빈 상태로, 그 밖의 실패만 연결 오류로 보여 준다
+  const unreachable = detail.isError && !isStaleTransferError(detail.error);
   const isPending = approve.isPending || postpone.isPending;
 
   const goBack = () => {
@@ -63,7 +75,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
   };
 
   const refresh = () => {
-    void transfers.refetch();
+    void detail.refetch();
   };
 
   const openSettings = () => router.push(SETTINGS_ROUTE);
@@ -84,7 +96,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
     <View className="flex-1 bg-background">
       <ScreenHeader title="이체 승인" onBack={goBack} />
 
-      {settings.isPending || transfers.isPending ? (
+      {settings.isPending || loading ? (
         <ApprovalSkeleton />
       ) : settings.data?.consent === false ? (
         <EmptyState
@@ -93,12 +105,12 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
           description="설정에서 결제 준비 이체에 동의하면 제안을 받을 수 있어요."
           action={{ label: "설정 열기", onPress: () => router.replace(SETTINGS_ROUTE) }}
         />
-      ) : transfers.data === undefined ? (
+      ) : unreachable ? (
         <EmptyState
           icon={WifiOff}
           title="이체 제안을 불러오지 못했어요"
           description="연결 상태를 확인한 뒤 다시 시도해 주세요."
-          action={{ label: "다시 시도", onPress: () => transfers.refetch(), disabled: transfers.isFetching }}
+          action={{ label: "다시 시도", onPress: refresh, disabled: detail.isFetching }}
         />
       ) : transfer === null ? (
         <EmptyState
@@ -116,6 +128,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
             ) : (
               <ResultCard transfer={transfer} />
             )}
+            <HistoryTimeline history={detail.data?.history ?? []} />
           </ScrollView>
 
           <View className="gap-2 px-6 pb-8 pt-2">
@@ -303,12 +316,15 @@ function ResultCard({ transfer }: ResultCardProps) {
       {failed ? (
         <>
           <Text className="text-body-sm text-destructive">{transfer.failReason ?? "실패 사유를 받지 못했어요."}</Text>
-          <Text className="text-caption text-card-foreground">계좌 잔액·은행 한도를 확인한 뒤 결제일 전에 직접 옮겨 주세요.</Text>
+          <Text className="text-caption text-card-foreground">
+            결제일 전에 잔액을 채우면 다음 날 아침 8시 30분에 다시 제안해요. 급하면 직접 옮겨 주세요.
+          </Text>
         </>
       ) : null}
       {transfer.status === "APPROVED" ? (
         <Text className="text-body-sm text-card-foreground">
-          승인은 됐는데 결과를 받지 못했어요. [다시 시도] 를 누르면 같은 건으로 확인해요 — 이미 옮겨졌으면 두 번 나가지 않아요.
+          승인은 됐는데 결과를 받지 못했어요. 30분 안에 자동으로 다시 확인하고, [다시 시도] 를 눌러도 같은 건으로 확인해요 — 이미
+          옮겨졌으면 두 번 나가지 않아요.
         </Text>
       ) : null}
       {transfer.status === "CANCELED" || transfer.status === "UNKNOWN" ? (
@@ -316,6 +332,49 @@ function ResultCard({ transfer }: ResultCardProps) {
       ) : null}
     </View>
   );
+}
+
+type HistoryTimelineProps = { history: TransferHistoryEntry[] };
+
+/**
+ * 감사 타임라인 (GET /transfers/{id} 의 history, 오래된 순). 돈이 움직인 기록이라 서버가 남긴 근거 문구를
+ * 그대로 적고 화면에서 다시 쓰지 않는다 (규칙 80). 기록이 없는 제안(갓 만들어진 PROPOSED)은 아예 그리지 않는다.
+ */
+function HistoryTimeline({ history }: HistoryTimelineProps) {
+  if (history.length === 0) return null;
+
+  return (
+    <View className="gap-3 rounded-lg bg-muted p-3.5">
+      <Text className="text-label text-foreground">진행 기록</Text>
+      {history.map((entry, index) => (
+        <View key={`${entry.at}-${index}`} className="flex-row gap-2.5">
+          <Icon as={historyIcon(entry.action)} size={16} className={cn("mt-0.5", historyTone(entry.action))} />
+          <View className="shrink gap-0.5">
+            <View className="flex-row items-center gap-2">
+              <Text className="text-body-sm text-foreground">{transferHistoryLabel(entry.action)}</Text>
+              <Text className="text-caption tabular-nums text-card-foreground">
+                {formatDateTime(parseKSTLocalDateTime(entry.at))}
+              </Text>
+            </View>
+            {entry.basis ? <Text className="text-caption text-card-foreground">{entry.basis}</Text> : null}
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function historyIcon(action: TransferHistoryAction) {
+  if (action === "EXECUTE") return CircleCheck;
+  if (action === "FAIL") return CircleAlert;
+  if (action === "CANCEL") return Ban;
+  return CalendarClock;
+}
+
+function historyTone(action: TransferHistoryAction): string {
+  if (action === "EXECUTE") return "text-positive";
+  if (action === "FAIL") return "text-destructive";
+  return "text-card-foreground";
 }
 
 type ErrorLineProps = {

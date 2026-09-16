@@ -17,16 +17,18 @@ const BUBBLE_SCENE = { x: 40, y: 262, width: 236 } as const;
 type CoachBubbleProps = {
   /** 캔버스 폭(pt) */
   width: number;
-  /** 미확정 결제 건수. 1건 이상이면 정리 링크를 보여준다 */
+  /** 미확정 결제 건수(받아 둔 첫 쪽 기준). 1건 이상이면 정리 링크를 보여준다 */
   pendingCount?: number;
+  /** 서버에 더 남아 있어(다음 커서 있음) 건수가 전부가 아닐 때 */
+  pendingMore?: boolean;
   onCleanup?: () => void;
 };
 
-export function cleanupLinkLabel(pendingCount: number): string {
-  return `미확정 결제 ${pendingCount}건 정리`;
+export function cleanupLinkLabel(pendingCount: number, pendingMore = false): string {
+  return `미확정 결제 ${pendingCount}건${pendingMore ? "+" : ""} 정리`;
 }
 
-function CoachBubble({ width, pendingCount = 0, onCleanup }: CoachBubbleProps) {
+function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup }: CoachBubbleProps) {
   const scale = getSceneScale(width);
   const [open, setOpen] = React.useState(false);
 
@@ -57,8 +59,13 @@ function CoachBubble({ width, pendingCount = 0, onCleanup }: CoachBubbleProps) {
         >
           <Text className="text-body-sm text-foreground">{COACH_PLACEHOLDER}</Text>
           {pendingCount > 0 && onCleanup ? (
-            <Pressable accessibilityRole="link" accessibilityLabel={cleanupLinkLabel(pendingCount)} hitSlop={6} onPress={onCleanup}>
-              <Text className="text-caption text-primary">{cleanupLinkLabel(pendingCount)}</Text>
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={cleanupLinkLabel(pendingCount, pendingMore)}
+              hitSlop={6}
+              onPress={onCleanup}
+            >
+              <Text className="text-caption text-primary">{cleanupLinkLabel(pendingCount, pendingMore)}</Text>
             </Pressable>
           ) : null}
         </View>

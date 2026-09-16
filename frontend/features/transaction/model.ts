@@ -47,8 +47,12 @@ export type TransactionDto = {
 };
 
 export type PendingTransactionsDto = { items: TransactionDto[]; nextCursor: number | null };
-export type SubcategoryListDto = { items: SubcategoryDto[] };
-export type SubcategoryDto = { id: number; name: string; envelopeId: number; envelopeName: string };
+/**
+ * GET /subcategories 응답. 서버는 **봉투별로 묶어서** 준다 (백엔드 SubcategoryListResponse, 2026-09-16 대조).
+ * 화면은 평탄한 목록을 쓰고 시트에서 다시 봉투로 묶으므로 toSubcategories 가 펴 준다.
+ */
+export type SubcategoryListDto = { items: SubcategoryEnvelopeDto[] };
+export type SubcategoryEnvelopeDto = { envelopeId: number; envelopeName: string; subcategories: { id: number; name: string }[] };
 
 /**
  * PUT /transactions/{id}/classification 요청. subcategoryId 와 excludeTag 중 하나만 보내고,
@@ -234,7 +238,9 @@ export function transactionDateTimeLabel(transaction: Transaction): string {
 
 /**
  * 분류를 바꿀 수 없는 거래의 이유. 바꿀 수 있으면 null (FR-TXN-03·05).
- * 들어온 돈은 봉투에서 나가지 않고 취소된 결제는 봉투 합계에서 이미 빠졌다 — 서버 제약이 아니라 화면 판단이다 (TBD)
+ * 서버도 같은 규칙이다 — 입금(DEPOSIT)과 취소(CANCELED)는 409 TRANSACTION_007 로 막는다
+ * (Transaction.validateClassifiable, 2026-09-16 대조). 화면은 그 전에 버튼을 잠가 헛걸음을 줄인다.
+ * 환급 입금을 봉투로 되돌리는 RESTORE 는 서버가 입금에만 허용하는데 화면 입력이 아직 없다 (TBD)
  */
 export function reclassifyBlockedReason(transaction: Transaction): string | null {
   if (transaction.status === "CANCELED") return "취소된 결제는 분류를 바꿀 수 없어요.";
@@ -285,8 +291,16 @@ export function parseTransactionId(value: string | string[] | undefined): number
   return raw !== undefined && POSITIVE_ID.test(raw) ? Number(raw) : null;
 }
 
+/** 봉투 묶음을 펴서 세분류 목록으로. 봉투 순서·세분류 순서는 서버가 준 대로 둔다 */
 export function toSubcategories(dto: SubcategoryListDto): Subcategory[] {
-  return dto.items.map((item) => ({ id: item.id, name: item.name, envelopeId: item.envelopeId, envelopeName: item.envelopeName }));
+  return dto.items.flatMap((envelope) =>
+    envelope.subcategories.map((item) => ({
+      id: item.id,
+      name: item.name,
+      envelopeId: envelope.envelopeId,
+      envelopeName: envelope.envelopeName,
+    }))
+  );
 }
 
 export function toClassifyResult(dto: ClassifyResponseDto): ClassifyResult {

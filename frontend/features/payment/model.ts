@@ -405,8 +405,18 @@ export type TransferDto = {
   createdAt: string;
 };
 
-/** 목록 응답의 `data` 자체 */
-export type TransferListDto = TransferDto[];
+/** 목록 응답 — 커서 페이지(-62, 2026-09-16). 커서는 마지막 항목 id, 마지막 쪽은 null */
+export type TransferListDto = { items: TransferDto[]; nextCursor: number | null };
+
+/** 감사 로그 한 줄의 종류. EXECUTE 실행 · HOLD 보류(안전장치·나중에) · FAIL 금융망 거부 · CANCEL 배치 정리 */
+export const TRANSFER_HISTORY_ACTIONS = ["EXECUTE", "HOLD", "FAIL", "CANCEL"] as const;
+export type TransferHistoryAction = (typeof TRANSFER_HISTORY_ACTIONS)[number] | "UNKNOWN";
+
+/** GET /transfers/{id} — 제안 한 건 + 감사 타임라인(오래된 순) */
+export type TransferDetailDto = {
+  transfer: TransferDto;
+  history: { action: string; basis: string; at: string }[];
+};
 
 export type Transfer = {
   id: number;
@@ -459,8 +469,29 @@ export function toTransfer(dto: TransferDto): Transfer {
   };
 }
 
-export function toTransfers(dto: TransferListDto): Transfer[] {
-  return dto.map(toTransfer);
+export function toTransfers(dtos: TransferDto[]): Transfer[] {
+  return dtos.map(toTransfer);
+}
+
+export type TransferPage = { items: Transfer[]; nextCursor: number | null };
+
+export function toTransferPage(dto: TransferListDto): TransferPage {
+  return { items: toTransfers(dto.items), nextCursor: dto.nextCursor };
+}
+
+export type TransferHistoryEntry = { action: TransferHistoryAction; basis: string; at: string };
+export type TransferDetail = { transfer: Transfer; history: TransferHistoryEntry[] };
+
+function toHistoryAction(raw: string): TransferHistoryAction {
+  return (TRANSFER_HISTORY_ACTIONS as readonly string[]).includes(raw) ? (raw as TransferHistoryAction) : "UNKNOWN";
+}
+
+/** 승인 화면(PAGE-25)이 쓰는 단건 조회. 목록 첫 쪽에 없는 제안(딥링크·푸시)도 이걸로 연다 */
+export function toTransferDetail(dto: TransferDetailDto): TransferDetail {
+  return {
+    transfer: toTransfer(dto.transfer),
+    history: dto.history.map((entry) => ({ action: toHistoryAction(entry.action), basis: entry.basis, at: entry.at })),
+  };
 }
 
 export function findTransfer(transfers: Transfer[], id: number): Transfer | null {
@@ -510,6 +541,19 @@ const TRANSFER_STATUS_LABELS: Record<TransferStatus, string> = {
 
 export function transferStatusLabel(status: TransferStatus): string {
   return TRANSFER_STATUS_LABELS[status];
+}
+
+const TRANSFER_HISTORY_LABELS: Record<TransferHistoryAction, string> = {
+  EXECUTE: "이체 완료",
+  HOLD: "보류",
+  FAIL: "이체 실패",
+  CANCEL: "취소",
+  UNKNOWN: "기록",
+};
+
+/** 감사 타임라인 한 줄의 제목. 종류만 우리말로 적고 서버 근거 문구(basis)는 고치지 않는다 (규칙 80) */
+export function transferHistoryLabel(action: TransferHistoryAction): string {
+  return TRANSFER_HISTORY_LABELS[action];
 }
 
 /** 이체 승인 라우트(`/payment/transfer/[id]`)의 id. 양의 정수가 아니면 null — 푸시·딥링크 값은 믿지 않는다 (규칙 80) */

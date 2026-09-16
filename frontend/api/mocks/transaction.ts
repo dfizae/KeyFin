@@ -56,11 +56,19 @@ function applyClassification(dto: TransactionDto): TransactionDto {
   };
 }
 
-export function pendingTransactionsMock(): PendingTransactionsDto {
-  return { items: PENDING.filter((item) => !classifications.has(item.id)), nextCursor: null };
+/**
+ * GET /transactions/pending — 확정 안 된 건만, 서버처럼 커서(마지막 id)·size 로 자른다 (백엔드 findPendingTransactions, 2026-09-16).
+ * 인자를 생략하면 전부 한 쪽에 준다(테스트·홈 코치 건수용).
+ */
+export function pendingTransactionsMock(cursor: number | null = null, size = 20): PendingTransactionsDto {
+  const remaining = PENDING.filter((item) => !classifications.has(item.id));
+  const start = cursor === null ? 0 : remaining.findIndex((item) => item.id === cursor) + 1;
+  const page = remaining.slice(start, start + size);
+  const hasNext = start + size < remaining.length;
+  return { items: page, nextCursor: hasNext ? (page[page.length - 1]?.id ?? null) : null };
 }
 
-/** 확정 응답 예시. 외식 봉투 잔액 132,000 (계약 사본 예시 값) */
+/** 확정 응답 예시. 서버처럼 CONFIRMED 로 돌려주고 봉투 잔액은 응답에 없다 */
 export function classifyTransactionMock(transactionId: number, request: ClassifyRequest): ClassifyResponseDto {
   classifications.set(transactionId, request);
   return {
@@ -72,31 +80,73 @@ export function classifyTransactionMock(transactionId: number, request: Classify
   };
 }
 
-/** GET /subcategories — ERD 기준 데이터 22종 (docs/api-contract.md §4) */
+/** GET /subcategories — ERD 기준 데이터 22종. 서버처럼 봉투별로 묶어서 준다 (docs/api-contract.md TRANSACTION) */
 export const subcategoriesMock: SubcategoryListDto = {
   items: [
-    { id: 101, name: "음식점", envelopeId: 1, envelopeName: "외식" },
-    { id: 102, name: "카페", envelopeId: 1, envelopeName: "외식" },
-    { id: 103, name: "배달", envelopeId: 1, envelopeName: "외식" },
-    { id: 104, name: "주점", envelopeId: 1, envelopeName: "외식" },
-    { id: 201, name: "대중교통", envelopeId: 2, envelopeName: "교통비" },
-    { id: 202, name: "택시", envelopeId: 2, envelopeName: "교통비" },
-    { id: 203, name: "주유", envelopeId: 2, envelopeName: "교통비" },
-    { id: 301, name: "병원·약국", envelopeId: 3, envelopeName: "의료·건강" },
-    { id: 302, name: "운동·헬스", envelopeId: 3, envelopeName: "의료·건강" },
-    { id: 401, name: "영화·공연·전시", envelopeId: 4, envelopeName: "취미·여가" },
-    { id: 402, name: "스포츠 관람", envelopeId: 4, envelopeName: "취미·여가" },
-    { id: 403, name: "게임·콘텐츠", envelopeId: 4, envelopeName: "취미·여가" },
-    { id: 404, name: "여행·숙박", envelopeId: 4, envelopeName: "취미·여가" },
-    { id: 501, name: "패션·잡화", envelopeId: 5, envelopeName: "쇼핑" },
-    { id: 502, name: "뷰티", envelopeId: 5, envelopeName: "쇼핑" },
-    { id: 503, name: "온라인 쇼핑", envelopeId: 5, envelopeName: "쇼핑" },
-    { id: 601, name: "편의점", envelopeId: 6, envelopeName: "편의점·마트·잡화" },
-    { id: 602, name: "마트", envelopeId: 6, envelopeName: "편의점·마트·잡화" },
-    { id: 603, name: "생활용품", envelopeId: 6, envelopeName: "편의점·마트·잡화" },
-    { id: 701, name: "교육", envelopeId: 7, envelopeName: "기타" },
-    { id: 702, name: "해외 결제", envelopeId: 7, envelopeName: "기타" },
-    { id: 703, name: "경조사·기타", envelopeId: 7, envelopeName: "기타" },
+    {
+      envelopeId: 1,
+      envelopeName: "외식",
+      subcategories: [
+        { id: 101, name: "음식점" },
+        { id: 102, name: "카페" },
+        { id: 103, name: "배달" },
+        { id: 104, name: "주점" },
+      ],
+    },
+    {
+      envelopeId: 2,
+      envelopeName: "교통비",
+      subcategories: [
+        { id: 201, name: "대중교통" },
+        { id: 202, name: "택시" },
+        { id: 203, name: "주유" },
+      ],
+    },
+    {
+      envelopeId: 3,
+      envelopeName: "의료·건강",
+      subcategories: [
+        { id: 301, name: "병원·약국" },
+        { id: 302, name: "운동·헬스" },
+      ],
+    },
+    {
+      envelopeId: 4,
+      envelopeName: "취미·여가",
+      subcategories: [
+        { id: 401, name: "영화·공연·전시" },
+        { id: 402, name: "스포츠 관람" },
+        { id: 403, name: "게임·콘텐츠" },
+        { id: 404, name: "여행·숙박" },
+      ],
+    },
+    {
+      envelopeId: 5,
+      envelopeName: "쇼핑",
+      subcategories: [
+        { id: 501, name: "패션·잡화" },
+        { id: 502, name: "뷰티" },
+        { id: 503, name: "온라인 쇼핑" },
+      ],
+    },
+    {
+      envelopeId: 6,
+      envelopeName: "편의점·마트·잡화",
+      subcategories: [
+        { id: 601, name: "편의점" },
+        { id: 602, name: "마트" },
+        { id: 603, name: "생활용품" },
+      ],
+    },
+    {
+      envelopeId: 7,
+      envelopeName: "기타",
+      subcategories: [
+        { id: 701, name: "교육" },
+        { id: 702, name: "해외 결제" },
+        { id: 703, name: "경조사·기타" },
+      ],
+    },
   ],
 };
 
@@ -134,7 +184,8 @@ const MOCK_PAGE_SIZE = 20;
 type MockEntry = { dto: TransactionDto; source: MockSource };
 
 function subcategoryName(id: number): string {
-  return subcategoriesMock.items.find((item) => item.id === id)?.name ?? "기타";
+  const found = subcategoriesMock.items.flatMap((envelope) => envelope.subcategories).find((item) => item.id === id);
+  return found?.name ?? "기타";
 }
 
 function monthTransactions(month: string, todayKey: string): MockEntry[] {

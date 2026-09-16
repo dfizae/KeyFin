@@ -44,10 +44,36 @@ describe("toTransaction", () => {
 });
 
 describe("pending · subcategories · classify", () => {
+  it("미확정 목록은 커서·size 로 잘리고 마지막 쪽은 nextCursor 가 null 이다", () => {
+    const first = pendingTransactionsMock(null, 1);
+    expect(first.items.map((item) => item.id)).toEqual([501]);
+    expect(first.nextCursor).toBe(501);
+
+    const second = pendingTransactionsMock(first.nextCursor, 1);
+    expect(second.items.map((item) => item.id)).toEqual([502]);
+    expect(second.nextCursor).toBeNull();
+  });
+
   it("미확정 목록과 세분류 22종을 변환한다", () => {
     expect(toPendingTransactions(pendingTransactionsMock()).items.map((item) => item.id)).toEqual([501, 502]);
     expect(toSubcategories(subcategoriesMock)).toHaveLength(22);
     expect(toSubcategories(subcategoriesMock)[1]).toEqual({ id: 102, name: "카페", envelopeId: 1, envelopeName: "외식" });
+  });
+
+  it("세분류는 봉투별로 묶여 오고(백엔드 SubcategoryListResponse) 화면 목록으로 펴진다", () => {
+    const flattened = toSubcategories({
+      items: [
+        { envelopeId: 1, envelopeName: "외식", subcategories: [{ id: 101, name: "음식점" }, { id: 102, name: "카페" }] },
+        { envelopeId: 7, envelopeName: "기타", subcategories: [{ id: 701, name: "교육" }] },
+      ],
+    });
+
+    expect(flattened).toEqual([
+      { id: 101, name: "음식점", envelopeId: 1, envelopeName: "외식" },
+      { id: 102, name: "카페", envelopeId: 1, envelopeName: "외식" },
+      { id: 701, name: "교육", envelopeId: 7, envelopeName: "기타" },
+    ]);
+    expect(toSubcategories({ items: [{ envelopeId: 3, envelopeName: "의료·건강", subcategories: [] }] })).toEqual([]);
   });
 
   it("확정 응답(develop 2026-09-15 모양)을 화면 모델로 바꾸고 더치페이 부담액은 KRW 로 바꾼다", () => {
