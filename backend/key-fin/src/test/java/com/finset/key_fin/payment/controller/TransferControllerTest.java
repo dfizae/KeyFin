@@ -26,6 +26,7 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.CalendarItemType;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse.Purpose;
 import com.finset.key_fin.payment.entity.TransferStatus;
@@ -55,27 +56,30 @@ class TransferControllerTest {
 
 	@Test
 	void listsProposedTransfers() throws Exception {
-		when(transferService.list(1L, TransferStatus.PROPOSED)).thenReturn(List.of(new TransferResponse(
-				21L, TransferStatus.PROPOSED, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 15), 230000L, 1L, 3L,
-				new Purpose(CalendarItemType.FIXED, 7L, null, "월세"), null, null, LocalDateTime.of(2026, 9, 14, 8, 30))));
+		when(transferService.list(1L, TransferStatus.PROPOSED, null, null, null)).thenReturn(new TransferListResponse(
+				List.of(new TransferResponse(
+						21L, TransferStatus.PROPOSED, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 15), 230000L, 1L, 3L,
+						new Purpose(CalendarItemType.FIXED, 7L, null, "월세"), null, null, LocalDateTime.of(2026, 9, 14, 8, 30))),
+				null));
 
 		mockMvc.perform(get("/api/v1/transfers").param("status", "PROPOSED"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.data[0].id").value(21))
-				.andExpect(jsonPath("$.data[0].status").value("PROPOSED"))
-				.andExpect(jsonPath("$.data[0].dueDate").value("2026-09-15"))
-				.andExpect(jsonPath("$.data[0].purpose.type").value("FIXED"))
-				.andExpect(jsonPath("$.data[0].purpose.name").value("월세"));
+				.andExpect(jsonPath("$.data.items[0].id").value(21))
+				.andExpect(jsonPath("$.data.items[0].status").value("PROPOSED"))
+				.andExpect(jsonPath("$.data.items[0].dueDate").value("2026-09-15"))
+				.andExpect(jsonPath("$.data.items[0].purpose.type").value("FIXED"))
+				.andExpect(jsonPath("$.data.items[0].purpose.name").value("월세"))
+				.andExpect(jsonPath("$.data.nextCursor").doesNotExist());
 	}
 
 	@Test
 	void listsAllWhenStatusOmitted() throws Exception {
-		when(transferService.list(1L, null)).thenReturn(List.of());
+		when(transferService.list(1L, null, null, null, null)).thenReturn(new TransferListResponse(List.of(), null));
 
 		mockMvc.perform(get("/api/v1/transfers"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.data").isEmpty());
-		verify(transferService).list(eq(1L), isNull());
+				.andExpect(jsonPath("$.data.items").isEmpty());
+		verify(transferService).list(eq(1L), isNull(), isNull(), isNull(), isNull());
 	}
 
 	@Test

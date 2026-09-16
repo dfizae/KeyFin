@@ -2,11 +2,9 @@ package com.finset.key_fin.payment.controller;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
-import java.util.List;
-
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
-import com.finset.key_fin.payment.dto.response.TransferResponse;
+import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.entity.TransferStatus;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,7 +26,8 @@ public interface TransferControllerDocs {
 
 	@Operation(
 			summary = "이체 제안·이력 목록",
-			description = "status를 주면 해당 상태만, 생략하면 전체를 최신순으로 돌려줍니다. "
+			description = "status·month(대상 출금일 기준 yyyyMM)로 거르고, 생략하면 전체를 최신순으로 돌려줍니다. "
+					+ "cursor는 직전 응답의 nextCursor(없으면 첫 페이지), size는 1~100(기본 20). nextCursor가 null이면 마지막 페이지. "
 					+ "PROPOSED = 승인 대기 / APPROVED = 실행 중(응답 대기, 다시 승인하면 같은 번호로 재시도) / EXECUTED = 실행 완료 / "
 					+ "FAILED = 금융망 거부(잔액 부족·은행 한도) / CANCELED = 출금일 경과 또는 부족액 해소로 무효. "
 					+ "scheduledDate는 실행 예정일(제안한 날), dueDate는 대상 출금일. purpose.type은 FIXED(고정지출) 또는 CARD_BILL(카드 청구서).",
@@ -43,19 +42,25 @@ public interface TransferControllerDocs {
 							schema = @Schema(implementation = BaseResponse.class),
 							examples = @ExampleObject(
 									name = "승인 대기 목록",
-									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":[{\"id\":21,\"status\":\"PROPOSED\",\"scheduledDate\":\"2026-09-14\",\"dueDate\":\"2026-09-15\",\"requiredAmount\":230000,\"fromAccountId\":1,\"toAccountId\":3,\"purpose\":{\"type\":\"FIXED\",\"fixedExpenseId\":7,\"cardBillingId\":null,\"name\":\"월세\"},\"executedAt\":null,\"failReason\":null,\"createdAt\":\"2026-09-14T08:30:12\"},{\"id\":22,\"status\":\"PROPOSED\",\"scheduledDate\":\"2026-09-14\",\"dueDate\":\"2026-09-14\",\"requiredAmount\":33900,\"fromAccountId\":1,\"toAccountId\":3,\"purpose\":{\"type\":\"CARD_BILL\",\"fixedExpenseId\":null,\"cardBillingId\":5,\"name\":\"KB 국민카드\"},\"executedAt\":null,\"failReason\":null,\"createdAt\":\"2026-09-14T08:30:12\"}]}"
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"items\":[{\"id\":21,\"status\":\"PROPOSED\",\"scheduledDate\":\"2026-09-14\",\"dueDate\":\"2026-09-15\",\"requiredAmount\":230000,\"fromAccountId\":1,\"toAccountId\":3,\"purpose\":{\"type\":\"FIXED\",\"fixedExpenseId\":7,\"cardBillingId\":null,\"name\":\"월세\"},\"executedAt\":null,\"failReason\":null,\"createdAt\":\"2026-09-14T08:30:12\"},{\"id\":22,\"status\":\"PROPOSED\",\"scheduledDate\":\"2026-09-14\",\"dueDate\":\"2026-09-14\",\"requiredAmount\":33900,\"fromAccountId\":1,\"toAccountId\":3,\"purpose\":{\"type\":\"CARD_BILL\",\"fixedExpenseId\":null,\"cardBillingId\":5,\"name\":\"KB 국민카드\"},\"executedAt\":null,\"failReason\":null,\"createdAt\":\"2026-09-14T08:30:12\"}],\"nextCursor\":null}}"
 							)
 					)
 			),
-			@ApiResponse(responseCode = "400", description = "status 값이 올바르지 않음(COMMON_001)",
+			@ApiResponse(responseCode = "400", description = "status·month·cursor·size 값이 올바르지 않음(COMMON_001)",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
 			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	})
-	BaseResponse<List<TransferResponse>> list(
+	BaseResponse<TransferListResponse> list(
 			Long userId,
 			@Parameter(description = "상태 필터(선택). PROPOSED / APPROVED / EXECUTED / FAILED / CANCELED", example = "PROPOSED")
-			TransferStatus status
+			TransferStatus status,
+			@Parameter(description = "대상 출금일 월 필터(선택). yyyyMM", example = "202609")
+			String month,
+			@Parameter(description = "직전 응답의 nextCursor(선택). 생략하면 첫 페이지", example = "21")
+			Long cursor,
+			@Parameter(description = "페이지 크기(선택). 1~100, 기본 20", example = "20")
+			Integer size
 	);
 
 	@Operation(
