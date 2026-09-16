@@ -18,7 +18,6 @@ import com.finset.key_fin.card.entity.Card;
 import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.CommonErrorCode;
-import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.payment.dto.response.CardBillingDetailResponse;
 import com.finset.key_fin.payment.dto.response.CardBillingDetailResponse.Approval;
 import com.finset.key_fin.payment.dto.response.CardBillingDetailResponse.EstimatedDetail;
@@ -27,6 +26,7 @@ import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.CardSu
 import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.Estimated;
 import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.Statement;
 import com.finset.key_fin.payment.entity.CardBilling;
+import com.finset.key_fin.payment.exception.PaymentErrorCode;
 import com.finset.key_fin.payment.repository.CardBillingRepository;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
@@ -68,7 +68,7 @@ public class CardBillingQueryService {
 	@Transactional(readOnly = true)
 	public CardBillingDetailResponse detail(long userId, long cardId, String from, String to) {
 		Card card = cardRepository.findByIdAndUserId(cardId, userId)
-				.orElseThrow(() -> new BusinessException(LinkErrorCode.CARD_NOT_FOUND));
+				.orElseThrow(() -> new BusinessException(PaymentErrorCode.CARD_NOT_FOUND));
 		Cycle cycle = Cycle.at(LocalDate.now(clock));
 		YearMonth thisMonth = YearMonth.from(cycle.today);
 		YearMonth toMonth = to == null ? thisMonth : parseMonth(to);

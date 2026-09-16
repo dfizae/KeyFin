@@ -16,13 +16,13 @@ import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.CommonErrorCode;
-import com.finset.key_fin.link.exception.LinkErrorCode;
 import com.finset.key_fin.payment.dto.response.CardBillingDetailResponse;
 import com.finset.key_fin.payment.dto.response.CardBillingDetailResponse.Approval;
 import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse;
 import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.CardSummary;
 import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.Statement;
 import com.finset.key_fin.payment.entity.CardBilling.BillingStatus;
+import com.finset.key_fin.payment.exception.PaymentErrorCode;
 import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
@@ -105,11 +105,11 @@ class CardBillingQueryServiceTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	@DisplayName("상세: 남의 카드는 404 CARD_NOT_FOUND, 잘못된 범위(형식·역순·12개월 초과)는 COMMON_001")
+	@DisplayName("상세: 남의 카드는 404 PAY_013, 잘못된 범위(형식·역순·12개월 초과)는 COMMON_001")
 	void rejectsOthersCardAndBadRange() {
 		assertThatThrownBy(() -> cardBillingQueryService.detail(985L, CARD_WITH_WEEKDAY, null, null))
 				.isInstanceOf(BusinessException.class)
-				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(LinkErrorCode.CARD_NOT_FOUND);
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(PaymentErrorCode.CARD_NOT_FOUND);
 
 		for (String[] range : List.of(
 				new String[] {"2026-08", null},
