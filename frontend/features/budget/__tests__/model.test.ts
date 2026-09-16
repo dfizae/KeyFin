@@ -103,6 +103,17 @@ describe("toBudget (GET /budgets/current)", () => {
     expect(() => toBudget({ ...proposed, envelopes: [{ ...proposed.envelopes[0], proposedAmount: null }] })).toThrow(ContractMismatchError);
   });
 
+  it("비상금 풀을 함께 옮긴다 — amount 0 은 미설정이고 넘겨 쓰면 remaining 이 음수다", () => {
+    const dto = budgetConfirmedMock(TODAY);
+
+    expect(toBudget(dto).emergency).toEqual({ amount: "0", spent: "0", remaining: "0" });
+    expect(toBudget({ ...dto, emergency: { amount: 200000, spent: 230000, remaining: -30000 } }).emergency).toEqual({
+      amount: "200000",
+      spent: "230000",
+      remaining: "-30000",
+    });
+  });
+
   it("금액·잔여율이 정수가 아니거나 월·기간·budgetId 형식이 틀리면 계약 불일치다", () => {
     const dto = budgetConfirmedMock(TODAY);
     const total = dto.total ?? { confirmed: 0, spent: 0, remaining: 0, remainingRate: null };
