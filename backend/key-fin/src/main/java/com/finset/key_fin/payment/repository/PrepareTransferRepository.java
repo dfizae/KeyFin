@@ -27,6 +27,8 @@ public interface PrepareTransferRepository extends JpaRepository<PrepareTransfer
 
 	List<PrepareTransfer> findAllByUserIdAndStatusIn(Long userId, Collection<TransferStatus> statuses);
 
+	List<PrepareTransfer> findAllByStatus(TransferStatus status);
+
 	@Query("""
 			select coalesce(sum(t.requiredAmount), 0) from PrepareTransfer t
 			where t.userId = :userId

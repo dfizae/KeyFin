@@ -27,7 +27,9 @@ import com.finset.key_fin.user.entity.UserSettings;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserSettingsRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TransferService {
@@ -62,10 +64,10 @@ public class TransferService {
 			checkSafeguards(ctx);
 			institutionTxNo = headerFactory.newTransactionUniqueNo();
 			writer.approve(userId, transferId, institutionTxNo);
+			log.info("이체 승인: transferId={}, userId={}, institutionTxNo={}, amount={}",
+					transferId, userId, institutionTxNo, ctx.amount());
 		}
-		FinanceTransferResult result = financeTransferClient.transfer(
-				ctx.userKey(), institutionTxNo, ctx.fromAccountNo(), ctx.toAccountNo(), ctx.amount(),
-				SUMMARY_PREFIX + ctx.purposeName());
+		FinanceTransferResult result = transfer(ctx, institutionTxNo);
 		TransferApproveResponse response = writer.complete(userId, transferId, result, LocalDateTime.now(clock));
 		if (!result.isSuccess()) {
 			throw new BusinessException(result.status() == FinanceTransferResult.Status.INSUFFICIENT_BALANCE
@@ -73,6 +75,29 @@ public class TransferService {
 					: PaymentErrorCode.TRANSFER_BANK_LIMIT);
 		}
 		return response;
+	}
+
+	/** APPROVED로 남은 건(응답 유실)을 저장된 번호로 재전송한다. 이번에도 결과를 못 받으면 다음 회차에 다시 본다. */
+	public void recoverApproved() {
+		List<PrepareTransfer> stuck = prepareTransferRepository.findAllByStatus(TransferStatus.APPROVED);
+		int failed = 0;
+		for (PrepareTransfer transfer : stuck) {
+			try {
+				ApprovalContext ctx = writer.load(transfer.getUserId(), transfer.getId());
+				FinanceTransferResult result = transfer(ctx, ctx.institutionTxNo());
+				writer.complete(ctx.userId(), ctx.transferId(), result, LocalDateTime.now(clock));
+			} catch (RuntimeException e) {
+				failed++;
+				log.warn("이체 복구 실패 — 다음 회차에 재시도: transferId={}, cause={}", transfer.getId(), e.toString());
+			}
+		}
+		log.info("이체 복구 완료: candidates={}, failed={}", stuck.size(), failed);
+	}
+
+	private FinanceTransferResult transfer(ApprovalContext ctx, String institutionTxNo) {
+		return financeTransferClient.transfer(
+				ctx.userKey(), institutionTxNo, ctx.fromAccountNo(), ctx.toAccountNo(), ctx.amount(),
+				SUMMARY_PREFIX + ctx.purposeName());
 	}
 
 	@Transactional
