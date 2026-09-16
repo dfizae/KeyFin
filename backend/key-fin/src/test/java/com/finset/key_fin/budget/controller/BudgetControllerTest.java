@@ -26,6 +26,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.request.EmergencyFundRequest;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Emergency;
+import com.finset.key_fin.budget.dto.response.EmergencyFundResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Total;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
@@ -76,7 +79,8 @@ class BudgetControllerTest {
 		when(budgetService.getCurrent(1L)).thenReturn(new BudgetCurrentResponse(
 				11L, "202609", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "CONFIRMED",
 				new Total(780000, 298000, 482000, 61),
-				List.of(EnvelopeBoard.confirmed(3, "의료·건강", 0, 30000, -30000, null))));
+				List.of(EnvelopeBoard.confirmed(3, "의료·건강", 0, 30000, -30000, null)),
+				Emergency.of(0, 0)));
 
 		mockMvc.perform(get("/api/v1/budgets/current"))
 				.andExpect(status().isOk())
@@ -85,6 +89,33 @@ class BudgetControllerTest {
 				.andExpect(jsonPath("$.data.total.remainingRate").value(61))
 				.andExpect(jsonPath("$.data.envelopes[0].remaining").value(-30000))
 				.andExpect(jsonPath("$.data.envelopes[0].remainingRate").value((Object) null));
+	}
+
+	@Test
+	void updatesEmergencyFund() throws Exception {
+		when(budgetService.updateEmergency(eq(1L), eq(11L), any(EmergencyFundRequest.class)))
+				.thenReturn(new EmergencyFundResponse(11L, Emergency.of(200000, 45000)));
+
+		mockMvc.perform(put("/api/v1/budgets/11/emergency")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"amount\":200000}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.budgetId").value(11))
+				.andExpect(jsonPath("$.data.emergency.amount").value(200000))
+				.andExpect(jsonPath("$.data.emergency.remaining").value(155000));
+	}
+
+	@Test
+	void rejectsNegativeOrMissingEmergencyAmount() throws Exception {
+		mockMvc.perform(put("/api/v1/budgets/11/emergency")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"amount\":-1000}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
+		mockMvc.perform(put("/api/v1/budgets/11/emergency")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

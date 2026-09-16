@@ -10,8 +10,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
+import com.finset.key_fin.budget.dto.request.EmergencyFundRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.response.EmergencyFundResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.budget.service.BudgetService;
 import com.finset.key_fin.global.base.BaseResponse;
@@ -46,5 +48,15 @@ public class BudgetController implements BudgetControllerDocs {
 			@Valid @RequestBody BudgetConfirmRequest request
 	) {
 		return BaseResponse.ok(budgetService.confirm(userId, budgetId, request));
+	}
+
+	@PutMapping("/{budgetId}/emergency")
+	@Override
+	public BaseResponse<EmergencyFundResponse> updateEmergency(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable Long budgetId,
+			@Valid @RequestBody EmergencyFundRequest request
+	) {
+		return BaseResponse.ok(budgetService.updateEmergency(userId, budgetId, request));
 	}
 }
