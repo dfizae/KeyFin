@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1043570040701",
+    "project_id": "keyfin-dev-c39b2",
+    "storage_bucket": "keyfin-dev-c39b2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1043570040701:android:0a3e44eb853600d5623614",
+        "android_client_info": {
+          "package_name": "com.finset.keyfin"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCyTcT7JXm7NWHezTXYc1Q0nW82EqXt3xI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
