@@ -7,9 +7,11 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -171,6 +173,46 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 
 		assertThat(response.status()).isEqualTo(TransferStatus.EXECUTED);
 		assertThat(auditOf(9904L)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("복구 배치: APPROVED 행만 저장된 번호로 재전송, H1007이면 EXECUTED. PROPOSED 행은 건드리지 않는다")
+	void recoverApprovedSettlesWithStoredNo() {
+		when(financeTransferClient.transfer(eq(USER_KEY), eq("20260901083000000009"), eq(INCOME_NO), eq(LIVING_NO), eq(120000L), any()))
+				.thenReturn(FinanceTransferResult.ALREADY_PROCESSED);
+
+		transferService.recoverApproved();
+
+		PrepareTransfer recovered = prepareTransferRepository.findById(9905L).orElseThrow();
+		assertThat(recovered.getStatus()).isEqualTo(TransferStatus.EXECUTED);
+		assertThat(recovered.getInstitutionTxNo()).isEqualTo("20260901083000000009");
+		assertThat(auditOf(9905L)).extracting(AuditLog::getAction).containsExactly(AuditAction.EXECUTE);
+		assertThat(prepareTransferRepository.findById(9901L).orElseThrow().isProposed()).isTrue();
+		verify(financeTransferClient, times(1)).transfer(any(), any(), any(), any(), anyLong(), any());
+	}
+
+	@Test
+	@DisplayName("복구 배치: A1014는 FAILED로 마감, 통신 예외가 난 행은 APPROVED로 남겨 다음 회차에 다시 본다")
+	void recoverApprovedIsolatesFailures() {
+		PrepareTransfer stuck = PrepareTransfer.proposeForFixedExpense(
+				USER, 9704L, LocalDate.of(2026, 9, 9), LocalDate.of(2026, 9, 24), 50000L, 9506L, 9504L);
+		stuck.approve("20260910083000000077");
+		long stuckId = prepareTransferRepository.save(stuck).getId();
+		when(financeTransferClient.transfer(any(), eq("20260901083000000009"), any(), any(), anyLong(), any()))
+				.thenReturn(new FinanceTransferResult(Status.INSUFFICIENT_BALANCE, "A1014"));
+		when(financeTransferClient.transfer(any(), eq("20260910083000000077"), any(), any(), anyLong(), any()))
+				.thenThrow(new IllegalStateException("finance down"));
+
+		transferService.recoverApproved();
+
+		PrepareTransfer failed = prepareTransferRepository.findById(9905L).orElseThrow();
+		assertThat(failed.getStatus()).isEqualTo(TransferStatus.FAILED);
+		assertThat(failed.getFailReason()).startsWith("A1014");
+		assertThat(auditOf(9905L)).extracting(AuditLog::getAction).containsExactly(AuditAction.FAIL);
+		PrepareTransfer pending = prepareTransferRepository.findById(stuckId).orElseThrow();
+		assertThat(pending.isApproved()).isTrue();
+		assertThat(pending.getInstitutionTxNo()).isEqualTo("20260910083000000077");
+		assertThat(auditOf(stuckId)).isEmpty();
 	}
 
 	private List<AuditLog> auditOf(long transferId) {
