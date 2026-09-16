@@ -22,11 +22,14 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.global.exception.CommonErrorCode;
 import com.finset.key_fin.payment.client.FinanceTransferClient;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult.Status;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.CalendarItemType;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
+import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse;
 import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
@@ -154,15 +157,76 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 	@Test
 	@DisplayName("목록: 상태 필터는 선택, 없으면 전체 최신순. 목적 이름은 고정지출 이름 또는 카드명")
 	void listsWithOptionalFilter() {
-		List<TransferResponse> proposed = transferService.list(USER, TransferStatus.PROPOSED);
+		List<TransferResponse> proposed = transferService.list(USER, TransferStatus.PROPOSED, null, null, null).items();
 		assertThat(proposed).extracting(TransferResponse::id).containsExactly(9903L, 9902L, 9901L);
 		assertThat(proposed.get(0).purpose().type()).isEqualTo(CalendarItemType.CARD_BILL);
 		assertThat(proposed.get(0).purpose().name()).isEqualTo("신한 테스트카드");
 		assertThat(proposed.get(2).purpose().name()).isEqualTo("월세");
 
-		List<TransferResponse> all = transferService.list(USER, null);
-		assertThat(all).hasSize(7);
-		assertThat(all.get(0).id()).isEqualTo(9909L);
+		TransferListResponse all = transferService.list(USER, null, null, null, null);
+		assertThat(all.items()).hasSize(7);
+		assertThat(all.items().get(0).id()).isEqualTo(9909L);
+		assertThat(all.nextCursor()).isNull();
+	}
+
+	@Test
+	@DisplayName("페이징: size+1 읽기로 다음 페이지 유무를 판단하고, 커서(마지막 id)로 이어 가면 중복·누락 없이 전체를 순회한다")
+	void pagesWithCursor() {
+		TransferListResponse first = transferService.list(USER, null, null, null, 3);
+		assertThat(first.items()).extracting(TransferResponse::id).containsExactly(9909L, 9906L, 9905L);
+		assertThat(first.nextCursor()).isEqualTo(9905L);
+
+		TransferListResponse second = transferService.list(USER, null, null, first.nextCursor(), 3);
+		assertThat(second.items()).extracting(TransferResponse::id).containsExactly(9904L, 9903L, 9902L);
+		assertThat(second.nextCursor()).isEqualTo(9902L);
+
+		TransferListResponse last = transferService.list(USER, null, null, second.nextCursor(), 3);
+		assertThat(last.items()).extracting(TransferResponse::id).containsExactly(9901L);
+		assertThat(last.nextCursor()).isNull();
+	}
+
+	@Test
+	@DisplayName("필터: month는 대상 출금일 기준이며 status와 함께 적용된다. 다른 사용자 행은 보이지 않고, 잘못된 month·size·cursor는 COMMON_001")
+	void filtersAndValidates() {
+		assertThat(transferService.list(USER, null, "202609", null, null).items()).hasSize(7);
+		assertThat(transferService.list(USER, null, "202610", null, null).items()).isEmpty();
+		assertThat(transferService.list(USER, TransferStatus.EXECUTED, "202609", null, null).items())
+				.extracting(TransferResponse::id).containsExactly(9906L, 9904L);
+		assertThat(transferService.list(987L, null, null, null, null).items())
+				.extracting(TransferResponse::id).containsExactly(9907L);
+
+		for (Runnable call : List.<Runnable>of(
+				() -> transferService.list(USER, null, "2026-09", null, null),
+				() -> transferService.list(USER, null, null, null, 0),
+				() -> transferService.list(USER, null, null, null, 101),
+				() -> transferService.list(USER, null, null, 0L, null))) {
+			assertThatThrownBy(call::run).isInstanceOf(BusinessException.class)
+					.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT_VALUE);
+		}
+	}
+
+	@Test
+	@DisplayName("상세: 현재 상태와 감사 타임라인을 오래된 순으로 돌려주고, 남의 제안은 404")
+	void detailWithHistory() {
+		assertThatThrownBy(() -> transferService.approve(USER, 9902L))
+				.isInstanceOf(BusinessException.class);
+		transferService.postpone(USER, 9902L);
+
+		TransferDetailResponse detail = transferService.detail(USER, 9902L);
+
+		assertThat(detail.transfer().id()).isEqualTo(9902L);
+		assertThat(detail.transfer().status()).isEqualTo(TransferStatus.PROPOSED);
+		assertThat(detail.transfer().purpose().name()).isEqualTo("월세");
+		assertThat(detail.history()).extracting(TransferDetailResponse.HistoryEntry::action)
+				.containsExactly(AuditAction.HOLD, AuditAction.HOLD);
+		assertThat(detail.history().get(0).basis()).contains("PAY_008").contains("350000");
+		assertThat(detail.history().get(1).basis()).startsWith(TransferService.POSTPONE_BASIS);
+		assertThat(detail.history()).allSatisfy(entry -> assertThat(entry.at()).isNotNull());
+
+		assertThat(transferService.detail(USER, 9901L).history()).isEmpty();
+		assertThatThrownBy(() -> transferService.detail(USER, 9907L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(PaymentErrorCode.TRANSFER_NOT_FOUND);
 	}
 
 	@Test

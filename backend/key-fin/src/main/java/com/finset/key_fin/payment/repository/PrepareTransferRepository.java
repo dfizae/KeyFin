@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Limit;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,18 @@ public interface PrepareTransferRepository extends JpaRepository<PrepareTransfer
 	List<PrepareTransfer> findAllByUserIdOrderByIdDesc(Long userId);
 
 	List<PrepareTransfer> findAllByUserIdAndStatusOrderByIdDesc(Long userId, TransferStatus status);
+
+	@Query("""
+			select t from PrepareTransfer t
+			where t.userId = :userId
+			  and (:status is null or t.status = :status)
+			  and (:from is null or t.dueDate >= :from)
+			  and (:to is null or t.dueDate < :to)
+			  and (:cursor is null or t.id < :cursor)
+			order by t.id desc
+			""")
+	List<PrepareTransfer> findPage(@Param("userId") Long userId, @Param("status") TransferStatus status,
+			@Param("from") LocalDate from, @Param("to") LocalDate to, @Param("cursor") Long cursor, Limit limit);
 
 	Optional<PrepareTransfer> findByIdAndUserId(Long id, Long userId);
 

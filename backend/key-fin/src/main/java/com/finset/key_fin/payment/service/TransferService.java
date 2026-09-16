@@ -3,17 +3,24 @@ package com.finset.key_fin.payment.service;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.account.entity.Account;
 import com.finset.key_fin.account.repository.AccountRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.global.exception.CommonErrorCode;
 import com.finset.key_fin.global.finance.client.FinanceHeaderFactory;
 import com.finset.key_fin.payment.client.FinanceTransferClient;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
+import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse;
 import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
@@ -36,6 +43,9 @@ public class TransferService {
 
 	static final String SUMMARY_PREFIX = "KeyFin 결제 준비 - ";
 	static final String POSTPONE_BASIS = "사용자 보류(나중에)";
+	static final int DEFAULT_SIZE = 20;
+	static final int MAX_SIZE = 100;
+	private static final DateTimeFormatter MONTH_FORMAT = DateTimeFormatter.ofPattern("yyyyMM");
 
 	private final PrepareTransferRepository prepareTransferRepository;
 	private final UserSettingsRepository userSettingsRepository;
@@ -47,13 +57,54 @@ public class TransferService {
 	private final FinanceHeaderFactory headerFactory;
 	private final Clock clock;
 
+	/** month는 대상 출금일(due_date) 기준 yyyyMM. cursor는 직전 페이지 마지막 id — 최신순이라 그보다 작은 id를 읽는다. */
 	@Transactional(readOnly = true)
-	public List<TransferResponse> list(long userId, TransferStatus status) {
-		List<PrepareTransfer> transfers = status == null
-				? prepareTransferRepository.findAllByUserIdOrderByIdDesc(userId)
-				: prepareTransferRepository.findAllByUserIdAndStatusOrderByIdDesc(userId, status);
-		Map<Long, String> names = purposeResolver.namesOf(transfers);
-		return transfers.stream().map(t -> TransferResponse.of(t, names.get(t.getId()))).toList();
+	public TransferListResponse list(long userId, TransferStatus status, String month, Long cursor, Integer size) {
+		YearMonth target = parseMonth(month);
+		int pageSize = resolveSize(size);
+		if (cursor != null && cursor <= 0) {
+			throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+		}
+		List<PrepareTransfer> rows = prepareTransferRepository.findPage(
+				userId, status,
+				target == null ? null : target.atDay(1),
+				target == null ? null : target.plusMonths(1).atDay(1),
+				cursor, Limit.of(pageSize + 1));
+		boolean hasNext = rows.size() > pageSize;
+		List<PrepareTransfer> page = hasNext ? rows.subList(0, pageSize) : rows;
+		Map<Long, String> names = purposeResolver.namesOf(page);
+		return new TransferListResponse(
+				page.stream().map(t -> TransferResponse.of(t, names.get(t.getId()))).toList(),
+				hasNext ? page.getLast().getId() : null);
+	}
+
+	@Transactional(readOnly = true)
+	public TransferDetailResponse detail(long userId, long transferId) {
+		PrepareTransfer transfer = prepareTransferRepository.findByIdAndUserId(transferId, userId)
+				.orElseThrow(() -> new BusinessException(PaymentErrorCode.TRANSFER_NOT_FOUND));
+		return TransferDetailResponse.of(
+				TransferResponse.of(transfer, purposeResolver.nameOf(transfer)),
+				auditLogRepository.findAllByTargetTypeAndTargetIdOrderByIdAsc(
+						AuditLog.TARGET_PREPARE_TRANSFER, String.valueOf(transferId)));
+	}
+
+	private static YearMonth parseMonth(String month) {
+		if (month == null || month.isBlank()) {
+			return null;
+		}
+		try {
+			return YearMonth.parse(month, MONTH_FORMAT);
+		} catch (DateTimeParseException e) {
+			throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+		}
+	}
+
+	private static int resolveSize(Integer size) {
+		int resolved = size == null ? DEFAULT_SIZE : size;
+		if (resolved < 1 || resolved > MAX_SIZE) {
+			throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
+		}
+		return resolved;
 	}
 
 	/** 트랜잭션 없음 — APPROVED 커밋 후 금융망 이체, 응답 유실 시 같은 기관거래고유번호로 재시도하기 위해. */
