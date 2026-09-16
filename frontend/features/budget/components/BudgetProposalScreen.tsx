@@ -21,6 +21,7 @@ import {
   useCurrentBudget,
   type ConfirmBudgetVariables,
 } from "@/features/budget/api/queries";
+import { useAuthStore } from "@/features/auth/store";
 import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
 import { confirmErrorMessage, isAlreadyConfirmedError } from "@/features/budget/errors";
 import {
@@ -33,6 +34,7 @@ import {
   type ProposalBasisKind,
   type ProposalRow,
 } from "@/features/budget/model";
+import { saveOnboardingDone } from "@/lib/session-storage";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW, fromWon, toWon, type KRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -144,7 +146,14 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
   const total = sumAmounts(rows.map(amountOf));
   const summary = proposalSummary(kind, rows, analysis);
 
-  const goNext = () => router.replace(nextRoute);
+  const userId = useAuthStore((state) => state.user?.id ?? null);
+  const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
+  // 첫 예산 확정 = 온보딩 완료(백엔드 합의 2026-09-11). 서버 필드가 생기기 전까지 기기에 기록해 홈 게이트가 이 값을 본다.
+  const goNext = () => {
+    completeOnboarding();
+    if (userId !== null) void saveOnboardingDone(userId);
+    router.replace(nextRoute);
+  };
 
   // 확정은 주기당 1회라 확인을 받은 뒤 보낸다(노션 권고). 이미 확정됨(BUDGET_003)은 끝난 것으로 보고 넘긴다.
   const handleConfirm = () => {

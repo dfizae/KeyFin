@@ -25,6 +25,13 @@ export function financeStatusMock(): FinanceStatusDto {
   return { connected };
 }
 
+/** 온보딩을 마친 사용자로 시작할 때: 연결됨 + 후보 계좌·카드 전부 관리 대상 (리로드로 목이 초기화돼도 홈이 열리게) */
+export function seedConnectedMock(): void {
+  connected = true;
+  for (const account of CANDIDATE_ACCOUNTS) managedAccounts.add(account.id);
+  for (const card of CANDIDATE_CARDS) managedCards.add(card.id);
+}
+
 /** 테스트·개발 재시작용 */
 export function resetLinkMocks(): void {
   connected = false;
