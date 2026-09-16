@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.time.LocalTime;
 import java.util.Collection;
 import java.util.Optional;
@@ -39,4 +40,15 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 			  and t.transactionDate between :from and :to
 			""")
 	long sumLiveCardApprovals(@Param("cardId") Long cardId, @Param("from") LocalDate from, @Param("to") LocalDate to);
+
+	@Query("""
+			select t from Transaction t
+			where t.cardId = :cardId
+			  and t.source = com.finset.key_fin.transaction.entity.TransactionSource.LIVE
+			  and t.transactionType = com.finset.key_fin.transaction.entity.TransactionType.CARD
+			  and t.status = com.finset.key_fin.transaction.entity.TransactionStatus.NORMAL
+			  and t.transactionDate between :from and :to
+			order by t.transactionDate desc, t.transactionTime desc, t.id desc
+			""")
+	List<Transaction> findLiveCardApprovals(@Param("cardId") Long cardId, @Param("from") LocalDate from, @Param("to") LocalDate to);
 }
