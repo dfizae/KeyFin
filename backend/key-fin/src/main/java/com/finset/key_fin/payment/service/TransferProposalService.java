@@ -18,7 +18,6 @@ import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Item;
 import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
 import com.finset.key_fin.payment.entity.PrepareTransfer;
-import com.finset.key_fin.payment.entity.TransferStatus;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
 import com.finset.key_fin.payment.service.RequiredAmountService.Entry;
@@ -41,8 +40,7 @@ public class TransferProposalService {
 	public ProposalResult propose(long userId) {
 		LocalDate today = LocalDate.now(clock);
 		LocalDate tomorrow = today.plusDays(1);
-		List<PrepareTransfer> rows = prepareTransferRepository.findAllByUserIdAndStatusIn(
-				userId, List.of(TransferStatus.PROPOSED, TransferStatus.CANCELED));
+		List<PrepareTransfer> rows = prepareTransferRepository.findAllByUserIdOrderByIdDesc(userId);
 		int canceled = expire(userId, rows, today);
 
 		Account income = accountRepository.findAllByUserIdAndIncomeTrue(userId).stream()
@@ -73,8 +71,10 @@ public class TransferProposalService {
 				continue;
 			}
 			if (existing != null) {
-				existing.reopen(today, item.shortage());
-				reopened++;
+				if (existing.isFailed()) {
+					existing.reopen(today, item.shortage());
+					reopened++;
+				}
 				continue;
 			}
 			PrepareTransfer transfer = item.type() == CalendarItemType.CARD_BILL

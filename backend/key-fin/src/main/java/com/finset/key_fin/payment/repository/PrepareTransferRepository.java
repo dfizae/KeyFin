@@ -2,7 +2,6 @@ package com.finset.key_fin.payment.repository;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import jakarta.persistence.LockModeType;
@@ -25,7 +24,7 @@ public interface PrepareTransferRepository extends JpaRepository<PrepareTransfer
 	@Query("select t from PrepareTransfer t where t.id = :id and t.userId = :userId")
 	Optional<PrepareTransfer> findByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
 
-	List<PrepareTransfer> findAllByUserIdAndStatusIn(Long userId, Collection<TransferStatus> statuses);
+	List<PrepareTransfer> findAllByStatus(TransferStatus status);
 
 	@Query("""
 			select coalesce(sum(t.requiredAmount), 0) from PrepareTransfer t

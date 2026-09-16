@@ -15,6 +15,7 @@ import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import com.finset.key_fin.payment.service.CardBillingSyncService;
 import com.finset.key_fin.payment.service.SubscriptionSyncService;
 import com.finset.key_fin.payment.service.TransferProposalService;
+import com.finset.key_fin.payment.service.TransferService;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.repository.UserRepository;
 
@@ -24,8 +25,9 @@ class PaymentSyncSchedulerTest {
 	private final SubscriptionSyncService subscriptionSyncService = mock(SubscriptionSyncService.class);
 	private final CardBillingSyncService cardBillingSyncService = mock(CardBillingSyncService.class);
 	private final TransferProposalService transferProposalService = mock(TransferProposalService.class);
+	private final TransferService transferService = mock(TransferService.class);
 	private final PaymentSyncScheduler scheduler =
-			new PaymentSyncScheduler(userRepository, subscriptionSyncService, cardBillingSyncService, transferProposalService);
+			new PaymentSyncScheduler(userRepository, subscriptionSyncService, cardBillingSyncService, transferProposalService, transferService);
 
 	@Test
 	@DisplayName("연결된 사용자마다 구독·카드 청구를 동기화하고, 한 사용자의 실패가 다음 사용자를 막지 않는다")

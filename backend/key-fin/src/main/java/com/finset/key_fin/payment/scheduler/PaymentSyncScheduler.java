@@ -6,6 +6,7 @@ import org.springframework.stereotype.Component;
 import com.finset.key_fin.payment.service.CardBillingSyncService;
 import com.finset.key_fin.payment.service.SubscriptionSyncService;
 import com.finset.key_fin.payment.service.TransferProposalService;
+import com.finset.key_fin.payment.service.TransferService;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class PaymentSyncScheduler {
 	private final SubscriptionSyncService subscriptionSyncService;
 	private final CardBillingSyncService cardBillingSyncService;
 	private final TransferProposalService transferProposalService;
+	private final TransferService transferService;
 
 	/** 08:00 — 월요일 07:30 청구서 발행 직후. 17:00 — 출금 요일 16:00 출금 결과 반영. */
 	@Scheduled(cron = "0 0 8,17 * * *", zone = "Asia/Seoul")
@@ -48,6 +50,12 @@ public class PaymentSyncScheduler {
 			}
 		}
 		log.info("이체 제안 완료: users={}, failed={}", users.size(), failed);
+	}
+
+	/** 30분 — 승인 후 금융망 응답을 못 받아 APPROVED로 남은 건을 같은 번호로 재전송한다. */
+	@Scheduled(cron = "0 0/30 * * * *", zone = "Asia/Seoul")
+	public void recoverApproved() {
+		transferService.recoverApproved();
 	}
 
 	boolean syncOne(long userId) {

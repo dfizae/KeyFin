@@ -25,7 +25,7 @@ INSERT INTO fixed_expenses (id, user_id, name, expense_type, amount, is_variable
  (9712, 985, '학원비', 'UTILITY',  50000, FALSE, 10, 9507, NULL, TRUE);
 
 -- 기존 제안: 9901 학원비(출금 9/10) 40,000(→ 50,000 갱신) / 9902 보험료(출금 9/11, 어제 D-1 제안 → 부족액 해소로 취소) /
--- 9903 월세(출금 9/8) 만료(→ 출금일 경과 취소) / 9904 이미 실행됨(불변) / 9905 카드 청구 9802가 어제 취소됨(→ 다시 부족하므로 재개)
+-- 9903 월세(출금 9/8) 만료(→ 출금일 경과 취소) / 9904 이미 실행됨(불변) / 9905 카드 청구 9802가 어제 취소됨(→ 다시 부족해도 재제안 없음)
 INSERT INTO prepare_transfers (id, user_id, fixed_expense_id, card_billing_id, scheduled_date, due_date, required_amount, from_account_id, to_account_id, status, institution_tx_no, executed_at, fail_reason) VALUES
  (9901, 986, 9710, NULL, '2026-09-09', '2026-09-10',  40000, 9506, 9504, 'PROPOSED', NULL, NULL, NULL),
  (9902, 986, 9711, NULL, '2026-09-09', '2026-09-11',  60000, 9506, 9505, 'PROPOSED', NULL, NULL, NULL),
