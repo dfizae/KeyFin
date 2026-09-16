@@ -13,6 +13,7 @@ import {
   EMPTY_FIXED_EXPENSE_FORM,
   canApproveTransfer,
   canOpenEntry,
+  canPostponeTransfer,
   findFixedExpense,
   findTransfer,
   fixedExpenseFormError,
@@ -404,37 +405,66 @@ describe("고정지출 목 — 서버처럼 반영하고 거절한다", () => {
 describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", () => {
   afterEach(() => resetTransferMocks());
 
-  it("목록을 화면 모델로 바꾸고 상태를 유니온으로 옮긴다", () => {
+  it("배열 응답을 화면 모델로 바꾸고 출금일·목적을 함께 옮긴다", () => {
     const transfers = toTransfers(transferListMock(MONTH));
 
     expect(transfers).toHaveLength(2);
-    expect(transfers[0]).toMatchObject({
+    expect(findTransfer(transfers, 501)).toMatchObject({
       id: 501,
       status: "PROPOSED",
-      scheduledDate: "2026-09-15",
+      scheduledDate: "2026-09-14",
+      dueDate: "2026-09-15",
       requiredAmount: "230000",
+      purposeType: "FIXED",
       purposeName: "월세",
+      purposeFixedExpenseId: 7,
+      purposeCardBillingId: null,
       executedAt: null,
       failReason: null,
+      createdAt: "2026-09-14T08:30:12",
     });
-    expect(transfers[1]).toMatchObject({ status: "FAILED", failReason: "출금 계좌 잔액이 부족해 이체하지 못했어요." });
+    expect(findTransfer(transfers, 502)).toMatchObject({
+      status: "FAILED",
+      purposeType: "CARD_BILL",
+      purposeCardBillingId: 5,
+      failReason: "출금 계좌 잔액이 부족해 이체하지 못했어요.",
+    });
   });
 
-  it("모르는 상태는 UNKNOWN 으로 흡수하고 '확인 중' 으로 적는다", () => {
-    const [dto] = transferListMock(MONTH).items;
-    const transfer = toTransfers({ items: [{ ...dto, status: "SETTLING" }] })[0];
+  it("제안한 날과 대상 출금일은 다를 수 있다 — 화면 날짜는 dueDate 다", () => {
+    const proposal = findTransfer(toTransfers(transferListMock(MONTH)), 501);
+
+    expect(proposal?.scheduledDate).not.toBe(proposal?.dueDate);
+  });
+
+  it("모르는 상태·목적은 UNKNOWN 으로 흡수하고 '확인 중' 으로 적는다", () => {
+    const [dto] = transferListMock(MONTH);
+    const transfer = toTransfers([{ ...dto, status: "SETTLING", purpose: { ...dto.purpose, type: "LOAN_REPAY" } }])[0];
 
     expect(transfer.status).toBe("UNKNOWN");
+    expect(transfer.purposeType).toBe("UNKNOWN");
     expect(transferStatusLabel(transfer.status)).toBe("확인 중");
     expect(canApproveTransfer(transfer)).toBe(false);
   });
 
-  it("승인할 수 있는 상태는 제안뿐이고, 목록에서 id 로 찾는다", () => {
-    const transfers = toTransfers(transferListMock(MONTH));
+  it("출금일이 빠진 응답은 계약 불일치로 막는다", () => {
+    const [dto] = transferListMock(MONTH);
 
-    expect(canApproveTransfer(transfers[0])).toBe(true);
-    expect(canApproveTransfer(transfers[1])).toBe(false);
-    expect(findTransfer(transfers, 501)?.id).toBe(501);
+    expect(() => toTransfers([{ ...dto, dueDate: "2026-09" }])).toThrow(ContractMismatchError);
+  });
+
+  it("승인은 제안·실행 중까지 열고, 연기는 제안만 받는다", () => {
+    const transfers = toTransfers(transferListMock(MONTH));
+    const proposed = findTransfer(transfers, 501);
+    const failed = findTransfer(transfers, 502);
+    const approved = toTransfers([{ ...transferListMock(MONTH)[0], status: "APPROVED" }])[0];
+
+    expect(canApproveTransfer(proposed!)).toBe(true);
+    expect(canPostponeTransfer(proposed!)).toBe(true);
+    // 금융망 응답이 유실된 건이라 같은 번호로 재시도할 수 있다. 연기는 409 라 막는다.
+    expect(canApproveTransfer(approved)).toBe(true);
+    expect(canPostponeTransfer(approved)).toBe(false);
+    expect(canApproveTransfer(failed!)).toBe(false);
     expect(findTransfer(transfers, 999)).toBeNull();
   });
 
@@ -442,8 +472,8 @@ describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", ()
     transferListMock(MONTH);
     const result = approveTransferMock(501, "2026-09-14T07:12:00");
 
-    expect(result).toEqual({ status: "EXECUTED", executedAt: "2026-09-14T07:12:00" });
-    const after = toTransfers(transferListMock(MONTH)).find((transfer) => transfer.id === 501);
+    expect(result).toEqual({ id: 501, status: "EXECUTED", executedAt: "2026-09-14T07:12:00", failReason: null });
+    const after = findTransfer(toTransfers(transferListMock(MONTH)), 501);
     expect(after).toMatchObject({ status: "EXECUTED", executedAt: "2026-09-14T07:12:00" });
   });
 });
