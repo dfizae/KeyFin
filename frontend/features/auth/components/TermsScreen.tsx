@@ -1,11 +1,12 @@
 import { useRouter } from "expo-router";
 import { Circle, CircleCheckBig } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { canAgreeToTerms, TERMS_ITEMS } from "@/features/auth/model";
@@ -58,10 +59,10 @@ function TermsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader title="약관에 동의해 주세요" onBack={() => router.canGoBack() && router.back()} />
+    <Screen>
+      <ScreenHeader flat title="약관에 동의해 주세요" onBack={() => router.canGoBack() && router.back()} />
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-4">
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 px-6">
         <CoachRow
           character={CHARACTER_PHONE}
           message={"약관은 제가 미리 읽어 봤어요.\n필수 2개만 체크하면 바로 시작할 수 있어요."}
@@ -78,7 +79,7 @@ function TermsScreen() {
 
         <View className="gap-3.5">
           <Pressable
-            className="flex-row items-center gap-2.5 rounded-lg bg-accent px-4 py-3.5"
+            className="flex-row items-center gap-2.5 rounded-lg bg-card px-4 py-3.5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
             accessibilityRole="checkbox"
             accessibilityLabel="전체 동의"
             accessibilityState={{ checked: allChecked }}
@@ -110,7 +111,7 @@ function TermsScreen() {
             })}
           </View>
         </View>
-      </ScrollView>
+      </ScreenScrollView>
 
       <View className="px-6 pb-8 pt-3">
         <Button
@@ -123,7 +124,7 @@ function TermsScreen() {
           <Text>동의하고 계속하기</Text>
         </Button>
       </View>
-    </View>
+    </Screen>
   );
 }
 

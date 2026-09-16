@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
+import { getColors } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 type TabBarProps = Parameters<NonNullable<React.ComponentProps<typeof Tabs>["tabBar"]>>[0];
@@ -21,6 +22,8 @@ const TAB_ICONS: Record<string, LucideIcon> = {
 
 // Pencil Tabs 프레임 padding [12,16,8,16]. 홈 인디케이터 영역은 safe area 로 대체한다.
 const MIN_BOTTOM_INSET = 8;
+/** 헤더(shadow-md, black/10)와 짝이 되는 위쪽 그림자. NativeWind 그림자 클래스는 아래 방향만 있어 스타일로 두고, 색은 토큰 black + 10% 알파다 (2026-09-16) */
+const TAB_BAR_SHADOW = { boxShadow: `0 -2px 8px ${getColors("light").black}1A` } as const;
 
 function TabBar({ state, descriptors, navigation }: TabBarProps) {
   const insets = useSafeAreaInsets();
@@ -28,7 +31,7 @@ function TabBar({ state, descriptors, navigation }: TabBarProps) {
   return (
     <View
       className="flex-row items-center justify-between border-t border-border bg-card px-4 pt-3"
-      style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}
+      style={[TAB_BAR_SHADOW, { paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }]}
       accessibilityRole="tablist"
     >
       {state.routes.map((route, index) => {

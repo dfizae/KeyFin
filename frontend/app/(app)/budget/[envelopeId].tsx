@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 
 import { EnvelopeDetailScreen } from "@/features/budget/components/EnvelopeDetailScreen";
 import { parseEnvelopeId } from "@/features/budget/model";
@@ -9,8 +9,8 @@ export default function EnvelopeDetailRoute() {
   const { envelopeId } = useLocalSearchParams();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <View className="flex-1 bg-background">
       <EnvelopeDetailScreen envelopeId={parseEnvelopeId(envelopeId)} />
-    </SafeAreaView>
+    </View>
   );
 }

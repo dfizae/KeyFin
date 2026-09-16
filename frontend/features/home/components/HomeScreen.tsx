@@ -1,11 +1,13 @@
 import { Redirect, useFocusEffect } from "expo-router";
 import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
@@ -40,7 +42,9 @@ function HomeScreen() {
   // 방이 홈의 주인공이다(사용자 결정 2026-09-15): 화면 폭 가득, 아래 예산 카드 없음. 예산은 벽의 리스트를 탭해 시트로 본다.
   // 작은 화면에서 방이 다 안 들어갈 때만 스크롤된다.
   return (
-    <ScrollView className="flex-1 bg-background" contentContainerClassName="flex-grow justify-center pb-6" scrollEnabled={!roomZoomed}>
+    <Screen>
+      {room.isSuccess ? <HomeHeader coinBalance={room.data.coinBalance} /> : null}
+      <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow justify-center pb-6" scrollEnabled={!roomZoomed}>
       {room.isPending ? <HomeSkeleton /> : null}
       {room.isError ? (
         <View className="flex-1 px-6 pt-6">
@@ -54,7 +58,6 @@ function HomeScreen() {
       ) : null}
       {room.isSuccess ? (
         <>
-          <HomeHeader coinBalance={room.data.coinBalance} />
           <View className="relative">
             <CharacterRoom
               locked={panel !== null}
@@ -78,7 +81,8 @@ function HomeScreen() {
           <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
         </>
       ) : null}
-    </ScrollView>
+      </ScreenScrollView>
+    </Screen>
   );
 }
 
@@ -106,24 +110,27 @@ type HomeHeaderProps = {
   coinBalance: number;
 };
 
-// Pencil home/p0 (EWfx2) HomeHeader: padding [16,24] · space_between · 좌측 caption+h2 · 우측 코인 배지 + 알림 벨.
+// Pencil home/p0 (EWfx2) HomeHeader: space_between · 좌측 caption+h2 · 우측 코인 배지 + 알림 벨.
+// 다른 화면과 같은 ScreenHeader(흰 면·그림자·스크롤 시 투명)인데 제목이 두 줄이라 행만 바꿔 넣는다 (2026-09-16).
 function HomeHeader({ coinBalance }: HomeHeaderProps) {
   const userName = useAuthStore(selectUserName);
   const greeting = userName ? `${userName}님, 안녕하세요!` : "안녕하세요!";
 
   return (
-    <View className="flex-row items-center justify-between bg-background px-6 py-4">
-      <View className="gap-1">
-        <Text className="text-caption text-card-foreground">환영합니다</Text>
-        <Text className="text-h2 text-foreground" accessibilityRole="header">
-          {greeting}
-        </Text>
+    <ScreenHeader title={greeting}>
+      <View className="flex-row items-center justify-between">
+        <View className="gap-1">
+          <Text className="text-caption text-card-foreground">환영합니다</Text>
+          <Text className="text-h2 text-foreground" accessibilityRole="header">
+            {greeting}
+          </Text>
+        </View>
+        <View className="flex-row items-center gap-2">
+          <CoinBadge balance={coinBalance} />
+          <NotificationButton />
+        </View>
       </View>
-      <View className="flex-row items-center gap-2">
-        <CoinBadge balance={coinBalance} />
-        <NotificationButton />
-      </View>
-    </View>
+    </ScreenHeader>
   );
 }
 

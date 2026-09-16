@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from "expo-router";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 
 import { FixedExpenseFormScreen } from "@/features/payment/components/FixedExpenseFormScreen";
 import { parseFixedExpenseRoute } from "@/features/payment/model";
@@ -9,8 +9,8 @@ export default function FixedExpenseRoute() {
   const { id } = useLocalSearchParams();
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
+    <View className="flex-1 bg-background">
       <FixedExpenseFormScreen route={parseFixedExpenseRoute(id)} />
-    </SafeAreaView>
+    </View>
   );
 }

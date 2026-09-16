@@ -1,11 +1,12 @@
 import { Redirect, useRouter } from "expo-router";
 import { Receipt, WalletMinimal, WifiOff } from "lucide-react-native";
-import { FlatList, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenFlatList } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
@@ -56,7 +57,7 @@ function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
   if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader title={envelope?.name ?? "봉투"} onBack={goBack} />
 
       {budget.isPending ? (
@@ -76,7 +77,7 @@ function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
           action={{ label: "예산 보기", onPress: () => router.replace(BUDGET_ROUTE) }}
         />
       ) : (
-        <FlatList
+        <ScreenFlatList
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
           contentContainerClassName="px-6 pb-8"
@@ -110,7 +111,7 @@ function EnvelopeDetailScreen({ envelopeId }: EnvelopeDetailScreenProps) {
           }
         />
       )}
-    </View>
+    </Screen>
   );
 }
 

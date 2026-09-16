@@ -1,9 +1,10 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { ChevronRight, X } from "lucide-react-native";
-import { Dimensions, Modal, Pressable, ScrollView, View } from "react-native";
+import { Dimensions, Pressable, ScrollView, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -57,10 +58,12 @@ function BudgetSheet({ visible, budget, onClose }: BudgetSheetProps) {
   const summary = budget.data?.total ? totalSummary(budget.data.total) : null;
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View className="flex-1 justify-end">
-        <Pressable className="flex-1 bg-black/50" accessibilityRole="button" accessibilityLabel={BUDGET_SHEET_CLOSE_LABEL} onPress={onClose} />
-        <View className="rounded-t-xl bg-popover pb-8" style={{ maxHeight: Dimensions.get("window").height * SHEET_MAX_HEIGHT_RATIO }}>
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      closeLabel={BUDGET_SHEET_CLOSE_LABEL}
+      maxHeight={Dimensions.get("window").height * SHEET_MAX_HEIGHT_RATIO}
+    >
           <View className="flex-row items-center justify-between gap-3 px-5 pt-5">
             <View className="shrink gap-0.5">
               <Text className="text-h3 text-popover-foreground" accessibilityRole="header">
@@ -87,9 +90,7 @@ function BudgetSheet({ visible, budget, onClose }: BudgetSheetProps) {
               </Pressable>
             ) : null}
           </ScrollView>
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 

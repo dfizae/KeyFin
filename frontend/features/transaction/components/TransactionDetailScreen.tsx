@@ -1,11 +1,12 @@
 import { useRouter } from "expo-router";
 import { ChevronRight, CircleAlert, CircleHelp, Receipt } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { envelopeIcon, envelopeName, envelopeTone } from "@/features/budget/catalog";
@@ -67,7 +68,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader title="거래 상세" onBack={goBack} />
 
       {transaction === null ? (
@@ -79,7 +80,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
         />
       ) : (
         <>
-          <ScrollView contentContainerClassName="gap-6 px-6 pb-10">
+          <ScreenScrollView contentContainerClassName="gap-10 px-6 pb-10">
             <AmountSummary transaction={transaction} />
             <ClassificationList
               transaction={transaction}
@@ -87,7 +88,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
               errorMessage={classify.isError ? classifyErrorMessage(classify.error) : null}
               onReclassify={() => setSheetOpen(true)}
             />
-          </ScrollView>
+          </ScreenScrollView>
           <SubcategorySheet
             visible={sheetOpen}
             subcategories={subcategories.data}
@@ -99,7 +100,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
           />
         </>
       )}
-    </View>
+    </Screen>
   );
 }
 

@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
 import { CheckCheck, CircleAlert, WifiOff } from "lucide-react-native";
 import { useState } from "react";
-import { FlatList, View } from "react-native";
+import { View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Screen, ScreenFlatList } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { flattenPending, useClassifyTransaction, usePendingTransactions, useSubcategories } from "@/features/transaction/api/queries";
@@ -43,7 +44,7 @@ function PendingCleanupScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ScreenHeader
         title="미확정 정리"
         onBack={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))}
@@ -59,7 +60,7 @@ function PendingCleanupScreen() {
           action={{ label: "다시 시도", onPress: () => pending.refetch(), disabled: pending.isFetching }}
         />
       ) : (
-        <FlatList
+        <ScreenFlatList
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
           contentContainerClassName="gap-3 px-6 pb-8"
@@ -109,7 +110,7 @@ function PendingCleanupScreen() {
         onSelect={(request) => sheetTransaction && submit(sheetTransaction, request)}
         onClose={() => setSheetTransaction(null)}
       />
-    </View>
+    </Screen>
   );
 }
 

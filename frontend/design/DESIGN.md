@@ -85,16 +85,16 @@
 
 카드(`bg-card` 면, `rounded-2xl p-5`)는 두 경우에만 쓴다(2026-09-14 규칙): ① 눌러서 어딘가로 가는 목록 항목(결제 캘린더 항목·고정지출 관리 항목·자산 탭 계좌/카드·빠른 메뉴·수입 계좌 선택지) ② 선택지·버튼이 한 덩어리로 묶인 것(미확정 정리 항목·코치 말풍선·팝오버). 정보를 보여주기만 하는 덩어리(총예산·준비할 금액·설정 동의·거래/봉투 요약)는 카드 없이 본문에 바로 놓고, 상태 안내는 `*-muted` 색 띠(`rounded-lg p-3.5`)로 한다.
 
-라이트 모드는 `background` 와 `card` 가 둘 다 흰색이라, 흰 배경 위 목록 항목을 `bg-card` + 그림자로만 두면 구분이 안 된다(2026-09-15 사용자 피드백). 눌러서 가는 목록 항목은 자산 탭 계좌 항목처럼 `bg-accent rounded-lg p-4` 면으로 두고, 그 안의 아이콘 타일은 `bg-card` 원으로 한다(결제 캘린더·고정지출 관리 적용). 같은 목록 안에서 일부 항목만 눌리지 않게 두지 않는다 — 고칠 수 없는 항목도 읽기 전용 상세로 연다.
+라이트 모드 배경은 브랜드 기 없는 중립 `background` #FCFCFC(2026-09-16 사용자 결정 — #F6F5FB → #FAF9FD 를 거쳐 보라 기를 빼고 흰색에 가깝게)이고 `card` 는 흰색이다. 배경과 카드 차이가 거의 없어 면 구분은 그림자가 맡는다: 헤더 `shadow-md shadow-black/10`, 탭바는 같은 세기의 위쪽 그림자(`tab-bar.tsx` 스타일 상수), 목록 항목은 `bg-card rounded-lg p-4` + `shadow shadow-black/10`(다크는 `dark:border dark:border-border dark:shadow-none`)로 면을 나누고, 그 안의 아이콘 타일은 `bg-accent` 원(#EAE8F5)으로 한다(자산 탭 계좌·카드, 결제 캘린더, 고정지출 관리, 약관 전체 동의 적용). `accent`·`muted`·`secondary` 는 tint 배경에 묻히지 않도록 한 단계 진한 #EAE8F5 다 — 칩·탭 활성·눌림 상태·트랙·아이콘 원에만 쓰고 목록 항목 면으로는 쓰지 않는다. 2026-09-15 까지는 background 와 card 가 둘 다 흰색이라 항목을 `bg-accent` 면으로 두었는데, tint 도입으로 뒤집었다. 같은 목록 안에서 일부 항목만 눌리지 않게 두지 않는다 — 고칠 수 없는 항목도 읽기 전용 상세로 연다.
 
-섹션 구분(2026-09-15 사용자 규칙, 앞으로 모든 화면): 자산 탭처럼 섹션 제목은 `text-h2 text-foreground`(한 섹션 안의 하위 묶음·날짜 묶음은 `text-h3 text-foreground`)로 크고 검게 쓰고, 섹션 사이는 32(`gap-8`)·제목과 내용 사이는 12(`gap-3`)로 띄운다. 작은 보조색 라벨(`text-label`·`text-caption` + `text-muted-foreground`/`text-card-foreground`)을 섹션 제목으로 쓰지 않는다. Pencil 에서도 섹션 제목은 `$foreground` 20/600(하위 16/600)이다.
+섹션 구분(2026-09-15 사용자 규칙, 앞으로 모든 화면): 자산 탭처럼 섹션 제목은 `text-h2 text-foreground`(한 섹션 안의 하위 묶음·날짜 묶음은 `text-h3 text-foreground`)로 크고 검게 쓰고, 섹션 사이는 40(`gap-10`, 2026-09-16 사용자 요청으로 32 에서 올림 — 스크롤 컨테이너의 `contentContainerClassName` 에 두어 화면마다 같은 값이 되게 한다)·제목과 내용 사이는 12(`gap-3`)로 띄운다. 작은 보조색 라벨(`text-label`·`text-caption` + `text-muted-foreground`/`text-card-foreground`)을 섹션 제목으로 쓰지 않는다. Pencil 에서도 섹션 제목은 `$foreground` 20/600(하위 16/600)이다.
 | `text-label` | 15/22 | 500 | 입력 라벨, 탭, 카테고리명 (킷 Body 3, 2026-09-14 14→15) |
 | `text-caption` | 13/18 | 500 | 날짜, 상태, 법적 고지 (킷 Caption 2, 2026-09-14 12→13) |
 | `text-button` | 16/24 | 500 | 버튼 (킷 Button 라벨) |
 
 ## 4. 간격 · 형태 · 크기
 
-- 4px 그리드(Tailwind 기본 스케일). 화면 좌우 패딩 `px-5`(20). 카드 내부 `p-4`(16). 섹션 간격 `gap-6`(24).
+- 4px 그리드(Tailwind 기본 스케일). 화면 좌우 패딩 `px-5`(20). 카드 내부 `p-4`(16). 섹션 간격 `gap-10`(40, 2장 섹션 규칙).
 - 모서리(킷): 배지 `rounded-sm`(6), 거래 행 아이콘 타일 `rounded-md`(10), **버튼·입력·카드·금액 칩·탭 `rounded-lg`(15)**, 바텀시트 `rounded-xl`(20). RNR `Button`·`Input`·`Card` 기본 클래스는 벤더 원본을 유지하므로 화면에서 `className="rounded-lg"`로 덮어쓴다.
 - 그림자(킷 `shadow.card`: 0/4, blur 30, `primary` 7%): 산출물에 아직 없어 `shadow-sm shadow-black/5`로 근사한다. 다크 모드에서는 그림자 대신 `border-border`.
 - 터치 타깃 최소 44pt(`min-h-touch min-w-touch`). 주요 CTA 높이 `h-button-lg`(56, 사용자 결정), 일반 버튼 `h-button-md`(44, 킷), 입력 `h-input`(44, 킷). 아이콘 `w-icon`(24) `w-icon-sm`(20) `w-icon-lg`(28, 카테고리), 아이콘 타일 `w-icon-tile`(40), 아바타 `w-avatar`(50).
@@ -129,7 +129,9 @@
 | `FillBar` | `components/ui/fill-bar.tsx` | Reanimated | 가로 진행 막대 한 종류(트랙 `bg-muted rounded-full`, 기본 `h-2`). `fillDelay` 를 주면 진입 시 0 에서 차오름(900ms). 소비 분석 막대·예산 탭 사용률 막대 |
 | `Floating` | `components/ui/floating.tsx` | Reanimated | 캐릭터 정지 이미지 둥실거림(`distance` 6 · `period` 2400ms) · 동작 줄이기면 정지. 로그인 캐릭터·`CoachRow` |
 | `CountUpAmount` | `components/ui/count-up-amount.tsx` | `Text`, `hooks/use-count-up` | 화면의 주인공 금액이 0 → 값으로 0.9초 굴러 올라감(값이 바뀌면 이어서). 소비 분석 합계·예산 잔액·예산 설정 총액·홈 예산 카드. 목록 행 금액에는 쓰지 않는다. 동작 줄이기면 정지 |
-| `ScreenHeader` | `components/ui/screen-header.tsx` | `Icon`, `Text`, `Pressable` | Pencil `ScreenHeader` — `<`(24) + `text-h1` 제목 + 오른쪽 액션 슬롯, `px-6 pb-3`. 모든 화면 헤더가 이것 하나다 |
+| `ScreenHeader` | `components/ui/screen-header.tsx` | `Icon`, `Text`, `Pressable`, Reanimated | Pencil `ScreenHeader`(tdgU8) — `<`(24) + `text-h1` 제목 + 오른쪽 액션 슬롯(`children` 로 행 교체 가능 — 홈 인사말). tint 배경 위 흰 면: `bg-card border-b border-border px-6 pb-3 shadow-sm shadow-black/5 dark:shadow-none`, 상태바 영역은 헤더가 `SafeAreaInsetsContext.top` 만큼 직접 칠한다(라우트에 SafeAreaView 없음). `Screen` 안에서는 본문 위에 떠 있다가 48px 스크롤하면 투명해지고 제목·뒤로가기도 사라지며(터치는 본문으로), 맨 위로 오면 돌아온다. 헤더 자리는 같은 높이 빈 공간 + 24 로 흐름에 남는다. `Screen` 밖(스크롤 없는 화면)에서는 흐름 안 고정 바 + `mb-6`. 모든 화면 헤더가 이것 하나다. 2026-09-16 |
+| `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Modal`, `Pressable`, Reanimated | Pencil 없음(동작 컴포넌트). 아래서 올라오는 시트: 열릴 때 스크림 220ms 페이드 + 시트 280ms 슬라이드, 닫힐 때 반대로(시트가 다 내려간 뒤 모달을 내림). 홈 예산 시트·세분류 시트·거래 필터 선택창이 쓴다. 2026-09-16 |
+| `Screen` / `ScreenScrollView` / `ScreenFlatList` | `components/ui/screen.tsx` | `ScrollView`, `FlatList`, Reanimated shared value | Pencil 없음(동작 컴포넌트). 헤더가 겹치는 화면의 뿌리(`flex-1 bg-background` + 스크롤 값·헤더 높이 컨텍스트)와, 그 안에서 헤더 자리만큼 위로 당겨져(`marginTop: -(헤더+24)`) 내용이 헤더 아래로 지나가는 스크롤 컨테이너. `Screen` 밖에서는 보통 ScrollView/FlatList 와 같다. 스크롤 있는 헤더 화면 18개가 쓴다. 2026-09-16 |
 | `CoachRow` | `components/ui/coach-row.tsx` | `Floating`, `Text` | 온보딩 코치 행 — 캐릭터 76×112 + 말풍선 `bg-card border-border rounded-lg p-3.5 text-label`(홈 코치 말풍선과 같은 스타일). 회원가입·약관·금융망 이메일 |
 | `Toast` | `components/ui/toast.tsx` | — | `info` `success` `error`, `bg-inverse` |
 | `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Dialog` 또는 별도 | `bg-popover` |
@@ -152,7 +154,7 @@
 
 - 화면 제목은 `text-h1` 하나. 뒤로가기는 플랫폼 기본 헤더 또는 좌상단 아이콘 버튼(`accessibilityLabel="뒤로"`).
 - 하단 탭은 KeyFin 기준 5개(홈·자산·예산·리포트·마이, `TabBar`). 핵심 액션은 각 탭 화면 안에 둔다.
-- 홈은 흰 배경(`bg-background`). 헤더는 `px-6 py-4`, 좌측에 `text-caption text-muted-foreground` "환영합니다"와 `text-h2` 인사말("{이름}님, 안녕하세요!"), 우측에 코인 배지(`bg-accent rounded-full`, 노란 원 + `text-label tabular-nums`)와 상점 버튼(40 원형 `bg-accent`, 우상단 배지 `bg-destructive`). 본문은 방 씬이 화면 폭 가득(좌우 여백 없음, 편집 화면과 같은 크기)이고 그 아래에는 아무것도 두지 않는다(사용자 결정 2026-09-15 — 방이 곧 대시보드). 예산 카드(`BudgetCard`)는 홈 본문에서 빠져 벽의 리스트(보드)를 탭하면 아래서 올라오는 예산 시트(`BudgetSheet`: 기간·요약 + 예산 카드 + 봉투별 남은 금액 + 예산 탭 링크)에만 있다. 캘린더 탭은 씬 안 팝오버 그대로.
+- 홈은 tint 배경(`bg-background`). 헤더는 `px-6 py-4`, 좌측에 `text-caption text-muted-foreground` "환영합니다"와 `text-h2` 인사말("{이름}님, 안녕하세요!"), 우측에 코인 배지(`bg-accent rounded-full`, 노란 원 + `text-label tabular-nums`)와 상점 버튼(40 원형 `bg-accent`, 우상단 배지 `bg-destructive`). 본문은 방 씬이 화면 폭 가득(좌우 여백 없음, 편집 화면과 같은 크기)이고 그 아래에는 아무것도 두지 않는다(사용자 결정 2026-09-15 — 방이 곧 대시보드). 예산 카드(`BudgetCard`)는 홈 본문에서 빠져 벽의 리스트(보드)를 탭하면 아래서 올라오는 예산 시트(`BudgetSheet`: 기간·요약 + 예산 카드 + 봉투별 남은 금액 + 예산 탭 링크)에만 있다. 캘린더 탭은 씬 안 팝오버 그대로.
 - 이체 플로우는 `받는 사람 → 금액 → 확인 → 인증(PIN/생체) → 완료`의 5단계를 넘지 않는다. 확인 화면은 금액을 `text-amount-lg`로, 받는 사람·계좌를 마스킹해 표시한다.
 - 로딩은 스피너보다 `Skeleton`. 1초 이상 걸리는 작업에만 진행 표시.
 - 오류는 필드 근처에 원인 + 해결 방법. 재시도 버튼은 중복 요청을 막는다.

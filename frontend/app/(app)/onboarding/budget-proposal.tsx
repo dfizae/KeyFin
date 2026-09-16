@@ -1,4 +1,4 @@
-import { SafeAreaView } from "react-native-safe-area-context";
+import { View } from "react-native";
 
 import { BudgetProposalScreen } from "@/features/budget/components/BudgetProposalScreen";
 
@@ -6,8 +6,8 @@ import { BudgetProposalScreen } from "@/features/budget/components/BudgetProposa
 // 하단 안전 영역은 CTA 가 직접 띄운다 — 배경색이 다르기 때문이다.
 export default function BudgetProposalRoute() {
   return (
-    <SafeAreaView className="flex-1 bg-card" edges={["top"]}>
+    <View className="flex-1 bg-background">
       <BudgetProposalScreen />
-    </SafeAreaView>
+    </View>
   );
 }

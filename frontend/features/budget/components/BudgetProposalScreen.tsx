@@ -2,7 +2,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { WifiOff } from "lucide-react-native";
 import * as React from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import {
@@ -73,7 +74,7 @@ function BudgetProposalScreen() {
   if (current.data?.status === "CONFIRMED" && confirm.isIdle) return <Redirect href={nextRoute} />;
 
   return (
-    <View className="flex-1 bg-background">
+    <Screen>
       <ProposalHeader showBack={!fromHome} />
       {current.isPending ? (
         <ProposalSkeleton />
@@ -87,7 +88,7 @@ function BudgetProposalScreen() {
       ) : (
         <ProposalForm budget={current.data} analysis={analysis.data} confirm={confirm} nextRoute={nextRoute} />
       )}
-    </View>
+    </Screen>
   );
 }
 
@@ -98,6 +99,7 @@ function ProposalHeader({ showBack }: { showBack: boolean }) {
 
   return (
     <ScreenHeader
+    flat
       title="이번 달 예산 설정"
       className="bg-card"
       onBack={showBack ? () => (router.canGoBack() ? router.back() : router.replace("/budget")) : undefined}
@@ -161,7 +163,7 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
 
   return (
     <View className="flex-1">
-      <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-5 pb-6">
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-5 pb-6">
         <Text className="text-body-sm text-card-foreground">{BASIS_DESCRIPTION[kind]}</Text>
 
         <View className="gap-1.5">
@@ -188,7 +190,7 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
             />
           ))}
         </View>
-      </ScrollView>
+      </ScreenScrollView>
 
       <View className="gap-2 px-6 pt-3" style={{ paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }}>
         {confirm.isError ? (
