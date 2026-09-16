@@ -32,7 +32,7 @@ class PrepareTransferTest {
 	}
 
 	@Test
-	@DisplayName("승인된 제안이 실패하면 FAILED와 사유가 남고, 제안 상태에서만 취소·금액 갱신, 취소 상태에서만 재개가 가능하다")
+	@DisplayName("승인된 제안이 실패하면 FAILED와 사유가 남고, 제안 상태에서만 취소·금액 갱신, 실패 상태에서만 재개가 가능하다")
 	void failAndCancelRules() {
 		PrepareTransfer failed = PrepareTransfer.proposeForCardBilling(986L, 9803L, DATE, DATE, 15000L, 9504L, 9505L);
 		failed.approve("20260915083000000002");
@@ -48,12 +48,15 @@ class PrepareTransferTest {
 		assertThat(proposed.getStatus()).isEqualTo(TransferStatus.CANCELED);
 		assertThatThrownBy(() -> proposed.approve("x")).isInstanceOf(IllegalStateException.class);
 
-		proposed.reopen(DUE, 70000L);
-		assertThat(proposed.isProposed()).isTrue();
-		assertThat(proposed.getScheduledDate()).isEqualTo(DUE);
-		assertThat(proposed.getRequiredAmount()).isEqualTo(70000L);
-		assertThat(proposed.getFailReason()).isNull();
-		assertThatThrownBy(() -> proposed.reopen(DUE, 1L)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> proposed.reopen(DUE, 70000L)).isInstanceOf(IllegalStateException.class);
+
+		failed.reopen(DUE, 70000L);
+		assertThat(failed.isProposed()).isTrue();
+		assertThat(failed.getScheduledDate()).isEqualTo(DUE);
+		assertThat(failed.getRequiredAmount()).isEqualTo(70000L);
+		assertThat(failed.getInstitutionTxNo()).isNull();
+		assertThat(failed.getFailReason()).isNull();
+		assertThatThrownBy(() -> failed.reopen(DUE, 1L)).isInstanceOf(IllegalStateException.class);
 	}
 
 	@Test

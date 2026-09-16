@@ -36,12 +36,12 @@ class TransferProposalServiceTest extends SpringIntegrationTestSupport {
 	private AuditLogRepository auditLogRepository;
 
 	@Test
-	@DisplayName("오늘·내일 출금 중 부족한 건만 제안: 기존 제안은 금액 갱신, 취소됐던 카드 청구는 재개, 준비된 건·만료 건은 취소, 실행된 건은 불변")
+	@DisplayName("오늘·내일 출금 중 부족한 건만 제안: 기존 제안은 금액 갱신, 취소됐던 카드 청구는 다시 제안하지 않음, 준비된 건·만료 건은 취소, 실행된 건은 불변")
 	void proposesForShortagesInWindow() {
 		ProposalResult result = transferProposalService.propose(USER);
 
 		assertThat(result.incomeAccountFound()).isTrue();
-		assertThat(result.created()).isEqualTo(1);
+		assertThat(result.created()).isEqualTo(0);
 		assertThat(result.updated()).isEqualTo(1);
 		assertThat(result.canceled()).isEqualTo(2);
 
@@ -60,18 +60,13 @@ class TransferProposalServiceTest extends SpringIntegrationTestSupport {
 		assertThat(prepareTransferRepository.findById(9904L).orElseThrow().getStatus()).isEqualTo(TransferStatus.EXECUTED);
 
 		List<PrepareTransfer> open = prepareTransferRepository.findAllByUserIdAndStatusOrderByIdDesc(USER, TransferStatus.PROPOSED);
-		assertThat(open).hasSize(2);
-		PrepareTransfer cardBill = open.stream().filter(t -> t.getCardBillingId() != null).findFirst().orElseThrow();
-		assertThat(cardBill.getId()).isEqualTo(9905L);
-		assertThat(cardBill.getCardBillingId()).isEqualTo(9802L);
-		assertThat(cardBill.getScheduledDate()).isEqualTo(LocalDate.of(2026, 9, 10));
-		assertThat(cardBill.getDueDate()).isEqualTo(LocalDate.of(2026, 9, 10));
-		assertThat(cardBill.getRequiredAmount()).isEqualTo(80000L);
-		assertThat(cardBill.getFailReason()).isNull();
+		assertThat(open).extracting(PrepareTransfer::getId).containsExactly(9901L);
+		PrepareTransfer cardBill = prepareTransferRepository.findById(9905L).orElseThrow();
+		assertThat(cardBill.getStatus()).isEqualTo(TransferStatus.CANCELED);
+		assertThat(cardBill.getRequiredAmount()).isEqualTo(30000L);
+		assertThat(cardBill.getFailReason()).isEqualTo(TransferProposalService.REASON_RESOLVED);
 		assertThat(academy.getScheduledDate()).isEqualTo(LocalDate.of(2026, 9, 9));
 		assertThat(academy.getDueDate()).isEqualTo(LocalDate.of(2026, 9, 10));
-		assertThat(cardBill.getFromAccountId()).isEqualTo(9506L);
-		assertThat(cardBill.getToAccountId()).isEqualTo(9504L);
 
 		List<AuditLog> logs = auditLogRepository.findAll();
 		assertThat(logs).extracting(AuditLog::getAction).containsOnly(AuditAction.CANCEL);
@@ -87,7 +82,7 @@ class TransferProposalServiceTest extends SpringIntegrationTestSupport {
 		assertThat(second.created()).isZero();
 		assertThat(second.updated()).isZero();
 		assertThat(second.canceled()).isZero();
-		assertThat(prepareTransferRepository.findAllByUserIdAndStatusOrderByIdDesc(USER, TransferStatus.PROPOSED)).hasSize(2);
+		assertThat(prepareTransferRepository.findAllByUserIdAndStatusOrderByIdDesc(USER, TransferStatus.PROPOSED)).hasSize(1);
 	}
 
 	@Test

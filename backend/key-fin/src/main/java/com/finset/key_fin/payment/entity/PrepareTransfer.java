@@ -140,16 +140,21 @@ public class PrepareTransfer extends BaseEntity {
 		this.status = TransferStatus.CANCELED;
 	}
 
-	/** 취소된 제안을 재사용 — 같은 출금 건은 유니크 키 때문에 새 행을 만들 수 없다. */
+	public boolean isFailed() {
+		return status == TransferStatus.FAILED;
+	}
+
+	/** 실패한 제안을 재사용 — 같은 출금 건은 유니크 키 때문에 새 행을 만들 수 없다. */
 	public void reopen(LocalDate scheduledDate, long requiredAmount) {
-		if (status != TransferStatus.CANCELED) {
-			throw new IllegalStateException("transfer is not CANCELED: " + status);
+		if (!isFailed()) {
+			throw new IllegalStateException("transfer is not FAILED: " + status);
 		}
 		if (requiredAmount <= 0) {
 			throw new IllegalArgumentException("requiredAmount must be positive");
 		}
 		this.scheduledDate = scheduledDate;
 		this.requiredAmount = requiredAmount;
+		this.institutionTxNo = null;
 		this.failReason = null;
 		this.status = TransferStatus.PROPOSED;
 	}
