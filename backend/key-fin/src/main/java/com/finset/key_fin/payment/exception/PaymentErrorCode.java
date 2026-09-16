@@ -23,7 +23,8 @@ public enum PaymentErrorCode implements ErrorCode {
 	TRANSFER_LIMIT_DAILY(HttpStatus.FORBIDDEN, "PAY_009", "1일 이체 한도를 초과합니다."),
 	TRANSFER_ACCOUNT_INELIGIBLE(HttpStatus.FORBIDDEN, "PAY_010", "출금 계좌가 수입 계좌·관리 대상이 아닙니다."),
 	TRANSFER_INSUFFICIENT_BALANCE(HttpStatus.UNPROCESSABLE_ENTITY, "PAY_011", "출금 계좌 잔액이 부족해 이체에 실패했습니다."),
-	TRANSFER_BANK_LIMIT(HttpStatus.UNPROCESSABLE_ENTITY, "PAY_012", "은행 이체 한도를 초과해 이체에 실패했습니다.");
+	TRANSFER_BANK_LIMIT(HttpStatus.UNPROCESSABLE_ENTITY, "PAY_012", "은행 이체 한도를 초과해 이체에 실패했습니다."),
+	CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "PAY_013", "카드를 찾을 수 없습니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;
