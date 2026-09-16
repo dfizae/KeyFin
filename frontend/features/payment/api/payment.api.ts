@@ -27,7 +27,7 @@ import { serverClock, toKSTDateKey } from "@/lib/date";
 
 /**
  * GET /payments/calendar?month=YYYYMM — 날짜별 출금 예정과 준비 상태 (docs/api-contract.md PAYMENT, FR-PAY-01·02).
- * 서버는 호출할 때 금융망 정기결제를 먼저 동기화하고, 실패해도 저장된 항목으로 응답한다.
+ * 금융망 정기결제·카드 청구 동기화는 호출 시가 아니라 서버 스케줄러(08:00·17:00 KST)가 한다(develop 69fdacb) — 조회는 저장된 값이다.
  */
 export async function getPaymentCalendar(month: string, signal?: AbortSignal): Promise<PaymentCalendar> {
   if (isMocked("payment")) return toPaymentCalendar(await withMockLatency(paymentCalendarMock(month), signal));

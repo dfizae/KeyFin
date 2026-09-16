@@ -2,7 +2,7 @@ import { Pressable, View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
 import { Text } from "@/components/ui/text";
-import { isIncoming, transactionBadge, transactionCategoryLabel, type Transaction } from "@/features/transaction/model";
+import { isIncoming, merchantLabel, transactionBadge, transactionCategoryLabel, type Transaction } from "@/features/transaction/model";
 import { formatMonthDay, parseKSTDateKey } from "@/lib/date";
 import { formatKRW, subtractKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -29,13 +29,13 @@ function TransactionRow({ transaction, onPress }: TransactionRowProps) {
       className="min-h-touch flex-row items-center justify-between gap-3 border-b border-border py-3 active:opacity-70"
       accessible
       accessibilityRole="button"
-      accessibilityLabel={[transaction.merchantName, meta, amount, badge].filter(Boolean).join(", ")}
+      accessibilityLabel={[merchantLabel(transaction), meta, amount, badge].filter(Boolean).join(", ")}
       accessibilityHint="거래 상세를 엽니다"
       onPress={onPress}
     >
       <View className="flex-1 gap-1">
         <Text className="text-h3 text-foreground" numberOfLines={1}>
-          {transaction.merchantName}
+          {merchantLabel(transaction)}
         </Text>
         <View className="flex-row items-center gap-1.5">
           <Text className="shrink text-caption text-card-foreground" numberOfLines={1}>

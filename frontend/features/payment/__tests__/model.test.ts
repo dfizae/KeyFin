@@ -46,6 +46,7 @@ function item(overrides: Partial<CalendarItemDto> = {}): CalendarItemDto {
   return {
     type: "FIXED",
     fixedExpenseId: 7,
+    cardId: null,
     name: "월세",
     expenseType: "RENT",
     amount: 550000,
@@ -178,7 +179,7 @@ describe("isEditableEntry · canOpenEntry", () => {
           items: [
             item(),
             item({ type: "CARD_SUBSCRIPTION", fixedExpenseId: 8, withdrawalAccountId: null }),
-            item({ type: "CARD_BILL", fixedExpenseId: null, expenseType: "CARD_BILL", withdrawalAccountId: null }),
+            item({ type: "CARD_BILL", fixedExpenseId: null, cardId: 2, name: "KB 국민카드", expenseType: "CARD_BILL", withdrawalAccountId: 3, estimated: true }),
           ],
         },
       ],
@@ -187,6 +188,8 @@ describe("isEditableEntry · canOpenEntry", () => {
     expect(isEditableEntry(fixed)).toBe(true);
     expect(isEditableEntry(subscription)).toBe(false);
     expect(isEditableEntry(bill)).toBe(false);
+    expect(bill).toMatchObject({ cardId: 2, fixedExpenseId: null, estimated: true });
+    expect(fixed.cardId).toBeNull();
     expect(canOpenEntry(fixed)).toBe(true);
     expect(canOpenEntry(subscription)).toBe(true);
     expect(canOpenEntry(bill)).toBe(false);

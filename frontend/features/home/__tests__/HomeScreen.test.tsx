@@ -6,12 +6,12 @@ import { authUserMock } from "@/api/mocks/auth";
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
 import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payment";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
-import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock } from "@/api/mocks/transaction";
+import { pendingTransactionsMock, subcategoriesMock } from "@/api/mocks/transaction";
 import { useAuthStore } from "@/features/auth/store";
 import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
-import { CLASSIFY_ERROR_MESSAGE } from "@/features/transaction/errors";
+import { COACH_PLACEHOLDER, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
@@ -19,7 +19,7 @@ import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom } from "@/features/room/model";
 import { classifyTransaction, getPendingTransactions, getSubcategories } from "@/features/transaction/api/transaction.api";
-import { toClassifyResult, toPendingTransactions, toSubcategories } from "@/features/transaction/model";
+import { toPendingTransactions, toSubcategories } from "@/features/transaction/model";
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
 jest.mock("@/features/budget/api/budget.api", () => ({ getCurrentBudget: jest.fn() }));
@@ -101,73 +101,23 @@ describe("HomeScreen", () => {
     mockedGetSubcategories.mockReset();
     mockedGetSubcategories.mockResolvedValue(toSubcategories(subcategoriesMock));
     mockedClassify.mockReset();
-    mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", envelopeId: 1, remaining: "132000" });
+    mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", subcategoryId: 102, excludeTag: "NONE", adjustedAmount: null });
     mockPush.mockReset();
     mockRedirect.mockReset();
   });
 
-  // 확정 뒤 무효화로 다시 불러와도 확정한 거래가 빠지도록, 목 모듈의 상태를 그대로 쓴다.
-  function mockPendingFlow() {
-    resetTransactionMocks();
-    mockedGetPending.mockImplementation(async () => toPendingTransactions(pendingTransactionsMock()));
-    mockedClassify.mockImplementation(async ({ transactionId, request }) => toClassifyResult(classifyTransactionMock(transactionId, request)));
-  }
-
-  it("미확정 거래가 있으면 코치가 묻고, 확정을 누르면 제안된 세분류로 분류한 뒤 다음 질문으로 넘어간다", async () => {
+  it("코치를 탭하면 임시 말풍선이 열리고, 미확정 결제가 있으면 정리 화면 링크를 보여준다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    mockPendingFlow();
+    mockedGetPending.mockResolvedValue(toPendingTransactions(pendingTransactionsMock()));
     await renderHome();
     await screen.findByText("김재영님, 안녕하세요!");
     await layoutRoom();
 
-    expect(await screen.findByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "카페 확정" }));
-
-    await waitFor(() => expect(mockedClassify).toHaveBeenCalledWith({ transactionId: 501, request: { subcategoryId: 102 } }));
-    expect(await screen.findByText("『김씨네분식 12,000원』 음식점 맞나냥?")).toBeTruthy();
-    await waitForQueriesToSettle();
-  });
-
-  it("다른 카테고리를 누르면 세분류 시트가 열리고, 세분류나 제외 태그를 고르면 그대로 분류한다", async () => {
-    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    mockPendingFlow();
-    await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
-    await layoutRoom();
-
-    await fireEvent.press(await screen.findByRole("button", { name: "다른 카테고리" }));
-    expect(await screen.findByText("카테고리 선택")).toBeTruthy();
-    expect(await screen.findByRole("button", { name: "배달" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "카페" }).props.accessibilityState).toMatchObject({ selected: true });
-
-    await fireEvent.press(screen.getByRole("button", { name: "배달" }));
-    await waitFor(() => expect(mockedClassify).toHaveBeenCalledWith({ transactionId: 501, request: { subcategoryId: 103 } }));
-    await waitFor(() => expect(screen.queryByText("카테고리 선택")).toBeNull());
-
-    await fireEvent.press(await screen.findByRole("button", { name: "다른 카테고리" }));
-    await fireEvent.press(await screen.findByRole("button", { name: "더치페이" }));
-    await waitFor(() => expect(mockedClassify).toHaveBeenLastCalledWith({ transactionId: 502, request: { excludeTag: "DUTCH" } }));
-    await waitForQueriesToSettle();
-  });
-
-  it("분류 저장이 실패하면 말풍선에 오류 문구를 보여주고 다시 시도할 수 있다", async () => {
-    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
-    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    mockPendingFlow();
-    mockedClassify.mockRejectedValueOnce(new Error("network"));
-    await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
-    await layoutRoom();
-
-    await fireEvent.press(await screen.findByRole("button", { name: "카페 확정" }));
-    expect(await screen.findByText(CLASSIFY_ERROR_MESSAGE)).toBeTruthy();
-    expect(screen.getByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
-
-    await fireEvent.press(screen.getByRole("button", { name: "카페 확정" }));
-    expect(await screen.findByText("『김씨네분식 12,000원』 음식점 맞나냥?")).toBeTruthy();
-    await waitForQueriesToSettle();
+    await fireEvent.press(await screen.findByRole("button", { name: "코치" }));
+    expect(await screen.findByText(COACH_PLACEHOLDER)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("link", { name: cleanupLinkLabel(2) }));
+    expect(mockPush).toHaveBeenCalledWith("/transaction/pending");
   });
 
   it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방을 표시하며 예산 카드는 리스트를 탭한 시트에 있다", async () => {
