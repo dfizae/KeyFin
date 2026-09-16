@@ -3,8 +3,10 @@ package com.finset.key_fin.budget.controller;
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
+import com.finset.key_fin.budget.dto.request.EmergencyFundRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.response.EmergencyFundResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
 import com.finset.key_fin.global.base.BaseResponse;
 
@@ -149,4 +151,34 @@ public interface BudgetControllerDocs {
 			)
 	})
 	BaseResponse<BudgetConfirmResponse> confirm(Long userId, Long budgetId, BudgetConfirmRequest request);
+
+	@Operation(
+			summary = "비상금 설정",
+			description = "현재 예산(budgetId는 GET /budgets/current의 값)의 비상금 월 금액을 설정합니다. 비상금은 실제 계좌가 아닌 가상 풀이며, "
+					+ "사용액(spent)은 주기 내 EMERGENCY 태그 거래의 합, 잔액(remaining)은 설정액 − 사용액(음수 가능)입니다. "
+					+ "금액은 0 이상 1,000원 단위, 0이면 해제(미설정과 같은 상태). 예산 확정 여부와 무관하게 주기 중 언제든 바꿀 수 있고, "
+					+ "이체·예산 제안·봉투 잔액에는 영향을 주지 않습니다. 같은 값이 GET /budgets/current의 emergency 객체로도 조회됩니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "설정 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "설정 성공",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"budgetId\":11,\"emergency\":{\"amount\":200000,\"spent\":45000,\"remaining\":155000}}}"
+							)
+					)
+			),
+			@ApiResponse(responseCode = "400", description = "금액이 없거나 음수(COMMON_001) 또는 1,000원 단위 아님(BUDGET_005)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "본인 소유의 예산이 아니거나 존재하지 않음(BUDGET_002)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<EmergencyFundResponse> updateEmergency(Long userId, Long budgetId, EmergencyFundRequest request);
 }

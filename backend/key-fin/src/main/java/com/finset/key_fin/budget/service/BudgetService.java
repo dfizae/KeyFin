@@ -14,11 +14,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest.EnvelopeAmount;
+import com.finset.key_fin.budget.dto.request.EmergencyFundRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Emergency;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Total;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
+import com.finset.key_fin.budget.dto.response.EmergencyFundResponse;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopeProposal;
 import com.finset.key_fin.budget.entity.Budget;
 import com.finset.key_fin.budget.entity.BudgetEnvelope;
@@ -37,6 +40,16 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class BudgetService {
+
+	private static final String EMERGENCY_SPENT_SQL = """
+			SELECT COALESCE(SUM(t.amount), 0)
+			FROM transactions t
+			WHERE t.user_id = :userId
+			  AND t.tx_date >= :fromDate AND t.tx_date < :toDate
+			  AND t.status = 'NORMAL'
+			  AND t.confirm_status IN ('AUTO', 'CONFIRMED')
+			  AND t.exclude_tag = 'EMERGENCY'
+			""";
 
 	private static final String RECENT_SPENT_SQL = """
 			SELECT e.id AS envelope_id,
@@ -190,7 +203,8 @@ public class BudgetService {
 							rs.getLong("proposed_amount")))
 					.list();
 			return new BudgetCurrentResponse(
-					budget.getId(), month, period.from(), periodTo, BudgetStatus.PROPOSED.name(), null, envelopes);
+					budget.getId(), month, period.from(), periodTo, BudgetStatus.PROPOSED.name(), null, envelopes,
+					emergencyOf(userId, budget, period));
 		}
 
 		long confirmed = 0;
@@ -215,7 +229,30 @@ public class BudgetService {
 				periodTo,
 				BudgetStatus.CONFIRMED.name(),
 				new Total(confirmed, spent, remaining, remainingRate(remaining, confirmed)),
-				envelopes);
+				envelopes,
+				emergencyOf(userId, budget, period));
+	}
+
+	@Transactional
+	public EmergencyFundResponse updateEmergency(long userId, long budgetId, EmergencyFundRequest request) {
+		Budget budget = budgetRepository.findByIdAndUserId(budgetId, userId)
+				.orElseThrow(() -> new BusinessException(BudgetErrorCode.BUDGET_NOT_FOUND));
+		if (request.amount() % AMOUNT_UNIT != 0) {
+			throw new BusinessException(BudgetErrorCode.AMOUNT_NOT_THOUSAND_UNIT);
+		}
+		budget.updateEmergencyAmount(request.amount());
+		BudgetPeriod period = BudgetPeriod.of(budget.getBudgetMonth(), anchorDayOf(userId));
+		return new EmergencyFundResponse(budget.getId(), emergencyOf(userId, budget, period));
+	}
+
+	private Emergency emergencyOf(long userId, Budget budget, BudgetPeriod period) {
+		long spent = jdbc.sql(EMERGENCY_SPENT_SQL)
+				.param("userId", userId)
+				.param("fromDate", period.from())
+				.param("toDate", period.to())
+				.query(Long.class)
+				.single();
+		return Emergency.of(budget.getEmergencyAmount(), spent);
 	}
 
 	private static Integer remainingRate(long remaining, long confirmed) {

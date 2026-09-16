@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.dto.response.BudgetConfirmResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
+import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Emergency;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Total;
 import com.finset.key_fin.budget.dto.response.BudgetProposalResponse;
@@ -76,7 +77,8 @@ class BudgetControllerTest {
 		when(budgetService.getCurrent(1L)).thenReturn(new BudgetCurrentResponse(
 				11L, "202609", LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30), "CONFIRMED",
 				new Total(780000, 298000, 482000, 61),
-				List.of(EnvelopeBoard.confirmed(3, "의료·건강", 0, 30000, -30000, null))));
+				List.of(EnvelopeBoard.confirmed(3, "의료·건강", 0, 30000, -30000, null)),
+				Emergency.of(0, 0)));
 
 		mockMvc.perform(get("/api/v1/budgets/current"))
 				.andExpect(status().isOk())
