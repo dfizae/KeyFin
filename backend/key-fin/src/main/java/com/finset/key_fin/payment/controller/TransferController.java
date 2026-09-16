@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
 import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.entity.TransferStatus;
 import com.finset.key_fin.payment.service.TransferService;
@@ -31,6 +32,15 @@ public class TransferController implements TransferControllerDocs {
 			@RequestParam(required = false) Integer size
 	) {
 		return BaseResponse.ok(transferService.list(userId, status, month, cursor, size));
+	}
+
+	@GetMapping("/{transferId}")
+	@Override
+	public BaseResponse<TransferDetailResponse> detail(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable long transferId
+	) {
+		return BaseResponse.ok(transferService.detail(userId, transferId));
 	}
 
 	@PostMapping("/{transferId}/approve")

@@ -19,6 +19,7 @@ import com.finset.key_fin.global.finance.client.FinanceHeaderFactory;
 import com.finset.key_fin.payment.client.FinanceTransferClient;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
 import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse;
 import com.finset.key_fin.payment.entity.AuditLog;
@@ -75,6 +76,16 @@ public class TransferService {
 		return new TransferListResponse(
 				page.stream().map(t -> TransferResponse.of(t, names.get(t.getId()))).toList(),
 				hasNext ? page.getLast().getId() : null);
+	}
+
+	@Transactional(readOnly = true)
+	public TransferDetailResponse detail(long userId, long transferId) {
+		PrepareTransfer transfer = prepareTransferRepository.findByIdAndUserId(transferId, userId)
+				.orElseThrow(() -> new BusinessException(PaymentErrorCode.TRANSFER_NOT_FOUND));
+		return TransferDetailResponse.of(
+				TransferResponse.of(transfer, purposeResolver.nameOf(transfer)),
+				auditLogRepository.findAllByTargetTypeAndTargetIdOrderByIdAsc(
+						AuditLog.TARGET_PREPARE_TRANSFER, String.valueOf(transferId)));
 	}
 
 	private static YearMonth parseMonth(String month) {

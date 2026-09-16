@@ -4,6 +4,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
 import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.entity.TransferStatus;
 
@@ -62,6 +63,34 @@ public interface TransferControllerDocs {
 			@Parameter(description = "페이지 크기(선택). 1~100, 기본 20", example = "20")
 			Integer size
 	);
+
+	@Operation(
+			summary = "이체 상세·이력 타임라인",
+			description = "제안 한 건의 현재 상태(목록 항목과 같은 필드)와 감사 로그 타임라인을 돌려줍니다. "
+					+ "history의 action은 HOLD(승인했지만 안전장치·보류로 실행되지 않음, basis에 근거) / EXECUTE(실행, 기관거래고유번호·금액) / "
+					+ "FAIL(금융망 거부, 코드·사유) / CANCEL(출금일 경과·부족액 해소). 오래된 것부터 정렬. "
+					+ "실패 후 되살아난 제안은 행에 실패 흔적이 없으므로 이전 시도는 history의 FAIL로 확인합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "조회 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "한도 차단 후 실행된 건",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"transfer\":{\"id\":21,\"status\":\"EXECUTED\",\"scheduledDate\":\"2026-09-14\",\"dueDate\":\"2026-09-15\",\"requiredAmount\":230000,\"fromAccountId\":1,\"toAccountId\":3,\"purpose\":{\"type\":\"FIXED\",\"fixedExpenseId\":7,\"cardBillingId\":null,\"name\":\"월세\"},\"executedAt\":\"2026-09-14T09:12:00\",\"failReason\":null,\"createdAt\":\"2026-09-14T08:30:12\"},\"history\":[{\"action\":\"HOLD\",\"basis\":\"PAY_009 1일 이체 한도를 초과합니다. — 오늘 실행 600000 + 금액 230000 > 1일 한도 800000\",\"at\":\"2026-09-14T08:41:03\"},{\"action\":\"EXECUTE\",\"basis\":\"금융망 H0000 — 기관거래고유번호 20260914091200000012, 금액 230000, 계좌 1→3\",\"at\":\"2026-09-14T09:12:00\"}]}}"
+							)
+					)
+			),
+			@ApiResponse(responseCode = "404", description = "본인 소유가 아니거나 없는 제안(PAY_005)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<TransferDetailResponse> detail(Long userId, long transferId);
 
 	@Operation(
 			summary = "이체 승인·실행",
