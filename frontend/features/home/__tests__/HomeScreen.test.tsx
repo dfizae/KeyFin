@@ -78,7 +78,13 @@ async function waitForQueriesToSettle() {
 }
 
 function renderHome() {
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0 },
+      // 출석 mutation의 기본 5분 GC 타이머가 CI 테스트 종료를 붙잡지 않게 한다.
+      mutations: { gcTime: 0 },
+    },
+  });
   return render(
     <QueryClientProvider client={client}>
       <HomeScreen />

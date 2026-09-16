@@ -7,10 +7,63 @@
 //   - Push Events, Accepted/Closed Merge Request Events, and Pipeline Events: disabled.
 //   - Branch filter: RegexBasedFilter; source: .*; target: ^develop$.
 //   - Pending build name for pipeline: backend-mr-ci; CI skip: disabled.
+// Keep this status name for compatibility; it now covers both frontend and backend checks.
 // The GitLab webhook for this job must send both Merge request events and Push events.
 // In GitLab, enable Pipelines must succeed and leave skipped pipelines unsuccessful.
 
 def reportMrStatus = false
+
+// Compare against a known successful/develop base, not Jenkins' previous job-wide changelog.
+def selectCiComponents(String baseCommit) {
+    def allComponents = [backend: true, frontend: true]
+    if (!(baseCommit ==~ /[0-9a-fA-F]{40}/)) {
+        echo 'No comparison baseline is available; validating both applications.'
+        return allComponents
+    }
+
+    return withEnv(["CI_DIFF_BASE=${baseCommit}"]) {
+        if (sh(script: 'git merge-base --is-ancestor "$CI_DIFF_BASE" HEAD',
+               returnStatus: true) != 0) {
+            echo 'The baseline is unavailable or not an ancestor; validating both applications.'
+            return allComponents
+        }
+
+        // Disable rename detection so moves between applications select both sides.
+        def paths = sh(
+            script: 'git -c core.quotepath=false diff --no-renames --name-only "$CI_DIFF_BASE" HEAD --',
+            returnStdout: true
+        ).readLines()
+        def sharedChange = paths.any { path ->
+            !path.startsWith('backend/') && !path.startsWith('frontend/') &&
+            !path.startsWith('ai/') && !path.startsWith('docs/') &&
+            !path.startsWith('.gitlab/merge_request_templates/') && path != 'README.md'
+        }
+
+        return [
+            backend: sharedChange || paths.any { it.startsWith('backend/') },
+            frontend: sharedChange || paths.any { it.startsWith('frontend/') }
+        ]
+    }
+}
+
+// Use the agent's existing Docker daemon; Node/pnpm are only needed inside this image.
+def checkFrontend() {
+    writeFile file: '.ci-frontend.Dockerfile', text: '''
+FROM node:24-bookworm-slim
+ENV CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 EXPO_NO_TELEMETRY=1
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+ARG CI_RUN_ID
+RUN echo "CI run: $CI_RUN_ID" && pnpm run typecheck
+RUN pnpm run lint
+RUN pnpm test --ci --runInBand
+'''
+    // Cache dependency installation, but execute the checks again for each Jenkins build.
+    sh 'docker build --build-arg "CI_RUN_ID=$BUILD_TAG" --file .ci-frontend.Dockerfile frontend'
+}
 
 pipeline {
     agent { label 'backend-ci' }
@@ -19,7 +72,7 @@ pipeline {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
         skipStagesAfterUnstable()
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
@@ -73,7 +126,8 @@ pipeline {
                             name: 'origin',
                             url: remote.url,
                             credentialsId: remote.credentialsId,
-                            refspec: "+${mrRef}:refs/remotes/origin/mr-${env.gitlabMergeRequestIid}"
+                            refspec: "+${mrRef}:refs/remotes/origin/mr-${env.gitlabMergeRequestIid} " +
+                                     '+refs/heads/develop:refs/remotes/origin/develop'
                         ]]
                     ])
 
@@ -91,7 +145,24 @@ pipeline {
             }
         }
 
-        stage('Environment Check') {
+        stage('Select Changed Applications') {
+            steps {
+                script {
+                    // Compare the complete MR diff, including changes from earlier MR commits.
+                    def baseCommit = sh(
+                        script: 'git merge-base HEAD refs/remotes/origin/develop || true',
+                        returnStdout: true
+                    ).trim()
+                    def components = selectCiComponents(baseCommit)
+                    env.CI_RUN_BACKEND = components.backend.toString()
+                    env.CI_RUN_FRONTEND = components.frontend.toString()
+                    echo "Backend: ${env.CI_RUN_BACKEND}; frontend: ${env.CI_RUN_FRONTEND}"
+                }
+            }
+        }
+
+        stage('Backend Environment Check') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 // Integration tests use Testcontainers, even though this job does not deploy.
                 sh '''
@@ -108,6 +179,7 @@ pipeline {
         }
 
         stage('Backend Test') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
                     sh 'bash ./gradlew --no-daemon --max-workers=1 --console=plain --stacktrace clean test'
@@ -120,7 +192,15 @@ pipeline {
             }
         }
 
+        stage('Frontend Checks') {
+            when { expression { env.CI_RUN_FRONTEND == 'true' } }
+            steps {
+                script { checkFrontend() }
+            }
+        }
+
         stage('Package JAR') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
                     sh 'bash ./gradlew --no-daemon --max-workers=1 --console=plain --stacktrace bootJar'

@@ -1,3 +1,55 @@
+// Compare against a known successful/develop base, not Jenkins' previous job-wide changelog.
+def selectCiComponents(String baseCommit) {
+    def allComponents = [backend: true, frontend: true]
+    if (!(baseCommit ==~ /[0-9a-fA-F]{40}/)) {
+        echo 'No comparison baseline is available; validating both applications.'
+        return allComponents
+    }
+
+    return withEnv(["CI_DIFF_BASE=${baseCommit}"]) {
+        if (sh(script: 'git merge-base --is-ancestor "$CI_DIFF_BASE" HEAD',
+               returnStatus: true) != 0) {
+            echo 'The baseline is unavailable or not an ancestor; validating both applications.'
+            return allComponents
+        }
+
+        // Disable rename detection so moves between applications select both sides.
+        def paths = sh(
+            script: 'git -c core.quotepath=false diff --no-renames --name-only "$CI_DIFF_BASE" HEAD --',
+            returnStdout: true
+        ).readLines()
+        def sharedChange = paths.any { path ->
+            !path.startsWith('backend/') && !path.startsWith('frontend/') &&
+            !path.startsWith('ai/') && !path.startsWith('docs/') &&
+            !path.startsWith('.gitlab/merge_request_templates/') && path != 'README.md'
+        }
+
+        return [
+            backend: sharedChange || paths.any { it.startsWith('backend/') },
+            frontend: sharedChange || paths.any { it.startsWith('frontend/') }
+        ]
+    }
+}
+
+// Use the agent's existing Docker daemon; Node/pnpm are only needed inside this image.
+def checkFrontend() {
+    writeFile file: '.ci-frontend.Dockerfile', text: '''
+FROM node:24-bookworm-slim
+ENV CI=true COREPACK_ENABLE_DOWNLOAD_PROMPT=0 EXPO_NO_TELEMETRY=1
+WORKDIR /app
+RUN corepack enable
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY . .
+ARG CI_RUN_ID
+RUN echo "CI run: $CI_RUN_ID" && pnpm run typecheck
+RUN pnpm run lint
+RUN pnpm test --ci --runInBand
+'''
+    // Cache dependency installation, but execute the checks again for each Jenkins build.
+    sh 'docker build --build-arg "CI_RUN_ID=$BUILD_TAG" --file .ci-frontend.Dockerfile frontend'
+}
+
 pipeline {
     agent { label 'backend-ci' }
 
@@ -5,7 +57,7 @@ pipeline {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
         skipStagesAfterUnstable()
-        timeout(time: 30, unit: 'MINUTES')
+        timeout(time: 45, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
@@ -15,12 +67,28 @@ pipeline {
                 // Start with a clean workspace so old reports cannot be published.
                 deleteDir()
                 // Repository, branch and credentials come from the Jenkins job's SCM settings.
-                checkout scm
+                script {
+                    def checkoutInfo = checkout scm
+                    env.CI_BASE_COMMIT = checkoutInfo.GIT_PREVIOUS_SUCCESSFUL_COMMIT ?: ''
+                    env.CI_COMMIT = checkoutInfo.GIT_COMMIT
+                }
                 sh 'git log -1 --format="%H %s"'
             }
         }
 
-        stage('Environment Check') {
+        stage('Select Changed Applications') {
+            steps {
+                script {
+                    def components = selectCiComponents(env.CI_BASE_COMMIT)
+                    env.CI_RUN_BACKEND = components.backend.toString()
+                    env.CI_RUN_FRONTEND = components.frontend.toString()
+                    echo "Backend: ${env.CI_RUN_BACKEND}; frontend: ${env.CI_RUN_FRONTEND}"
+                }
+            }
+        }
+
+        stage('Backend Environment Check') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 sh '''
                     set -eu
@@ -36,6 +104,7 @@ pipeline {
         }
 
         stage('Backend Test') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
                     sh 'bash ./gradlew --no-daemon --max-workers=1 --console=plain --stacktrace clean test'
@@ -48,7 +117,15 @@ pipeline {
             }
         }
 
+        stage('Frontend Checks') {
+            when { expression { env.CI_RUN_FRONTEND == 'true' } }
+            steps {
+                script { checkFrontend() }
+            }
+        }
+
         stage('Package JAR') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
                     sh 'bash ./gradlew --no-daemon --max-workers=1 --console=plain --stacktrace bootJar'
@@ -63,6 +140,7 @@ pipeline {
         }
 
         stage('Build Docker Image') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 script {
                     env.CI_COMMIT = sh(
@@ -103,6 +181,7 @@ pipeline {
         }
 
         stage('Deploy Backend') {
+            when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 sh '''
                     set -eu
@@ -112,6 +191,7 @@ pipeline {
 
                     bash infra/jenkins/deploy-backend.sh "$APP_IMAGE"
                 '''
+                script { env.CI_BACKEND_DEPLOYED = 'true' }
             }
         }
     }
@@ -124,25 +204,27 @@ pipeline {
                 def notifications = [
                     SUCCESS: [
                         color: 'good',
-                        title: '✅ 백엔드 테스트·배포 성공'
+                        title: env.CI_BACKEND_DEPLOYED == 'true'
+                            ? '✅ CI 검증·백엔드 배포 성공'
+                            : '✅ CI 검증 완료 (백엔드 배포 없음)'
                     ],
                     FAILURE: [
                         color: 'danger',
-                        title: '❌ 백엔드 파이프라인 실패 — 로그 확인 필요'
+                        title: '❌ CI/CD 파이프라인 실패 — 로그 확인 필요'
                     ],
                     UNSTABLE: [
                         color: 'warning',
-                        title: '⚠️ 백엔드 파이프라인 불안정 — 테스트 결과 확인 필요'
+                        title: '⚠️ CI/CD 파이프라인 불안정 — 테스트 결과 확인 필요'
                     ],
                     ABORTED: [
                         color: '#808080',
-                        title: '⏹️ 백엔드 파이프라인 중단'
+                        title: '⏹️ CI/CD 파이프라인 중단'
                     ]
                 ]
 
                 def notification = notifications[result] ?: [
                     color: '#808080',
-                    title: "ℹ️ 백엔드 파이프라인 종료: ${result}"
+                    title: "ℹ️ CI/CD 파이프라인 종료: ${result}"
                 ]
 
                 def branch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: '확인 불가'
@@ -153,6 +235,7 @@ pipeline {
                     "**${notification.title}**",
                     "작업: ${env.JOB_NAME} · 빌드: #${env.BUILD_NUMBER}",
                     "브랜치: ${branch} · 커밋: ${shortCommit}",
+                    "검증 대상 — 백엔드: ${env.CI_RUN_BACKEND ?: '미확인'} · 프론트엔드: ${env.CI_RUN_FRONTEND ?: '미확인'}",
                     "[실행 결과](${env.BUILD_URL}) · [콘솔 로그](${env.BUILD_URL}console)"
                 ].join('\n')
 
