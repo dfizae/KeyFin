@@ -8,7 +8,13 @@ import {
   resetPaymentMocks,
   updateFixedExpenseMock,
 } from "@/api/mocks/payment";
-import { approveTransferMock, resetTransferMocks, transferListMock } from "@/api/mocks/transfer";
+import {
+  approveTransferMock,
+  postponeTransferMock,
+  resetTransferMocks,
+  transferDetailMock,
+  transferListMock,
+} from "@/api/mocks/transfer";
 import {
   EMPTY_FIXED_EXPENSE_FORM,
   canApproveTransfer,
@@ -30,6 +36,9 @@ import {
   toFixedExpenseRequest,
   toFixedExpenses,
   toPaymentCalendar,
+  toTransferDetail,
+  toTransferPage,
+  transferHistoryLabel,
   toTransfers,
   transferStatusLabel,
   upcomingEntries,
@@ -406,8 +415,29 @@ describe("고정지출 목 — 서버처럼 반영하고 거절한다", () => {
 describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", () => {
   afterEach(() => resetTransferMocks());
 
+  it("목록은 최신순 커서 페이지고 status·month(출금일 기준)로 거른다", () => {
+    const first = transferListMock(MONTH, {}, { cursor: null, size: 1 });
+    expect(first.items.map((item) => item.id)).toEqual([502]);
+    expect(first.nextCursor).toBe(502);
+
+    const second = transferListMock(MONTH, {}, { cursor: first.nextCursor, size: 1 });
+    expect(second.items.map((item) => item.id)).toEqual([501]);
+    expect(second.nextCursor).toBeNull();
+
+    expect(transferListMock(MONTH, { status: "PROPOSED" }).items.map((item) => item.id)).toEqual([501]);
+    expect(transferListMock(MONTH, { month: "190001" }).items).toEqual([]);
+    expect(toTransferPage(transferListMock(MONTH)).items).toHaveLength(2);
+  });
+
+  it("단건 조회는 제안과 감사 타임라인을 준다", () => {
+    const failed = toTransferDetail(transferDetailMock(MONTH, 502));
+    expect(failed.transfer.status).toBe("FAILED");
+    expect(failed.history[0]).toMatchObject({ action: "FAIL" });
+    expect(toTransferDetail({ ...transferDetailMock(MONTH, 501), history: [{ action: "REOPEN", basis: "", at: "2026-09-15T08:30:00" }] }).history[0].action).toBe("UNKNOWN");
+  });
+
   it("배열 응답을 화면 모델로 바꾸고 출금일·목적을 함께 옮긴다", () => {
-    const transfers = toTransfers(transferListMock(MONTH));
+    const transfers = toTransfers(transferListMock(MONTH).items);
 
     expect(transfers).toHaveLength(2);
     expect(findTransfer(transfers, 501)).toMatchObject({
@@ -433,13 +463,13 @@ describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", ()
   });
 
   it("제안한 날과 대상 출금일은 다를 수 있다 — 화면 날짜는 dueDate 다", () => {
-    const proposal = findTransfer(toTransfers(transferListMock(MONTH)), 501);
+    const proposal = findTransfer(toTransfers(transferListMock(MONTH).items), 501);
 
     expect(proposal?.scheduledDate).not.toBe(proposal?.dueDate);
   });
 
   it("모르는 상태·목적은 UNKNOWN 으로 흡수하고 '확인 중' 으로 적는다", () => {
-    const [dto] = transferListMock(MONTH);
+    const [dto] = transferListMock(MONTH).items;
     const transfer = toTransfers([{ ...dto, status: "SETTLING", purpose: { ...dto.purpose, type: "LOAN_REPAY" } }])[0];
 
     expect(transfer.status).toBe("UNKNOWN");
@@ -449,16 +479,16 @@ describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", ()
   });
 
   it("출금일이 빠진 응답은 계약 불일치로 막는다", () => {
-    const [dto] = transferListMock(MONTH);
+    const [dto] = transferListMock(MONTH).items;
 
     expect(() => toTransfers([{ ...dto, dueDate: "2026-09" }])).toThrow(ContractMismatchError);
   });
 
   it("승인은 제안·실행 중까지 열고, 연기는 제안만 받는다", () => {
-    const transfers = toTransfers(transferListMock(MONTH));
+    const transfers = toTransfers(transferListMock(MONTH).items);
     const proposed = findTransfer(transfers, 501);
     const failed = findTransfer(transfers, 502);
-    const approved = toTransfers([{ ...transferListMock(MONTH)[0], status: "APPROVED" }])[0];
+    const approved = toTransfers([{ ...transferListMock(MONTH).items[0], status: "APPROVED" }])[0];
 
     expect(canApproveTransfer(proposed!)).toBe(true);
     expect(canPostponeTransfer(proposed!)).toBe(true);
@@ -474,8 +504,25 @@ describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", ()
     const result = approveTransferMock(501, "2026-09-14T07:12:00");
 
     expect(result).toEqual({ id: 501, status: "EXECUTED", executedAt: "2026-09-14T07:12:00", failReason: null });
-    const after = findTransfer(toTransfers(transferListMock(MONTH)), 501);
+    const after = findTransfer(toTransfers(transferListMock(MONTH).items), 501);
     expect(after).toMatchObject({ status: "EXECUTED", executedAt: "2026-09-14T07:12:00" });
+  });
+
+  it("승인·연기는 서버처럼 감사 기록을 오래된 순으로 쌓는다", () => {
+    transferListMock(MONTH);
+    postponeTransferMock(501, "2026-09-14T07:12:30");
+    approveTransferMock(501, "2026-09-14T07:13:00");
+
+    const { history } = toTransferDetail(transferDetailMock(MONTH, 501));
+    expect(history.map((entry) => entry.action)).toEqual(["HOLD", "EXECUTE"]);
+    expect(history[0].basis).toContain("사용자 보류(나중에)");
+    expect(history[1].basis).toContain("기관거래고유번호");
+  });
+
+  it("감사 종류는 우리말 제목으로 적고 모르는 값은 '기록' 으로 흡수한다", () => {
+    expect(transferHistoryLabel("EXECUTE")).toBe("이체 완료");
+    expect(transferHistoryLabel("HOLD")).toBe("보류");
+    expect(transferHistoryLabel("UNKNOWN")).toBe("기록");
   });
 });
 
@@ -497,10 +544,10 @@ describe("findTransferForEntry — 캘린더 부족 뱃지에서 이체 제안�
 
   const entries = () => toPaymentCalendar(paymentCalendarMock(MONTH)).entries;
   const rent = () => entries().find((entry) => entry.name === "월세")!;
-  const proposal = () => findTransfer(toTransfers(transferListMock(MONTH)), 501)!;
+  const proposal = () => findTransfer(toTransfers(transferListMock(MONTH).items), 501)!;
 
   it("부족한 고정지출은 fixedExpenseId 와 출금일이 같은 제안으로 잇는다", () => {
-    const transfers = toTransfers(transferListMock(MONTH));
+    const transfers = toTransfers(transferListMock(MONTH).items);
 
     expect(findTransferForEntry(transfers, rent())?.id).toBe(501);
     expect(findTransferForEntry(transfers, entries().find((entry) => entry.name === "통신비")!)).toBeNull();

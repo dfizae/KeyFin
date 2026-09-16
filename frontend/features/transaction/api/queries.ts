@@ -146,7 +146,7 @@ export type ClassifyVariables = ClassifyInput & {
 };
 
 /**
- * 확정 후: 미확정 목록에서 빼고, 거래가 현재 주기 안이면 응답 봉투 잔액을 예산 캐시에 바로 쓴 뒤 관련 조회를 무효화한다
+ * 확정 후: 미확정 목록에서 빼고, 거래가 현재 주기 안이면 예산을 다시 받은 뒤 관련 조회를 무효화한다
  * (docs/api-guide.md §5). 지난 주기 거래면 현재 주기 잔액과 무관하니 캐시를 건드리지 않는다.
  */
 export function useClassifyTransaction() {

@@ -23,7 +23,7 @@ export type TransactionPageParams = { cursor: number | null; size: number };
 
 /**
  * GET /transactions — 월 거래 목록, 커서 페이지 (FR-TXN-09). 취소·예산 제외 거래도 온다.
- * 백엔드 미구현이라 계약 사본(노션 9/8) 기준 목으로만 동작한다. Swagger 가 오면 파라미터·응답을 다시 맞춘다 (TBD)
+ * 백엔드 develop 구현과 대조 완료(2026-09-16): 정렬은 거래일·시각·id 내림차순이고 커서도 그 셋의 키셋이라 쪽이 겹치거나 빠지지 않는다.
  */
 export async function getTransactions(
   filter: TransactionFilter,
@@ -55,7 +55,7 @@ export async function getSubcategories(signal?: AbortSignal): Promise<Subcategor
 
 export type ClassifyInput = { transactionId: number; request: ClassifyRequest };
 
-/** PUT /transactions/{id}/classification — 세분류 확정 또는 제외 태그. 응답의 봉투 잔액으로 보드를 즉시 갱신한다 */
+/** PUT /transactions/{id}/classification — 세분류 확정 또는 제외 태그. 응답에 봉투 잔액은 없어 잔액은 예산 조회로 다시 받는다 */
 export async function classifyTransaction({ transactionId, request }: ClassifyInput): Promise<ClassifyResult> {
   if (isMocked("transaction")) return toClassifyResult(await withMockLatency(classifyTransactionMock(transactionId, request)));
   const { data } = await api.put<ClassifyResponseDto>(`/transactions/${transactionId}/classification`, request);

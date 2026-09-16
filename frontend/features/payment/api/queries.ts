@@ -1,4 +1,12 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  infiniteQueryOptions,
+  type InfiniteData,
+  queryOptions,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { accountKeys } from "@/features/account/api/queries";
 import { isStaleAccountError } from "@/features/account/errors";
@@ -8,13 +16,15 @@ import {
   deleteFixedExpense,
   getFixedExpenses,
   getPaymentCalendar,
+  getTransfer,
   getTransfers,
   postponeTransfer,
+  TRANSFER_PAGE_SIZE,
   updateFixedExpense,
   type TransferListParams,
 } from "@/features/payment/api/payment.api";
 import { isStaleFixedExpenseError } from "@/features/payment/errors";
-import { findFixedExpense } from "@/features/payment/model";
+import { findFixedExpense, type Transfer, type TransferPage } from "@/features/payment/model";
 import { roomKeys } from "@/features/room/api/queries";
 
 export const paymentKeys = {
@@ -26,7 +36,9 @@ export const paymentKeys = {
   fixedExpenses: () => [...paymentKeys.all, "fixed-expenses"] as const,
   /** 이체 제안·이력. 승인·연기 뒤 달 구분 없이 무효화한다 */
   transfers: () => [...paymentKeys.all, "transfers"] as const,
-  transferList: (params: TransferListParams) => [...paymentKeys.transfers(), params] as const,
+  transferList: (params: TransferListParams) => [...paymentKeys.transfers(), "list", params] as const,
+  /** 단건(GET /transfers/{id}). transfers 프리픽스 아래라 승인·연기 뒤 목록과 함께 무효화된다 */
+  transfer: (transferId: number) => [...paymentKeys.transfers(), "detail", transferId] as const,
 };
 
 export function paymentCalendarQueryOptions(month: string) {
@@ -101,17 +113,37 @@ export function useDeleteFixedExpense() {
   return useFixedExpenseMutation(deleteFixedExpense);
 }
 
+/** 커서 페이지(-62). 결제 캘린더는 해당 달(dueDate 기준)로 좁혀 첫 쪽만으로 부족 뱃지를 잇는다 */
 export function transferListQueryOptions(params: TransferListParams) {
-  return queryOptions({
+  return infiniteQueryOptions({
     queryKey: paymentKeys.transferList(params),
-    queryFn: ({ signal }) => getTransfers(params, signal),
+    queryFn: ({ pageParam, signal }) => getTransfers(params, { cursor: pageParam, size: TRANSFER_PAGE_SIZE }, signal),
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 30_000,
   });
 }
 
-/** 이체 승인 화면(PAGE-25)이 쓰는 제안 목록. 단건 조회가 없어 목록에서 id 를 찾는다 */
 export function useTransfers(params: TransferListParams) {
-  return useQuery(transferListQueryOptions(params));
+  return useInfiniteQuery(transferListQueryOptions(params));
+}
+
+/** 받아 둔 쪽들을 한 목록으로 */
+export function flattenTransfers(data: InfiniteData<TransferPage> | undefined): Transfer[] {
+  return data?.pages.flatMap((page) => page.items) ?? [];
+}
+
+/** 이체 승인 화면(PAGE-25)의 단건 조회(GET /transfers/{id}). 승인·연기 뒤 transfers 프리픽스로 같이 무효화된다 */
+export function transferQueryOptions(transferId: number) {
+  return queryOptions({
+    queryKey: paymentKeys.transfer(transferId),
+    queryFn: ({ signal }) => getTransfer(transferId, signal),
+    staleTime: 30_000,
+  });
+}
+
+export function useTransfer(transferId: number | null) {
+  return useQuery({ ...transferQueryOptions(transferId ?? 0), enabled: transferId !== null });
 }
 
 /**

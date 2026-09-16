@@ -174,7 +174,7 @@ export function budgetPeriodShortLabel(budget: Pick<Budget, "periodFrom" | "peri
   return `${from.month}.${from.day}~${to.month}.${to.day}`;
 }
 
-/** 거래일("YYYY-MM-DD")이 이 주기 안인지. 분류 확정 응답의 봉투 잔액을 현재 주기 캐시에 바로 써도 되는지 가른다 */
+/** 거래일("YYYY-MM-DD")이 이 주기 안인지. 분류를 확정했을 때 현재 주기 예산을 다시 받아야 하는지 가른다 */
 export function isWithinPeriod(budget: Pick<Budget, "periodFrom" | "periodTo">, dateKey: string): boolean {
   return dateKey >= budget.periodFrom && dateKey <= budget.periodTo;
 }

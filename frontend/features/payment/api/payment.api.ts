@@ -7,11 +7,12 @@ import {
   paymentCalendarMock,
   updateFixedExpenseMock,
 } from "@/api/mocks/payment";
-import { approveTransferMock, postponeTransferMock, transferListMock } from "@/api/mocks/transfer";
+import { approveTransferMock, postponeTransferMock, transferDetailMock, transferListMock } from "@/api/mocks/transfer";
 import {
   toFixedExpenses,
   toPaymentCalendar,
-  toTransfers,
+  toTransferDetail,
+  toTransferPage,
   type ApproveTransferDto,
   type FixedExpense,
   type FixedExpenseListDto,
@@ -19,8 +20,10 @@ import {
   type FixedExpenseResponseDto,
   type PaymentCalendar,
   type PaymentCalendarDto,
-  type Transfer,
+  type TransferDetail,
+  type TransferDetailDto,
   type TransferListDto,
+  type TransferPage,
   type TransferStatus,
 } from "@/features/payment/model";
 import { currentMonthKey, serverClock, toKSTDateKey } from "@/lib/date";
@@ -68,18 +71,35 @@ export async function deleteFixedExpense(id: number): Promise<void> {
 }
 
 export type TransferListParams = {
-  /** 생략하면 전체를 최신순으로 받는다. 월 필터는 계약에 없다 */
+  /** 생략하면 전체 상태 */
   status?: TransferStatus;
+  /** "YYYYMM" — 대상 출금일(dueDate) 기준. 생략하면 전체 기간 */
+  month?: string;
 };
 
+export type TransferPageParams = { cursor: number | null; size: number };
+
+/** 계약 기본값(size 20)과 같다 */
+export const TRANSFER_PAGE_SIZE = 20;
+
 /**
- * GET /transfers — 준비 이체 제안·이력 (FR-PAY-03·08). 단건 조회가 없어 화면이 목록에서 id 를 찾는다.
- * 응답 `data` 는 배열이다(items 래퍼 없음, 백엔드 TransferController.list).
+ * GET /transfers?status=&month=&cursor=&size= — 준비 이체 제안·이력, 커서 페이지 (FR-PAY-03·08, -62 2026-09-16).
+ * 최신순(id 내림차순), 커서는 마지막 항목 id. 값이 틀리면 400 COMMON_001.
  */
-export async function getTransfers({ status }: TransferListParams, signal?: AbortSignal): Promise<Transfer[]> {
-  if (isMocked("payment")) return toTransfers(await withMockLatency(transferListMock(currentMonthKey(), status), signal));
-  const { data } = await api.get<TransferListDto>("/transfers", { params: { status }, signal });
-  return toTransfers(data);
+export async function getTransfers(filter: TransferListParams, page: TransferPageParams, signal?: AbortSignal): Promise<TransferPage> {
+  if (isMocked("payment")) return toTransferPage(await withMockLatency(transferListMock(currentMonthKey(), filter, page), signal));
+  const { data } = await api.get<TransferListDto>("/transfers", {
+    params: { status: filter.status, month: filter.month, cursor: page.cursor ?? undefined, size: page.size },
+    signal,
+  });
+  return toTransferPage(data);
+}
+
+/** GET /transfers/{id} — 제안 한 건 + 감사 타임라인 (-62). 없거나 남의 것이면 404 PAY_005 */
+export async function getTransfer(transferId: number, signal?: AbortSignal): Promise<TransferDetail> {
+  if (isMocked("payment")) return toTransferDetail(await withMockLatency(transferDetailMock(currentMonthKey(), transferId), signal));
+  const { data } = await api.get<TransferDetailDto>(`/transfers/${transferId}`, { signal });
+  return toTransferDetail(data);
 }
 
 export type ApproveTransferResult = { id: number; status: TransferStatus; executedAt: string | null };
@@ -102,7 +122,8 @@ export async function approveTransfer(transferId: number): Promise<ApproveTransf
 /** POST /transfers/{id}/postpone — 응답 본문 없음. 제안은 PROPOSED 로 남는다 */
 export async function postponeTransfer(transferId: number): Promise<void> {
   if (isMocked("payment")) {
-    await withMockLatency(postponeTransferMock());
+    const now = `${toKSTDateKey(new Date(serverClock.now()))}T07:12:30`;
+    await withMockLatency(postponeTransferMock(transferId, now));
     return;
   }
   await api.post(`/transfers/${transferId}/postpone`);
