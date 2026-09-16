@@ -51,6 +51,11 @@ export function getSpriteRect(anchor: ScenePoint, size: SceneSize, anchorRatio: 
   };
 }
 
+/** 벽 오브젝트 아래에 팝오버를 붙일 좌상단(씬 단위). 오브젝트가 어디로 옮겨져도 팝오버는 씬 폭 안에 남는다 */
+export function popoverBelow(rect: SceneRect, width: number, gap = 8): ScenePoint {
+  return { x: clamp(rect.x, 0, SCENE_WIDTH - width), y: rect.y + rect.height + gap };
+}
+
 /** 씬 단위 사각형을 캔버스 픽셀 사각형으로 바꾼다. */
 export function sceneRectToCanvas(rect: SceneRect, scale: number): SceneRect {
   "worklet";

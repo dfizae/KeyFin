@@ -1,69 +1,34 @@
-import { Pin } from "lucide-react-native";
-import { Pressable, View } from "react-native";
+import { Pressable } from "react-native";
 
-import { Icon } from "@/components/ui/icon";
-import { Text } from "@/components/ui/text";
-import { getSceneScale } from "@/features/room/model";
-import { cn } from "@/lib/utils";
+import { getSceneScale, type SceneRect } from "@/features/room/model";
 
-// Pencil home/p0 WallBoard Asset (K5Ndp): 왼쪽 벽 창문 옆, 씬 단위 (20,22) 폭 88. 카드형 자리표시자이며 벽 보드 스프라이트가 오면
-// 그림은 Skia 씬이 그리고 이 컴포넌트는 탭 영역과 숫자·칩만 남긴다 (사용자 결정 2026-09-08).
-export const WALL_BOARD_SCENE_RECT = { x: 20, y: 22, width: 88 } as const;
-
-/** 칩 색. 예산 도메인의 EnvelopeHealth 와 값이 같지만 방 컴포넌트는 예산 타입에 의존하지 않는다. */
-export type BoardTone = "good" | "warning" | "over" | "unset";
-
-const TONE_CLASS: Record<BoardTone, string> = {
-  good: "bg-positive",
-  warning: "bg-warning",
-  over: "bg-destructive",
-  unset: "bg-muted",
-};
+// Pencil home/p0 WallBoard Asset (K5Ndp). 그림(체크리스트)은 Skia 씬이 스프라이트(WALL_ITEMS.board)로 그리고,
+// 이 컴포넌트는 그 위에 얹는 탭 영역뿐이다 — 벽걸이가 1×1 칸이라 글자를 얹지 않고 기간·잔여율·봉투 상태는 예산 시트(BudgetSheet)가 보여준다
+// (사용자 결정 2026-09-15). 자리는 배치(스토어)에서 온 사각형이라 방 꾸미기에서 옮기면 따라간다.
 
 type WallBoardProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
   width: number;
-  /** 보드에 적는 기간. 좁아서 "9.1~9.30" 처럼 줄인다 */
-  periodLabel: string;
-  /** 스크린리더가 읽는 기간 "9월 1일~30일" */
-  periodAccessibilityLabel: string;
-  /** 전체 잔여율(%). 승인 전이면 null */
-  remainingRate: number | null;
-  chips: BoardTone[];
+  /** 보드 스프라이트가 놓인 씬 사각형 */
+  rect: SceneRect;
+  /** 스크린리더가 읽는 설명 "예산 보드, 9월 1일~30일 36% 남음" */
+  label: string;
   onPress: () => void;
 };
 
-function WallBoard({ width, periodLabel, periodAccessibilityLabel, remainingRate, chips, onPress }: WallBoardProps) {
+function WallBoard({ width, rect, label, onPress }: WallBoardProps) {
   const scale = getSceneScale(width);
-  const status = remainingRate === null ? "예산 미설정" : `${remainingRate}% 남음`;
-  const fillPercent = remainingRate === null ? 0 : Math.min(100, Math.max(0, remainingRate));
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`예산 보드, ${periodAccessibilityLabel} ${status}`}
-      accessibilityHint="봉투별 잔액을 엽니다"
+      accessibilityLabel={label}
+      accessibilityHint="예산 보드를 엽니다"
       onPress={onPress}
       hitSlop={8}
-      className="absolute gap-1 rounded-sm border-2 border-border bg-card px-2.5 py-2 active:opacity-80"
-      style={{ left: WALL_BOARD_SCENE_RECT.x * scale, top: WALL_BOARD_SCENE_RECT.y * scale, width: WALL_BOARD_SCENE_RECT.width * scale }}
-    >
-      <View className="flex-row items-center justify-between">
-        <Text className="shrink text-caption tabular-nums text-foreground" numberOfLines={1}>
-          {periodLabel}
-        </Text>
-        <Icon as={Pin} size={10} className="text-card-foreground" />
-      </View>
-      <Text className={cn("text-label tabular-nums", remainingRate === null ? "text-card-foreground" : "text-primary")}>{status}</Text>
-      <View className="h-1.5 w-full overflow-hidden rounded-full bg-muted" accessible={false}>
-        {remainingRate !== null ? <View className="h-full rounded-full bg-positive" style={{ width: `${fillPercent}%` }} /> : null}
-      </View>
-      <View className="flex-row gap-0.5" accessible={false}>
-        {chips.map((tone, index) => (
-          <View key={index} className={cn("h-1 w-2 rounded-full", TONE_CLASS[tone])} />
-        ))}
-      </View>
-    </Pressable>
+      className="absolute active:opacity-80"
+      style={{ left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale }}
+    />
   );
 }
 

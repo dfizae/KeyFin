@@ -152,7 +152,7 @@
 
 - 화면 제목은 `text-h1` 하나. 뒤로가기는 플랫폼 기본 헤더 또는 좌상단 아이콘 버튼(`accessibilityLabel="뒤로"`).
 - 하단 탭은 KeyFin 기준 5개(홈·자산·예산·리포트·마이, `TabBar`). 핵심 액션은 각 탭 화면 안에 둔다.
-- 홈은 흰 배경(`bg-background`). 헤더는 `px-6 py-4`, 좌측에 `text-caption text-muted-foreground` "환영합니다"와 `text-h2` 인사말("{이름}님, 안녕하세요!"), 우측에 코인 배지(`bg-accent rounded-full`, 노란 원 + `text-label tabular-nums`)와 상점 버튼(40 원형 `bg-accent`, 우상단 배지 `bg-destructive`). 본문은 캐릭터 룸 이미지(좌우 여백 24). 캐릭터가 없으면 룸 전체가 "캐릭터를 등록하세요" 버튼이고 코인 배지·예산 카드는 숨긴다. 캐릭터가 있으면 룸 아래 `pt-6`에 예산 카드(`BudgetCard`).
+- 홈은 흰 배경(`bg-background`). 헤더는 `px-6 py-4`, 좌측에 `text-caption text-muted-foreground` "환영합니다"와 `text-h2` 인사말("{이름}님, 안녕하세요!"), 우측에 코인 배지(`bg-accent rounded-full`, 노란 원 + `text-label tabular-nums`)와 상점 버튼(40 원형 `bg-accent`, 우상단 배지 `bg-destructive`). 본문은 방 씬이 화면 폭 가득(좌우 여백 없음, 편집 화면과 같은 크기)이고 그 아래에는 아무것도 두지 않는다(사용자 결정 2026-09-15 — 방이 곧 대시보드). 예산 카드(`BudgetCard`)는 홈 본문에서 빠져 벽의 리스트(보드)를 탭하면 아래서 올라오는 예산 시트(`BudgetSheet`: 기간·요약 + 예산 카드 + 봉투별 남은 금액 + 예산 탭 링크)에만 있다. 캘린더 탭은 씬 안 팝오버 그대로.
 - 이체 플로우는 `받는 사람 → 금액 → 확인 → 인증(PIN/생체) → 완료`의 5단계를 넘지 않는다. 확인 화면은 금액을 `text-amount-lg`로, 받는 사람·계좌를 마스킹해 표시한다.
 - 로딩은 스피너보다 `Skeleton`. 1초 이상 걸리는 작업에만 진행 표시.
 - 오류는 필드 근처에 원인 + 해결 방법. 재시도 버튼은 중복 요청을 막는다.

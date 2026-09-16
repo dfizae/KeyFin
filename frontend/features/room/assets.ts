@@ -1,5 +1,7 @@
 // 방 씬 에셋. 스프라이트는 앱 에셋이므로 assets/sprites 에만 둔다(Git LFS 대상). 가구는 features/room/catalog.ts 에 있다.
-// 바닥은 Pencil AI 생성 원본(design/images/ai/floor-default.jpg)을 씬 비율(327:404)로 잘라 창문(window.jpg)을 합성한 622×768 이미지다.
+// 바닥은 Pencil AI 생성 원본(design/images/ai/floor-default.jpg)을 x 416 부터 622×768 로 잘라낸 이미지다(씬 비율 327:404).
+// 2026-09-09 판은 창문(window.jpg)을 합성했지만, 벽걸이 아이템을 격자에 채우려고 2026-09-15 창문 없이 다시 잘랐다(사용자 결정).
+// 벽·바닥 경계선(scene.ts FLOOR_POLYGON·SURFACES)은 같은 크롭이라 그대로다.
 export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-default.png");
 export const CHARACTER_IDLE = require("@/assets/sprites/char1-idle.png");
 /** 입주 연출(PAGE-08)에서만 쓰는 환호 포즈 */
