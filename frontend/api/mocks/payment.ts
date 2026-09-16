@@ -1,11 +1,13 @@
 import { ApiError } from "@/api/error";
 import type {
   CalendarItemDto,
+  CardBillingsDto,
   FixedExpenseDto,
   FixedExpenseListDto,
   FixedExpenseRequest,
   PaymentCalendarDto,
 } from "@/features/payment/model";
+import { currentDateKey } from "@/lib/date";
 
 /**
  * GET /payments/calendar · GET/POST/PUT/DELETE /fixed-expenses 목 (docs/api-contract.md PAYMENT).
@@ -187,6 +189,49 @@ export function updateFixedExpenseMock(id: number, request: FixedExpenseRequest)
 export function deleteFixedExpenseMock(id: number): void {
   const target = findManual(id);
   fixedExpenses = fixedExpenses.filter((expense) => expense !== target);
+}
+
+/**
+ * GET /cards/billings 목. 카드는 금융망 후보 목(api/mocks/link.ts)의 연결 카드 2장과 같은 id 를 쓴다 —
+ * 자산 탭이 두 응답을 cardId 로 잇기 때문이다.
+ * 1번(신한 Deep Dream 체크)은 이번 주기 승인 2건과 발행된 청구서가 있고,
+ * 2번(국민 노리 체크)은 출금 요일을 모르는 카드(재연결 필요)라 출금일이 없고 청구서도 없다 — 서버가 null 을 주는 경우를 폰에서 보기 위한 값이다.
+ */
+export function cardBillingsMock(todayKey: string = currentDateKey()): CardBillingsDto {
+  const day = Number(todayKey.slice(8, 10));
+  const prefix = todayKey.slice(0, 8);
+  const dayKey = (value: number) => `${prefix}${String(Math.min(Math.max(value, 1), 28)).padStart(2, "0")}`;
+
+  return {
+    asOf: todayKey,
+    cycleFrom: dayKey(day - 2),
+    nextBillingDate: dayKey(day + 5),
+    cards: [
+      {
+        cardId: 1,
+        cardName: "Deep Dream 체크",
+        withdrawalWeekday: 3,
+        withdrawalAccountId: 1,
+        estimated: { amount: 38200, approvalCount: 4, withdrawalDate: dayKey(day + 7) },
+        latestStatement: {
+          billingId: 12,
+          billingDate: dayKey(day - 2),
+          amount: 214000,
+          status: "UNPAID",
+          withdrawalDate: dayKey(day + 2),
+          paidAt: null,
+        },
+      },
+      {
+        cardId: 2,
+        cardName: "노리 체크",
+        withdrawalWeekday: null,
+        withdrawalAccountId: 1,
+        estimated: { amount: 0, approvalCount: 0, withdrawalDate: null },
+        latestStatement: null,
+      },
+    ],
+  };
 }
 
 /** 테스트·개발 재시작용 */

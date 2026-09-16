@@ -1,5 +1,6 @@
 import { TIMEOUT_MONEY_MS, api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
+import { cardBillingsMock } from "@/api/mocks/payment";
 import {
   createFixedExpenseMock,
   deleteFixedExpenseMock,
@@ -9,6 +10,7 @@ import {
 } from "@/api/mocks/payment";
 import { approveTransferMock, postponeTransferMock, transferDetailMock, transferListMock } from "@/api/mocks/transfer";
 import {
+  toCardBillings,
   toFixedExpenses,
   toPaymentCalendar,
   toTransferDetail,
@@ -18,6 +20,8 @@ import {
   type FixedExpenseListDto,
   type FixedExpenseRequest,
   type FixedExpenseResponseDto,
+  type CardBillings,
+  type CardBillingsDto,
   type PaymentCalendar,
   type PaymentCalendarDto,
   type TransferDetail,
@@ -127,4 +131,14 @@ export async function postponeTransfer(transferId: number): Promise<void> {
     return;
   }
   await api.post(`/transfers/${transferId}/postpone`);
+}
+
+/**
+ * GET /cards/billings — 관리 대상 카드별 이번 주기 승인 합계와 최근 청구서 (docs/api-contract.md PAYMENT, 2026-09-16).
+ * 주기는 서버가 정한다(이번 주 월요일~오늘). 카드 이름·번호는 이 응답에 없어 화면이 금융망 후보와 cardId 로 잇는다.
+ */
+export async function getCardBillings(signal?: AbortSignal): Promise<CardBillings> {
+  if (isMocked("payment")) return toCardBillings(await withMockLatency(cardBillingsMock(), signal));
+  const { data } = await api.get<CardBillingsDto>("/cards/billings", { signal });
+  return toCardBillings(data);
 }

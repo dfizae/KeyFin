@@ -13,9 +13,9 @@ import { balanceAsOfLabel, linkedCards, totalBalance, type LinkedAccount, type L
 import { useLinkCandidates } from "@/features/link/api/queries";
 import { BankLogoTile } from "@/features/link/components/BankLogoTile";
 import { CandidatesErrorState } from "@/features/link/components/CandidatesErrorState";
-import { usePaymentCalendar } from "@/features/payment/api/queries";
+import { useCardBillings, usePaymentCalendar } from "@/features/payment/api/queries";
 import { calendarEntryIcon } from "@/features/payment/catalog";
-import { upcomingEntries, type CalendarEntry } from "@/features/payment/model";
+import { findCardBilling, upcomingEntries, type CalendarEntry, type CardBilling, type CardBillings } from "@/features/payment/model";
 import { RECENT_TRANSACTION_COUNT, useRecentTransactions } from "@/features/transaction/api/queries";
 import { TransactionRow } from "@/features/transaction/components/TransactionRow";
 import { currentDateKey, currentMonthKey, formatMonthDay, parseKSTDateKey } from "@/lib/date";
@@ -169,43 +169,75 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
   );
 }
 
-// 카드 목록 API 가 없어 금융망 후보의 연결 카드를 쓴다. 이 섹션이 보일 때만 후보를 불러온다.
+// 카드 이름·번호를 주는 API 가 없어 금융망 후보의 연결 카드를 쓰고, 금액은 GET /cards/billings 로 채운다(cardId 로 잇는다).
+// 둘 다 이 섹션이 보일 때만 부른다. 청구 조회가 실패해도 카드 목록은 그대로 두고 금액 줄만 빠진다.
 function CardSection() {
   const candidates = useLinkCandidates();
+  const billings = useCardBillings();
 
   if (candidates.isPending) return <AssetSkeleton />;
   if (candidates.isError) {
     return <CandidatesErrorState error={candidates.error} retrying={candidates.isFetching} onRetry={() => candidates.refetch()} />;
   }
-  return <CardList cards={linkedCards(candidates.data)} />;
+  return <CardList cards={linkedCards(candidates.data)} billings={billings.data} />;
 }
 
-function CardList({ cards }: { cards: LinkedCard[] }) {
+function CardList({ cards, billings }: { cards: LinkedCard[]; billings: CardBillings | undefined }) {
   if (cards.length === 0) {
     return <EmptyState icon={CreditCard} title="연결된 카드가 없어요" className="py-6" />;
   }
   return (
     <View className="gap-2">
       {cards.map((card) => (
-        <View
-          key={card.cardId}
-          className="flex-row items-center gap-3 rounded-lg bg-accent p-4"
-          accessible
-          accessibilityLabel={`${card.cardName} ${card.issuerName} ${card.maskedNo}`}
-        >
-          <BankLogoTile name={card.issuerName} />
-          <View className="flex-1 gap-0.5">
-            <Text className="text-h3 text-foreground" numberOfLines={1}>
-              {card.cardName}
-            </Text>
-            <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
-              {card.issuerName} · {card.maskedNo}
-            </Text>
-          </View>
-        </View>
+        <CardRow key={card.cardId} card={card} billing={findCardBilling(billings, card.cardId)} />
       ))}
     </View>
   );
+}
+
+function CardRow({ card, billing }: { card: LinkedCard; billing: CardBilling | null }) {
+  const estimated = billing === null ? null : `이번 주 ${formatKRW(billing.estimatedAmount)}`;
+  const unpaid = billing?.statement?.status === "UNPAID" ? billing.statement : null;
+
+  return (
+    <View
+      className="flex-row items-center gap-3 rounded-lg bg-accent p-4"
+      accessible
+      accessibilityLabel={[`${card.cardName} ${card.issuerName} ${card.maskedNo}`, estimated, unpaidLabel(unpaid)]
+        .filter(Boolean)
+        .join(", ")}
+    >
+      <BankLogoTile name={card.issuerName} />
+      <View className="flex-1 gap-0.5">
+        <Text className="text-h3 text-foreground" numberOfLines={1}>
+          {card.cardName}
+        </Text>
+        <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
+          {card.issuerName} · {card.maskedNo}
+        </Text>
+      </View>
+      {billing === null ? null : (
+        <View className="items-end gap-0.5">
+          <Text className="text-label tabular-nums text-foreground" numberOfLines={1}>
+            {formatKRW(billing.estimatedAmount)}
+          </Text>
+          <Text className="text-caption tabular-nums text-card-foreground" numberOfLines={1}>
+            {billingCaption(billing)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** 오른쪽 금액은 이번 주기 승인 합계(확정 전)다. 출금일을 모르는 카드는 재연결이 필요하다고 알린다 */
+function billingCaption(billing: CardBilling): string {
+  if (billing.estimatedWithdrawalDate === null) return "출금일 확인 필요";
+  return `${formatMonthDay(parseKSTDateKey(billing.estimatedWithdrawalDate))} 출금 예정`;
+}
+
+function unpaidLabel(statement: CardBilling["statement"]): string | null {
+  return statement === null ? null : `청구서 ${formatKRW(statement.amount)} 미결제`;
 }
 
 // Pencil RecurringPayments (Csfwz). 데이터는 홈 캘린더와 같은 GET /payments/calendar 캐시를 쓴다.

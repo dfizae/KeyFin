@@ -14,6 +14,7 @@ import {
   approveTransfer,
   createFixedExpense,
   deleteFixedExpense,
+  getCardBillings,
   getFixedExpenses,
   getPaymentCalendar,
   getTransfer,
@@ -34,6 +35,8 @@ export const paymentKeys = {
   calendarMonth: (month: string) => [...paymentKeys.calendar(), month] as const,
   /** 활성 고정지출 목록(GET /fixed-expenses). 관리 화면과 수정 화면이 같이 쓴다 */
   fixedExpenses: () => [...paymentKeys.all, "fixed-expenses"] as const,
+  /** 카드별 청구 요약. 주기를 서버가 정해 파라미터가 없다 */
+  cardBillings: () => [...paymentKeys.all, "card-billings"] as const,
   /** 이체 제안·이력. 승인·연기 뒤 달 구분 없이 무효화한다 */
   transfers: () => [...paymentKeys.all, "transfers"] as const,
   transferList: (params: TransferListParams) => [...paymentKeys.transfers(), "list", params] as const,
@@ -168,4 +171,17 @@ export function usePostponeTransfer() {
     retry: false,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: paymentKeys.transfers() }),
   });
+}
+
+export function cardBillingsQueryOptions() {
+  return queryOptions({
+    queryKey: paymentKeys.cardBillings(),
+    queryFn: ({ signal }) => getCardBillings(signal),
+    staleTime: 60_000,
+  });
+}
+
+/** 자산 탭 카드 섹션이 쓴다. 카드 이름·번호는 금융망 후보에서 오고 금액만 이 조회로 채운다 */
+export function useCardBillings() {
+  return useQuery(cardBillingsQueryOptions());
 }

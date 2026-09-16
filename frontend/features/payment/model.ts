@@ -91,6 +91,103 @@ function toPreparation(item: CalendarItemDto): Preparation | null {
   return { status: "SHORTAGE", shortage: won(item.shortage, "items.shortage") };
 }
 
+/* ───────────── 서버 계약: GET /cards/billings (docs/api-contract.md PAYMENT, 2026-09-16 대조) ───────────── */
+
+/** 발행된 청구서 상태. 모르는 값은 UNKNOWN 으로 흡수한다 (규칙 80) */
+export const BILLING_STATUSES = ["UNPAID", "PAID"] as const;
+export type BillingStatus = (typeof BILLING_STATUSES)[number] | "UNKNOWN";
+
+export type CardBillingStatementDto = {
+  billingId: number;
+  billingDate: string;
+  amount: number;
+  status: string;
+  /** 출금 요일을 모르는 카드는 null */
+  withdrawalDate: string | null;
+  paidAt: string | null;
+};
+
+export type CardBillingDto = {
+  cardId: number;
+  cardName: string;
+  /** 1(월)~7(일). 재연결이 필요한 카드는 null 이고 출금일도 없다 */
+  withdrawalWeekday: number | null;
+  withdrawalAccountId: number | null;
+  estimated: { amount: number; approvalCount: number; withdrawalDate: string | null };
+  /** 아직 청구서가 없으면 null */
+  latestStatement: CardBillingStatementDto | null;
+};
+
+export type CardBillingsDto = {
+  asOf: string;
+  cycleFrom: string;
+  nextBillingDate: string;
+  cards: CardBillingDto[];
+};
+
+export type CardBillingStatement = {
+  billingId: number;
+  billingDate: string;
+  amount: KRW;
+  status: BillingStatus;
+  withdrawalDate: string | null;
+  paidAt: string | null;
+};
+
+export type CardBilling = {
+  cardId: number;
+  cardName: string;
+  /** 이번 주기(cycleFrom~asOf) 승인 합계. 확정 전 예상값이다 */
+  estimatedAmount: KRW;
+  approvalCount: number;
+  /** 예상 출금일. 출금 요일을 모르는 카드는 null */
+  estimatedWithdrawalDate: string | null;
+  /** 발행된 최근 청구서 1건 */
+  statement: CardBillingStatement | null;
+};
+
+export type CardBillings = {
+  asOf: string;
+  cycleFrom: string;
+  nextBillingDate: string;
+  cards: CardBilling[];
+};
+
+export function toCardBillings(dto: CardBillingsDto): CardBillings {
+  return {
+    asOf: dto.asOf,
+    cycleFrom: dto.cycleFrom,
+    nextBillingDate: dto.nextBillingDate,
+    cards: dto.cards.map((card) => ({
+      cardId: card.cardId,
+      cardName: card.cardName,
+      estimatedAmount: won(card.estimated.amount, "estimated.amount"),
+      approvalCount: card.estimated.approvalCount,
+      estimatedWithdrawalDate: card.estimated.withdrawalDate,
+      statement:
+        card.latestStatement === null
+          ? null
+          : {
+              billingId: card.latestStatement.billingId,
+              billingDate: card.latestStatement.billingDate,
+              amount: won(card.latestStatement.amount, "latestStatement.amount"),
+              status: pickStatus(card.latestStatement.status),
+              withdrawalDate: card.latestStatement.withdrawalDate,
+              paidAt: card.latestStatement.paidAt,
+            },
+    })),
+  };
+}
+
+function pickStatus(raw: string): BillingStatus {
+  return (BILLING_STATUSES as readonly string[]).includes(raw) ? (raw as BillingStatus) : "UNKNOWN";
+}
+
+/** 카드 한 장의 청구 요약. 아직 동기화 전이면 null 이라 화면이 금액 줄을 생략한다 */
+export function findCardBilling(billings: CardBillings | undefined, cardId: number): CardBilling | null {
+  return billings?.cards.find((card) => card.cardId === cardId) ?? null;
+}
+
 export function toPaymentCalendar(dto: PaymentCalendarDto): PaymentCalendar {
   const days = [...dto.days].sort((a, b) => a.date.localeCompare(b.date));
   const entries = days.flatMap((day) => {

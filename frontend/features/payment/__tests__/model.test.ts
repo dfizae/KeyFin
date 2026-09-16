@@ -1,5 +1,6 @@
 import { ApiError } from "@/api/error";
 import {
+  cardBillingsMock,
   createFixedExpenseMock,
   deleteFixedExpenseMock,
   fixedExpenseListMock,
@@ -20,6 +21,7 @@ import {
   canApproveTransfer,
   canOpenEntry,
   canPostponeTransfer,
+  findCardBilling,
   findFixedExpense,
   findTransfer,
   findTransferForEntry,
@@ -35,6 +37,7 @@ import {
   toFixedExpenseForm,
   toFixedExpenseRequest,
   toFixedExpenses,
+  toCardBillings,
   toPaymentCalendar,
   toTransferDetail,
   toTransferPage,
@@ -568,5 +571,36 @@ describe("findTransferForEntry — 캘린더 부족 뱃지에서 이체 제안�
     expect(findTransferForEntry([transfer], bill)?.id).toBe(501);
     expect(findTransferForEntry([{ ...transfer, purposeName: "신한카드" }], bill)).toBeNull();
     expect(findTransferForEntry([{ ...transfer, toAccountId: 9 }], bill)).toBeNull();
+  });
+});
+
+describe("카드 청구 요약 (GET /cards/billings)", () => {
+  const TODAY = "2026-09-16";
+
+  it("예상 승인액·출금일과 최근 청구서를 화면 모델로 옮긴다", () => {
+    const billings = toCardBillings(cardBillingsMock(TODAY));
+    const shinhan = findCardBilling(billings, 1);
+
+    expect(billings.asOf).toBe(TODAY);
+    expect(shinhan).toMatchObject({ cardName: "Deep Dream 체크", estimatedAmount: "38200", approvalCount: 4 });
+    expect(shinhan?.statement).toMatchObject({ billingId: 12, amount: "214000", status: "UNPAID", paidAt: null });
+  });
+
+  it("출금 요일을 모르는 카드는 출금일이 없고 청구서도 없다 — 금액 0 으로 온다", () => {
+    const nori = findCardBilling(toCardBillings(cardBillingsMock(TODAY)), 2);
+
+    expect(nori).toMatchObject({ estimatedAmount: "0", approvalCount: 0, estimatedWithdrawalDate: null, statement: null });
+  });
+
+  it("모르는 청구서 상태는 UNKNOWN 으로 흡수하고, 연결되지 않은 카드는 null 이다", () => {
+    const dto = cardBillingsMock(TODAY);
+    const withUnknown = {
+      ...dto,
+      cards: [{ ...dto.cards[0], latestStatement: { ...dto.cards[0].latestStatement!, status: "SETTLING" } }],
+    };
+
+    expect(toCardBillings(withUnknown).cards[0].statement?.status).toBe("UNKNOWN");
+    expect(findCardBilling(toCardBillings(dto), 999)).toBeNull();
+    expect(findCardBilling(undefined, 1)).toBeNull();
   });
 });
