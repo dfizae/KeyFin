@@ -64,8 +64,7 @@ class RoomControllerTest {
 					.andExpect(jsonPath("$.data.furnitures[0].placementDirection").value("FRONT_RIGHT"))
 					.andExpect(jsonPath("$.data.furnitures[0].positionX").value(165.000))
 					.andExpect(jsonPath("$.data.coin.balance").value(1250))
-					.andExpect(jsonPath("$.data.board.month").value("202609"))
-					.andExpect(jsonPath("$.data.board.totalRemainingRate").value(36))
+					.andExpect(jsonPath("$.data.board").doesNotHaveJsonPath())
 					.andExpect(jsonPath("$.data.attendance.checkedToday").value(false));
 
 			verify(roomService).getRoom(1L);
@@ -98,7 +97,6 @@ class RoomControllerTest {
 						)
 				),
 				new RoomResponse.CoinResponse(1250),
-				new RoomResponse.BoardResponse("202609", 36),
 				new RoomResponse.AttendanceResponse(false)
 		);
 	}

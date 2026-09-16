@@ -20,6 +20,23 @@ class SwaggerDocumentationTest extends SpringIntegrationTestSupport {
 	private MockMvc mockMvc;
 
 	@Test
+	void documentsRoomWithoutBoard() throws Exception {
+		mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties").value(aMapWithSize(4)))
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.avatar").exists())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.furnitures").exists())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.coin").exists())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.attendance").exists())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.board").doesNotHaveJsonPath())
+				.andExpect(jsonPath("$.components.schemas.BoardResponse").doesNotHaveJsonPath())
+				.andExpect(jsonPath("$.paths['/api/v1/room'].get.responses['200'].content['application/json'].examples['방 조회 성공'].value.data")
+						.value(aMapWithSize(4)))
+				.andExpect(jsonPath("$.paths['/api/v1/room'].get.responses['200'].content['application/json'].examples['방 조회 성공'].value.data.board")
+						.doesNotHaveJsonPath());
+	}
+
+	@Test
 	void documentsItemPatchWithRequiredBooleanAndSharedEquipment() throws Exception {
 		mockMvc.perform(get("/v3/api-docs"))
 				.andExpect(status().isOk())

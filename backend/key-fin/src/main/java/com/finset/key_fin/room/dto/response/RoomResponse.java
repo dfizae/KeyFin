@@ -10,7 +10,6 @@ public record RoomResponse(
 		AvatarResponse avatar,
 		List<PlacedFurnitureResponse> furnitures,
 		CoinResponse coin,
-		BoardResponse board,
 		AttendanceResponse attendance
 ) {
 
@@ -27,12 +26,6 @@ public record RoomResponse(
 	}
 
 	public record CoinResponse(int balance) {
-	}
-
-	public record BoardResponse(
-			String month,
-			int totalRemainingRate
-	) {
 	}
 
 	public record AttendanceResponse(boolean checkedToday) {

@@ -15,7 +15,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 @Tag(
 		name = "방",
-		description = "방 초기 화면에 필요한 아바타, 가구, 코인, 보드와 출석 데이터를 제공합니다."
+		description = "방 초기 화면에 필요한 아바타, 가구, 코인과 출석 데이터를 제공합니다."
 )
 public interface RoomControllerDocs {
 
@@ -40,7 +40,7 @@ public interface RoomControllerDocs {
 											 "avatar":{"equipped":[{"userItemId":101,"slotType":"HEAD","itemId":1,"assetKey":"hat_blue"}],"reaction":null},
 											 "furnitures":[{"userFurnitureId":201,"itemId":4,"slotType":"FLOOR","assetKey":"sofa_default",
 											 "placementStatus":"FLOOR","placementDirection":"FRONT_RIGHT","positionX":165.000,"positionY":280.000,"layer":0}],
-											 "coin":{"balance":1250},"board":{"month":"202609","totalRemainingRate":36},"attendance":{"checkedToday":false}}}
+											 "coin":{"balance":1250},"attendance":{"checkedToday":false}}}
 											"""
 							)
 					)
