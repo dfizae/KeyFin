@@ -1,37 +1,21 @@
 package com.finset.key_fin.room.dto.response;
 
-import com.finset.key_fin.room.entity.FurniturePlacementDirection;
-import com.finset.key_fin.room.entity.FurniturePlacementStatus;
-import com.finset.key_fin.item.entity.ItemSlotType;
+import com.finset.key_fin.furniture.dto.response.PlacedFurnitureResponse;
 import com.finset.key_fin.item.dto.response.EquippedItemResponse;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 public record RoomResponse(
 		AvatarResponse avatar,
-		List<FurnitureResponse> furnitures,
+		List<PlacedFurnitureResponse> furnitures,
 		CoinResponse coin,
-		BoardResponse board,
 		AttendanceResponse attendance
 ) {
 
 	public record AvatarResponse(
 			List<EquippedItemResponse> equipped,
 			ReactionResponse reaction
-	) {
-	}
-
-	public record FurnitureResponse(
-			Long itemId,
-			ItemSlotType slotType,
-			String assetKey,
-			FurniturePlacementStatus placementStatus,
-			FurniturePlacementDirection placementDirection,
-			BigDecimal positionX,
-			BigDecimal positionY,
-			int layer
 	) {
 	}
 
@@ -42,12 +26,6 @@ public record RoomResponse(
 	}
 
 	public record CoinResponse(int balance) {
-	}
-
-	public record BoardResponse(
-			String month,
-			int totalRemainingRate
-	) {
 	}
 
 	public record AttendanceResponse(boolean checkedToday) {

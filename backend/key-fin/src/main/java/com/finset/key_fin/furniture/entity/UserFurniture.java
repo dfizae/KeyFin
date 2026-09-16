@@ -1,7 +1,10 @@
-package com.finset.key_fin.room.entity;
+package com.finset.key_fin.furniture.entity;
 
+import com.finset.key_fin.furniture.exception.FurnitureErrorCode;
+import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.item.entity.Item;
 import com.finset.key_fin.item.entity.ItemCategory;
+import com.finset.key_fin.item.entity.ItemSlotType;
 import com.finset.key_fin.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -66,4 +69,31 @@ public class UserFurniture {
 	@Generated(event = EventType.INSERT)
 	@Column(name = "acquired_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime acquiredAt;
+
+	public void place(FurniturePlacementStatus status, FurniturePlacementDirection direction,
+			BigDecimal positionX, BigDecimal positionY, int layer) {
+		boolean allowed = (item.getSlotType() == ItemSlotType.FLOOR && status == FurniturePlacementStatus.FLOOR)
+				|| (item.getSlotType() == ItemSlotType.WALL
+				&& (status == FurniturePlacementStatus.LEFT_WALL || status == FurniturePlacementStatus.RIGHT_WALL));
+		if (!allowed) {
+			throw new BusinessException(FurnitureErrorCode.PLACEMENT_NOT_ALLOWED);
+		}
+		this.placementStatus = status;
+		this.placementDirection = direction;
+		this.positionX = positionX;
+		this.positionY = positionY;
+		this.layer = layer;
+	}
+
+	public void unplace() {
+		this.placementStatus = null;
+		this.placementDirection = null;
+		this.positionX = null;
+		this.positionY = null;
+		this.layer = 0;
+	}
+
+	public boolean isPlaced() {
+		return placementStatus != null;
+	}
 }

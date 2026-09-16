@@ -15,14 +15,15 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
 @Tag(
 		name = "방",
-		description = "방 초기 화면에 필요한 아바타, 가구, 코인, 보드와 출석 데이터를 제공합니다."
+		description = "방 초기 화면에 필요한 아바타, 가구, 코인과 출석 데이터를 제공합니다."
 )
 public interface RoomControllerDocs {
 
 	@Operation(
 			summary = "방 홈 화면 데이터 조회",
 			description = "인증된 사용자의 방 초기 화면 데이터를 조회합니다. avatar.equipped는 실제 장착 상태이며 "
-					+ "미장착 부위는 모바일에서 기본 에셋을 표시합니다. 착장 외 항목은 개발용 데이터입니다.",
+					+ "미장착 부위는 모바일에서 기본 에셋을 표시합니다. furnitures는 실제 설치된 가구를 보유 가구 ID "
+					+ "오름차순으로 반환하며 미설치 가구는 제외합니다. 착장·가구 외 항목은 개발용 데이터입니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
 	@ApiResponses({
@@ -34,7 +35,13 @@ public interface RoomControllerDocs {
 							mediaType = APPLICATION_JSON_VALUE,
 							examples = @ExampleObject(
 									name = "방 조회 성공",
-									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"avatar\":{\"equipped\":[{\"userItemId\":101,\"slotType\":\"HEAD\",\"itemId\":1,\"assetKey\":\"hat_blue\"},{\"userItemId\":102,\"slotType\":\"FACE\",\"itemId\":2,\"assetKey\":\"glasses_round\"},{\"userItemId\":103,\"slotType\":\"UPPER_BODY\",\"itemId\":3,\"assetKey\":\"shirt_blue\"}],\"reaction\":null},\"furnitures\":[{\"itemId\":4,\"slotType\":\"FLOOR\",\"assetKey\":\"sofa_default\",\"placementStatus\":\"FLOOR\",\"placementDirection\":\"FRONT_RIGHT\",\"positionX\":165.000,\"positionY\":280.000,\"layer\":0}],\"coin\":{\"balance\":1250},\"board\":{\"month\":\"202609\",\"totalRemainingRate\":36},\"attendance\":{\"checkedToday\":false}}}"
+									value = """
+											{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{
+											 "avatar":{"equipped":[{"userItemId":101,"slotType":"HEAD","itemId":1,"assetKey":"hat_blue"}],"reaction":null},
+											 "furnitures":[{"userFurnitureId":201,"itemId":4,"slotType":"FLOOR","assetKey":"sofa_default",
+											 "placementStatus":"FLOOR","placementDirection":"FRONT_RIGHT","positionX":165.000,"positionY":280.000,"layer":0}],
+											 "coin":{"balance":1250},"attendance":{"checkedToday":false}}}
+											"""
 							)
 					)
 			),
