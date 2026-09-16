@@ -70,7 +70,8 @@ function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) 
   return (
     <Screen>
       {changing ? <ScreenHeader title="수입 계좌 변경" onBack={goBack} /> : null}
-      <View className="flex-1 gap-5 px-6">
+      {/* 온보딩에는 헤더가 없어 상태바 높이와 위 여백을 직접 둔다 — 헤더 통일 때 둘 다 빠져 제목이 맨 위에 붙었다 (2026-09-17) */}
+      <View className="flex-1 gap-5 px-6" style={changing ? undefined : { paddingTop: insets.top + ONBOARDING_TOP_GAP }}>
         <View className="gap-1.5">
           <Text className="text-h2 text-foreground" accessibilityRole="header">
             수입이 들어오는 계좌를 골라 주세요
@@ -126,6 +127,9 @@ function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) 
     </Screen>
   );
 }
+
+/** 헤더 없는 온보딩 모드에서 상태바 아래 제목까지의 간격. 섹션 간격(40)과 같다 */
+const ONBOARDING_TOP_GAP = 40;
 
 type IncomeAccountRowProps = {
   option: IncomeAccountOption;

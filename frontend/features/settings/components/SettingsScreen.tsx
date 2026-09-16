@@ -1,8 +1,7 @@
 import { useRouter } from "expo-router";
 import { CircleAlert, WifiOff } from "lucide-react-native";
-import { useColorScheme } from "nativewind";
 import { useState } from "react";
-import { Switch, View } from "react-native";
+import { View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
@@ -11,6 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
+import { Switch } from "@/components/ui/switch";
 import { Text } from "@/components/ui/text";
 import { useTransferSettings, useUpdateTransferSettings } from "@/features/settings/api/queries";
 import { transferSettingsErrorMessage } from "@/features/settings/errors";
@@ -22,7 +22,6 @@ import {
   type TransferSettings,
   type TransferSettingsForm,
 } from "@/features/settings/model";
-import { getColors } from "@/lib/theme";
 
 const MY_ROUTE = "/my";
 
@@ -60,8 +59,6 @@ type TransferSettingsFormProps = {
 };
 
 function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
-  const { colorScheme } = useColorScheme();
-  const colors = getColors(colorScheme);
   const update = useUpdateTransferSettings();
   const [form, setForm] = useState<TransferSettingsForm>(() => toSettingsForm(settings));
 
@@ -78,8 +75,9 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
 
   return (
     <>
-      <ScreenScrollView contentContainerClassName="gap-10 px-6 pb-8" keyboardShouldPersistTaps="handled">
-        <View className="gap-3 border-b border-border pb-6 pt-2">
+      <ScreenScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">
+        {/* Pencil PAGE-27 설정 (WGeTO) 의 Card / Consent: 흰 카드 안에 동의 스위치와 설명 (2026-09-17) */}
+        <View className="gap-3 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
           <View className="flex-row items-center justify-between gap-3">
             <Text className="shrink text-h3 text-foreground">결제 준비 이체 동의</Text>
             <Switch
@@ -87,9 +85,6 @@ function TransferSettingsForm({ settings }: TransferSettingsFormProps) {
               onValueChange={(consent) => patch({ consent })}
               disabled={update.isPending}
               accessibilityLabel="결제 준비 이체 동의"
-              accessibilityState={{ checked: form.consent, disabled: update.isPending }}
-              trackColor={{ false: colors.muted, true: colors.primary }}
-              thumbColor={colors.background}
             />
           </View>
           <Text className="text-body-sm text-card-foreground">

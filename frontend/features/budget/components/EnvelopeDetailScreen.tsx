@@ -127,13 +127,13 @@ type EnvelopeSummaryProps = {
   period: string;
 };
 
-// 기간 · 잔액 · 사용률 막대 · 예산/사용액. 카드 없이 잔액이 주인공이다. 금액은 서버 값만 쓴다(규칙 80).
+// 기간 · 잔액 · 사용률 막대 · 예산/사용액. 예산 탭 남은 예산과 같은 흰 카드다(2026-09-17 사용자 결정). 금액은 서버 값만 쓴다(규칙 80).
 function EnvelopeSummary({ envelope, period }: EnvelopeSummaryProps) {
   const health = envelopeHealth(envelope);
   const used = usedBarPercent(envelope.remainingRate);
 
   return (
-    <View className="gap-3 pb-2 pt-3">
+    <View className="gap-3 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
       <View className="flex-row items-center gap-2.5">
         <View className={cn("h-7 w-7 items-center justify-center rounded-md", envelopeTone(envelope.envelopeId).tile)}>
           <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className={envelopeTone(envelope.envelopeId).icon} />

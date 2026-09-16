@@ -42,7 +42,8 @@ function SpendingSummaryScreen() {
       <ScrollView className="flex-1" contentContainerClassName="gap-9 px-6 pb-6 pt-10">
         <AnalysisHero icon={ChartPie} title="지난 소비를 분석했어요" description={`${basis} 기준으로 계산했어요.`} />
 
-        <View className="gap-1">
+        {/* 한 달 평균 소비는 흰 카드로 감싼다 (2026-09-17 사용자 요청, Pencil mhzUD Summary 도 같이 바꿈) */}
+        <View className="gap-1 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
           <Text className="text-label text-card-foreground">한 달 평균 소비</Text>
           <CountUpAmount value={total} className="text-amount-lg tabular-nums text-foreground" />
         </View>

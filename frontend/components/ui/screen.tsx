@@ -56,10 +56,18 @@ function Screen({ children, className }: ScreenProps) {
   );
 }
 
-function useScrollTracking(onScroll: ((event: NativeSyntheticEvent<NativeScrollEvent>) => void) | undefined) {
+type OverlapOption = {
+  /**
+   * 목록이 헤더 밑으로 지나가며 헤더가 투명해진다(기본). 헤더와 목록 사이에 월 선택·필터 같은 고정 컨트롤이 있으면 false —
+   * 끌어올린 목록이 그 컨트롤을 덮어 누를 수 없게 되므로, 목록은 컨트롤 아래에서만 스크롤되고 헤더도 그대로 둔다.
+   */
+  overlapHeader?: boolean;
+};
+
+function useScrollTracking(onScroll: ((event: NativeSyntheticEvent<NativeScrollEvent>) => void) | undefined, overlapHeader: boolean) {
   const context = useScreenScroll();
   const headerHeight = useHeaderHeight();
-  const scrollY = context?.scrollY;
+  const scrollY = overlapHeader ? context?.scrollY : undefined;
   const handleScroll = React.useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       scrollY?.set(event.nativeEvent.contentOffset.y);
@@ -67,37 +75,58 @@ function useScrollTracking(onScroll: ((event: NativeSyntheticEvent<NativeScrollE
     },
     [scrollY, onScroll]
   );
+  const overlaid = context !== null && overlapHeader;
   // 헤더 자리(빈 공간)만큼 위로 끌어올리고 내용은 그만큼 내려서, 쉬는 상태 배치는 그대로 두고 스크롤만 헤더 아래로 이어지게 한다
-  const offset = context ? headerHeight + HEADER_CONTENT_GAP : 0;
-  return { handleScroll, offset, overlaid: context !== null };
+  const offset = overlaid ? headerHeight + HEADER_CONTENT_GAP : 0;
+  return { handleScroll, offset, overlaid };
 }
 
 /** `Screen` 안에서 쓰는 ScrollView. 밖에서 쓰면 보통 ScrollView 와 같다 */
-function ScreenScrollView({ onScroll, style, contentContainerStyle, ...props }: ScrollViewProps) {
-  const { handleScroll, offset, overlaid } = useScrollTracking(onScroll);
-  return (
+function ScreenScrollView({ onScroll, contentContainerStyle, overlapHeader = true, ...props }: ScrollViewProps & OverlapOption) {
+  const { handleScroll, offset, overlaid } = useScrollTracking(onScroll, overlapHeader);
+  const scroll = (
     <ScrollView
       {...props}
       onScroll={handleScroll}
       scrollEventThrottle={16}
-      style={[style, overlaid ? { marginTop: -offset } : null]}
       contentContainerStyle={[contentContainerStyle, overlaid ? { paddingTop: offset } : null]}
     />
   );
+  return overlaid ? <PulledUp offset={offset}>{scroll}</PulledUp> : scroll;
 }
 
-/** `Screen` 안에서 쓰는 FlatList. 밖에서 쓰면 보통 FlatList 와 같다 */
-function ScreenFlatList<ItemT>({ onScroll, style, contentContainerStyle, ...props }: FlatListProps<ItemT>) {
-  const { handleScroll, offset, overlaid } = useScrollTracking(onScroll);
-  return (
-    <FlatList
-      {...props}
-      onScroll={handleScroll}
-      scrollEventThrottle={16}
-      style={[style, overlaid ? { marginTop: -offset } : null]}
-      contentContainerStyle={[contentContainerStyle, overlaid ? { paddingTop: offset } : null]}
-    />
+/**
+ * `Screen` 안에서 쓰는 FlatList. 밖에서 쓰면 보통 FlatList 와 같다.
+ * 위 여백은 contentContainerStyle 이 아니라 목록 머리의 빈 View 로 넣는다 — NativeWind 가 FlatList 의 contentContainerClassName 을
+ * remapProps 로 처리해 웹에서 인라인 contentContainerStyle 을 덮어써, 여백이 빠지고 내용이 헤더 밑에 깔렸다 (2026-09-17).
+ */
+function ScreenFlatList<ItemT>({ onScroll, style, ListHeaderComponent, overlapHeader = true, ...props }: FlatListProps<ItemT> & OverlapOption) {
+  const { handleScroll, offset, overlaid } = useScrollTracking(onScroll, overlapHeader);
+  const header = overlaid ? (
+    <View>
+      <View style={{ height: offset }} />
+      {renderListHeader(ListHeaderComponent)}
+    </View>
+  ) : (
+    ListHeaderComponent
   );
+  const list = <FlatList {...props} style={style} ListHeaderComponent={header} onScroll={handleScroll} scrollEventThrottle={16} />;
+  return overlaid ? <PulledUp offset={offset}>{list}</PulledUp> : list;
+}
+
+/**
+ * 헤더 자리만큼 위로 끌어올리는 래퍼. 여백을 스크롤 컴포넌트의 style 에 주지 않는 이유: 당겨서 새로고침(refreshControl)이 붙으면
+ * 웹(RN Web)은 스크롤 뷰를 바깥 래퍼로 감싸면서 같은 style 을 바깥·안쪽 양쪽에 적용해 -offset 이 두 번 먹는다 —
+ * 봉투 상세가 헤더 밑에 깔린 원인이었다 (2026-09-17 웹에서 측정: 바깥 top 0 · 안쪽 top -105).
+ */
+function PulledUp({ offset, children }: { offset: number; children: React.ReactNode }) {
+  return <View style={{ flex: 1, marginTop: -offset }}>{children}</View>;
+}
+
+function renderListHeader(header: FlatListProps<unknown>["ListHeaderComponent"]): React.ReactNode {
+  if (header === null || header === undefined) return null;
+  if (React.isValidElement(header)) return header;
+  return React.createElement(header as React.ComponentType);
 }
 
 export { Screen, ScreenFlatList, ScreenScrollView };

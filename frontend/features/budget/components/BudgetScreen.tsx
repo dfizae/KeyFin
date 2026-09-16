@@ -114,13 +114,14 @@ type TotalCardProps = {
   period: string;
 };
 
-// Pencil 예산 탭 · 카드 정리 대안 (IiOk3) 의 TotalCard: 카드 없이 라벨 · 금액 · 진행 바 8pt · 총/사용이 본문에 바로.
+// Pencil PAGE-12 예산 탭 (kvc1e) 의 TotalCard: 흰 카드 안에 라벨 · 금액 · 진행 바 8pt · 총/사용 (2026-09-17 사용자 결정 — IiOk3 의 카드 없는 안에서 되돌림).
+// 면 구분은 카드 규칙대로 테두리 대신 그림자(다크는 테두리).
 function TotalCard({ total, period }: TotalCardProps) {
   const health = budgetHealth(total);
   const used = usedBarPercent(total.remainingRate);
 
   return (
-    <View className="gap-3 pb-1">
+    <View className="gap-3 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
       <Text className="text-label tabular-nums text-card-foreground">{period} 남은 예산</Text>
       <CountUpAmount
         value={total.remaining}

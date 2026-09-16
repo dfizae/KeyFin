@@ -90,6 +90,7 @@ function PaymentCalendarScreen() {
         />
       ) : (
         <ScreenFlatList
+          overlapHeader={false}
           data={groups}
           keyExtractor={(group) => group.date}
           contentContainerClassName="gap-10 px-6 pb-8"
