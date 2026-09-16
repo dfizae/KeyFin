@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 
 import { CoachBubble } from "@/features/home/components/CoachBubble";
-import { usePendingTransactions } from "@/features/transaction/api/queries";
+import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 
 const CLEANUP_ROUTE = "/transaction/pending";
 
@@ -19,7 +19,15 @@ function HomeCoach({ width }: HomeCoachProps) {
   const router = useRouter();
   const pending = usePendingTransactions();
 
-  return <CoachBubble width={width} pendingCount={pending.data?.items.length ?? 0} onCleanup={() => router.push(CLEANUP_ROUTE)} />;
+  // 첫 쪽(20건)만 받아 두므로 더 남았으면 pendingMore 로 알려 "n건+" 로 적는다
+  return (
+    <CoachBubble
+      width={width}
+      pendingCount={flattenPending(pending.data).length}
+      pendingMore={pending.hasNextPage}
+      onCleanup={() => router.push(CLEANUP_ROUTE)}
+    />
+  );
 }
 
 export { HomeCoach };

@@ -44,6 +44,16 @@ describe("toTransaction", () => {
 });
 
 describe("pending · subcategories · classify", () => {
+  it("미확정 목록은 커서·size 로 잘리고 마지막 쪽은 nextCursor 가 null 이다", () => {
+    const first = pendingTransactionsMock(null, 1);
+    expect(first.items.map((item) => item.id)).toEqual([501]);
+    expect(first.nextCursor).toBe(501);
+
+    const second = pendingTransactionsMock(first.nextCursor, 1);
+    expect(second.items.map((item) => item.id)).toEqual([502]);
+    expect(second.nextCursor).toBeNull();
+  });
+
   it("미확정 목록과 세분류 22종을 변환한다", () => {
     expect(toPendingTransactions(pendingTransactionsMock()).items.map((item) => item.id)).toEqual([501, 502]);
     expect(toSubcategories(subcategoriesMock)).toHaveLength(22);

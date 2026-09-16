@@ -1,4 +1,13 @@
-import { infiniteQueryOptions, type QueryCache, queryOptions, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  infiniteQueryOptions,
+  type InfiniteData,
+  type QueryCache,
+  queryOptions,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useCallback, useSyncExternalStore } from "react";
 
 import { budgetKeys } from "@/features/budget/api/queries";
@@ -99,12 +108,20 @@ export function useRecentTransactions(month: string) {
   return useQuery(recentTransactionsQueryOptions(month));
 }
 
+/** 미확정 목록도 커서 페이지다(서버 size 기본 20). 홈 코치 건수와 정리 화면(PAGE-22)이 같은 캐시를 본다 */
 export function pendingTransactionsQueryOptions() {
-  return queryOptions({
+  return infiniteQueryOptions({
     queryKey: transactionKeys.pending(),
-    queryFn: ({ signal }) => getPendingTransactions(signal),
+    queryFn: ({ pageParam, signal }) => getPendingTransactions({ cursor: pageParam, size: TRANSACTION_PAGE_SIZE }, signal),
+    initialPageParam: null as number | null,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     staleTime: 30_000,
   });
+}
+
+/** 받아 둔 쪽들을 한 목록으로. 아직 안 받은 쪽이 있으면 `hasMore` 라 건수 뒤에 + 를 붙인다 */
+export function flattenPending(data: InfiniteData<PendingTransactions> | undefined): Transaction[] {
+  return data?.pages.flatMap((page) => page.items) ?? [];
 }
 
 export function subcategoriesQueryOptions() {
@@ -116,7 +133,7 @@ export function subcategoriesQueryOptions() {
 }
 
 export function usePendingTransactions() {
-  return useQuery(pendingTransactionsQueryOptions());
+  return useInfiniteQuery(pendingTransactionsQueryOptions());
 }
 
 export function useSubcategories(enabled = true) {
@@ -138,8 +155,11 @@ export function useClassifyTransaction() {
     mutationFn: ({ transactionId, request }: ClassifyVariables) => classifyTransaction({ transactionId, request }),
     // 확정 응답에 봉투 잔액이 없어(develop 2026-09-15) 즉시 반영은 못 하고, 현재 주기 거래면 예산을 다시 받는다.
     onSuccess: (_result, { transactionId, txDate }) => {
-      queryClient.setQueryData<PendingTransactions>(transactionKeys.pending(), (old) =>
-        old ? { ...old, items: old.items.filter((item) => item.id !== transactionId) } : old
+      // 커서 페이지 캐시라 쪽마다 걸러낸다. 커서(마지막 id)가 빠진 쪽이 생겨도 다음 쪽은 이미 받아 둔 것이라 이어 붙는 데 문제없다.
+      queryClient.setQueryData<InfiniteData<PendingTransactions>>(transactionKeys.pending(), (old) =>
+        old
+          ? { ...old, pages: old.pages.map((page) => ({ ...page, items: page.items.filter((item) => item.id !== transactionId) })) }
+          : old
       );
       void queryClient.invalidateQueries({ queryKey: transactionKeys.all });
       const budget = queryClient.getQueryData<Budget>(budgetKeys.current());

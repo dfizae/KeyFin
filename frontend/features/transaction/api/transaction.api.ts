@@ -36,10 +36,13 @@ export async function getTransactions(
   return toTransactionPage(data);
 }
 
-/** GET /transactions/pending — 사용자 확인이 필요한 미확정 거래 (FR-TXN-03). 파라미터 없음 */
-export async function getPendingTransactions(signal?: AbortSignal): Promise<PendingTransactions> {
-  if (isMocked("transaction")) return toPendingTransactions(await withMockLatency(pendingTransactionsMock(), signal));
-  const { data } = await api.get<PendingTransactionsDto>("/transactions/pending", { signal });
+/**
+ * GET /transactions/pending?cursor=&size= — 사용자 확인이 필요한 미확정 거래, 커서 페이지 (FR-TXN-03).
+ * 서버는 PENDING·NORMAL·입금 제외를 최신순으로 주고 size 기본 20 이다(백엔드 findPendingTransactions, 2026-09-16 대조).
+ */
+export async function getPendingTransactions({ cursor, size }: TransactionPageParams, signal?: AbortSignal): Promise<PendingTransactions> {
+  if (isMocked("transaction")) return toPendingTransactions(await withMockLatency(pendingTransactionsMock(cursor, size), signal));
+  const { data } = await api.get<PendingTransactionsDto>("/transactions/pending", { params: { cursor: cursor ?? undefined, size }, signal });
   return toPendingTransactions(data);
 }
 

@@ -9,7 +9,7 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { useClassifyTransaction, usePendingTransactions, useSubcategories } from "@/features/transaction/api/queries";
+import { flattenPending, useClassifyTransaction, usePendingTransactions, useSubcategories } from "@/features/transaction/api/queries";
 import { SubcategorySheet } from "@/features/transaction/components/SubcategorySheet";
 import { classifyErrorMessage } from "@/features/transaction/errors";
 import { merchantLabel, transactionDateTimeLabel, type ClassifyRequest, type Transaction } from "@/features/transaction/model";
@@ -30,7 +30,9 @@ function PendingCleanupScreen() {
   const classify = useClassifyTransaction();
   const [sheetTransaction, setSheetTransaction] = useState<Transaction | null>(null);
   const subcategories = useSubcategories(sheetTransaction !== null);
-  const items = pending.data?.items ?? [];
+  const items = flattenPending(pending.data);
+  // 서버가 20건씩 주므로 더 남아 있으면 건수 뒤에 + 를 붙인다 — 받은 만큼만 세고 모르는 건 모른다고 적는다
+  const countLabel = `${items.length}건${pending.hasNextPage ? "+" : ""}`;
   const submittingId = classify.isPending ? classify.variables?.transactionId : undefined;
 
   const submit = (transaction: Transaction, request: ClassifyRequest) => {
@@ -61,14 +63,27 @@ function PendingCleanupScreen() {
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
           contentContainerClassName="gap-3 px-6 pb-8"
-          refreshing={pending.isRefetching}
+          refreshing={pending.isRefetching && !pending.isFetchingNextPage}
           onRefresh={() => pending.refetch()}
+          onEndReachedThreshold={0.4}
+          onEndReached={() => {
+            if (pending.hasNextPage && !pending.isFetchingNextPage) void pending.fetchNextPage();
+          }}
           ListHeaderComponent={
             items.length === 0 ? null : (
               <Text className="pb-1 text-body-sm text-card-foreground" accessibilityLiveRegion="polite">
-                확인이 필요한 결제 {items.length}건
+                확인이 필요한 결제 {countLabel}
               </Text>
             )
+          }
+          ListFooterComponent={
+            pending.isFetchingNextPage ? (
+              <Skeleton className="h-32 w-full rounded-2xl" />
+            ) : pending.isFetchNextPageError ? (
+              <Button variant="outline" className="h-button-md rounded-lg" onPress={() => pending.fetchNextPage()}>
+                <Text>더 불러오지 못했어요. 다시 시도</Text>
+              </Button>
+            ) : null
           }
           ListEmptyComponent={
             <EmptyState icon={CheckCheck} title="정리할 결제가 없어요" description="새 결제가 들어오면 여기에 모아 둘게요." />

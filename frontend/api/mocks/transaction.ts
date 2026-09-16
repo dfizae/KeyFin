@@ -56,8 +56,16 @@ function applyClassification(dto: TransactionDto): TransactionDto {
   };
 }
 
-export function pendingTransactionsMock(): PendingTransactionsDto {
-  return { items: PENDING.filter((item) => !classifications.has(item.id)), nextCursor: null };
+/**
+ * GET /transactions/pending — 확정 안 된 건만, 서버처럼 커서(마지막 id)·size 로 자른다 (백엔드 findPendingTransactions, 2026-09-16).
+ * 인자를 생략하면 전부 한 쪽에 준다(테스트·홈 코치 건수용).
+ */
+export function pendingTransactionsMock(cursor: number | null = null, size = 20): PendingTransactionsDto {
+  const remaining = PENDING.filter((item) => !classifications.has(item.id));
+  const start = cursor === null ? 0 : remaining.findIndex((item) => item.id === cursor) + 1;
+  const page = remaining.slice(start, start + size);
+  const hasNext = start + size < remaining.length;
+  return { items: page, nextCursor: hasNext ? (page[page.length - 1]?.id ?? null) : null };
 }
 
 /** 확정 응답 예시. 외식 봉투 잔액 132,000 (계약 사본 예시 값) */
