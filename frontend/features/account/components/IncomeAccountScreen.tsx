@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useAccounts, useSetIncomeAccount } from "@/features/account/api/queries";
@@ -24,30 +25,51 @@ const ASSET_SELECT_ROUTE = "/onboarding/asset-select";
 /** 하단 CTA 가 안전 영역이 없는 기기에서도 띄워지는 최소 여백 (AssetSelectScreen 과 같은 기준) */
 const MIN_BOTTOM_INSET = 12;
 
+/** 변경 모드에서 돌아갈 곳이 없을 때(딥링크) */
+const ASSETS_ROUTE = "/assets";
+
+type IncomeAccountScreenProps = {
+  /**
+   * onboarding = PAGE-05, 지정 뒤 소비 분석으로 넘어간다.
+   * change = 자산 탭·이체 승인(PAY_010)에서 들어오는 변경 화면. 헤더에 뒤로가기가 있고 바꾼 뒤 돌아간다(2026-09-16).
+   */
+  mode?: "onboarding" | "change";
+};
+
 // PAGE-05 수입 계좌 지정. Pencil 시안이 없어 계좌·카드 연결(PAGE-04)의 구성과 행 모양을 따른다.
 // 목록은 GET /accounts(관리 중 계좌)이고, 이미 수입 계좌가 있으면 그 계좌를 골라 둔 채로 보여 준다.
-function IncomeAccountScreen() {
+function IncomeAccountScreen({ mode = "onboarding" }: IncomeAccountScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const accounts = useAccounts();
   const setIncomeAccount = useSetIncomeAccount();
+  const changing = mode === "change";
 
   // 사용자가 고르기 전에는 서버의 현재 수입 계좌를 선택값으로 쓴다(파생값이라 state 에 복사하지 않는다).
   const [pickedId, setPickedId] = React.useState<number | null>(null);
 
   const options = accounts.data ?? [];
-  const selectedId = pickedId ?? incomeAccountIdOf(options);
-  const canSubmit = canSubmitIncomeAccount(options, selectedId) && !setIncomeAccount.isPending;
+  const currentId = incomeAccountIdOf(options);
+  const selectedId = pickedId ?? currentId;
+  // 변경 모드에서 지금 수입 계좌를 그대로 고른 건 보낼 게 없다(서버도 멱등이라 200 이지만 헛요청이다)
+  const unchanged = changing && selectedId === currentId;
+  const canSubmit = canSubmitIncomeAccount(options, selectedId) && !unchanged && !setIncomeAccount.isPending;
   const errorMessage = setIncomeAccount.isError ? incomeAccountErrorMessage(setIncomeAccount.error) : null;
+
+  const goBack = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace(ASSETS_ROUTE);
+  };
 
   const handleSubmit = () => {
     if (!canSubmit || selectedId === null) return;
-    setIncomeAccount.mutate(selectedId, { onSuccess: () => router.replace(NEXT_ROUTE) });
+    setIncomeAccount.mutate(selectedId, { onSuccess: () => (changing ? goBack() : router.replace(NEXT_ROUTE)) });
   };
 
   return (
     <View className="flex-1 bg-background">
-      <View className="flex-1 gap-5 px-6 pt-6">
+      {changing ? <ScreenHeader title="수입 계좌 변경" onBack={goBack} /> : null}
+      <View className={cn("flex-1 gap-5 px-6", changing ? "pt-2" : "pt-6")}>
         <View className="gap-1.5">
           <Text className="text-h2 text-foreground" accessibilityRole="header">
             수입이 들어오는 계좌를 골라 주세요
@@ -72,7 +94,7 @@ function IncomeAccountScreen() {
               icon={WalletMinimal}
               title="연결된 계좌가 없어요"
               description="수입 계좌로 지정하려면 계좌를 먼저 연결해 주세요."
-              action={{ label: "계좌 연결하기", onPress: () => router.replace(ASSET_SELECT_ROUTE) }}
+              action={{ label: "계좌 연결하기", onPress: () => (changing ? router.push(ASSET_SELECT_ROUTE) : router.replace(ASSET_SELECT_ROUTE)) }}
             />
           </View>
         ) : (
@@ -97,7 +119,7 @@ function IncomeAccountScreen() {
           </Text>
         )}
         <Button size="lg" className="h-button-lg rounded-lg" onPress={handleSubmit} disabled={!canSubmit}>
-          <Text>{setIncomeAccount.isPending ? "지정하는 중…" : "다음"}</Text>
+          <Text>{setIncomeAccount.isPending ? "지정하는 중…" : changing ? "변경" : "다음"}</Text>
         </Button>
       </View>
     </View>
