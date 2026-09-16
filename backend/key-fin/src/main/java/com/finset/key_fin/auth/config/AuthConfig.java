@@ -7,6 +7,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.Clock;
+import java.time.ZoneId;
 
 @Configuration
 @EnableConfigurationProperties(JwtProperties.class)
@@ -19,6 +20,6 @@ public class AuthConfig {
 
 	@Bean
 	public Clock clock() {
-		return Clock.systemUTC();
+		return Clock.system(ZoneId.of("Asia/Seoul"));
 	}
 }
