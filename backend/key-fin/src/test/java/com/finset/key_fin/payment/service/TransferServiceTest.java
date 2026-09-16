@@ -28,6 +28,7 @@ import com.finset.key_fin.payment.dto.response.FinanceTransferResult;
 import com.finset.key_fin.payment.dto.response.FinanceTransferResult.Status;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.CalendarItemType;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
 import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse;
 import com.finset.key_fin.payment.entity.AuditLog;
@@ -202,6 +203,30 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 			assertThatThrownBy(call::run).isInstanceOf(BusinessException.class)
 					.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CommonErrorCode.INVALID_INPUT_VALUE);
 		}
+	}
+
+	@Test
+	@DisplayName("상세: 현재 상태와 감사 타임라인을 오래된 순으로 돌려주고, 남의 제안은 404")
+	void detailWithHistory() {
+		assertThatThrownBy(() -> transferService.approve(USER, 9902L))
+				.isInstanceOf(BusinessException.class);
+		transferService.postpone(USER, 9902L);
+
+		TransferDetailResponse detail = transferService.detail(USER, 9902L);
+
+		assertThat(detail.transfer().id()).isEqualTo(9902L);
+		assertThat(detail.transfer().status()).isEqualTo(TransferStatus.PROPOSED);
+		assertThat(detail.transfer().purpose().name()).isEqualTo("월세");
+		assertThat(detail.history()).extracting(TransferDetailResponse.HistoryEntry::action)
+				.containsExactly(AuditAction.HOLD, AuditAction.HOLD);
+		assertThat(detail.history().get(0).basis()).contains("PAY_008").contains("350000");
+		assertThat(detail.history().get(1).basis()).startsWith(TransferService.POSTPONE_BASIS);
+		assertThat(detail.history()).allSatisfy(entry -> assertThat(entry.at()).isNotNull());
+
+		assertThat(transferService.detail(USER, 9901L).history()).isEmpty();
+		assertThatThrownBy(() -> transferService.detail(USER, 9907L))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(PaymentErrorCode.TRANSFER_NOT_FOUND);
 	}
 
 	@Test

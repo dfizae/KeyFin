@@ -26,6 +26,9 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.CalendarItemType;
 import com.finset.key_fin.payment.dto.response.TransferApproveResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse;
+import com.finset.key_fin.payment.dto.response.TransferDetailResponse.HistoryEntry;
+import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
 import com.finset.key_fin.payment.dto.response.TransferListResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse;
 import com.finset.key_fin.payment.dto.response.TransferResponse.Purpose;
@@ -82,6 +85,31 @@ class TransferControllerTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.items").isEmpty())
 				.andExpect(jsonPath("$.data.nextCursor").value(9902));
+	}
+
+	@Test
+	void returnsDetailWithHistory() throws Exception {
+		when(transferService.detail(1L, 21L)).thenReturn(new TransferDetailResponse(
+				new TransferResponse(21L, TransferStatus.EXECUTED, LocalDate.of(2026, 9, 14), LocalDate.of(2026, 9, 15), 230000L, 1L, 3L,
+						new Purpose(CalendarItemType.FIXED, 7L, null, "월세"), LocalDateTime.of(2026, 9, 14, 9, 12), null,
+						LocalDateTime.of(2026, 9, 14, 8, 30)),
+				List.of(new HistoryEntry(AuditAction.EXECUTE, "금융망 H0000", LocalDateTime.of(2026, 9, 14, 9, 12)))));
+
+		mockMvc.perform(get("/api/v1/transfers/21"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.transfer.id").value(21))
+				.andExpect(jsonPath("$.data.transfer.status").value("EXECUTED"))
+				.andExpect(jsonPath("$.data.history[0].action").value("EXECUTE"))
+				.andExpect(jsonPath("$.data.history[0].at").value("2026-09-14T09:12:00"));
+	}
+
+	@Test
+	void detailOfOthersIs404() throws Exception {
+		doThrow(new BusinessException(PaymentErrorCode.TRANSFER_NOT_FOUND)).when(transferService).detail(1L, 99L);
+
+		mockMvc.perform(get("/api/v1/transfers/99"))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("PAY_005"));
 	}
 
 	@Test
