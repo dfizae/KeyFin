@@ -30,6 +30,9 @@ jest.mock("@/features/transaction/api/transaction.api", () => ({
   classifyTransaction: jest.fn(),
 }));
 
+// 홈 화면은 최종 예산 표시를 검증한다. 실제 시간에 따른 카운트업은 CI 속도에 의존하지 않도록 생략한다.
+jest.mock("@/hooks/use-count-up", () => ({ useCountUp: (target: string) => target }));
+
 // 쿼리 알림을 setTimeout 이 아니라 그 자리에서 보내, 목 응답이 act 범위 안에서 화면에 반영되게 한다.
 notifyManager.setScheduler((callback) => callback());
 
