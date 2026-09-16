@@ -14,6 +14,7 @@ import { useAccounts } from "@/features/account/api/queries";
 import type { LinkedAccount } from "@/features/account/model";
 import { useApproveTransfer, usePostponeTransfer, useTransfers } from "@/features/payment/api/queries";
 import {
+  isIncomeAccountError,
   isRetryableTransferError,
   isStaleTransferError,
   isTransferSettingsError,
@@ -29,6 +30,8 @@ import { cn } from "@/lib/utils";
 
 const CALENDAR_ROUTE = "/payment/calendar";
 const SETTINGS_ROUTE = "/my/settings";
+/** 안전장치 ④(PAY_010)는 이체 설정이 아니라 수입 계좌 지정에서 고친다 (2026-09-16) */
+const INCOME_ACCOUNT_ROUTE = "/account/income";
 const HOME_ROUTE = "/";
 
 type TransferApprovalScreenProps = {
@@ -64,6 +67,7 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
   };
 
   const openSettings = () => router.push(SETTINGS_ROUTE);
+  const openIncomeAccount = () => router.push(INCOME_ACCOUNT_ROUTE);
 
   const runApprove = () => {
     if (transfer === null || isPending) return;
@@ -116,7 +120,10 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
 
           <View className="gap-2 px-6 pb-8 pt-2">
             {approve.isError ? (
-              <ErrorLine message={transferApproveErrorMessage(approve.error)} action={approveErrorAction(approve.error, refresh, openSettings)} />
+              <ErrorLine
+                message={transferApproveErrorMessage(approve.error)}
+                action={approveErrorAction(approve.error, refresh, openSettings, openIncomeAccount)}
+              />
             ) : null}
             {postpone.isError ? (
               <ErrorLine
@@ -183,11 +190,17 @@ function TransferApprovalScreen({ transferId }: TransferApprovalScreenProps) {
 }
 
 /**
- * 안전장치(403 PAY_007~010)는 설정을 고쳐야 풀리고, 미확인·어긋남·금융망 장애는 서버 상태를 다시 받아야 다음 수가 보인다.
- * 잔액 부족·은행 한도(422)는 제안이 FAILED 로 끝나 화면에서 할 일이 없다.
+ * 안전장치 ①~③(403 PAY_007~009)은 이체 설정을, ④(PAY_010)는 수입 계좌 지정을 고쳐야 풀린다.
+ * 미확인·어긋남·금융망 장애는 서버 상태를 다시 받아야 다음 수가 보인다. 잔액 부족·은행 한도(422)는 제안이 FAILED 로 끝나 화면에서 할 일이 없다.
  */
-function approveErrorAction(error: unknown, refresh: () => void, openSettings: () => void): ErrorLineProps["action"] {
+function approveErrorAction(
+  error: unknown,
+  refresh: () => void,
+  openSettings: () => void,
+  openIncomeAccount: () => void
+): ErrorLineProps["action"] {
   if (isTransferSettingsError(error)) return { label: "이체 설정 열기", onPress: openSettings };
+  if (isIncomeAccountError(error)) return { label: "수입 계좌 변경", onPress: openIncomeAccount };
   if (isUnconfirmedTransferError(error) || isStaleTransferError(error) || isRetryableTransferError(error)) {
     return { label: "상태 새로 고침", onPress: refresh };
   }

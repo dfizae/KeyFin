@@ -3,7 +3,8 @@ import type { ApproveTransferDto, TransferDto, TransferListDto } from "@/feature
 /**
  * GET /transfers 응답 예시 (docs/api-contract.md PAYMENT · 백엔드 TransferResponse).
  * 응답 `data` 는 배열이다 — items 래퍼가 없다.
- * 결제 캘린더 목의 15일 월세(부족 230,000)에 맞춘 제안 1건과, 실패 화면 확인용 1건을 둔다.
+ * 결제 캘린더 목의 15일 월세(fixedExpenseId 11 · 출금 계좌 1 · 부족 230,000)에 맞춘 제안 1건과, 실패 화면 확인용 1건을 둔다.
+ * 캘린더 부족 뱃지가 이 제안으로 이어지려면 purpose.fixedExpenseId·dueDate·toAccountId 가 캘린더 목과 같아야 한다(findTransferForEntry).
  * 제안은 08:30 배치가 출금일 하루 전에 만들므로 scheduledDate = dueDate − 1 이다(월요일 출금 카드만 같은 날).
  * 승인하면 서버처럼 상태가 EXECUTED 로 바뀌어 다시 조회할 때 결과가 보인다.
  */
@@ -19,9 +20,9 @@ function initial(month: string): TransferDto[] {
       scheduledDate: dateOf(month, 14),
       dueDate: dateOf(month, 15),
       requiredAmount: 230000,
-      fromAccountId: 1,
-      toAccountId: 2,
-      purpose: { type: "FIXED", fixedExpenseId: 7, cardBillingId: null, name: "월세" },
+      fromAccountId: 2,
+      toAccountId: 1,
+      purpose: { type: "FIXED", fixedExpenseId: 11, cardBillingId: null, name: "월세" },
       createdAt: `${dateOf(month, 14)}T08:30:12`,
     },
     {

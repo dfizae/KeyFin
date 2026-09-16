@@ -468,6 +468,24 @@ export function findTransfer(transfers: Transfer[], id: number): Transfer | null
 }
 
 /**
+ * 캘린더 부족 항목에 대응하는 승인 가능한 이체 제안. 푸시(P1) 전까지 이체 승인(PAGE-25)으로 가는 유일한 앱 내 진입점이다(사용자 결정 2026-09-16).
+ * 제안은 08:30 배치가 출금일이 오늘·내일인 건에만 만들어서, 부족이어도 아직 제안이 없으면 null 이다 — 그때는 뱃지만 있고 눌리지 않는다.
+ * FIXED 는 fixedExpenseId + dueDate 로 정확히 잇는다. CARD_BILL 은 캘린더가 cardBillingId 를 주지 않아 dueDate + 출금 계좌 + 카드명으로 잇는다 (TBD: 캘린더 응답에 cardBillingId 요청).
+ */
+export function findTransferForEntry(transfers: Transfer[], entry: CalendarEntry): Transfer | null {
+  if (entry.preparation?.status !== "SHORTAGE") return null;
+  const match = transfers.find((transfer) => {
+    if (!canApproveTransfer(transfer) || transfer.dueDate !== entry.date) return false;
+    if (entry.type === "FIXED") return transfer.purposeType === "FIXED" && transfer.purposeFixedExpenseId === entry.fixedExpenseId;
+    if (entry.type === "CARD_BILL") {
+      return transfer.purposeType === "CARD_BILL" && transfer.toAccountId === entry.withdrawalAccountId && transfer.purposeName === entry.name;
+    }
+    return false;
+  });
+  return match ?? null;
+}
+
+/**
  * 승인을 보낼 수 있는 상태. PROPOSED 는 안전장치 4검사를 거쳐 새로 실행하고,
  * APPROVED 는 금융망 응답이 유실된 건이라 **같은 기관거래고유번호로 재시도**한다(서버가 검사를 건너뛴다).
  * 이미 성공했던 이체면 금융망이 중복(H1007)으로 답해 EXECUTED 가 되므로 이중 이체가 되지 않는다.

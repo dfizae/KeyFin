@@ -16,6 +16,7 @@ import {
   canPostponeTransfer,
   findFixedExpense,
   findTransfer,
+  findTransferForEntry,
   fixedExpenseFormError,
   groupEntriesByDate,
   isEditableEntry,
@@ -417,7 +418,7 @@ describe("이체 제안 (toTransfers · findTransfer · canApproveTransfer)", ()
       requiredAmount: "230000",
       purposeType: "FIXED",
       purposeName: "월세",
-      purposeFixedExpenseId: 7,
+      purposeFixedExpenseId: 11,
       purposeCardBillingId: null,
       executedAt: null,
       failReason: null,
@@ -485,5 +486,40 @@ describe("parseTransferId", () => {
     expect(parseTransferId("0")).toBeNull();
     expect(parseTransferId("501; DROP")).toBeNull();
     expect(parseTransferId(undefined)).toBeNull();
+  });
+});
+
+describe("findTransferForEntry — 캘린더 부족 뱃지에서 이체 제안으로", () => {
+  afterEach(() => {
+    resetPaymentMocks();
+    resetTransferMocks();
+  });
+
+  const entries = () => toPaymentCalendar(paymentCalendarMock(MONTH)).entries;
+  const rent = () => entries().find((entry) => entry.name === "월세")!;
+  const proposal = () => findTransfer(toTransfers(transferListMock(MONTH)), 501)!;
+
+  it("부족한 고정지출은 fixedExpenseId 와 출금일이 같은 제안으로 잇는다", () => {
+    const transfers = toTransfers(transferListMock(MONTH));
+
+    expect(findTransferForEntry(transfers, rent())?.id).toBe(501);
+    expect(findTransferForEntry(transfers, entries().find((entry) => entry.name === "통신비")!)).toBeNull();
+  });
+
+  it("출금일이 다르거나 이미 끝난 제안은 잇지 않고, 실행 중(APPROVED)은 재시도하러 잇는다", () => {
+    const base = proposal();
+
+    expect(findTransferForEntry([{ ...base, dueDate: `${MONTH.slice(0, 4)}-${MONTH.slice(4)}-16` }], rent())).toBeNull();
+    expect(findTransferForEntry([{ ...base, status: "EXECUTED" }], rent())).toBeNull();
+    expect(findTransferForEntry([{ ...base, status: "APPROVED" }], rent())?.id).toBe(501);
+  });
+
+  it("카드 청구는 cardBillingId 가 캘린더에 없어 출금일·출금 계좌·카드명으로 잇는다", () => {
+    const bill = { ...rent(), type: "CARD_BILL" as const, fixedExpenseId: null, cardId: 2, name: "KB 국민카드" };
+    const transfer = { ...proposal(), purposeType: "CARD_BILL" as const, purposeFixedExpenseId: null, purposeCardBillingId: 5, purposeName: "KB 국민카드" };
+
+    expect(findTransferForEntry([transfer], bill)?.id).toBe(501);
+    expect(findTransferForEntry([{ ...transfer, purposeName: "신한카드" }], bill)).toBeNull();
+    expect(findTransferForEntry([{ ...transfer, toAccountId: 9 }], bill)).toBeNull();
   });
 });

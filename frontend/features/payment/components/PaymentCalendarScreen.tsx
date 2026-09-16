@@ -7,11 +7,12 @@ import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { usePaymentCalendar } from "@/features/payment/api/queries";
+import { usePaymentCalendar, useTransfers } from "@/features/payment/api/queries";
 import { calendarEntryIcon } from "@/features/payment/catalog";
 import { CALENDAR_EMPTY_MESSAGE, ESTIMATED_SUFFIX } from "@/features/payment/components/CalendarPopover";
 import {
   canOpenEntry,
+  findTransferForEntry,
   groupEntriesByDate,
   isEditableEntry,
   parseCalendarMonth,
@@ -19,6 +20,7 @@ import {
   type CalendarDayGroup,
   type CalendarEntry,
   type PaymentCalendar,
+  type Transfer,
 } from "@/features/payment/model";
 import { currentMonthKey, formatMonthDay, formatMonthKeyLabel, parseKSTDateKey, shiftMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
@@ -26,6 +28,10 @@ import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
 const FIXED_EXPENSE_ROUTE = "/payment/fixed-expense";
+const TRANSFER_ROUTE = "/payment/transfer";
+
+/** 부족 뱃지 아래 한 줄. 제안이 있는 항목에만 붙는다 (Pencil cSTvK Note) */
+const TRANSFER_NOTE = "탭해서 결제 전에 옮겨요";
 
 /** KeyFin 에서 고칠 수 없는 항목에 붙이는 설명. 카드 정기결제는 출금 계좌가 아니라 카드 대금으로 함께 나간다 */
 const ENTRY_NOTES: Partial<Record<CalendarEntry["type"], string>> = {
@@ -38,6 +44,7 @@ const ENTRY_NOTES: Partial<Record<CalendarEntry["type"], string>> = {
  * 준비 상태(prepared·shortage)·estimated 는 서버 값이라 그대로 표시만 하고, 서버가 아직 계산하지 않았으면(null) 뱃지를 그리지 않는다 (규칙 80).
  * 고정지출 항목은 모두 눌러서 연다 — 직접 등록한 것(FIXED)은 수정 폼(PAGE-26), 카드 정기결제(CARD_SUBSCRIPTION)는 읽기 전용 상세.
  * 카드 청구(CARD_BILL)는 고정지출 행이 없어 버튼이 아니다.
+ * 부족 항목에 승인 가능한 이체 제안이 있으면 뱃지가 이체 승인(PAGE-25)으로 가는 버튼이 된다 — 푸시(P1) 전까지 유일한 앱 내 진입점(2026-09-16).
  * 헤더의 '관리'는 고정지출 관리(PAGE-26B)로 간다.
  * 달력 격자 대신 날짜별 목록으로 만든다(응답이 날짜·항목 목록이고 한 달 건수가 적다).
  * Pencil PAGE-24 결제 캘린더 (LGaxv) · 빈 상태 (XGcYs) · 오류 (w5uuk) · 준비 상태 없음 (pfLbO).
@@ -47,6 +54,8 @@ function PaymentCalendarScreen() {
   const params = useLocalSearchParams();
   const month = parseCalendarMonth(params.month, currentMonthKey());
   const calendar = usePaymentCalendar(month);
+  // 이체 승인 화면(PAGE-25)과 같은 키({})라 뱃지를 눌러 들어가면 목록이 캐시에서 바로 잡힌다. 못 받아도 캘린더는 그대로 보이고 뱃지만 눌리지 않는다.
+  const transfers = useTransfers({});
   const groups = calendar.data ? groupEntriesByDate(calendar.data.entries) : [];
 
   return (
@@ -97,9 +106,11 @@ function PaymentCalendarScreen() {
           renderItem={({ item }) => (
             <DayGroup
               group={item}
+              transfers={transfers.data ?? []}
               onSelect={(entry) => {
                 if (canOpenEntry(entry)) router.push(`${FIXED_EXPENSE_ROUTE}/${entry.fixedExpenseId}`);
               }}
+              onOpenTransfer={(transfer) => router.push(`${TRANSFER_ROUTE}/${transfer.id}`)}
             />
           )}
         />
@@ -149,11 +160,14 @@ function CalendarSummary({ calendar }: { calendar: PaymentCalendar }) {
 
 type DayGroupProps = {
   group: CalendarDayGroup;
+  /** 승인 가능한 이체 제안. 부족 항목에 짝이 있으면 뱃지가 이체 승인으로 가는 버튼이 된다 */
+  transfers: Transfer[];
   onSelect: (entry: CalendarEntry) => void;
+  onOpenTransfer: (transfer: Transfer) => void;
 };
 
 // 날짜 묶음 제목은 작은 회색 라벨이 아니라 text-h3 검정으로 둔다 (DESIGN.md 섹션 구분 규칙, 2026-09-15).
-function DayGroup({ group, onSelect }: DayGroupProps) {
+function DayGroup({ group, transfers, onSelect, onOpenTransfer }: DayGroupProps) {
   return (
     <View className="gap-3">
       <Text className="text-h3 text-foreground" accessibilityRole="header">
@@ -161,7 +175,13 @@ function DayGroup({ group, onSelect }: DayGroupProps) {
       </Text>
       <View className="gap-2">
         {group.entries.map((entry) => (
-          <EntryCard key={entry.key} entry={entry} onPress={() => onSelect(entry)} />
+          <EntryCard
+            key={entry.key}
+            entry={entry}
+            transfer={findTransferForEntry(transfers, entry)}
+            onPress={() => onSelect(entry)}
+            onOpenTransfer={onOpenTransfer}
+          />
         ))}
       </View>
     </View>
@@ -170,11 +190,16 @@ function DayGroup({ group, onSelect }: DayGroupProps) {
 
 type EntryCardProps = {
   entry: CalendarEntry;
+  /** 이 항목의 이체 제안. 없으면 뱃지는 표시만 한다 */
+  transfer: Transfer | null;
   onPress: () => void;
+  onOpenTransfer: (transfer: Transfer) => void;
 };
 
 // 흰 배경에서 그림자만으로는 구분이 안 돼 자산 탭 계좌 항목처럼 연보라 면으로 둔다. 아이콘 타일은 그 위의 흰 원.
-function EntryCard({ entry, onPress }: EntryCardProps) {
+// 이체 제안이 있는 부족 항목은 뱃지가 셰브런 달린 버튼이 되고 아래에 한 줄 안내가 붙는다 (Pencil PAGE-24 · 이체 제안 cSTvK, 2026-09-16).
+// 그때 카드는 접근성 컨테이너에서 빠져(accessible=false) 카드 본체와 뱃지가 각각 읽히고 눌린다.
+function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps) {
   const openable = canOpenEntry(entry);
   const hint = openable ? (isEditableEntry(entry) ? "고정지출을 수정합니다" : "카드 정기결제 정보를 봅니다") : undefined;
   const name = entry.estimated ? `${entry.name} ${ESTIMATED_SUFFIX}` : entry.name;
@@ -182,12 +207,13 @@ function EntryCard({ entry, onPress }: EntryCardProps) {
   const badge = preparationLabel(entry.preparation);
   const prepared = entry.preparation?.status === "PREPARED";
   const note = ENTRY_NOTES[entry.type] ?? null;
-  const label = [`${name} ${amount}`, note, badge].filter((part) => part !== null).join(", ");
+  const linked = transfer !== null && badge !== null;
+  const label = [`${name} ${amount}`, note, linked ? null : badge].filter((part) => part !== null).join(", ");
 
   return (
     <Pressable
       className="flex-row items-center gap-3 rounded-lg bg-accent p-4 active:opacity-70"
-      accessible
+      accessible={!linked}
       accessibilityRole={openable ? "button" : undefined}
       accessibilityLabel={label}
       accessibilityHint={hint}
@@ -203,7 +229,19 @@ function EntryCard({ entry, onPress }: EntryCardProps) {
         </Text>
         {badge === null && note === null ? null : (
           <View className="flex-row flex-wrap items-center gap-2">
-            {badge === null ? null : (
+            {badge === null ? null : linked ? (
+              <Pressable
+                className="flex-row items-center gap-0.5 rounded-sm bg-destructive-muted py-0.5 pl-1.5 pr-1 active:opacity-70"
+                accessibilityRole="button"
+                accessibilityLabel={`${badge}, 이체 제안 보기`}
+                accessibilityHint="결제 전에 부족한 금액을 옮기는 화면을 엽니다"
+                hitSlop={6}
+                onPress={() => onOpenTransfer(transfer)}
+              >
+                <Text className="text-caption tabular-nums text-destructive">{badge}</Text>
+                <Icon as={ChevronRight} size={14} className="text-destructive" />
+              </Pressable>
+            ) : (
               <View className={cn("rounded-sm px-1.5 py-0.5", prepared ? "bg-positive-muted" : "bg-destructive-muted")}>
                 <Text className={cn("text-caption tabular-nums", prepared ? "text-positive" : "text-destructive")}>{badge}</Text>
               </View>
@@ -211,6 +249,7 @@ function EntryCard({ entry, onPress }: EntryCardProps) {
             {note === null ? null : <Text className="text-caption text-card-foreground">{note}</Text>}
           </View>
         )}
+        {linked ? <Text className="text-caption text-card-foreground">{TRANSFER_NOTE}</Text> : null}
       </View>
       <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
         {amount}
