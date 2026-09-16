@@ -290,6 +290,8 @@ export type RoomStickers = { count: number; total: number; removableToday: boole
 
 export type Room = {
   equipped: EquippedItem[];
+  /** 설치된 가구. 씬 배치로 바꾸는 것은 furniture.ts 가 한다 (3단계) */
+  furnitures: PlacedFurnitureDto[];
   reaction: AvatarReaction | null;
   coinBalance: number;
   checkedInToday: boolean;
@@ -315,6 +317,7 @@ export function toRoom(dto: RoomDto): Room {
       assetKey: item.assetKey,
     })),
     reaction: dto.avatar.reaction,
+    furnitures: dto.furnitures ?? [],
     coinBalance: dto.coin.balance,
     checkedInToday: dto.attendance.checkedToday,
     stickers: dto.stickers ?? null,

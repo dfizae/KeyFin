@@ -16,6 +16,8 @@ export type FurnitureId = "sofa" | "coffee-table" | "desk" | "fridge" | "plant";
 export type FurnitureItem = {
   id: FurnitureId;
   name: string;
+  /** 서버 items.asset_key. 이 값으로 GET /room·/furnitures 응답을 스프라이트에 잇는다 (3단계) */
+  assetKey: string;
   sprite: number;
   size: SceneSize;
   anchor: AnchorRatio;
@@ -43,6 +45,7 @@ const ratio = (width: number, pngWidth: number, pngHeight: number): SceneSize =>
 export const FURNITURE: Record<FurnitureId, FurnitureItem> = {
   sofa: {
     id: "sofa",
+    assetKey: "sofa_default",
     name: "소파",
     sprite: require("@/assets/sprites/furniture/sofa.png"),
     // 다리 접지점 (80,504)·(265,616)·(749,416) → 긴 변 523.7px(각도 22.5도)
@@ -52,6 +55,7 @@ export const FURNITURE: Record<FurnitureId, FurnitureItem> = {
   },
   "coffee-table": {
     id: "coffee-table",
+    assetKey: "table_default",
     name: "테이블",
     // 격자 정렬용 재생성 대상이 아직 아니다(상점 도입 시 다른 가구와 같은 절차로 다시 만든다).
     sprite: require("@/assets/sprites/furniture/coffee-table.png"),
@@ -62,6 +66,7 @@ export const FURNITURE: Record<FurnitureId, FurnitureItem> = {
   },
   desk: {
     id: "desk",
+    assetKey: "desk_default",
     name: "책상",
     sprite: require("@/assets/sprites/furniture/desk.png"),
     // 다리 접지점 (72,535)·(271,671)·(743,442) → 긴 변 524.6px(각도 25.9도)
@@ -71,6 +76,7 @@ export const FURNITURE: Record<FurnitureId, FurnitureItem> = {
   },
   fridge: {
     id: "fridge",
+    assetKey: "fridge_default",
     name: "냉장고",
     sprite: require("@/assets/sprites/furniture/fridge.png"),
     // 상자형이라 접지면이 곧 본체 바닥이다. 종횡비 1.37 이라 키를 기준(1.7m)에 맞췄고
@@ -81,6 +87,7 @@ export const FURNITURE: Record<FurnitureId, FurnitureItem> = {
   },
   plant: {
     id: "plant",
+    assetKey: "plant_default",
     name: "화분",
     sprite: require("@/assets/sprites/furniture/plant.png"),
     // 화분 밑면은 한 칸보다 작다.
@@ -106,6 +113,8 @@ export type RoomItemId = FurnitureId | WallItemId;
 export type WallItem = {
   id: WallItemId;
   name: string;
+  /** 서버 items.asset_key */
+  assetKey: string;
   sprite: number;
   size: SceneSize;
   anchor: AnchorRatio;
@@ -124,6 +133,7 @@ const WALL_ITEM_SIZE: SceneSize = { width: 44, height: 55 };
 export const WALL_ITEMS: Record<WallItemId, WallItem> = {
   board: {
     id: "board",
+    assetKey: "board_default",
     name: "예산 보드",
     sprite: require("@/assets/sprites/wall/board.png"),
     size: WALL_ITEM_SIZE,
@@ -133,6 +143,7 @@ export const WALL_ITEMS: Record<WallItemId, WallItem> = {
   },
   calendar: {
     id: "calendar",
+    assetKey: "calendar_default",
     name: "출금 캘린더",
     sprite: require("@/assets/sprites/wall/calendar.png"),
     size: WALL_ITEM_SIZE,
@@ -144,4 +155,22 @@ export const WALL_ITEMS: Record<WallItemId, WallItem> = {
 
 export function isWallItemId(id: RoomItemId): id is WallItemId {
   return id in WALL_ITEMS;
+}
+
+/**
+ * 서버 assetKey → 방 오브젝트 id. 값은 Swagger 예시(`sofa_default`·`sofa_blue`)를 따른 추정이며
+ * 백엔드 아이템 시드가 들어오면 그 값으로 맞춘다 (TBD). 모르는 키는 undefined 라 화면이 건너뛴다 (규칙 90).
+ */
+const ITEM_ID_BY_ASSET_KEY: Record<string, RoomItemId> = Object.fromEntries([
+  ...Object.values(FURNITURE).map((item) => [item.assetKey, item.id] as const),
+  ...Object.values(WALL_ITEMS).map((item) => [item.assetKey, item.id] as const),
+]);
+
+export function roomItemIdByAssetKey(assetKey: string): RoomItemId | undefined {
+  return ITEM_ID_BY_ASSET_KEY[assetKey];
+}
+
+/** 배치·드래그가 쓰는 공통 정의(크기·앵커·격자). 벽 오브젝트와 가구를 한 자리에서 꺼낸다 */
+export function roomItem(id: RoomItemId): FurnitureItem | WallItem {
+  return isWallItemId(id) ? WALL_ITEMS[id] : FURNITURE[id];
 }

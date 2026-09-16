@@ -17,6 +17,7 @@ import { HomeCoach } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
+import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 
@@ -25,6 +26,7 @@ type RoomPanel = "board" | "calendar" | null;
 
 function HomeScreen() {
   const room = useRoom();
+  useRoomLayoutSync();
   const month = currentMonthKey();
   const budget = useCurrentBudget();
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);

@@ -1,11 +1,15 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { getFurnitures, updateFurniturePlacement, type FurnitureSlotType } from "@/features/room/api/furniture.api";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
+import type { PlacementSave } from "@/features/room/furniture";
 import type { Room } from "@/features/room/model";
 
 export const roomKeys = {
   all: ["room"] as const,
   home: () => [...roomKeys.all, "home"] as const,
+  /** 보유 가구. 배치를 저장하면 방 홈과 함께 무효화한다 */
+  furnitures: (slotType?: FurnitureSlotType) => [...roomKeys.all, "furnitures", slotType ?? "all"] as const,
 };
 
 export function roomQueryOptions() {
@@ -30,5 +34,35 @@ export function useCheckAttendance() {
         old ? { ...old, coinBalance: attendance.balance, checkedInToday: true } : old
       );
     },
+  });
+}
+
+export function furnitureListQueryOptions(slotType?: FurnitureSlotType) {
+  return queryOptions({
+    queryKey: roomKeys.furnitures(slotType),
+    queryFn: ({ signal }) => getFurnitures(slotType, signal),
+    staleTime: 30_000,
+  });
+}
+
+/** 보유 가구 목록. 방 화면은 GET /room 의 furnitures 로 충분하고, 이 조회는 미설치 가구까지 볼 때 쓴다 */
+export function useFurnitures(slotType?: FurnitureSlotType) {
+  return useQuery(furnitureListQueryOptions(slotType));
+}
+
+/**
+ * 방 꾸미기 완료 저장. 가구 한 개씩 PATCH 하는 계약이라 옮긴 것만 차례로 보낸다.
+ * 중간에 실패하면 거기서 멈추고 오류를 올린다 — 이미 보낸 것은 서버에 남고, 요청이 멱등이라 다시 눌러도 안전하다.
+ */
+export function useSavePlacements() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (saves: PlacementSave[]) => {
+      for (const save of saves) {
+        await updateFurniturePlacement(save.userFurnitureId, save.request);
+      }
+      return saves.length;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: roomKeys.all }),
   });
 }
