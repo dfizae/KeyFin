@@ -2,6 +2,7 @@ import {
   InvalidDateError,
   createServerClock,
   formatDate,
+  formatDateGroupLabel,
   formatDateTime,
   formatMonthDay,
   formatTime,
@@ -92,3 +93,13 @@ describe("createServerClock", () => {
     expect(clock.offsetMs()).toBe(0);
   });
 });
+
+describe("formatDateGroupLabel", () => {
+  it("오늘 · 어제 · 월일(요일)로 쓰고, 달이 바뀌어도 어제를 맞춘다", () => {
+    expect(formatDateGroupLabel("2026-09-17", "2026-09-17")).toBe("오늘");
+    expect(formatDateGroupLabel("2026-09-16", "2026-09-17")).toBe("어제");
+    expect(formatDateGroupLabel("2026-09-14", "2026-09-17")).toBe("9월 14일 (월)");
+    expect(formatDateGroupLabel("2026-08-31", "2026-09-01")).toBe("어제");
+  });
+});
+
