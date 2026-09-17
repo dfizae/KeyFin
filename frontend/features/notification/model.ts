@@ -137,3 +137,26 @@ export function notificationDateLabel(dateKey: string, todayKey: string): string
 export function notificationTimeLabel(notification: InboxNotification): string {
   return formatTime(parseKSTLocalDateTime(notification.createdAt));
 }
+
+/* ───────────── 서버 계약: PUT·DELETE /me/push-devices/{installationId} (백엔드 develop PushDeviceController, 2026-09-17 대조) ───────────── */
+
+/** 서버가 받는 플랫폼은 ANDROID 하나다(정규식 검증) */
+export const PUSH_PLATFORM = "ANDROID";
+
+/** PUT 본문. Notion 행의 `{ fcmToken }` 이 아니라 배포 코드의 `{ token, platform }` 을 따른다 */
+export type PushDeviceRequest = { token: string; platform: typeof PUSH_PLATFORM };
+
+const INSTALLATION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** 설치 UUID 인지. 서버는 하이픈 있는 표준 36자만 받는다(대소문자 무관) */
+export function isInstallationId(value: string | null): value is string {
+  return value !== null && INSTALLATION_ID.test(value);
+}
+
+/** 서버 검증과 같다: 공백 없는 출력 가능 ASCII(0x21~0x7E), 1~2048자 */
+const FCM_TOKEN = /^[!-~]{1,2048}$/;
+
+/** FCM 토큰을 등록 요청으로. 서버가 400 으로 거절할 모양이면 보내지 않도록 null 이다 */
+export function toPushDeviceRequest(token: unknown): PushDeviceRequest | null {
+  return typeof token === "string" && FCM_TOKEN.test(token) ? { token, platform: PUSH_PLATFORM } : null;
+}
