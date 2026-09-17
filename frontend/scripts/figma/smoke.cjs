@@ -133,6 +133,15 @@ const figma = {
   async loadAllPagesAsync() {},
   async setCurrentPageAsync(page) { currentPage = page; },
   createPage() { const p = makePage("Page"); pages.push(p); return p; },
+  base64Decode(data) { if (typeof data !== "string" || !data.length) throw new Error("base64Decode 인자 오류"); return new Uint8Array(Buffer.from(data, "base64")); },
+  createImage(bytes) {
+    if (!(bytes instanceof Uint8Array)) throw new Error("createImage 인자는 Uint8Array");
+    const png = bytes[0] === 0x89 && bytes[1] === 0x50;
+    const jpeg = bytes[0] === 0xff && bytes[1] === 0xd8;
+    if (!png && !jpeg) throw new Error("PNG/JPEG가 아닌 이미지");
+    count("IMAGE");
+    return { hash: `img${nextId++}` };
+  },
   createFrame() { const n = new Node("FRAME"); n.layoutMode = "NONE"; n.clipsContent = true; currentPage.appendChild(n); return n; },
   createRectangle() { const n = new Node("RECTANGLE"); currentPage.appendChild(n); return n; },
   createEllipse() { const n = new Node("ELLIPSE"); currentPage.appendChild(n); return n; },
