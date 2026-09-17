@@ -40,7 +40,6 @@ public class NotificationRepository {
 	}
 
 	public List<InboxNotification> findPage(long userId, boolean unreadOnly, Long cursor, int limit) {
-		// TEXT 본문을 filesort에 싣지 않도록 필터와 ID 정렬에 맞는 인덱스로 순회한다.
 		String index = unreadOnly ? "idx_noti_user_read_id" : "idx_noti_user_id";
 		String sql = """
 				SELECT n.id, n.noti_type, n.title, n.body, n.ref_id, n.requires_action, n.is_read, n.created_at

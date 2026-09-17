@@ -24,7 +24,6 @@ public class NotificationService {
 	private final NotificationRepository repository;
 	private final Clock clock;
 
-	/** 내부 도메인용 저장. 호출자의 트랜잭션에 참여하며 푸시는 발송하지 않는다. */
 	@Transactional
 	public long create(long userId, NotificationType type, String title, String body, String refId,
 			boolean requiresAction) {
@@ -59,7 +58,6 @@ public class NotificationService {
 		if (notificationId <= 0) {
 			throw new BusinessException(CommonErrorCode.INVALID_INPUT_VALUE);
 		}
-		// 변경된 행 수가 0이어도 이미 읽은 본인 알림이면 성공한다.
 		if (repository.markRead(userId, notificationId) == 0 && !repository.existsOwned(userId, notificationId)) {
 			throw new BusinessException(NotificationErrorCode.NOTIFICATION_NOT_FOUND);
 		}
