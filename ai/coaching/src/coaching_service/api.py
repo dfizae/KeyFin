@@ -15,6 +15,7 @@ from coaching_service.llm import OpenAICompatibleCoachModel, create_http_client
 from coaching_service.personal_routes import register_personal_context
 from coaching_service.provenance import verify_engine
 from coaching_service.repository import Repository
+from coaching_service.request_timing import RequestTiming
 from coaching_service.routes import register_coaching, register_records, register_twin
 from coaching_service.schemas import (
     JsonDocument,
@@ -31,6 +32,7 @@ def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAP
     core = CoachingCore(
         Repository(Store(settings.database)),
         model or OpenAICompatibleCoachModel(settings.model, client=client),
+        fdt_max_concurrency=settings.fdt_max_concurrency,
     )
     auth = Authenticate(settings.clients)
 
@@ -41,6 +43,9 @@ def create_app(settings: Settings, model: LanguageModel | None = None) -> FastAP
 
     app = FastAPI(title="FDT AI Coaching", version="0.3.0", lifespan=lifespan)
     app.add_middleware(BodyLimit)
+    # The timing middleware is outermost and inert unless a caller explicitly requests
+    # a payload-free trace. It measures the same request that reaches the model adapter.
+    app.add_middleware(RequestTiming)
 
     async def health() -> JsonDocument:
         """API의 기동 상태다. model_configured는 설정 유무이며 추론 성공을 뜻하지 않는다."""

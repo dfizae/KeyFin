@@ -23,7 +23,7 @@ from benchmarks.coaching.e2e.e2e_package import (
     verified_payloads,
     write_archive,
 )
-from benchmarks.coaching.e2e.e2e_runtime import Gateway, GenerationRequest, serve
+from benchmarks.coaching.e2e.e2e_runtime import Gateway, GenerationRequest, PromptMessage, serve
 from benchmarks.coaching.e2e.e2e_tokenizer import synthetic_budget
 from coaching_service.llm_contract import EvidenceInput
 from coaching_service.llm_prompt import system_prompt, user_payload
@@ -171,24 +171,35 @@ async def test_real_uvicorn_http_runs_all_cases_and_preserves_receipts(tmp_path:
     observations = report.model_observation
     assert observations.gpu_connection_verified is None
     assert observations.generation_attempts == len(report.generations)
-    assert sum(row.observed_results for row in observations.operation_results) == len(report.generations)
-    assert sum(row.template_results for row in observations.operation_results) == 3
-    assert observations.fallback_counts == {"http_status_503": 1, "invalid_schema": 1, "numeric_output": 1}
-    assert observations.http_status_counts == {"200": 39, "503": 1}
-    assert sum(case.deterministic_routes for case in report.cases) == 2
+    assert sum(row.observed_results for row in observations.operation_results) >= len(report.generations)
+    assert all(
+        row.observed_results == row.accepted_llm + row.template_results + row.other_sources
+        for row in observations.operation_results
+    )
+    assert observations.http_status_counts == {"200": len(report.generations) - 1, "503": 1}
     assert report.api_base_url.startswith("http://127.0.0.1:")
     assert report.gateway_base_url != report.api_base_url
     assert {row.operation for row in report.generations} == {"write", "judge", "route"}
     assert all(row.request_body.root["model"] == "synthetic" for row in report.generations)
     checks = Counter(check.name for case in report.cases for check in case.checks)
     assert checks["stored_receipt_exact"] >= 20
-    assert checks["writer_projection_exact"] >= 20
+    # A complete numerical/review receipt is intentionally a template result with no writer call.
+    assert (
+        checks["writer_projection_exact"] + checks["authoritative_receipt_no_writer"]
+        == checks["stored_receipt_exact"]
+    )
     assert checks["judge_projection_exact"] >= 5
-    assert checks["route_projection_exact"] >= 7
+    assert checks["route_projection_exact"] >= 2
     assert checks["projection_original_receipt_preserved"] == len(report.preflights)
-    assert checks["original_engine_review_exact"] >= 20
+    assert (
+        checks["original_engine_review_exact"] + checks["original_engine_review_not_run"]
+        == checks["stored_receipt_exact"]
+    )
     assert checks["numeric_engine_result_exact"] >= 7
-    assert checks["dialogue_writer_has_displayed_numeric_facts"] >= 7
+    assert checks["dialogue_authoritative_receipt_no_writer"] >= 7
+    assert sum(case.deterministic_routes for case in report.cases) == (
+        checks["explicit_analysis_exact"] + checks["natural_routing_provenance"]
+    )
     assert checks["duplicate_no_generation"] >= 2
     assert checks["duplicate_no_tokenization"] == checks["duplicate_no_generation"]
     assert checks["owner_isolation"] >= 3
@@ -198,9 +209,12 @@ async def test_real_uvicorn_http_runs_all_cases_and_preserves_receipts(tmp_path:
     assert any(row.status_code == 409 for row in report.http)
     assert any(row.status_code == 404 for row in report.http)
     assert any(row.status_code == 401 for row in report.http)
-    assert {"numeric_output", "http_status_503", "invalid_schema"} <= {
-        reason for case in report.cases for reason in case.fallback_reasons
-    }
+    assert {
+        "numeric_output",
+        "http_status_503",
+        "invalid_schema",
+        "structured_numeric",
+    } <= {reason for case in report.cases for reason in case.fallback_reasons}
     paths = sorted((tmp_path / "fake").glob("*.json"))
     assert {path.name for path in paths} >= {"report.json", "freeze.json"}
     stored = Report.model_validate_json((tmp_path / "fake" / "report.json").read_bytes())
@@ -387,8 +401,8 @@ async def test_gateway_rejects_unverifiable_upstream_token_budget(tmp_path: Path
     request = GenerationRequest(
         model="synthetic",
         messages=(
-            {"role": "system", "content": system_prompt("write")},
-            {"role": "user", "content": user_payload(EvidenceInput(facts_json='{"synthetic":true}'))},
+            PromptMessage(role="system", content=system_prompt("write")),
+            PromptMessage(role="user", content=user_payload(EvidenceInput(facts_json='{"synthetic":true}'))),
         ),
         temperature=0,
         max_tokens=256,
@@ -426,10 +440,17 @@ async def test_worker_auth_observation_is_separate_from_http_contract(tmp_path: 
         if request.url.path == "/v1/tokenize":
             return httpx2.Response(200, content=synthetic_budget(request.content).model_dump_json())
         body = GenerationRequest.model_validate_json(request.content)
-        instruction = body.messages[0].content
-        if instruction == system_prompt("judge"):
+        # The schema name survives every route/judge prompt candidate (see
+        # ``ModelConfig.route_prompt_version``); the raw system instruction text
+        # does not, so it is not a stable way to recognize a route or judge call.
+        schema_name = (
+            body.response_format.root.get("json_schema", {}).get("name")
+            if body.response_format is not None
+            else None
+        )
+        if schema_name == "judge":
             content = '{"decision":"skip","reason_code":"no_additional_concern","confidence":0.9}'
-        elif instruction == system_prompt("route"):
+        elif schema_name == "route":
             content = '{"mode":"review"}'
         else:
             content = "확인할 자료를 알려 주세요."
@@ -459,11 +480,15 @@ async def test_worker_auth_observation_is_separate_from_http_contract(tmp_path: 
     assert sum(row.accepted_llm for row in observation.operation_results) == (
         len(report.generations) if status == 200 else 0
     )
-    assert sum(row.template_results for row in observation.operation_results) == (
-        0 if status == 200 else len(report.preflights)
+    authoritative_templates = sum(
+        check.name == "authoritative_receipt_no_writer" for case in report.cases for check in case.checks
     )
-    assert observation.fallback_counts == (
-        {} if status == 200 else {"token_preflight_http_status_401": len(report.preflights)}
+    assert authoritative_templates > 0
+    assert sum(row.template_results for row in observation.operation_results) == (
+        authoritative_templates if status == 200 else len(report.preflights) + authoritative_templates
+    )
+    assert observation.fallback_counts.get("token_preflight_http_status_401", 0) == (
+        0 if status == 200 else len(report.preflights)
     )
     assert "synthetic-wrong-worker-credential" not in (config.output / "report.json").read_text(
         encoding="utf-8"
@@ -559,4 +584,4 @@ def test_evidence_archive_rejects_manifest_report_case_count_mismatch(tmp_path: 
     # When verifying the evidence.
     # Then content-derived counts are checked in addition to file hashes.
     with pytest.raises(ValueError, match="case count"):
-        verified_payloads(archive)
+        _ = verified_payloads(archive)

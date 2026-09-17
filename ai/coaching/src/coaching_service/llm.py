@@ -12,8 +12,10 @@ import anyio
 import httpx2
 
 from coaching_service.chart_wording import ChartSelection, selected_chart_wording
-from coaching_service.evidence import context_limited, operation_evidence
+from coaching_service.dialogue_decision import DialogueDecision, DialogueSelection
+from coaching_service.evidence import context_limited, operation_evidence, token_retry_evidence
 from coaching_service.finance_knowledge import FinanceSelection, selected_finance_wording
+from coaching_service.inference_metrics import InferenceTrace, measure_inference
 from coaching_service.llm_contract import (
     CompletionEnvelope,
     EvidenceInput,
@@ -26,6 +28,7 @@ from coaching_service.llm_contract import (
     Wording,
 )
 from coaching_service.llm_prompt import TEMPLATE_TEXT, system_prompt, user_payload, wording_problem
+from coaching_service.schemas import JsonDocument
 from coaching_service.token_budget import BudgetFailure, check_token_budget
 
 if TYPE_CHECKING:
@@ -33,6 +36,8 @@ if TYPE_CHECKING:
 
 _LIMITS: Final = httpx2.Limits(max_connections=200, max_keepalive_connections=40, keepalive_expiry=30)
 _JSON_FENCE: Final = re.compile(r"```(?:json)?\r?\n(.*?)\r?\n```", re.DOTALL)
+_SELECTION_MAX_TOKENS: Final = 96
+_COACHING_MAX_TOKENS: Final = 160
 
 
 def unique_json_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
@@ -150,6 +155,15 @@ class OpenAICompatibleCoachModel:
         self._client: httpx2.AsyncClient | None = client
         self._limiter: anyio.CapacityLimiter = anyio.CapacityLimiter(config.max_concurrency)
 
+    @property
+    def deterministic_finance_fast_path(self) -> bool:
+        """Expose only the evaluated catalog-shortcut capability to dialogue code.
+
+        Keeping the rest of ``ModelConfig`` private prevents another layer from
+        changing transport limits or endpoint details at runtime.
+        """
+        return self._config.deterministic_finance_fast_path
+
     async def write(self, evidence: EvidenceInput) -> Wording:
         """차트는 주어진 근거 ID만 선택하고 일반 코칭은 제한된 보조 문장을 검증한다.
 
@@ -222,6 +236,34 @@ class OpenAICompatibleCoachModel:
             case _ as unreachable:
                 assert_never(unreachable)
 
+    async def decide(self, routing: EvidenceInput, finance: EvidenceInput) -> DialogueDecision:
+        """Select the route and approved finance facts in one bounded inference.
+
+        The switch preserves the frozen two-call baseline for paired experiments. Numeric
+        routes still execute the original tools; this selection cannot supply FDT values.
+        """
+        if not self._config.combined_dialogue:
+            return DialogueDecision(routing=await self.route(routing))
+        result = await self._infer(finance, "route")
+        match result:
+            case InferenceFailure(reason=reason):
+                return DialogueDecision(routing=Routing(
+                    mode="review", source="template", fallback_reason=reason,
+                ))
+            case InferenceText(text=text):
+                try:
+                    selected = DialogueSelection.model_validate_json(structured_json(text))
+                except (ValueError, RecursionError):
+                    return DialogueDecision(routing=Routing(
+                        mode="review", source="template", fallback_reason="invalid_schema",
+                    ))
+                wording = None if selected.finance is None else selected_finance_wording(
+                    selected.finance.model_dump_json(), self._config.model, evidence=finance,
+                )
+                return DialogueDecision(routing=Routing(mode=selected.mode, source="llm"), finance=wording)
+            case unreachable:
+                assert_never(unreachable)
+
     def _fallback(self, reason: str) -> Wording:
         return Wording(
             text=TEMPLATE_TEXT,
@@ -240,15 +282,24 @@ class OpenAICompatibleCoachModel:
                 {
                     "role": "system",
                     "content": system_prompt(
-                        operation, chart=evidence.purpose == "chart", finance=evidence.purpose == "finance"
+                        operation,
+                        chart=evidence.purpose == "chart",
+                        finance=evidence.purpose == "finance",
+                        route_prompt_version=self._config.route_prompt_version,
+                        finance_prompt_version=self._config.finance_prompt_version,
                     ),
                 },
                 {"role": "user", "content": user_payload(evidence)},
             ],
             "temperature": 0,
-            "max_tokens": self._config.max_tokens,
+            "max_tokens": self._output_tokens(evidence, operation),
             "stream": False,
         }
+        if self._config.generation_seed is not None:
+            # The field is supported by the isolated OpenAI-compatible runtime.
+            # It remains absent by default so existing deployments retain their
+            # established sampling behavior until a candidate passes evaluation.
+            payload["seed"] = self._config.generation_seed
         match operation:
             case "write":
                 if evidence.purpose == "finance":
@@ -271,6 +322,8 @@ class OpenAICompatibleCoachModel:
                     }
             case "judge" | "route":
                 schema: type[BaseModel] = JudgmentDraft if operation == "judge" else RoutingDraft
+                if operation == "route" and evidence.purpose == "finance":
+                    schema = DialogueSelection
                 payload["response_format"] = {
                     "type": "json_schema",
                     "json_schema": {
@@ -291,41 +344,113 @@ class OpenAICompatibleCoachModel:
         )
 
     async def _infer(self, evidence: EvidenceInput, operation: Operation) -> InferenceText | InferenceFailure:
+        with measure_inference(operation) as trace:
+            return await self._execute(evidence, operation, trace)
+
+    async def _execute(  # noqa: PLR0911 - each terminal transport outcome preserves its exact fallback reason.
+        self, evidence: EvidenceInput, operation: Operation, trace: InferenceTrace,
+    ) -> InferenceText | InferenceFailure:
         if self._config.endpoint_url is None:
+            trace.set_outcome("rejected")
             return InferenceFailure("disabled")
         if self._client is None or self._client.is_closed:
+            trace.set_outcome("rejected")
             return InferenceFailure("client_unavailable" if self._client is None else "client_closed")
         evidence = operation_evidence(evidence, operation)
         if context_limited(evidence):
+            trace.set_outcome("rejected")
             return InferenceFailure("context_limit")
         try:
             with anyio.fail_after(self._config.timeout_seconds):
-                async with self._limiter:
-                    return await self._send(self._client, self._request(evidence, operation))
+                # Measure only acquisition: wrapping the async-with block would count generation as wait.
+                with trace.phase("limiter_wait"):
+                    await self._limiter.acquire()
+                try:
+                    result = await self._send(
+                        self._client,
+                        self._request(evidence, operation),
+                        self._output_tokens(evidence, operation),
+                        trace,
+                    )
+                    # The first request is the only trustworthy way to learn the
+                    # serving tokenizer's limit. A supplementary writer may then
+                    # retry once with no financial payload; selection calls never
+                    # lose their source facts merely to fit a context window.
+                    if isinstance(result, InferenceFailure) and result.reason == "input_token_limit":
+                        retry = token_retry_evidence(evidence)
+                        if retry is not None:
+                            return await self._send(
+                                self._client,
+                                self._request(retry, operation),
+                                self._output_tokens(retry, operation),
+                                trace,
+                            )
+                    return result
+                finally:
+                    self._limiter.release()
         except TimeoutError:
+            trace.set_outcome("timeout")
             return InferenceFailure("deadline_exceeded")
         except httpx2.RequestError as error:
+            trace.set_outcome("timeout" if isinstance(error, httpx2.TimeoutException) else "failure")
             return transport_failure(error)
 
     async def _send(
         self,
         client: httpx2.AsyncClient,
         request: httpx2.Request,
+        max_tokens: int,
+        trace: InferenceTrace,
     ) -> InferenceText | InferenceFailure:
         if self._config.token_preflight:
-            budget = await check_token_budget(client, request, self._config.max_tokens)
+            with trace.phase("token_preflight"):
+                budget = await check_token_budget(client, request, max_tokens)
             if isinstance(budget, BudgetFailure):
+                trace.set_outcome("rejected")
                 return InferenceFailure(budget.reason)
             request.headers["X-Coaching-Prompt-Sha256"] = budget.prompt_sha256
-        response = await client.send(request, stream=True, auth=None, follow_redirects=False)
+        response: httpx2.Response | None = None
         try:
-            return await self._read(response)
+            # Roundtrip includes streamed body parsing. Cleanup belongs only to total elapsed time.
+            with trace.phase("generation_http"):
+                response = await client.send(request, stream=True, auth=None, follow_redirects=False)
+                result = await self._read(response)
+            trace.set_outcome("failure" if isinstance(result, InferenceFailure) else "success")
+            return result
         finally:
-            with anyio.move_on_after(0.1, shield=True):
-                await response.aclose()
+            if response is not None:
+                with anyio.move_on_after(0.1, shield=True):
+                    await response.aclose()
+
+    def _output_tokens(self, evidence: EvidenceInput, operation: Operation) -> int:
+        """Match the generation ceiling to the validated response shape.
+
+        Route and fact-selection responses are compact JSON, while supplementary
+        coaching wording is capped at 400 characters by its admission boundary.
+        Keeping those bounds small reduces single-request decoder time and uses the
+        same value for token preflight as for generation.
+        """
+        if operation == "route" or evidence.purpose in {"finance", "chart"}:
+            return min(self._config.max_tokens, _SELECTION_MAX_TOKENS)
+        return min(self._config.max_tokens, _COACHING_MAX_TOKENS)
 
     async def _read(self, response: httpx2.Response) -> InferenceText | InferenceFailure:
         if response.status_code != 200:
+            if response.status_code == 413:
+                # A worker may return this before preflight is enabled or when a
+                # proxy sits in front of it. Treat only its exact stable reason
+                # as retriable; generic 413 responses can be body/route limits.
+                body = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(body) + len(chunk) > 1024:
+                        break
+                    body.extend(chunk)
+                try:
+                    error = JsonDocument.model_validate_json(body).root
+                except ValueError:
+                    error = None
+                if isinstance(error, dict) and error.get("detail") == "input_token_limit":
+                    return InferenceFailure("input_token_limit")
             return InferenceFailure(f"http_status_{response.status_code}")
         body = bytearray()
         async for chunk in response.aiter_bytes():

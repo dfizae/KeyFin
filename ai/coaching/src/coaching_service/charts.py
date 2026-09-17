@@ -15,6 +15,7 @@ from coaching_service.coaching import CoachingCore
 from coaching_service.engine import ENGINE_COMMIT
 from coaching_service.llm_contract import Wording
 from coaching_service.repository import Mutation, write
+from coaching_service.request_timing import measure_fdt, run_measured_fdt
 from coaching_service.schemas import JsonDocument
 from coaching_service.store import Operation
 
@@ -56,12 +57,14 @@ class Charts:
                         "horizon_days": (period.horizon_end - period.as_of).days,
                     }
                 )
-                numeric_result, daily_prediction = await anyio.to_thread.run_sync(
-                    self.core.engine.chart_numeric,
-                    twin,
-                    numeric_request,
-                    limiter=self.core.engine_limit,
-                )
+                # Match dialogue traces: one chart forecast records its real FDT
+                # operation separately from model generation and HTML rendering.
+                with measure_fdt():
+                    numeric_result, daily_prediction = await anyio.to_thread.run_sync(
+                        run_measured_fdt,
+                        lambda: self.core.engine.chart_numeric(twin, numeric_request),
+                        limiter=self.core.engine_limit,
+                    )
             else:
                 observation_audit = await anyio.to_thread.run_sync(
                     self.core.engine.observation_audit, twin, limiter=self.core.engine_limit

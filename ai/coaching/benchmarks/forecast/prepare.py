@@ -72,6 +72,8 @@ def main() -> None:
     _ = (out / "baselines.json").write_bytes(TypeAdapter(list[Forecast]).dump_json(forecasts))
     manifest = {
         "protocol_sha256": hashlib.sha256((HERE / "README.md").read_bytes()).hexdigest(),
+        "target_definition": "future_total_variable_consumption/v1",
+        "outcome_calculator": "separate_spec_implementation_not_human_oracle/v1",
         "source_csv_sha256": hashes, "cases": len(cases), "users": len({case.user for case in cases}),
         "training_series": len(training), "training_end": str(TRAINING_END),
         "input_sha256": hashlib.sha256((out / "model_inputs.json").read_bytes()).hexdigest(),

@@ -45,11 +45,13 @@ async def test_explicit_intent_reaches_engine_and_retry_without_router(tmp_path:
         assert receipt["numeric_result"]["status"] == "ok"
         assert receipt["routing"] == {"mode": mode, "source": "template", "fallback_reason": None}
         assert receipt["period"]["forecast_end"] == "2026-09-16"
-        assert model.writes == 1
-        assert model.seen[0].question == body["question"]
+        assert answer["wording_source"] == "template"
+        assert answer["model"] == "not_called"
+        assert model.writes == 0
+        assert model.seen == []
         repeated = await client.post(path + "/messages", json=body, headers={"Idempotency-Key": "turn"})
         assert repeated.json() == answer
-        assert model.writes == 1
+        assert model.writes == 0
         conflict = await client.post(path + "/messages", json={**body, "question": "다시 확인"},
                                      headers={"Idempotency-Key": "turn"})
         assert conflict.status_code == 409

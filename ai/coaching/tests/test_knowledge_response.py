@@ -53,6 +53,16 @@ def test_approved_body_passes_but_appended_unsupported_claim_fails() -> None:
     assert not evaluate(CONCEPTS[0], JsonDocument.model_validate_json(changed.model_dump_json()))
 
 
+def test_catalog_template_with_the_same_pinned_body_counts_as_a_correct_answer() -> None:
+    """The quality score must not punish a model-free response for avoiding latency."""
+    wording = selected_finance_wording(
+        '{"status":"answered","fact_ids":["compound_interest"]}', "not_called",
+    ).model_copy(update={"source": "template"})
+    answer = knowledge_answer(wording)
+
+    assert evaluate(CONCEPTS[0], JsonDocument.model_validate_json(answer.model_dump_json()))
+
+
 def test_wrong_personal_total_is_not_counted_as_an_answer() -> None:
     # Given: an otherwise valid account response silently omits the overdraft.
     answer = ChatAnswer(

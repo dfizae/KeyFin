@@ -10,6 +10,7 @@ from coaching_service.admission import RequestCost
 from coaching_service.errors import ServiceError
 from coaching_service.periods import (
     MonthEnd,
+    NextMonthEnd,
     PeriodSource,
     PeriodSpec,
     ResolvedPeriod,
@@ -21,7 +22,8 @@ from coaching_service.schemas import JsonDocument
 
 _PERIOD: Final = re.compile(
     r"(?P<date>\d{4}-\d{2}-\d{2})\s*(?:마감\s*)?까지"
-    r"|(?P<month>이번\s*달(?:\s*말까지)?|이달(?:\s*말까지)?|월말까지)"
+    r"|(?P<month>이번\s*달(?:\s*말(?:까지|에)?|에)?|이달(?:\s*말(?:까지|에)?|에)?|월말(?:까지|에)?)"
+    r"|(?P<next_month>다음\s*달(?:\s*말(?:까지|에)?|에)?)"
     r"|(?P<inclusive>기준일\s*(?:부터|포함))\s*(?P<included_days>\d{1,3})\s*일"
     r"|(?<![\d./-])(?P<ahead>앞으로\s*)?(?P<days>\d{1,3})\s*일"
     r"(?P<suffix>\s*(?:뒤|후|동안|간))?(?![\d])"
@@ -39,7 +41,7 @@ _MODIFIED: Final = re.compile(
 _UNSUPPORTED_CALENDAR: Final = re.compile(r"윤달|음력|영업일|공휴일")
 
 
-def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:
+def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:  # noqa: C901 - 지원 기간 표현이 하나씩 늘며 분기가 누적된 단일 파서; 분해보다 한 곳 유지가 안전하다.
     """지원하는 명확한 한국어 기간 하나만 해석한다.
 
     여러 기간·음력·영업일은 422로 재확인을 요구한다. 그 밖의 모호한 표현은
@@ -64,6 +66,8 @@ def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:
             return ThroughDate.model_validate({"end_date": found.group("date")})
         if found.group("month"):
             return MonthEnd()
+        if found.group("next_month"):
+            return NextMonthEnd()
         if found.group("inclusive"):
             return RollingDays(days=int(found.group("included_days")), include_reference_date=True)
         return RollingDays(days=int(found.group("days")))

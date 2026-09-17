@@ -9,6 +9,7 @@ from benchmarks.forecast.ledger_adapter.contracts import LedgerRow
 from benchmarks.forecast.ledger_adapter.ledger import ENVELOPES, envelope
 
 from .contracts import Family, ForecastCase, Series, Split, Truth
+from .truth import settled_consumption_envelope
 
 FAMILIES: Final[tuple[Family, ...]] = ("days7", "target14", "days30", "month_end")
 TRAINING_END: Final = date(2026, 6, 30)
@@ -21,7 +22,9 @@ def observed_series(rows: tuple[LedgerRow, ...], cutoff: date) -> tuple[Series, 
     totals = {name: dict.fromkeys(dates, 0.0) for name in ENVELOPES}
     for row in observed:
         name = envelope(row)
-        if name is not None and row.exclude_tag == "NONE":
+        # FDT learns total variable consumption.  Budget exclusion tags change
+        # envelope-balance usage, not the purchase-time consumption target.
+        if name is not None:
             totals[name][row.transaction_date] += row.amount_krw
     return tuple(Series(user=observed[0].user_id, envelope=name, first_date=start,
                         last_date=cutoff, daily=tuple(totals[name][day] for day in dates))
@@ -68,7 +71,13 @@ def build_cases(
                     family=family, first_date=series.first_date, cutoff=cutoff, end_date=end,
                     horizon=(end-cutoff).days, history=series.daily,
                 ))
-                total = sum(row.amount_krw for row in rows if cutoff < row.transaction_date <= end
-                            and envelope(row) == series.envelope and row.exclude_tag == "NONE")
+                # Future truth uses the separately implemented settled-outcome
+                # calculator, so the model's FDT classifier cannot define its
+                # own answer key.
+                total = sum(
+                    row.amount_krw for row in rows
+                    if cutoff < row.transaction_date <= end
+                    and settled_consumption_envelope(row) == series.envelope
+                )
                 outcomes.append(Truth(case_id=identifier, actual=total))
     return tuple(cases), tuple(outcomes)

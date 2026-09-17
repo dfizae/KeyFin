@@ -54,8 +54,11 @@ uv run python -m benchmarks.coaching.flow.run --backend gpu --output artifacts/r
 첫 프로세스의 종료 코드와 두 프로세스의 PID가 남습니다. `completed=true`는 모든 구조·금액·기간·저장
 검사가 통과했다는 뜻입니다. HTTP 200만으로 성공으로 세지 않으며 예측 문장에 모델이 채택되었는지도 확인합니다.
 `routing_observations`는 답변 writer와 별도로 라우터의 실제 source·fallback을 기록합니다. 예측과 확정 소비는
-라우터의 `source=llm`과 fallback 부재까지 통과해야 합니다. 금융 개념 응답처럼 서버가 routing metadata를
-반환하지 않는 경우 `metadata_available=false`이며, 해당 라우터 호출의 모델 채택은 직접 확인한 것으로 세지 않습니다.
+기본적으로 라우터의 `source=llm`과 fallback 부재까지 통과해야 합니다. 단, 명확한 개인 예측·위험 질문은
+FDT 수치 계약이 있는 `forecast` 또는 `risk` 모드를 템플릿으로 결정할 수 있습니다. 이 경우
+`source=template`, fallback 부재, 수치 계약을 함께 확인하며 이를 모델 채택으로 집계하지 않습니다. 금융 개념
+응답처럼 서버가 routing metadata를 반환하지 않는 경우 `metadata_available=false`이며, 해당 라우터 호출의 모델
+채택은 직접 확인한 것으로 세지 않습니다.
 금융 개념 후 예측을 질문하거나 취소 후 현재 위험을 질문해도 기존 코칭과 현재 상태가 섞이지 않아야 합니다.
 
 이 시험은 **합성 사용자 1명의 통합 회귀 시나리오**입니다. 99개 이상의 체크를 독립 고객 수나 예측 정확도

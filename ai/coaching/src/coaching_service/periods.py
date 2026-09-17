@@ -50,18 +50,24 @@ class MonthEnd(PeriodContract):
     kind: Literal["month_end"] = "month_end"
 
 
+class NextMonthEnd(PeriodContract):
+    """The requested display window is the next Gregorian calendar month."""
+
+    kind: Literal["next_month_end"] = "next_month_end"
+
+
 class ThroughDate(PeriodContract):
     kind: Literal["through_date"] = "through_date"
     end_date: DateOnly
 
 
-PeriodSpec = Annotated[RollingDays | MonthEnd | ThroughDate, Field(discriminator="kind")]
+PeriodSpec = Annotated[RollingDays | MonthEnd | NextMonthEnd | ThroughDate, Field(discriminator="kind")]
 PeriodSource = Literal["request", "question", "analysis", "default", "review"]
 
 
 class ResolvedPeriod(PeriodContract):
     contract_version: Literal["coaching-period/1"] = "coaching-period/1"
-    kind: Literal["rolling_days", "month_end", "through_date"]
+    kind: Literal["rolling_days", "month_end", "next_month_end", "through_date"]
     source: PeriodSource
     reference_date: date
     reference_state: Literal["day_close_observed"] = "day_close_observed"
@@ -98,11 +104,19 @@ def resolve_period(reference: date, spec: PeriodSpec, source: PeriodSource) -> R
                 end = window_start + timedelta(days=spec.days - 1)
             case MonthEnd():
                 window_start, end = month_start, month_end
+            case NextMonthEnd():
+                next_year, next_month = (
+                    (reference.year + 1, 1)
+                    if reference.month == 12
+                    else (reference.year, reference.month + 1)
+                )
+                window_start = date(next_year, next_month, 1)
+                end = date(next_year, next_month, calendar.monthrange(next_year, next_month)[1])
             case ThroughDate():
                 window_start, end = tomorrow, spec.end_date
             case unreachable:
                 assert_never(unreachable)
-    except OverflowError:
+    except (OverflowError, ValueError):
         raise ServiceError("period_date_out_of_range") from None
     horizon = (end - reference).days
     if horizon < 0:

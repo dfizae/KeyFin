@@ -89,8 +89,9 @@ async def test_exact_answer_reference_survives_reload_retry_and_owner_checks(
         assert (await restarted.delete("/v1/me/data")).status_code == 200
         assert (await restarted.get(session_path)).status_code == 404
         assert (await restarted.get(answer_path)).status_code == 404
-    assert model.routes == 1
-    assert model.writes == 1
+    # Clear personal FDT wording now selects its validated numeric mode without a separate route call.
+    assert model.routes == (0 if kind == "coaching" else 1)
+    assert model.writes == (0 if kind == "coaching" else 1)
     assert restarted_model.routes == restarted_model.writes == 0
 
 

@@ -1,14 +1,14 @@
 # ruff: noqa: INP001
 """Hand-specified calendar oracles; no FDT or AI decides expected dates."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
 
 from coaching_service.errors import ServiceError
 from coaching_service.period_request import turn_period
-from coaching_service.periods import MonthEnd, RollingDays, ThroughDate, resolve_period
+from coaching_service.periods import MonthEnd, NextMonthEnd, RollingDays, ThroughDate, resolve_period
 from coaching_service.schemas import JsonDocument, TurnRequest
 
 
@@ -73,6 +73,29 @@ def test_all_4800_months_of_gregorian_cycle_against_arithmetic_oracle() -> None:
 
 
 @pytest.mark.parametrize(
+    ("reference", "window_start", "end", "future_days", "window_days"),
+    [
+        ("2026-09-10", "2026-10-01", "2026-10-31", 51, 31),
+        ("2026-12-20", "2027-01-01", "2027-01-31", 42, 31),
+        ("2028-01-30", "2028-02-01", "2028-02-29", 30, 29),
+    ],
+)
+def test_next_calendar_month_end_keeps_requested_window_separate_from_forecast_span(
+    reference: str, window_start: str, end: str, future_days: int, window_days: int
+) -> None:
+    """Next-month wording requests a calendar month, while simulation starts after day close."""
+    period = resolve_period(date.fromisoformat(reference), NextMonthEnd(), "question")
+    assert period.kind == "next_month_end"
+    assert period.window_start.isoformat() == window_start
+    assert period.window_end.isoformat() == end
+    assert period.forecast_start == date.fromisoformat(reference) + timedelta(days=1)
+    assert period.forecast_end.isoformat() == end
+    assert period.forecast_days == future_days
+    assert period.window_calendar_days == window_days
+    assert not period.reference_in_window
+
+
+@pytest.mark.parametrize(
     ("reference", "end", "code"),
     [
         ("2026-09-10", "2026-09-09", "period_ends_before_reference"),
@@ -119,10 +142,24 @@ def test_question_period_is_grounded_before_model_call(question: str, days: int)
     assert turn_period(date(2026, 9, 10), question, None, None).forecast_days == days
 
 
+def test_question_period_distinguishes_current_and_next_calendar_months() -> None:
+    reference = date(2026, 9, 10)
+    current = turn_period(reference, "이번 달 말에 잔액을 예측해줘", None, None)
+    next_month = turn_period(reference, "다음 달 잔액을 예측해줘", None, None)
+
+    assert (current.kind, current.window_end.isoformat(), current.forecast_days) == (
+        "month_end", "2026-09-30", 20,
+    )
+    assert (next_month.kind, next_month.window_start.isoformat(), next_month.window_end.isoformat()) == (
+        "next_month_end", "2026-10-01", "2026-10-31",
+    )
+    assert next_month.forecast_days == 51
+
+
 @pytest.mark.parametrize(
     "question",
     [
-        "한 달 뒤", "1개월 뒤", "다음 달 예산", "목표일까지", "9월 30일까지", "30일에 결제해",
+        "한 달 뒤", "1개월 뒤", "다음 주 예산", "목표일까지", "9월 30일까지", "30일에 결제해",
         "30일 뒤 말고 90일 뒤", "30일 이내", "-30일 뒤", "1.5일 뒤", "1000일 뒤", "30영업일 뒤",
         "음력 윤달 말까지", "2026-09-11부터 2026-10-10까지", "30일 전", "30일 이후", "91일 뒤",
         "이번 달 초 잔액", "이번 달 중순 잔액", "이틀 뒤", "열흘 뒤", "올해 말까지",

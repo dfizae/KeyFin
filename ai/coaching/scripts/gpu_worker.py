@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from starlette.middleware.base import RequestResponseEndpoint
 
     from .gpu_batching import BatchComplete
+    from .gpu_execution import AsyncComplete, Shutdown
 
 
 Backend = contracts.Backend
@@ -83,8 +84,9 @@ class CompletionResponse(Frozen):
 def generation_messages(request: CompletionRequest) -> tuple[Message, ...]:
     """응답 스키마까지 포함한 실제 생성 메시지를 만든다.
 
-    이 런타임은 문법 강제 디코더가 없어 스키마를 지시문에 넣고 클라이언트가 결과를
-    다시 검증한다. 합쳐진 내용도 메시지 한도를 검사해야 Pydantic 오류가 500이 되지 않는다.
+    기본 decoder는 스키마를 지시문에 넣고 클라이언트가 결과를 다시 검증한다. 선택
+    decoder는 같은 스키마를 생성 문법에도 전달하지만, 의미·근거 검증은 서비스가 계속 한다.
+    합쳐진 내용도 메시지 한도를 검사해야 Pydantic 오류가 500이 되지 않는다.
     measure와 complete는 모두 이 함수를 사용해야 토큰 사전 검사가 같은 입력을 센다.
     """
     if request.response_format is None or request.response_format.type == "text":
@@ -124,13 +126,28 @@ def validate_prompt_count(count: PromptCount, metadata: Metadata, expected: str 
         raise HTTPException(status_code=409, detail="tokenizer_preflight_changed")
 
 
-def create_app(
-    backend: Backend, token: str, *, batch_complete: BatchComplete | None = None, max_batch_size: int = 1,
+def create_app(  # noqa: PLR0913 - dependency injection keeps worker variants testable.
+    backend: Backend,
+    token: str,
+    *,
+    batch_complete: BatchComplete | None = None,
+    async_complete: AsyncComplete | None = None,
+    shutdown: Shutdown | None = None,
+    max_batch_size: int = 1,
+    require_matching_response_format: bool = False,
 ) -> FastAPI:
-    """GPU 생성은 직렬 소유하고, 지원 backend에서만 제한된 요청 배치를 사용한다."""
+    """Keep the API contract while each decoder owns its reviewed scheduling policy."""
     if len(token) < 32:
         raise ValueError("token_too_short")
-    execution = WorkerExecution(backend, batch_complete, max_batch_size, validate_prompt_count)
+    execution = WorkerExecution(
+        backend,
+        batch_complete,
+        max_batch_size,
+        validate_prompt_count,
+        async_complete=async_complete,
+        shutdown=shutdown,
+        require_matching_response_format=require_matching_response_format,
+    )
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=execution.lifespan)
     _ = app.middleware("http")(bound_body)
 
@@ -209,11 +226,28 @@ def create_app(
     return app
 
 
+def admission_limit(backend_kind: Literal["transformers", "vllm", "vllm_async"], batch_size: int) -> int:
+    """ASGI-level in-flight cap: generation slot budget + 1 request queued behind it.
+
+    Online batching already admits up to 16 concurrent requests (see gpu_execution's
+    dispatcher CapacityLimiter), so its ASGI cap stays 32. The vllm_async backend now
+    reserves 8 engine slots (gpu_execution.WorkerExecution.slots) instead of the old
+    2-deep synchronous path, so its ASGI cap follows the same "slots + headroom" shape
+    the batch branch already uses: 8 slots -> 16 (vs. the previous 2 slots -> 8).
+    """
+    if batch_size:
+        return 32
+    return 16 if backend_kind == "vllm_async" else 8
+
+
 def main() -> None:
     """Load only on the authorized device; read the private token from disk."""
-    from gpu_registry import validate_device  # noqa: PLC0415
+    from gpu_registry import execution_backend, validate_device  # noqa: PLC0415
 
     validate_device(os.environ)
+    # Validate the opt-in decoder before loading model weights. The default stays
+    # on the established Transformer path unless a measured promotion changes it.
+    backend_kind = execution_backend(os.environ)
     root = Path(os.environ["COACH_GPU_WORKSPACE"])
     if not root.is_absolute() or root.is_symlink() or root.stat().st_uid != os.getuid():
         raise RuntimeError("workspace_ownership_invalid")
@@ -224,13 +258,26 @@ def main() -> None:
     batch_size = int(os.environ.get("COACH_GPU_BATCH_SIZE", "0"))
     if not 0 <= batch_size <= 4:
         raise RuntimeError("worker_batch_size_invalid")
+    if backend_kind == "vllm_async" and batch_size:
+        # AsyncLLM performs continuous scheduling itself.  An outer synchronous
+        # batch queue would recreate the latency barrier this candidate removes.
+        raise RuntimeError("async_vllm_external_batching_forbidden")
     token_path = root / "worker.token"
     file_stat = token_path.stat()
     if stat.S_IMODE(file_stat.st_mode) != 0o600 or file_stat.st_uid != os.getuid():
         raise RuntimeError("token_permissions_invalid")
-    from gpu_runtime import PinnedBackend  # noqa: PLC0415
+    if backend_kind == "vllm_async":
+        from gpu_runtime import AsyncPinnedBackend  # noqa: PLC0415
 
-    backend = PinnedBackend(os.environ["COACH_GPU_MODEL"])
+        backend = AsyncPinnedBackend(os.environ["COACH_GPU_MODEL"])
+        async_complete = backend.complete_async
+        shutdown: Shutdown | None = backend.close
+    else:
+        from gpu_runtime import PinnedBackend  # noqa: PLC0415
+
+        backend = PinnedBackend(os.environ["COACH_GPU_MODEL"])
+        async_complete = None
+        shutdown = None
     _ = (root / "worker_metadata.json").write_text(
         backend.metadata.model_dump_json(indent=2), encoding="utf-8"
     )
@@ -239,13 +286,16 @@ def main() -> None:
         create_app(
             backend, token_path.read_text().strip(),
             batch_complete=backend.complete_batch if batch_size else None,
+            async_complete=async_complete,
+            shutdown=shutdown,
             max_batch_size=max(1, batch_size),
+            require_matching_response_format=backend.metadata.grammar_enforced,
         ),
         host="127.0.0.1",
         port=port,
         access_log=False,
         log_level="warning",
-        limit_concurrency=32 if batch_size else 8,
+        limit_concurrency=admission_limit(backend_kind, batch_size),
         timeout_keep_alive=5,
     )
 

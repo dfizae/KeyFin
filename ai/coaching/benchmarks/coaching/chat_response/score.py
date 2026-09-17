@@ -63,7 +63,10 @@ def finance_passed(case: ChatCase, answer: ChatAnswer) -> bool:
         return False
     if case.expected_status == "answered":
         return (
-            answer.wording_source == "llm"
+            # Catalog-template answers preserve the same approved reference and
+            # body as model-selected answers; scoring must measure correctness,
+            # not whether an avoidable inference call happened.
+            answer.wording_source in {"llm", "template"}
             and answer.fallback_reason is None
             and reference_ids(answer) == (case.reference_id,)
             and all(any(marker in answer.text for marker in group) for group in case.markers)

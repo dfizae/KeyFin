@@ -70,13 +70,50 @@ class Flow:
             case Coaching():
                 route = answer.receipt.routing
                 required = answer.receipt.numeric_request is not None
+                numeric_mode = (
+                    answer.receipt.numeric_request.root.get("mode")
+                    if answer.receipt.numeric_request is not None
+                    else None
+                )
+                allows_deterministic = numeric_mode in {"forecast", "risk"} or (
+                    answer.receipt.trigger in {"requested_review", "historical_coaching_followup"}
+                    and answer.model == "not_called"
+                )
             case ChatAnswer():
                 raw = answer.evidence.root.get("routing")
                 route = JsonDocument.model_validate(raw) if raw is not None else None
                 required = answer.answer_type in {"spending_history", "personal_context"}
-        self.observe_route(stage, route, required=required)
+                # Exact personal/history grammars are evaluated by the engine after
+                # routing.  They do not need an LLM decision, but they must retain
+                # explicit template provenance and an engine-only response receipt.
+                deterministic_modes = (
+                    frozenset({"history", "personal"})
+                    if (
+                        required
+                        and answer.wording_source == "engine"
+                        and answer.model == "not_called"
+                        and answer.fallback_reason is None
+                    )
+                    else frozenset()
+                )
+                self.observe_route(
+                    stage,
+                    route,
+                    required=required,
+                    deterministic_modes=deterministic_modes,
+                )
+                return
+        self.observe_route(stage, route, required=required, allows_deterministic=allows_deterministic)
 
-    def observe_route(self, stage: str, route: JsonDocument | None, *, required: bool) -> None:
+    def observe_route(
+        self,
+        stage: str,
+        route: JsonDocument | None,
+        *,
+        required: bool,
+        allows_deterministic: bool = False,
+        deterministic_modes: frozenset[str] = frozenset(),
+    ) -> None:
         parsed = Routing.model_validate(route.root) if route is not None else None
         self.routes.append(
             RoutingObservation(
@@ -88,9 +125,21 @@ class Flow:
             )
         )
         if required or parsed is not None:
+            # Ordinary routes still need an adopted model decision.  The only template
+            # route that is admissible here is an independently checked FDT result or
+            # a stored-coaching follow-up that reads the current ledger exactly.
+            model_accepted = parsed is not None and parsed.source == "llm" and parsed.fallback_reason is None
+            deterministic_accepted = (
+                parsed is not None
+                and parsed.source == "template"
+                and parsed.fallback_reason is None
+                and parsed.mode in (
+                    {"forecast", "risk", "review"} if allows_deterministic else deterministic_modes
+                )
+            )
             self.check(
                 stage + ":router_accepted",
-                passed=parsed is not None and parsed.source == "llm" and parsed.fallback_reason is None,
+                passed=model_accepted or deterministic_accepted,
             )
 
     def turn(self, stage: str, session: str, question: str) -> JsonDocument:

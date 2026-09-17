@@ -401,9 +401,26 @@ def _goal(result: GoalResult) -> list[str]:
 
 def _what_if(result: WhatIfResult) -> list[str]:
     saving = _required_money(result, "paired_expense_saving_p50_krw")
-    pieces = [
-        (f"동일 난수 경로에서 가정 분기와 기준 분기를 비교한 소비 감소 P50은 {_money_text(saving)}입니다.")
-    ]
+    pieces: list[str] = []
+    intervention = result.decision.intervention
+    reductions = intervention.get("expense_reductions")
+    if isinstance(reductions, dict) and len(reductions) == 1:
+        envelope, fraction = next(iter(reductions.items()))
+        if (
+            isinstance(envelope, str)
+            and isinstance(fraction, (int, float))
+            and not isinstance(fraction, bool)
+            and 0 < fraction < 1
+        ):
+            pieces.append(f"가정은 {envelope} 소비를 {_percent_text(float(fraction))} 줄이는 조건입니다.")
+    multiplier = intervention.get("expense_multiplier")
+    if not pieces and isinstance(multiplier, (int, float)) and not isinstance(multiplier, bool):
+        reduction = 1 - float(multiplier)
+        if 0 < reduction < 1:
+            pieces.append(f"가정은 변동 소비를 {_percent_text(reduction)} 줄이는 조건입니다.")
+    pieces.append(
+        f"동일 난수 경로에서 가정 분기와 기준 분기를 비교한 소비 감소 P50은 {_money_text(saving)}입니다."
+    )
     cash = _money(result, "paired_terminal_cash_delta_p50_krw")
     if cash is not None:
         pieces.append(f"가정 분기의 기간말 현금 차이 P50은 {_money_text(cash)}입니다.")

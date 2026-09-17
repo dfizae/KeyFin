@@ -16,12 +16,28 @@ from coaching_service.chat_answers import (
     out_of_scope_answer,
 )
 from coaching_service.coaching import CoachingCore, coaching_writes, evidence_for
+from coaching_service.dialogue_decision import decide_dialogue
 from coaching_service.errors import ServiceError
-from coaching_service.evidence import bounded_evidence, context_limited
-from coaching_service.finance_knowledge import finance_evidence
+from coaching_service.evidence import LIMITED_CONTEXT, bounded_evidence, context_limited
+from coaching_service.fast_routes import (
+    NaturalGoal,
+    NaturalWhatIf,
+    deterministic_analysis_route,
+    deterministic_lookup_route,
+    natural_goal,
+    natural_what_if,
+    stored_coaching_followup,
+)
+from coaching_service.finance_knowledge import (
+    deterministic_finance_status,
+    deterministic_finance_wording,
+    finance_evidence,
+    model_selected_finance_evidence,
+    selected_finance_wording,
+)
 from coaching_service.history import historical_context
 from coaching_service.knowledge_retrieval import is_followup
-from coaching_service.llm_contract import ChatMessage, EvidenceInput, Routing
+from coaching_service.llm_contract import ChatMessage, EvidenceInput, FinanceWording, Routing
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
 from coaching_service.personal_service import personal_answer
@@ -38,6 +54,44 @@ from coaching_service.schemas import (
 )
 from coaching_service.spending_history import spending_answer
 from coaching_service.store import Operation
+
+
+def turn_numeric_request(
+    analysis: JsonDocument | None,
+    parsed_goal: NaturalGoal | None,
+    parsed_what_if: NaturalWhatIf | None,
+    route: Routing,
+    horizon_days: int,
+) -> JsonDocument | None:
+    """Build a typed FDT request without allowing natural language to invent inputs.
+
+    API-supplied analysis remains authoritative. Natural shortcuts can add only
+    one explicitly parsed target or variable-expense branch; the calendar resolver
+    provides the horizon after independently checking the user's period expression.
+    """
+    if analysis is not None:
+        return JsonDocument({**analysis.root, "horizon_days": horizon_days})
+    if parsed_goal is not None:
+        return JsonDocument.model_validate({
+            "mode": "goal",
+            "horizon_days": horizon_days,
+            "paths": 400,
+            "seed": 42,
+            "goal": {"target_krw": parsed_goal.target_krw},
+        })
+    if parsed_what_if is not None:
+        return JsonDocument.model_validate({
+            "mode": "what_if",
+            "horizon_days": horizon_days,
+            "paths": 400,
+            "seed": 42,
+            "scenario": parsed_what_if.scenario(),
+        })
+    if route.mode in {"risk", "forecast"}:
+        return JsonDocument.model_validate(
+            {"mode": route.mode, "horizon_days": horizon_days, "paths": 100, "seed": 42}
+        )
+    return None
 
 
 def chat_history(session: Session, *, include_subject: bool = False) -> tuple[ChatMessage, ...]:
@@ -110,13 +164,16 @@ class Dialogue:
         """Allow a source-backed concept question without a Twin or initial review."""
 
         async def action() -> Mutation:
-            answer = knowledge_answer(await self.core.model.write(finance_evidence(request.question)))
+            evidence = finance_evidence(request.question)
+            direct = deterministic_finance_wording(evidence) if self._direct_finance_enabled() else None
+            answer = knowledge_answer(direct if direct is not None else await self.core.model.write(evidence))
             return Mutation(result=document(answer), writes=(write("answer/" + answer.id, answer),))
 
         return await self.core.repository.mutate(op, action)
 
     async def standalone_answer(
-        self, owner: str, request: TurnRequest, route: Routing, history: tuple[ChatMessage, ...]
+        self, owner: str, request: TurnRequest, route: Routing, history: tuple[ChatMessage, ...],
+        finance: FinanceWording | None = None,
     ) -> ChatAnswer | None:
         """Answer concepts before loading financial data; explicit analysis takes precedence."""
         if request.analysis is not None:
@@ -127,6 +184,7 @@ class Dialogue:
         match route.mode:
             case "finance":
                 return knowledge_answer(
+                    finance if finance is not None else
                     await self.core.model.write(finance_evidence(request.question, history))
                 )
             case "other":
@@ -150,21 +208,19 @@ class Dialogue:
         async def action() -> Mutation:
             session = await self.active_session(op.owner, session_id)
             history = chat_history(session)
-            match request.analysis.root.get("mode") if request.analysis is not None else None:
-                case "forecast" | "risk" as mode:
-                    # 명시한 수치 모드는 원래도 LLM 분류보다 우선했다. 같은 결정을 다시
-                    # GPU에 묻지 않으며, 기간·수치 입력 검증은 아래에서 그대로 수행한다.
-                    route = Routing(mode=mode, source="template")
-                case _:
-                    # General questions can mention deposit maturity, so route before parsing dates.
-                    route = await self.core.model.route(
-                        EvidenceInput(
-                            question=request.question, history=history, facts_json='{"operation":"dialogue"}'
-                        )
-                    )
+            # A natural goal is accepted only when the parser found one exact KRW
+            # amount.  It is carried as a local typed value rather than mutating the
+            # user's request, so the receipt can still distinguish API-supplied
+            # analysis from an admitted natural-language shortcut.
+            parsed_goal = natural_goal(request.question) if request.analysis is None else None
+            parsed_what_if = natural_what_if(request.question) if request.analysis is None else None
+            route, finance = await self._route_for_turn(
+                request, session, history, parsed_goal, parsed_what_if,
+            )
             standalone = await self.standalone_answer(
                 op.owner, request, route,
                 chat_history(session, include_subject=True) if route.mode == "finance" else history,
+                finance,
             )
             if standalone is not None:
                 # Keep actual router adoption separate from answer generation and HTTP success.
@@ -178,6 +234,53 @@ class Dialogue:
                 if error.code != "resource_not_found":
                     raise
                 return save_turn(session, request.question, missing_twin_answer(route))
+            original = (
+                None
+                if session.coaching_id is None
+                else Coaching.model_validate_json(
+                    await self.core.repository.load(op.owner, "coaching/" + session.coaching_id)
+                )
+            )
+            if original is not None and stored_coaching_followup(request.question):
+                # A question about an already delivered coaching cause or the current
+                # envelope balance does not ask for a new future-state simulation. Keep
+                # the original receipt immutable, update only the separately labelled
+                # historical/current ledger facts, and avoid both model phases.
+                transactions = await anyio.to_thread.run_sync(self.core.engine.transactions, twin)
+                current_envelopes = Ledger.model_validate_json(
+                    await self.core.repository.load(op.owner, "ledger")
+                ).envelopes
+                identity = await anyio.to_thread.run_sync(self.core.engine.identity, twin)
+                receipt = original.receipt.model_copy(
+                    update={
+                        "identity": identity,
+                        "request": JsonDocument(
+                            {"operation": "historical_coaching_followup", "coaching_id": original.id}
+                        ),
+                        # The original engine result is retained only under the explicitly
+                        # labelled historical field below. Presenting it as a new FDT result
+                        # would incorrectly bind past numbers to the current Twin revision.
+                        "result": JsonDocument(
+                            {"status": "not_run", "reason": "historical_coaching_followup"}
+                        ),
+                        "payment": None,
+                        "trigger": "historical_coaching_followup",
+                        "original_coaching_id": original.id,
+                        "numeric_request": None,
+                        "numeric_result": None,
+                        "historical": historical_context(original, transactions),
+                        "current_envelopes": current_envelopes,
+                        "period": None,
+                        "routing": document(route),
+                    }
+                )
+                # The answer is entirely template-rendered from the stored receipt and
+                # current ledger. Do not serialize the original receipt into a model
+                # prompt merely to decide that no model call is necessary.
+                coaching = await self.core.compose(
+                    receipt, EvidenceInput(question=request.question, facts_json=LIMITED_CONTEXT)
+                )
+                return save_turn(session, request.question, coaching)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, twin)
             reference = date.fromisoformat(identity.as_of)
             if route.mode == "history" and request.analysis is None:
@@ -203,19 +306,24 @@ class Dialogue:
                     created_at=time.time(),
                 )
                 return save_turn(session, request.question, answer)
-            original = (
-                None
-                if session.coaching_id is None
-                else Coaching.model_validate_json(
-                    await self.core.repository.load(op.owner, "coaching/" + session.coaching_id)
-                )
-            )
             period = turn_period(reference, request.question, request.period, request.analysis)
             today = datetime.now(ZoneInfo("Asia/Seoul")).date()
-            receipt = await self.core.receipt(
-                twin,
-                ReviewRequest(on_date=reference, through_date=period.forecast_end, replay=reference != today),
+            numeric_request = turn_numeric_request(
+                request.analysis, parsed_goal, parsed_what_if, route, period.forecast_days,
             )
+            if numeric_request is not None:
+                receipt = await self.core.numeric_receipt(
+                    twin, identity, numeric_request, period, replay=reference != today
+                )
+            else:
+                receipt = await self.core.receipt(
+                    twin,
+                    ReviewRequest(
+                        on_date=reference,
+                        through_date=period.forecast_end,
+                        replay=reference != today,
+                    ),
+                )
             receipt = receipt.model_copy(
                 update={
                     "original_coaching_id": original.id if original is not None else None,
@@ -227,29 +335,126 @@ class Dialogue:
                     "current_envelopes": Ledger.model_validate_json(
                         await self.core.repository.load(op.owner, "ledger")
                     ).envelopes,
-                    "trigger": "dialogue",
                     "period": period,
                 }
             )
-            if context_limited(bounded_evidence(receipt, request.question, history)):
+            if numeric_request is None and context_limited(
+                bounded_evidence(receipt, request.question, history)
+            ):
                 # An intent-only route is not permission to analyze incomplete financial evidence.
                 route = Routing(mode="review", source="template", fallback_reason="context_limit")
             receipt = receipt.model_copy(update={"routing": document(route)})
-            numeric_request = request.analysis
-            if numeric_request is None and route.mode in {"risk", "forecast"}:
-                numeric_request = JsonDocument.model_validate(
-                    {"mode": route.mode, "horizon_days": period.forecast_days, "paths": 100, "seed": 42}
-                )
-            if numeric_request is not None:
-                numeric_request = JsonDocument({**numeric_request.root, "horizon_days": period.forecast_days})
-                numeric_result = await anyio.to_thread.run_sync(
-                    self.core.engine.numeric, twin, numeric_request, limiter=self.core.engine_limit
-                )
-                receipt = receipt.model_copy(
-                    update={"numeric_request": numeric_request, "numeric_result": numeric_result}
-                )
             evidence = bounded_evidence(receipt, request.question, history)
             coaching = await self.core.compose(receipt, evidence)
             return save_turn(session, request.question, coaching)
 
         return await self.core.repository.mutate(op, action)
+
+    async def _route_for_turn(
+        self,
+        request: TurnRequest,
+        session: Session,
+        history: tuple[ChatMessage, ...],
+        parsed_goal: NaturalGoal | None,
+        parsed_what_if: NaturalWhatIf | None,
+    ) -> tuple[Routing, FinanceWording | None]:
+        """Choose a route without changing the established FDT/numeric validation path."""
+        if (
+            request.analysis is None
+            and session.coaching_id is not None
+            and stored_coaching_followup(request.question)
+        ):
+            # The session itself establishes which immutable coaching receipt "this"
+            # denotes. A model route would add latency without improving the historical
+            # cause or the current ledger values returned below.
+            return Routing(mode="review", source="template"), None
+        if request.analysis is not None:
+            return await self._explicit_analysis_route(request, session, history)
+        if parsed_goal is not None or parsed_what_if is not None:
+            # A goal supplies one target and a paired branch supplies one
+            # variable-expense change; the deadline remains the independently
+            # validated calendar result below. ``review`` is the existing route
+            # label for entering a typed numeric operation without asking a
+            # model to invent an FDT parameter.
+            return Routing(mode="review", source="template"), None
+        lookup_route = deterministic_lookup_route(request.question)
+        if lookup_route is not None:
+            # Both the current-snapshot and historical-spending parsers accept
+            # only their own complete grammar.  The handlers below still
+            # validate availability and never turn a missing ledger into a
+            # guessed amount.
+            return Routing(mode=lookup_route, source="template"), None
+        direct_route = deterministic_analysis_route(request.question)
+        if direct_route is not None:
+            # This narrow grammar chooses only an unambiguous personal FDT mode.  Calculation,
+            # period validation, and final grounded wording still use the existing path below.
+            return Routing(mode=direct_route, source="template"), None
+        return await self._route_or_direct_finance(request, session, history)
+
+    async def _explicit_analysis_route(
+        self, request: TurnRequest, session: Session, history: tuple[ChatMessage, ...],
+    ) -> tuple[Routing, FinanceWording | None]:
+        """Honor typed numeric intent before the dialogue model sees its prose."""
+        analysis = request.analysis
+        if analysis is None:
+            raise RuntimeError("structured_analysis_missing")
+        match analysis.root.get("mode"):
+            case "forecast" | "risk" as mode:
+                # An explicit numeric request already supplies the intended mode. It does
+                # not need a second model decision; downstream still validates the period
+                # and all supplied numeric fields.
+                return Routing(mode=mode, source="template"), None
+            case "goal" | "optimize" | "what_if":
+                # The structured operation is authoritative. The routing schema does not
+                # represent these three FDT modes, and a model cannot safely improve the
+                # supplied financial parameters.
+                return Routing(mode="review", source="template", fallback_reason="structured_numeric"), None
+            case _:
+                return await self._route_or_direct_finance(request, session, history)
+
+    async def _route_or_direct_finance(
+        self, request: TurnRequest, session: Session, history: tuple[ChatMessage, ...],
+    ) -> tuple[Routing, FinanceWording | None]:
+        """Use a catalog definition only when its full question grammar is satisfied."""
+        finance_input = finance_evidence(request.question, chat_history(session, include_subject=True))
+        # A structured analysis may be goal/what-if/optimization even when its
+        # prose resembles a general concept.  Preserve its original route and
+        # numeric-operation observation instead of taking a knowledge shortcut.
+        shortcut_allowed = request.analysis is None and self._direct_finance_enabled()
+        direct = deterministic_finance_wording(finance_input) if shortcut_allowed else None
+        if direct is not None:
+            # This strict grammar cannot choose FDT routes or construct values; it
+            # supplies one pinned catalog definition only.
+            return Routing(mode="finance", source="template"), direct
+        bounded_status = deterministic_finance_status(finance_input) if shortcut_allowed else None
+        if bounded_status is not None:
+            # The question explicitly requires current external material or
+            # individual tax/calculation conditions. Returning that gap is
+            # safer than making a model infer a catalog status from prose.
+            return Routing(mode="finance", source="template"), bounded_status
+        fast_selection = model_selected_finance_evidence(finance_input) if shortcut_allowed else None
+        if fast_selection is not None:
+            # A non-exact general concept still needs the model to choose approved facts,
+            # but it does not need a preceding route call or any Twin/FDT lookup.
+            wording = await self.core.model.write(fast_selection)
+            if isinstance(wording, FinanceWording):
+                return Routing(mode="finance", source="template"), wording
+            # A model adapter must not convert its own invalid finance response into a
+            # personal-data/FDT request after the deterministic scope was accepted.
+            return Routing(mode="finance", source="template"), selected_finance_wording(
+                None, wording.model, "invalid_finance_wording"
+            )
+        decision = await decide_dialogue(
+            self.core.model,
+            EvidenceInput(
+                question=request.question,
+                history=history,
+                facts_json='{"operation":"dialogue"}',
+            ),
+            finance_input,
+        )
+        return decision.routing, decision.finance
+
+    def _direct_finance_enabled(self) -> bool:
+        """Keep injected legacy/test adapters on their established model-backed behavior."""
+        return bool(getattr(self.core.model, "deterministic_finance_fast_path", False))

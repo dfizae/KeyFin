@@ -1,9 +1,10 @@
 """Actual dialogue routing and explicit numeric-analysis evidence checks."""
 
-from benchmarks.coaching.e2e.e2e_client import ScenarioIO
+from benchmarks.coaching.e2e.e2e_client import ScenarioIO, authoritative_fdt
 from coaching_service.evidence_encoding import decode_facts
+from coaching_service.fast_routes import deterministic_analysis_route
 from coaching_service.numeric_rendering import numeric_text
-from coaching_service.schemas import Coaching, JsonDocument, Session
+from coaching_service.schemas import Coaching, JsonDocument, Receipt, Session
 
 
 async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
@@ -12,29 +13,22 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
     )
     latest = original
     for analysis in flow.case.analyses or (None,):
-        explicit_route = analysis is not None and analysis.root.get("mode") in ("forecast", "risk")
+        explicit_route = analysis is not None
+        natural_route = deterministic_analysis_route(flow.case.question) if analysis is None else None
+        deterministic_route = explicit_route or natural_route is not None
         before = len(flow.gateway.preflights)
         payload = JsonDocument({"question": flow.case.question})
         if analysis is not None:
             payload.root["analysis"] = analysis.root
         latest = await flow.verify_coaching(
-            await flow.request("POST", f"/v1/sessions/{session.id}/messages", payload)
+            await flow.request("POST", f"/v1/sessions/{session.id}/messages", payload),
+            preflight_start=before,
         )
         receipt = latest.receipt
-        mode = receipt.routing.root.get("mode") if receipt.routing else None
-        flow.observed_route = mode if isinstance(mode, str) else None
-        source = receipt.routing.root.get("source") if receipt.routing else None
-        if explicit_route:
-            # Count an explicit request separately from attempted-model adoption/fallback.
-            flow.deterministic_routes += 1
-        elif isinstance(source, str):
-            flow.routing_sources.append(source)
-        reason = receipt.routing.root.get("fallback_reason") if receipt.routing else None
-        if isinstance(reason, str):
-            flow.fallbacks.append(reason)
+        mode = observe_routing(flow, receipt, deterministic_route=deterministic_route)
         flow.check(
             "dialogue_current_historical_separation",
-            receipt.trigger == "dialogue"
+            receipt.trigger in {"numeric_dialogue", "requested_review"}
             and receipt.payment is None
             and receipt.original_coaching_id == original.id
             and receipt.historical is not None
@@ -49,10 +43,22 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
         calls = flow.gateway.preflights[before:]
         routes = [row for row in calls if row.operation == "route"]
         writers = [row for row in calls if row.operation == "write"]
-        flow.check("dialogue_operations", len(routes) == (0 if explicit_route else 1) and len(writers) == 1)
-        if explicit_route:
-            flow.check("explicit_routing_provenance", source == "template" and reason is None
-                       and analysis is not None and mode == analysis.root["mode"])
+        authoritative = authoritative_fdt(receipt)
+        flow.check(
+            "dialogue_operations",
+            len(routes) == (0 if deterministic_route else 1) and len(writers) == (0 if authoritative else 1),
+        )
+        if authoritative:
+            flow.check(
+                "dialogue_authoritative_receipt_no_writer",
+                latest.wording_source == "template" and latest.model == "not_called" and not writers,
+            )
+        verify_deterministic_provenance(
+            flow,
+            receipt,
+            analysis=analysis,
+            natural_route=natural_route,
+        )
         if routes:
             route_receipt = receipt.model_copy(
                 update={"routing": None, "numeric_request": None, "numeric_result": None}
@@ -78,3 +84,73 @@ async def dialogue(flow: ScenarioIO, original: Coaching) -> Coaching:
             stored.messages[-2].content == flow.case.question and stored.messages[-1].content == latest.text,
         )
     return latest
+
+
+def observe_routing(flow: ScenarioIO, receipt: Receipt, *, deterministic_route: bool) -> str | None:
+    """Record a route once while keeping deterministic FDT modes out of model denominators."""
+    routing = receipt.routing
+    mode_value = routing.root.get("mode") if routing else None
+    mode = mode_value if isinstance(mode_value, str) else None
+    flow.observed_route = mode
+    source_value = routing.root.get("source") if routing else None
+    source = source_value if isinstance(source_value, str) else None
+    if deterministic_route:
+        flow.deterministic_routes += 1
+    elif source is not None:
+        flow.routing_sources.append(source)
+    reason_value = routing.root.get("fallback_reason") if routing else None
+    reason = reason_value if isinstance(reason_value, str) else None
+    if reason is not None:
+        flow.fallbacks.append(reason)
+    return mode
+
+
+def verify_deterministic_provenance(
+    flow: ScenarioIO,
+    receipt: Receipt,
+    *,
+    analysis: JsonDocument | None,
+    natural_route: str | None,
+) -> None:
+    """Require the declared template route before exempting a turn from model calls."""
+    explicit_route = analysis is not None
+    deterministic_route = explicit_route or natural_route is not None
+    if not deterministic_route:
+        return
+    routing = receipt.routing
+    source_value = routing.root.get("source") if routing else None
+    source = source_value if isinstance(source_value, str) else None
+    reason_value = routing.root.get("fallback_reason") if routing else None
+    reason = reason_value if isinstance(reason_value, str) else None
+    mode_value = routing.root.get("mode") if routing else None
+    mode = mode_value if isinstance(mode_value, str) else None
+    provenance_check = "explicit_routing_provenance" if explicit_route else "natural_routing_provenance"
+    flow.check(
+        provenance_check,
+        source == "template"
+        and reason == expected_deterministic_reason(analysis)
+        and mode == expected_deterministic_mode(analysis, natural_route),
+    )
+
+
+def analysis_mode(analysis: JsonDocument | None) -> str | None:
+    """Narrow a JSON analysis mode before comparing it with the routing contract."""
+    if analysis is None:
+        return None
+    value = analysis.root.get("mode")
+    return value if isinstance(value, str) else None
+
+
+def expected_deterministic_mode(analysis: JsonDocument | None, natural_route: str | None) -> str | None:
+    """Map structured non-router modes to their preserved routing contract."""
+    if analysis is None:
+        return natural_route
+    mode = analysis_mode(analysis)
+    return mode if mode in {"forecast", "risk"} else "review"
+
+
+def expected_deterministic_reason(analysis: JsonDocument | None) -> str | None:
+    """Structured goal, branch, and optimization modes preserve their explicit reason."""
+    if analysis is None:
+        return None
+    return None if analysis_mode(analysis) in {"forecast", "risk"} else "structured_numeric"

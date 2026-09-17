@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from inspect import isawaitable
 from typing import TYPE_CHECKING, final
 
 import anyio
 from fastapi import HTTPException
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from fastapi import FastAPI
     from starlette.types import Receive
 
     from .gpu_batching import BatchComplete, BatchDispatcher
     from .gpu_contracts import Backend, CompletionRequest, Generated, Metadata, PromptCount
+
+    AsyncComplete = Callable[[CompletionRequest], Awaitable[Generated]]
+    Shutdown = Callable[[], object]
 else:  # noqa: PLR5501 - Keep the TYPE_CHECKING runtime boundary for basedpyright.
     if __package__:
         from .gpu_batching import BatchDispatcher
@@ -27,26 +31,55 @@ else:  # noqa: PLR5501 - Keep the TYPE_CHECKING runtime boundary for basedpyrigh
 class WorkerExecution:
     """단일 GPU 소비자와 별도 CPU tokenizer를 사용하고 기존 backend도 지원한다."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 - worker scheduling contracts remain explicit at this boundary.
         self, backend: Backend, batch_complete: BatchComplete | None, size: int,
         validate: Callable[[PromptCount, Metadata, str | None], None],
+        *,
+        async_complete: AsyncComplete | None = None,
+        shutdown: Shutdown | None = None,
+        require_matching_response_format: bool = False,
     ) -> None:
+        if batch_complete is not None and async_complete is not None:
+            raise ValueError("external_batching_and_async_generation_are_incompatible")
         self.backend = backend
         self.validate = validate
-        self.dispatcher = BatchDispatcher(batch_complete, size) if batch_complete is not None else None
-        self.slots = anyio.CapacityLimiter(16 if self.dispatcher is not None else 2)
+        self.async_complete = async_complete
+        self.shutdown = shutdown
+        self.dispatcher = (
+            BatchDispatcher(
+                batch_complete,
+                size,
+                require_matching_response_format=require_matching_response_format,
+            )
+            if batch_complete is not None
+            else None
+        )
+        # The asynchronous vLLM candidate has its own continuous scheduler.  A
+        # second FIFO batcher would reintroduce a completion barrier, while more
+        # than the engine's reviewed sequence limit would merely hide queue time.
+        self.slots = anyio.CapacityLimiter(8 if self.async_complete is not None else (
+            16 if self.dispatcher is not None else 2
+        ))
         self.gpu = anyio.CapacityLimiter(1)
-        self.tokenizer = anyio.CapacityLimiter(1) if self.dispatcher is not None else self.gpu
+        self.tokenizer = anyio.CapacityLimiter(8) if self.async_complete is not None else (
+            anyio.CapacityLimiter(1) if self.dispatcher is not None else self.gpu
+        )
 
     @asynccontextmanager
     async def lifespan(self, _app: FastAPI) -> AsyncGenerator[None, None]:
-        async with anyio.create_task_group() as group:
-            if self.dispatcher is not None:
-                await group.start(self.dispatcher.run)
-            try:
-                yield
-            finally:
-                group.cancel_scope.cancel()
+        try:
+            async with anyio.create_task_group() as group:
+                if self.dispatcher is not None:
+                    await group.start(self.dispatcher.run)
+                try:
+                    yield
+                finally:
+                    group.cancel_scope.cancel()
+        finally:
+            if self.shutdown is not None:
+                result = self.shutdown()
+                if isawaitable(result):
+                    await result
 
     async def measure(self, request: CompletionRequest) -> PromptCount:
         async with self.tokenizer:
@@ -89,6 +122,10 @@ class WorkerExecution:
         return result
 
     async def complete(self, request: CompletionRequest, expected: str | None) -> Generated:
+        if self.async_complete is not None:
+            count = await self.measure(request)
+            self.validate(count, self.backend.metadata, expected)
+            return await self.async_complete(request)
         if self.dispatcher is None:
             # 기존 backend는 tokenizer와 모델을 같은 잠금으로 보호해야 한다.
             async with self.gpu:

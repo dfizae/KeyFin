@@ -1,7 +1,7 @@
 """Private backend identity and model configuration from the environment only."""
 
 from pathlib import Path
-from typing import ClassVar, Literal, Self
+from typing import Annotated, ClassVar, Literal, Self
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     database: Path = Path("state/coaching.sqlite3")
     clients: tuple[Client, ...] = Field(default=(), min_length=1, max_length=1000, validate_default=True)
     model: ModelConfig = ModelConfig()
+    # A deterministic FDT operation is CPU-bound in the current service process.
+    # Two concurrent distinct simulations preserved the best local request median in
+    # the controlled external-dummy screen; higher values stay configurable for a
+    # deployment that has its own trace evidence.
+    fdt_max_concurrency: Annotated[int, Field(ge=1, le=8)] = 2
 
     @model_validator(mode="after")
     def unique_tokens(self) -> Self:

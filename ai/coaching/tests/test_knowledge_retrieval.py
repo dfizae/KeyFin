@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from coaching_service import knowledge_retrieval as retrieval
 from coaching_service.finance_knowledge import finance_evidence, selected_finance_wording
 from coaching_service.knowledge_catalog import KnowledgeCatalog, load_catalog
 from coaching_service.knowledge_retrieval import retrieve_facts
@@ -44,6 +45,21 @@ def test_valid_but_unretrieved_id_cannot_answer_question() -> None:
 ])
 def test_body_retrieval_finds_concept_without_exact_name(question: str) -> None:
     assert "compound_interest" in {fact.id for fact in retrieve_facts(question)}
+
+
+def test_body_index_reuses_catalog_statistics_without_changing_query_scores() -> None:
+    """Different questions share one immutable reviewed-catalog body index."""
+    facts = load_catalog().facts
+    retrieval._body_index.cache_clear()
+
+    first = retrieval.body_scores("이자에도 다시 이자가 붙는 방식은 뭐야?", facts)
+    second = retrieval.body_scores("금리 변화가 채권 가격에 미치는 영향은?", facts)
+    cache = retrieval._body_index.cache_info()
+
+    assert len(first) == len(facts)
+    assert len(second) == len(facts)
+    assert cache.misses == 1
+    assert cache.hits >= 1
 
 
 def test_small_catalog_can_recall_semantic_subject_with_few_shared_characters() -> None:

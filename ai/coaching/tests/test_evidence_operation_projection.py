@@ -10,8 +10,8 @@ import pytest
 from test_evidence_projection import receipt_with_numeric_result
 
 import coaching_service.evidence as evidence_module
-from coaching_service.evidence import bounded_evidence, context_limited
-from coaching_service.llm_contract import ChatMessage
+from coaching_service.evidence import bounded_evidence, context_limited, token_retry_evidence
+from coaching_service.llm_contract import ChatMessage, EvidenceInput
 from coaching_service.schemas import Receipt
 
 if TYPE_CHECKING:
@@ -151,3 +151,40 @@ def test_explicit_daily_series_request_retains_series_and_reports_limit() -> Non
 
     # Then: required rows cannot be dropped just to pass a character limit.
     assert context_limited(evidence)
+
+
+def test_token_limit_retry_keeps_only_provenance_for_supplementary_wording() -> None:
+    """A retry may shrink non-authoritative writer context without changing the receipt."""
+    original = EvidenceInput(
+        purpose="coaching",
+        question="추가로 확인할 사항을 알려줘.",
+        history=(
+            ChatMessage(role="user", content="이전 질문 " + "가" * 400),
+            ChatMessage(role="assistant", content="이전 답변 " + "나" * 400),
+            ChatMessage(role="user", content="최근 질문 " + "다" * 400),
+        ),
+        facts_json=json.dumps({"opaque_engine_payload": "라" * 5000}, ensure_ascii=False),
+    )
+
+    retry = token_retry_evidence(original)
+
+    assert retry is not None
+    assert retry.question == original.question
+    assert len(retry.history) == 2
+    assert all(len(row.content) <= 252 for row in retry.history)
+    facts = json.loads(retry.facts_json)
+    assert facts["model_context_status"] == "reduced_after_token_limit"
+    assert facts["source_canonical_sha256"] == hashlib.sha256(
+        original.facts_json.encode("utf-8")
+    ).hexdigest()
+    assert "opaque_engine_payload" not in retry.facts_json
+    assert original.facts_json.endswith("}"), "the original evidence remains unchanged"
+
+
+def test_token_limit_retry_never_removes_finance_selection_sources() -> None:
+    """Source-backed fact selection must fail closed rather than retry without facts."""
+    evidence = EvidenceInput(
+        purpose="finance", question="일반 금융 개념을 알려줘.", facts_json=json.dumps({"x": "가" * 5000})
+    )
+
+    assert token_retry_evidence(evidence) is None

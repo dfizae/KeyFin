@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from coaching_service.llm import OpenAICompatibleCoachModel, create_http_client
 from coaching_service.llm_contract import ChatMessage, EvidenceInput, ModelConfig
+from coaching_service.llm_prompt import system_prompt
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -84,6 +85,16 @@ async def model_server(body: bytes, *, delay: float = 0) -> AsyncIterator[str]:
             group.cancel_scope.cancel()
 
 
+def test_model_config_default_concurrency_reaches_the_vllm_async_slot_budget() -> None:
+    """C1: raising the client cap to 8 lets all vLLM async engine slots be used.
+
+    scripts/gpu_execution.py reserves 8 admission slots for the vllm_async backend;
+    a client-side cap below that (previously 2) left slots idle regardless of engine
+    capacity. ge=1, le=8 already bounds this field, so no Field change is required.
+    """
+    assert ModelConfig().max_concurrency == 8
+
+
 @pytest.mark.anyio
 async def test_disabled_model_reports_templates_without_http() -> None:
     model = OpenAICompatibleCoachModel(ModelConfig())
@@ -111,6 +122,63 @@ async def test_success_uses_real_http_generation_and_reusable_client() -> None:
             assert result.model == "fixture-generator"
             assert result.fallback_reason is None
             assert not client.is_closed
+
+
+@pytest.mark.anyio
+async def test_generation_seed_is_opt_in_and_sent_as_a_typed_request_field() -> None:
+    """A reproducibility candidate must not alter the default request payload."""
+    captured: list[dict[str, object]] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        captured.append(json.loads(request.content))
+        return httpx2.Response(200, content=completion('{"mode":"review"}'))
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as client:
+        seeded = OpenAICompatibleCoachModel(
+            ModelConfig(
+                token_preflight=False, endpoint_url="http://model.test", generation_seed=715,
+            ),
+            client=client,
+        )
+        unseeded = OpenAICompatibleCoachModel(
+            ModelConfig(token_preflight=False, endpoint_url="http://model.test"), client=client,
+        )
+        assert (await seeded.route(evidence())).source == "llm"
+        assert (await unseeded.route(evidence())).source == "llm"
+
+    assert captured[0]["seed"] == 715
+    assert "seed" not in captured[1]
+
+
+@pytest.mark.anyio
+async def test_finance_prompt_candidate_is_routed_only_when_explicitly_configured() -> None:
+    """The experimental finance selector wording must remain opt-in until its final gate passes."""
+    captured: list[dict[str, object]] = []
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        captured.append(json.loads(request.content))
+        return httpx2.Response(200, content=completion('{"status":"answered","fact_ids":["dsr"]}'))
+
+    evidence = EvidenceInput(
+        purpose="finance",
+        question="DSR이 뭐야?",
+        facts_json='{"knowledge_facts":[{"id":"dsr","title":"DSR","text":"설명"}]}',
+    )
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as client:
+        model = OpenAICompatibleCoachModel(
+            ModelConfig(
+                token_preflight=False,
+                endpoint_url="http://model.test",
+                finance_prompt_version="candidate_v2",
+            ),
+            client=client,
+        )
+        result = await model.write(evidence)
+
+    assert result.source == "llm"
+    assert captured[0]["messages"][0]["content"] == system_prompt(
+        "write", finance=True, finance_prompt_version="candidate_v2",
+    )
 
 
 @pytest.mark.anyio
@@ -378,6 +446,7 @@ async def test_untrusted_history_stays_in_user_data_and_credentials_are_scoped()
         assert (await model.route(data)).source == "llm"
     sent = json.loads(captured[0].content)
     assert [message["role"] for message in sent["messages"]] == ["system", "user"]
+    assert "현재 질문에서 긍정으로 요청한 결과를 우선하세요." in sent["messages"][0]["content"]
     assert injected not in sent["messages"][0]["content"]
     assert injected in sent["messages"][1]["content"]
     assert captured[0].headers["Authorization"] == "Bearer configured"

@@ -10,6 +10,7 @@ API와 모델 추론 프로세스는 분리합니다. API는 `uv.lock`으로 설
 | --- | --- | --- | --- |
 | `base8` | Qwen/Qwen3-8B | BF16 | `b968826d9c46dd6066d109eabc6255188de91218` |
 | `latest27_nf4` | Qwen/Qwen3.8-27B | NF4 | `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` |
+| `prod27_fp8` | Qwen/Qwen3.8-27B-FP8 | FP8 | 배치 전 `config_sha256`을 개인 등록 파일에 실측 기입 |
 
 개인 모델 등록 파일에는 아래 형식으로 실제 경로와 해시를 넣습니다. `revision`은 확인한 스냅샷의 40자리 commit, `config_sha256`은 그 경로의 `config.json`을 직접 계산한 64자리 해시입니다. 이 검사는 전체 가중치의 공급망 검증을 대신하지 않습니다.
 
@@ -25,9 +26,32 @@ API와 모델 추론 프로세스는 분리합니다. API는 `uv.lock`으로 설
 | `COACH_GPU_ALLOWED_DEVICES` | 실행자가 사용 권한을 확인한 장치 허용 목록 |
 | `COACH_GPU_WORKSPACE` | 실행자 소유의 절대 디렉터리 |
 | `COACH_GPU_MODEL_REGISTRY` | 개인 모델 등록 JSON 파일의 절대 경로 |
-| `COACH_GPU_MODEL` | `base8` 또는 `latest27_nf4` |
+| `COACH_GPU_MODEL` | `base8`, `latest27_nf4` 또는 `prod27_fp8` |
 | `COACH_GPU_PORT` | loopback 수신 포트, 기본 `18743` |
 | `COACH_GPU_BATCH_SIZE` | 기본 `0`(기존 순차 처리). `1`~`4`는 토큰 검사 분리·제한된 온라인 배치를 명시적으로 활성화 |
+| `COACH_GPU_EXECUTION_BACKEND` | 기본 `vllm_async`(SPEC-latency C1). `vllm`, `transformers`로 명시 전환 가능 |
+
+### C1 기본값 변경과 롤백
+
+워커 실행 백엔드 기본값이 `transformers`에서 `vllm_async`로 바뀌었고, `enable_prefix_caching`을 켜서 공유 시스템 프롬프트·JSON 스키마 프리필을 재사용합니다(`scripts/gpu_registry.py`의 `vllm_decoder_options`). `max_num_seqs`도 8에서 16으로 올렸고, `max_num_batched_tokens`(8192)·`max_model_len`(9728)은 그대로 두었습니다 — 두 값은 시퀀스 1개의 프리필/디코드 토큰 예산이지 동시 시퀀스 수가 아니고, 이 서비스의 호출은 대부분 96토큰 이하라 16개 동시 요청도 그 예산 안에 들어옵니다. API 쪽 `COACHING_MODEL.max_concurrency` 기본값도 2에서 8로 올려(워커의 vllm_async 슬롯 8개와 맞춤) 실제 동시성이 엔진까지 도달하게 했습니다.
+
+**이 변경은 코드 상 도달 가능성만 확보한 것이며, 실측 GPU A/B(E1 지연·E2 응답 JSON 동일성) 검증은 별도로 수행합니다. 이 커밋만으로 지연·정확도 개선을 주장하지 않습니다.**
+
+문제가 생기면 아래 환경 변수로 이전 동작(코드 변경 없이)으로 되돌립니다.
+
+| 변수 | 롤백 값 |
+| --- | --- |
+| `COACH_GPU_EXECUTION_BACKEND` | `transformers` |
+| `COACHING_MODEL__MAX_CONCURRENCY` (또는 `COACHING_MODEL`의 `max_concurrency`) | `2` |
+
+### FP8 27B 서빙 (`prod27_fp8`, 선택 채택)
+
+측정 결과, L40S 1장에서 `vllm==0.19.0` + `torch==2.10.0+cu128` 조합으로 공식 `Qwen/Qwen3.8-27B-FP8`(fine-grained FP8) 체크포인트를 서빙하면 기존 `latest27_nf4`(bitsandbytes NF4) 대비 1.35배~9.1배 빠르고, 정답 선택 정확도는 히든 평가 기준 122/144로 121/144(NF4)보다 낮지 않았습니다. `scripts/gpu_registry.py`의 `vllm_decoder_options`가 `("prod27_fp8", "fp8")` 조합을 별도 분기로 처리하며, bitsandbytes 로더를 지정하지 않고 vLLM이 체크포인트 자체 설정에서 FP8(compressed-tensors) 양자화를 자동 인식하게 둡니다. `enable_prefix_caching`(True)·`max_num_seqs`(16)·greedy 결정성(`seed=715`)은 다른 태그와 동일합니다.
+
+**서빙 환경 요건**: `vllm==0.19.0` + `torch==2.10.0+cu128`, CUDA-12 계열 드라이버(이 조합으로 실측). vLLM `0.27` 이상은 CUDA-13을 요구해 570 드라이버/CUDA-12.8 조합의 이 박스에서는 사용할 수 없습니다. 다른 드라이버·CUDA로 옮길 때는 vLLM/torch 버전 조합을 다시 확인해야 합니다.
+
+**선택 방법**: 개인 모델 등록 파일에 `{"tag":"prod27_fp8","model_id":"Qwen/Qwen3.8-27B-FP8","quantization":"fp8", ...}` 항목을 추가하고 `COACH_GPU_MODEL=prod27_fp8`로 기동합니다. 서비스 기본 모델은 그대로 `latest27_nf4`이며, 이 태그는 선택적으로만 활성화되는 옵션입니다(자동 전환 없음). 문제가 있으면 `COACH_GPU_MODEL=latest27_nf4` 또는 `base8`로 되돌리거나 `COACH_GPU_EXECUTION_BACKEND=transformers`로 전환합니다.
+
 
 작업 디렉터리에 충분히 긴 무작위 `worker.token`을 만들고 파일 권한을 `0600`으로 설정합니다. 토큰과 작업 디렉터리 소유자는 실행자와 같아야 합니다. 단일 장치 선택이 없거나 허용 목록과 다르면 시작을 거부합니다. 이 검사는 관리자의 스케줄러나 권한 통제를 대신하지 않습니다.
 

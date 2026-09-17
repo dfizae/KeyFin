@@ -8,6 +8,7 @@ import anyio
 import httpx2
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from scripts.gpu_batching import BatchDispatcher, Pending
 from scripts.gpu_worker import CompletionRequest, Generated, Metadata, PromptCount, create_app
@@ -45,12 +46,53 @@ class BatchBackend:
                 for text in texts]
 
 
+class AsyncBackend(BatchBackend):
+    """A fake continuous engine that records whether requests reach it independently."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.active = 0
+        self.maximum_active = 0
+        self.calls: list[str] = []
+
+    async def complete_async(self, request: CompletionRequest) -> Generated:
+        text = request.messages[0].content
+        self.calls.append(text)
+        self.active += 1
+        self.maximum_active = max(self.maximum_active, self.active)
+        try:
+            # A checkpoint gives the other HTTP request a chance to enter. A
+            # serialized outer GPU limiter would keep this maximum at one.
+            await anyio.sleep(0.02)
+        finally:
+            self.active -= 1
+        return Generated(text=text, prompt_tokens=len(text), completion_tokens=1, seconds=0.01)
+
+
 TOKEN = "synthetic-batching-test-worker-token"
 HEADERS = {"Authorization": "Bearer " + TOKEN}
 
 
-def body(text: str, max_tokens: int = 32) -> dict[str, str | int | list[dict[str, str]]]:
-    return {"model": "fixture", "messages": [{"role": "user", "content": text}], "max_tokens": max_tokens}
+def body(
+    text: str,
+    max_tokens: int = 32,
+    *,
+    seed: int | None = None,
+    schema: dict[str, object] | None = None,
+) -> dict[str, object]:
+    request: dict[str, object] = {
+        "model": "fixture",
+        "messages": [{"role": "user", "content": text}],
+        "max_tokens": max_tokens,
+    }
+    if seed is not None:
+        request["seed"] = seed
+    if schema is not None:
+        request["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "fixture", "schema": schema},
+        }
+    return request
 
 
 @pytest.mark.anyio
@@ -73,6 +115,63 @@ async def test_concurrent_requests_share_generation_and_preserve_each_response()
     assert len(backend.batches[0]) == 2
     assert all(reply.status_code == 200 and reply.json()["choices"][0]["message"]["content"] == text
                and reply.json()["usage"]["prompt_tokens"] == len(text) for text, reply in replies.items())
+
+
+@pytest.mark.anyio
+async def test_async_engine_requests_do_not_wait_for_an_outer_completion_batch() -> None:
+    """Native continuous scheduling must not be re-serialized by the HTTP worker."""
+    backend = AsyncBackend()
+    app = create_app(backend, TOKEN, async_complete=backend.complete_async)
+    replies: dict[str, httpx2.Response] = {}
+    async with app.router.lifespan_context(app), httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url="http://test",
+    ) as client:
+        async def send(text: str) -> None:
+            replies[text] = await client.post("/v1/chat/completions", headers=HEADERS, json=body(text))
+
+        async with anyio.create_task_group() as group:
+            group.start_soon(send, "first")
+            group.start_soon(send, "second")
+
+    assert sorted(backend.calls) == ["first", "second"]
+    assert backend.maximum_active == 2
+    assert backend.batches == []
+    assert all(reply.status_code == 200 for reply in replies.values())
+
+
+def test_async_engine_cannot_be_wrapped_in_an_external_batch_dispatcher() -> None:
+    backend = AsyncBackend()
+
+    with pytest.raises(ValueError, match="external_batching_and_async_generation_are_incompatible"):
+        _ = create_app(
+            backend,
+            TOKEN,
+            batch_complete=backend.complete_batch,
+            async_complete=backend.complete_async,
+            max_batch_size=2,
+        )
+
+
+@pytest.mark.anyio
+async def test_worker_admits_a_bounded_generation_seed_without_changing_the_response_contract() -> None:
+    """The experiment field must cross the HTTP boundary without becoming an output field."""
+    backend = BatchBackend()
+    app = create_app(backend, TOKEN, batch_complete=backend.complete_batch, max_batch_size=2)
+    request = body("seeded", seed=715)
+    async with app.router.lifespan_context(app), httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url="http://test",
+    ) as client:
+        response = await client.post("/v1/chat/completions", headers=HEADERS, json=request)
+    assert response.status_code == 200
+    assert CompletionRequest.model_validate(request).seed == 715
+    assert "seed" not in response.json()
+
+
+@pytest.mark.parametrize("seed", [-1, 4_294_967_296])
+def test_worker_rejects_generation_seeds_outside_the_explicit_unsigned_range(seed: int) -> None:
+    """Malformed experiment controls must fail before they can reach a shared decoder."""
+    with pytest.raises(ValidationError):
+        CompletionRequest.model_validate(body("invalid", seed=seed))
 
 
 @pytest.mark.anyio
@@ -112,6 +211,41 @@ def test_batch_preserves_output_limit_and_padded_token_budget(
     first = Pending(CompletionRequest.model_validate(body("first")), 10)
     second = Pending(CompletionRequest.model_validate(body("second", second_limit)), second_length)
     assert dispatcher.compatible([first], second) is compatible
+
+
+@pytest.mark.parametrize(
+    ("first_seed", "second_seed", "compatible"),
+    [(None, None, True), (715, 715, True), (715, 716, False), (None, 715, False)],
+)
+def test_batch_never_mixes_generation_seeds(
+    first_seed: int | None, second_seed: int | None, compatible: bool,
+) -> None:
+    """A decoder sampling parameter is batch-wide, so differently seeded requests stay separate."""
+    backend = BatchBackend()
+    dispatcher = BatchDispatcher(backend.complete_batch, 4)
+    first = Pending(CompletionRequest.model_validate(body("first", seed=first_seed)), 10)
+    second = Pending(CompletionRequest.model_validate(body("second", seed=second_seed)), 10)
+    assert dispatcher.compatible([first], second) is compatible
+
+
+def test_structured_decoder_batch_never_mixes_response_formats() -> None:
+    """A grammar-constrained decoder receives only requests sharing one response format."""
+    backend = BatchBackend()
+    dispatcher = BatchDispatcher(backend.complete_batch, 4, require_matching_response_format=True)
+    first = Pending(
+        CompletionRequest.model_validate(body(
+            "first", schema={"type": "object", "properties": {"mode": {"type": "string"}}},
+        )),
+        10,
+    )
+    second = Pending(
+        CompletionRequest.model_validate(body(
+            "second", schema={"type": "object", "properties": {"fact_ids": {"type": "array"}}},
+        )),
+        10,
+    )
+
+    assert dispatcher.compatible([first], second) is False
 
 
 @pytest.mark.anyio

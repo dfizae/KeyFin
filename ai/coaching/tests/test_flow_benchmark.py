@@ -10,6 +10,7 @@ from benchmarks.coaching.flow.client import Flow
 from benchmarks.coaching.flow.fixtures import expected_month_spend, scenario
 from benchmarks.coaching.flow.references import exact_references
 from benchmarks.coaching.flow.run import run
+from coaching_service.chat_answers import ChatAnswer
 from coaching_service.schemas import JsonDocument
 
 
@@ -53,6 +54,38 @@ def test_required_router_template_fallback_fails_admission() -> None:
     # Then: a fallback is explicit and is never counted as accepted GPU routing.
     assert flow.checks[0].passed is False
     assert flow.routes[0].fallback_reason == "deadline"
+
+
+def test_clear_numeric_template_route_passes_without_model_route_adoption() -> None:
+    # Given: a narrow deterministic FDT mode has no fallback reason and still has a numeric contract.
+    route = JsonDocument({"mode": "forecast", "source": "template"})
+    with httpx2.Client() as client:
+        flow = Flow(client)
+        # When: the flow observes the intentionally router-free request.
+        flow.observe_route("forecast", route, required=True, allows_deterministic=True)
+    # Then: deterministic selection passes, while fallback templates remain covered above.
+    assert flow.checks[0].passed is True
+
+
+def test_exact_personal_engine_route_passes_without_model_route_adoption() -> None:
+    # Given: the personal grammar is independently parsed and the engine returns
+    # the ledger-backed response without falling back from a model decision.
+    answer = ChatAnswer(
+        id="personal-1",
+        answer_type="personal_context",
+        status="answered",
+        text="계좌 잔액 합계입니다.",
+        wording_source="engine",
+        model="not_called",
+        evidence=JsonDocument({"routing": {"mode": "personal", "source": "template"}}),
+        created_at=0,
+    )
+    with httpx2.Client() as client:
+        flow = Flow(client)
+        # When: the benchmark observes the complete engine provenance.
+        flow.observe("personal", answer)
+    # Then: the deterministic grammar is accepted, without treating it as LLM adoption.
+    assert flow.checks[0].passed is True
 
 
 def test_missing_optional_router_metadata_is_not_claimed_as_model_adoption() -> None:

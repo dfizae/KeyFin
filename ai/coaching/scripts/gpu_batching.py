@@ -30,13 +30,21 @@ class Pending:
 class BatchDispatcher:
     """출력 상한이 맞는 요청만 묶고 대기열·패딩 메모리의 증가를 제한한다."""
 
-    def __init__(self, complete: BatchComplete, size: int, *, token_budget: int = 16384) -> None:
+    def __init__(
+        self,
+        complete: BatchComplete,
+        size: int,
+        *,
+        token_budget: int = 16384,
+        require_matching_response_format: bool = False,
+    ) -> None:
         # 단일 합법 요청(입력 8192 + 출력 1536)은 항상 들어갈 수 있어야 한다.
         if not 1 <= size <= 4 or token_budget < 9728:
             raise ValueError("invalid_batch_limits")
         self.complete = complete
         self.size = size
         self.token_budget = token_budget
+        self.require_matching_response_format = require_matching_response_format
         self.sender, self.receiver = anyio.create_memory_object_stream[Pending](16)
         self.pending: list[Pending] = []
         self.running = False
@@ -65,10 +73,24 @@ class BatchDispatcher:
             self.pending.remove(item)
 
     def compatible(self, batch: list[Pending], item: Pending) -> bool:
-        """가장 긴 요청으로 패딩할 때의 토큰 수를 계산하고 개별 출력 상한을 보존한다."""
+        """출력·시드·패딩 예산이 같은 요청만 한 decoder 호출로 묶는다."""
         same_limit = batch[0].request.max_tokens == item.request.max_tokens
+        # vLLM SamplingParams is one object per batch. Mixing seeds would silently
+        # apply the first request's experiment setting to another caller.
+        same_seed = batch[0].request.seed == item.request.seed
+        # Structured decoding applies one grammar to the complete generation
+        # batch, so response formats cannot be mixed on that optional path.
+        same_response_format = (
+            not self.require_matching_response_format
+            or batch[0].request.response_format == item.request.response_format
+        )
         longest = max(job.prompt_tokens + job.request.max_tokens for job in [*batch, item])
-        return same_limit and longest * (len(batch) + 1) <= self.token_budget
+        return (
+            same_limit
+            and same_seed
+            and same_response_format
+            and longest * (len(batch) + 1) <= self.token_budget
+        )
 
     async def run(self, *, task_status: anyio.abc.TaskStatus[None] = anyio.TASK_STATUS_IGNORED) -> None:
         self.running = True

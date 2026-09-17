@@ -56,9 +56,18 @@ def check_forecast(flow: Flow, stage: str, body: JsonDocument, data: Scenario, m
     )
     flow.check(stage + ":numeric_mode", passed=request is not None and request.root.get("mode") == mode)
     flow.check(stage + ":numeric_ready", passed=result is not None and result.root.get("status") == "ok")
-    flow.check(
-        stage + ":wording_accepted", passed=answer.wording_source == "llm" and answer.fallback_reason is None
+    # The checked FDT receipt is sufficient for a numeric response. A model
+    # explanation remains valid when present, but a deterministic follow-up is
+    # equally valid only when it records normal template provenance rather than
+    # disguising a failure as a successful answer.
+    wording_accepted = (
+        answer.wording_source == "llm" and answer.fallback_reason is None
+    ) or (
+        answer.wording_source == "template"
+        and answer.model == "not_called"
+        and answer.fallback_reason is None
     )
+    flow.check(stage + ":wording_accepted", passed=wording_accepted)
     return answer
 
 

@@ -10,6 +10,7 @@ import re
 import unicodedata
 from collections import Counter
 from datetime import date, datetime
+from functools import lru_cache
 from math import log
 from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
@@ -17,6 +18,8 @@ from zoneinfo import ZoneInfo
 from coaching_service.knowledge_catalog import KnowledgeCatalog, KnowledgeFact, load_catalog
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from coaching_service.llm_contract import ChatMessage
 
 _FOLLOWUP = re.compile(
@@ -58,21 +61,38 @@ def term_score(question: str, fact: KnowledgeFact) -> int:
     return sum(min(len(term), 12) for alias in fact.aliases if (term := compact(alias)) in normalized)
 
 
-def body_scores(question: str, facts: list[KnowledgeFact]) -> list[float]:
+def _grams(text: str) -> Counter[str]:
+    """Return normalized character bigrams used by the bounded body index."""
+    normalized = compact(text)
+    return Counter(normalized[index:index + 2] for index in range(len(normalized) - 1))
+
+
+@lru_cache(maxsize=32)
+def _body_index(
+    facts: tuple[KnowledgeFact, ...],
+) -> tuple[tuple[Counter[str], ...], Counter[str], float]:
+    """Build immutable catalog statistics once per reviewed fact tuple.
+
+    A user question changes on every request, but the approved catalog normally
+    does not.  Caching only the catalog-derived document grams, frequencies, and
+    mean length preserves the exact BM25-like score while removing repeated
+    parsing from the interactive path.
+    """
+    documents = tuple(_grams(fact.title + " " + fact.text) for fact in facts)
+    frequencies = Counter(term for document in documents for term in document)
+    mean_length = sum(sum(document.values()) for document in documents) / max(1, len(documents))
+    return documents, frequencies, mean_length
+
+
+def body_scores(question: str, facts: Sequence[KnowledgeFact]) -> list[float]:
     """Recall paraphrases from approved text without enumerating test questions.
 
     Character bigrams tolerate Korean particles and word spacing. BM25 discounts
     common fragments and long paragraphs; at least two shared fragments are
     required. These scores propose evidence only, never certify an answer.
     """
-    def grams(text: str) -> Counter[str]:
-        normalized = compact(text)
-        return Counter(normalized[index:index + 2] for index in range(len(normalized) - 1))
-
-    query = grams(question)
-    documents = [grams(fact.title + " " + fact.text) for fact in facts]
-    frequencies = Counter(term for document in documents for term in document)
-    mean_length = sum(sum(document.values()) for document in documents) / max(1, len(documents))
+    query = _grams(question)
+    documents, frequencies, mean_length = _body_index(tuple(facts))
     scores: list[float] = []
     for document in documents:
         shared = query.keys() & document.keys()

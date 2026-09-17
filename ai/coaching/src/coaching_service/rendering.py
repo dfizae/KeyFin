@@ -28,12 +28,20 @@ def authoritative_text(receipt: Receipt) -> str:
             pieces.append("결제액이 차감 전 봉투 잔액의 50% 이상이어서 코칭이 생성됐습니다.")
         elif receipt.trigger == "p1_context_concern":
             pieces.append("애매 상황에 대한 모델의 보조 판단으로 추가 점검을 제안합니다.")
-    action = receipt.result.root.get("next_action")
+    # A session-bound historical follow-up must never label the old FDT result as
+    # a new result for the current Twin revision. It still renders the preserved
+    # historical cause so the user can see why the original coaching existed.
+    result = (
+        receipt.historical.engine_result
+        if receipt.trigger == "historical_coaching_followup" and receipt.historical is not None
+        else receipt.result
+    )
+    action = result.root.get("next_action")
     if isinstance(action, dict):
         title, detail = action.get("title"), action.get("detail")
         if isinstance(title, str) and isinstance(detail, str):
             pieces.append(title + ". " + detail)
-    pieces.extend(user_warnings(receipt.result))
+    pieces.extend(user_warnings(result))
     if not pieces:
         pieces.append("현재 자료로 확인할 수 있는 코칭 근거가 부족합니다. 거래·잔액 정보를 확인해 주세요.")
     return "\n".join(pieces)

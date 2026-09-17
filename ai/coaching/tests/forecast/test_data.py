@@ -44,3 +44,27 @@ def test_training_array_ends_at_its_declared_cutoff() -> None:
     # Then the explicit last date and array length agree with only the past.
     assert all(value.last_date == date(2026, 6, 30) for value in values)
     assert all(len(value.daily) == (value.last_date-value.first_date).days+1 for value in values)
+
+
+def test_budget_excluded_purchase_remains_in_history_and_future_consumption_truth() -> None:
+    # Given a normal purchase that is excluded only from the monthly budget balance.
+    rows = daily_rows(date(2026, 9, 3), days=90)
+    tagged = tuple(
+        row.model_copy(update={"amount_krw": 2_000, "exclude_tag": "DUTCH"})
+        if row.transaction_date == date(2026, 8, 1)
+        else row.model_copy(update={"amount_krw": 3_000, "exclude_tag": "DUTCH"})
+        if row.transaction_date == date(2026, 8, 2)
+        else row
+        for row in rows
+    )
+
+    # When the August 1 forecast treats August 1 as observed and August 2 onward as truth.
+    history = next(
+        series for series in observed_series(tagged, date(2026, 8, 1)) if series.envelope == "외식"
+    )
+    _, truth = build_cases(tagged, "evaluation")
+    outcome = next(row for row in truth if row.case_id.endswith("/2026-08-01/days7/외식"))
+
+    # Then both purchases are total variable consumption, even though neither is budget usage.
+    assert history.daily[-1] == 2_000
+    assert outcome.actual == 9_000

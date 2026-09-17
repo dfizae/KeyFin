@@ -17,6 +17,14 @@ from coaching_service.schemas import Coaching, JsonDocument, Receipt
 from coaching_service.settings import Client
 
 
+def authoritative_fdt(receipt: Receipt) -> bool:
+    """Return whether a complete receipt deliberately has no supplementary writer."""
+    return (
+        receipt.numeric_request is not None
+        and receipt.numeric_result is not None
+    ) or (receipt.trigger == "requested_review" and receipt.payment is None)
+
+
 class ScenarioIO:
     def __init__(
         self,
@@ -90,7 +98,8 @@ class ScenarioIO:
         )
         return result
 
-    async def verify_coaching(self, raw: JsonDocument) -> Coaching:
+    async def verify_coaching(self, raw: JsonDocument, *, preflight_start: int = 0) -> Coaching:
+        """Check one saved answer against only the model calls made for that answer."""
         coaching = Coaching.model_validate(raw.root)
         self.sources.append(coaching.wording_source)
         if coaching.fallback_reason:
@@ -103,14 +112,26 @@ class ScenarioIO:
         )
         self.check("engine_commit_exact", receipt.engine_commit == ENGINE_COMMIT)
         twin = await self.request("GET", "/v1/twin")
-        expected = await anyio.to_thread.run_sync(self.engine.review, twin, receipt.request)
-        self.check("original_engine_review_exact", expected == receipt.result)
+        numeric_receipt = receipt.numeric_request is not None and receipt.numeric_result is not None
+        if numeric_receipt:
+            self.check(
+                "original_engine_review_not_run",
+                receipt.result == JsonDocument({"status": "not_run", "reason": "numeric_operation"}),
+            )
+        else:
+            expected = await anyio.to_thread.run_sync(self.engine.review, twin, receipt.request)
+            self.check("original_engine_review_exact", expected == receipt.result)
         calls = [
             row
-            for row in self.gateway.preflights
+            for row in self.gateway.preflights[preflight_start:]
             if row.case_id == self.case.case_id and row.operation == "write"
         ]
-        if calls:
+        if authoritative_fdt(receipt):
+            self.check(
+                "authoritative_receipt_no_writer",
+                not calls and coaching.wording_source == "template" and coaching.model == "not_called",
+            )
+        elif calls:
             self.verify_projection(receipt, "write", calls[-1].evidence)
         else:
             self.check("writer_projection_exact", passed=False, detail="No writer preflight was observed")
@@ -154,4 +175,7 @@ class ScenarioIO:
                 "seed": 42,
             }
         )
-        return await self.verify_coaching(await self.request("POST", "/v1/coaching/reviews", request))
+        before = len(self.gateway.preflights)
+        return await self.verify_coaching(
+            await self.request("POST", "/v1/coaching/reviews", request), preflight_start=before
+        )

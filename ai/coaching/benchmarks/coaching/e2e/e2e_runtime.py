@@ -7,7 +7,7 @@ import socket
 import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Literal, assert_never
+from typing import Literal, assert_never, cast
 
 import anyio
 import httpx2
@@ -48,13 +48,28 @@ class UserPayload(Frozen):
 
 
 def operation_input(request: GenerationRequest) -> tuple[Operation, EvidenceInput]:
-    operations: tuple[Operation, ...] = ("write", "judge", "route")
+    """Classify the real wire request rather than one fixed prompt string per operation.
+
+    The adapter can select among several route/finance prompt variants (see
+    ``ModelConfig.route_prompt_version``) and appends a chart/finance flag to the
+    route and write system prompts. Comparing the system message against only the
+    single default-variant prompt text made this classifier reject any other
+    configured variant even though the request was a legitimate call. The
+    ``response_format`` schema name is a stable, variant-independent signal for
+    ``judge``/``route``/finance/chart selections; a plain coaching write never
+    sets ``response_format`` at all, so its absence is the remaining case.
+    """
     first, second = request.messages
     operation: Operation | None = None
-    for candidate in operations:
-        if first.content == system_prompt(candidate):
-            operation = candidate
-            break
+    if request.response_format is not None:
+        schema_name = request.response_format.root.get("json_schema", {})
+        name = schema_name.get("name") if isinstance(schema_name, dict) else None
+        if name in ("route", "judge"):
+            operation = cast("Operation", name)
+        elif name in ("finance_facts", "chart_facts"):
+            operation = "write"
+    elif first.content == system_prompt("write"):
+        operation = "write"
     if first.role != "system" or second.role != "user" or operation is None:
         raise ValueError("Unexpected model instruction boundary")
     payload = UserPayload.model_validate_json(second.content)

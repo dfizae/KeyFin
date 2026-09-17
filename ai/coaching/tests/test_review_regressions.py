@@ -166,13 +166,13 @@ async def test_dialogue_keeps_canceled_payment_history_separate_from_current_bal
         reply = await client.post(
             "/v1/sessions/" + session.json()["id"] + "/messages",
             json={"question": "결제를 취소했어요. 현재 봉투 잔액은 얼마인가요?"},
-            headers={"Idempotency-Key": "turn"},
+            headers={"Idempotency-Key": "turn", "X-Coaching-Trace": "1"},
         )
         assert reply.status_code == 200, reply.text
         current = reply.json()
         receipt = current["receipt"]
         assert receipt["identity"]["revision"] == 2
-        assert receipt["trigger"] == "dialogue"
+        assert receipt["trigger"] == "historical_coaching_followup"
         assert receipt["payment"] is None
         assert receipt["current_envelopes"] == [{"envelope": "기타", "balance_krw": 100000}]
         historical = receipt["historical"]
@@ -184,6 +184,10 @@ async def test_dialogue_keeps_canceled_payment_history_separate_from_current_bal
         assert "당시 차감 후 50,000원이었습니다" in current["text"]
         assert "현재 취소 상태" in current["text"]
         assert "봉투 장부 잔액은 100,000원" in current["text"]
+        # This is a stored-coaching follow-up, so a trace for this response must
+        # contain neither a new FDT simulation nor a model operation.
+        assert "fdt;dur=" not in reply.headers["server-timing"]
+        assert "model;dur=" not in reply.headers["server-timing"]
         persisted = await client.get("/v1/coaching/" + original["id"])
         assert persisted.json() == original
 
@@ -234,7 +238,9 @@ async def test_non_ascii_bearer_is_unauthorized_and_does_not_disrupt_valid_auth(
 
 
 @pytest.mark.anyio
-async def test_large_receipt_preserves_p0_and_outbox_with_explicit_model_fallback(tmp_path: Path) -> None:
+async def test_large_receipt_preserves_p0_and_outbox_without_recomputing_or_model_fallback(
+    tmp_path: Path,
+) -> None:
     database = tmp_path / "large-p0.sqlite3"
     model = TestModel()
     account_id = "a" * 65000
@@ -280,19 +286,20 @@ async def test_large_receipt_preserves_p0_and_outbox_with_explicit_model_fallbac
         assert reply.status_code == 200, reply.text
         follow_up = reply.json()
         assert follow_up["wording_source"] == "template"
-        assert follow_up["fallback_reason"] == "context_limit"
+        assert follow_up["fallback_reason"] is None
         assert follow_up["receipt"]["routing"] == {
             "mode": "review",
             "source": "template",
-            "fallback_reason": "context_limit",
+            "fallback_reason": None,
         }
         assert follow_up["receipt"]["historical"]["engine_result"] == coaching["receipt"]["result"]
         assert model.writes == 0
         assert model.judgments == 0
-        # Intent-only routing now precedes Twin evidence, but the giant document
-        # must still suppress numeric analysis and supplementary generation.
-        assert model.routes == 1
-        assert account_id not in model.seen[-1].facts_json
+        # The session itself identifies the prior coaching. Its immutable receipt and
+        # current ledger answer this follow-up without serializing the giant document
+        # into a route or generation prompt.
+        assert model.routes == 0
+        assert all(account_id not in evidence.facts_json for evidence in model.seen)
 
 
 @pytest.mark.anyio

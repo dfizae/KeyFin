@@ -5,10 +5,12 @@ from __future__ import annotations
 import hashlib
 import os
 import time
+from importlib import import_module
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import torch
-from gpu_registry import ModelEntry, load_entry, validate_device
+from gpu_registry import ModelEntry, adapter_digest, load_entry, validate_device
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -17,6 +19,38 @@ from transformers import (
     PreTrainedTokenizerBase,
     Qwen3_5ForConditionalGeneration,
 )
+
+if TYPE_CHECKING:
+    from pydantic import JsonValue
+
+# ``gpu_runtime`` records this file's digest so receipts identify the exact
+# decoder implementation without exposing machine-specific settings.
+RUNTIME_SOURCE = Path(__file__)
+
+
+def load_verified_adapter(model: PreTrainedModel, entry: ModelEntry) -> PreTrainedModel:
+    """Attach only the exact BF16 selector adapter registered for this base model.
+
+    No adapter registration returns the untouched base model. Any missing runtime
+    dependency, byte mismatch, or unsupported registry pair stops startup instead
+    of silently answering with a lower-quality base checkpoint.
+    """
+    if entry.adapter_path is None:
+        return model
+    if entry.adapter_sha256 is None:
+        raise RuntimeError("adapter_fields_must_be_paired")
+    if adapter_digest(entry.adapter_path) != entry.adapter_sha256:
+        raise RuntimeError("model_adapter_changed")
+    try:
+        peft = import_module("peft")
+    except ModuleNotFoundError as error:
+        if error.name != "peft":
+            raise
+        raise RuntimeError("adapter_runtime_dependency_missing") from None
+    peft_model = peft.PeftModel
+    return peft_model.from_pretrained(
+        model, entry.adapter_path, local_files_only=True, is_trainable=False,
+    )
 
 
 def load_model(tag: str) -> tuple[PreTrainedModel, PreTrainedTokenizerBase, ModelEntry]:
@@ -45,13 +79,17 @@ def load_model(tag: str) -> tuple[PreTrainedModel, PreTrainedTokenizerBase, Mode
             )
         case _:
             raise ValueError("unsupported_model_quantization_pair")
-    return model.eval(), tokenizer, entry
+    return load_verified_adapter(model, entry).eval(), tokenizer, entry
 
 
-def generate(
+def generate(  # noqa: PLR0913 - The shared decoder boundary keeps all generation controls explicit.
     model: PreTrainedModel, tokenizer: PreTrainedTokenizerBase,
     chats: list[list[dict[str, str]]], max_tokens: int = 220, *, thinking: bool = False,
+    seed: int | None = None, structured_json_schema: dict[str, JsonValue] | None = None,
 ) -> tuple[list[str], float, list[int], list[int]]:
+    # Greedy Transformer decoding never samples, but the argument keeps both
+    # decoder implementations behind the same validated worker interface.
+    del seed, structured_json_schema
     prompts = [tokenizer.apply_chat_template(
         chat, tokenize=False, add_generation_prompt=True, enable_thinking=thinking,
     ) for chat in chats]

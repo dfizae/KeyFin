@@ -62,6 +62,17 @@ class _Period(StrEnum):
     CURRENT = "현재"
 
 
+def supports_spending_question(question: str) -> bool:
+    """Return whether the existing exact aggregate grammar can answer this turn.
+
+    The dialogue router uses this same predicate only to skip an LLM intent call.
+    It deliberately does not broaden the supported language: ``spending_answer``
+    remains the single parser that decides the calculation scope and can still
+    return ``needs_data`` when the connected ledger cannot prove an amount.
+    """
+    return _QUERY.fullmatch(re.sub(r"\s+", "", question)) is not None
+
+
 def _bounds(reference: date, period: _Period, observed: tuple[date, ...]) -> tuple[date | None, date]:
     """달력 월·하루·현재까지를 구분하고 기준일 이후는 읽지 않는다."""
     match period:

@@ -23,6 +23,18 @@ class Request:
     horizon_days: int
     budget_krw: int = 100_000
     seed: int = 42
+    paths: int = 400
+
+    def __post_init__(self) -> None:
+        """Keep replay resource settings inside the same public admission range.
+
+        The adapter is evaluation-only, but it must not grant a benchmark a
+        higher-resolution simulation setting than the service admits.  The
+        default remains 400 so existing frozen replay artifacts retain their
+        declared request contract.
+        """
+        if not 20 <= self.paths <= 400:
+            raise ValueError("forecast_paths_out_of_range")
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +57,7 @@ def execute(rows: tuple[LedgerRow, ...], request: Request) -> Execution:
         "envelopes": [],
     })
     numeric = JsonDocument.model_validate({
-        "mode": "risk", "horizon_days": request.horizon_days, "paths": 400,
+        "mode": "risk", "horizon_days": request.horizon_days, "paths": request.paths,
         "seed": request.seed, "stress_scenarios": [],
     })
     adapter = EngineAdapter()

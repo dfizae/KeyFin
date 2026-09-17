@@ -111,6 +111,18 @@ class ModelConfig(FrozenContract):
     endpoint_url: str | None = None
     token: SecretStr | None = None
     token_preflight: bool = True
+    # Joint routing is an opt-in candidate until paired quality/latency evaluation passes.
+    combined_dialogue: bool = False
+    # The frozen catalog-only screen permits this default. Exact definition grammar
+    # bypasses inference; any ambiguous, personal, numeric, or forecast request
+    # still falls through to the normal model and FDT validation flow.
+    deterministic_finance_fast_path: bool = True
+    # V3 passed the separately frozen synthetic route validation on the pinned
+    # evaluated candidate.  It remains an explicit setting so an endpoint with
+    # a different model can be rolled back to production wording and measured
+    # before it is treated as equivalent.
+    route_prompt_version: Literal["production", "candidate_v3"] = "candidate_v3"
+    finance_prompt_version: Literal["production", "candidate_v2"] = "production"
     model: Annotated[str, Field(min_length=1, max_length=200)] = "coaching-model"
     timeout_seconds: Annotated[float, Field(gt=0, le=120)] = 30.0
     connect_timeout_seconds: Annotated[float, Field(gt=0, le=30)] = 5.0
@@ -118,8 +130,16 @@ class ModelConfig(FrozenContract):
     write_timeout_seconds: Annotated[float, Field(gt=0, le=30)] = 10.0
     pool_timeout_seconds: Annotated[float, Field(gt=0, le=30)] = 1.0
     max_tokens: Annotated[int, Field(ge=16, le=1024)] = 256
+    # Optional provider-supported sampling seed. It is deliberately opt-in:
+    # changing it alters a model response and must pass the same quality gate
+    # as any other inference candidate.
+    generation_seed: Annotated[int | None, Field(ge=0, le=4294967295)] = None
     max_response_bytes: Annotated[int, Field(ge=1024, le=1048576)] = 65536
-    max_concurrency: Annotated[int, Field(ge=1, le=8)] = 2
+    # C1 (SPEC-latency): 2 -> 8. The bound (le=8) already allowed 8; only the
+    # default moves, to match gpu_execution.WorkerExecution's 8 vllm_async slots
+    # so client concurrency can actually reach the engine instead of stalling at
+    # the old cap of 2 while slots sit idle.
+    max_concurrency: Annotated[int, Field(ge=1, le=8)] = 8
 
     @field_validator("endpoint_url")
     @classmethod
