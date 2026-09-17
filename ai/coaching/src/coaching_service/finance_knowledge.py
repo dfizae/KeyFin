@@ -91,7 +91,8 @@ _STATUS_TEXT: Final = {
         "일반 금융 개념만으로 개인 수치를 정하지 않습니다."
     ),
     "out_of_scope": (
-        "금융 개념 설명과 연결된 소비·예측 질문을 도와드릴 수 있습니다. 금융과 관련된 질문을 입력해 주세요."
+        "이 질문에 맞는 검증된 금융 개념 자료가 아직 없습니다. "
+        "금융 개념 설명과 연결된 소비·예측 질문을 도와드릴 수 있습니다."
     ),
     "unavailable": "지금은 질문에 맞는 금융 근거를 확인하지 못했습니다. 잠시 후 다시 질문해 주세요.",
 }
@@ -104,6 +105,42 @@ _MISSING_TEXT: Final[dict[MissingInformation, str]] = {
     "tax_terms": "세후 결과를 확정하려면 실제 과세 여부·세율·공제 조건을 확인해야 합니다.",
     "calculation": "정확한 값에는 입력 조건·비교 기간·계산 방식·반올림을 확인한 별도 계산이 필요합니다.",
 }
+
+
+def _out_of_scope_text(question: str | None) -> str:
+    """Pair the flat out-of-scope refusal with up to three nearby registered concepts.
+
+    A flat refusal wastes a turn when a nearby registered concept exists. This
+    only builds a deterministic suggestion sentence; it never selects a fact
+    or changes the out_of_scope status/empty-fact_ids contract.
+    """
+    base = _STATUS_TEXT["out_of_scope"]
+    nearest = _nearest_concept_titles(question) if question else ()
+    if not nearest:
+        return base
+    return base + " 예를 들어 " + ", ".join(nearest) + " 같은 등록된 개념은 바로 질문할 수 있습니다."
+
+
+def _nearest_concept_titles(question: str, limit: int = 3) -> tuple[str, ...]:
+    """Suggest up to ``limit`` registered concept titles nearest to an out-of-scope question.
+
+    This reuses the existing bounded retrieval (``retrieve_facts``) exactly as
+    the finance evidence path does; it invents no new similarity model and
+    selects no fact as an answer. A question with no meaningful overlap with
+    any approved concept simply yields an empty tuple, which callers must
+    render as no suggestion rather than a fabricated one.
+    """
+    titles: list[str] = []
+    seen: set[str] = set()
+    for fact in retrieve_facts(question):
+        if fact.title not in seen:
+            seen.add(fact.title)
+            titles.append(fact.title)
+        if len(titles) == limit:
+            break
+    return tuple(titles)
+
+
 # This is deliberately a whole-question grammar rather than a keyword classifier.
 # "DSR이 뭐야?" has one fixed catalog answer; a question that adds a personal
 # amount, forecast, comparison, or calculation falls through to model selection.
@@ -859,7 +896,12 @@ def selected_finance_wording(
     if selection.status != "answered":
         # A grounded partial explanation must still visibly say what remains
         # unverified; it cannot be presented as an answer to the entire request.
-        paragraphs.append(_STATUS_TEXT[selection.status])
+        status_text = (
+            _out_of_scope_text(evidence.question if evidence is not None else None)
+            if selection.status == "out_of_scope"
+            else _STATUS_TEXT[selection.status]
+        )
+        paragraphs.append(status_text)
         paragraphs.extend(_MISSING_TEXT[key] for key in selection.missing)
     text = "\n\n".join(paragraphs)
     if len(text) > 2400:
