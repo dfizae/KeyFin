@@ -11,14 +11,17 @@ import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { canAgreeToTerms, TERMS_ITEMS } from "@/features/auth/model";
+import { canAgreeToTerms, HOME_ROUTE, TERMS_ITEMS } from "@/features/auth/model";
 import { useAuthStore } from "@/features/auth/store";
 import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { saveTermsAgreed } from "@/lib/session-storage";
 import { cn } from "@/lib/utils";
 
-/** 약관 다음은 금융망 이메일 연결(PAGE-03B)이다 (유저 플로우 v2, 2026-09-10). */
-const NEXT_ROUTE = "/onboarding/finance-email";
+/**
+ * 약관 다음 단계는 홈 게이트(app/(app)/(tabs)/_layout)가 정한다. 금융망 미연결이면 금융망 이메일(PAGE-03B)로,
+ * 이미 연결된 계정(새 기기·웹 새로고침으로 동의 기록만 없는 경우)이면 홈으로 간다.
+ */
+const NEXT_ROUTE = HOME_ROUTE;
 
 const CLAUSES = [
   {
