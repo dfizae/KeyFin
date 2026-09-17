@@ -60,7 +60,7 @@ class BudgetControllerTest {
 	@Test
 	void createsProposalForAuthenticatedUser() throws Exception {
 		BudgetProposalResponse response = new BudgetProposalResponse(
-				11L, "202609", "PROPOSED", "최근 3개월 평균",
+				11L, "202609", "PROPOSED", "최근 3개월 평균 (2026-06-02~2026-09-01)",
 				List.of(new EnvelopeProposal(1, "외식", 121000, 120652)));
 		when(budgetService.propose(1L)).thenReturn(response);
 

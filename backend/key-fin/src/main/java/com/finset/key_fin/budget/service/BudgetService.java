@@ -74,8 +74,8 @@ public class BudgetService {
 			ORDER BY e.id
 			""";
 
-	private static final String FIRST_TX_DATE_SQL = """
-			SELECT MIN(tx_date) FROM transactions
+	private static final String TX_DATE_RANGE_SQL = """
+			SELECT MIN(tx_date) AS first_date, MAX(tx_date) AS last_date FROM transactions
 			WHERE user_id = :userId AND tx_date < :toDate
 			""";
 
@@ -92,7 +92,7 @@ public class BudgetService {
 	private static final int DAYS_PER_MONTH = 30;
 	private static final int DEFAULT_ANCHOR_DAY = 1;
 	private static final long AMOUNT_UNIT = 1_000L;
-	private static final String BASIS_RECENT_AVERAGE = "최근 %d개월 평균";
+	private static final String BASIS_RECENT_AVERAGE = "최근 %d개월 평균 (%s~%s)";
 	private static final String BASIS_DEFAULT_TEMPLATE = "기본 템플릿";
 	private static final Map<Integer, Long> DEFAULT_TEMPLATE = Map.of(
 			1, 600_000L,
@@ -119,18 +119,25 @@ public class BudgetService {
 			throw new BusinessException(BudgetErrorCode.BUDGET_ALREADY_EXISTS);
 		}
 
-		LocalDate windowStart = referenceDate.minusMonths(WINDOW_MONTHS);
+		// 마지막 거래일 기준 3개월 — 시딩·늦은 연결로 최근 구간이 비어 있어도 공백만큼 평균이 깎이지 않게 한다.
+		TxDateRange range = txDateRange(userId, referenceDate);
+		LocalDate windowEnd = range.lastDate() == null ? referenceDate : range.lastDate().plusDays(1);
+		LocalDate windowStart = windowEnd.minusMonths(WINDOW_MONTHS);
+		LocalDate coveredFrom = range.firstDate() == null || range.firstDate().isBefore(windowStart)
+				? windowStart : range.firstDate();
 		List<EnvelopeSpent> recentSpent = jdbc.sql(RECENT_SPENT_SQL)
 				.param("userId", userId)
 				.param("fromDate", windowStart)
-				.param("toDate", referenceDate)
+				.param("toDate", windowEnd)
 				.query((rs, rowNum) -> new EnvelopeSpent(
 						rs.getInt("envelope_id"),
 						rs.getString("envelope_name"),
 						rs.getLong("spent")))
 				.list();
 		boolean noHistory = recentSpent.stream().allMatch(spent -> spent.amount() == 0);
-		long coveredDays = noHistory ? MIN_COVERED_DAYS : coveredDays(userId, windowStart, referenceDate);
+		long coveredDays = noHistory
+				? MIN_COVERED_DAYS
+				: Math.max(MIN_COVERED_DAYS, ChronoUnit.DAYS.between(coveredFrom, windowEnd));
 
 		Budget budget = budgetRepository.save(
 				Budget.propose(userRepository.getReferenceById(userId), month));
@@ -152,7 +159,9 @@ public class BudgetService {
 				budget.getId(),
 				month,
 				budget.getStatus().name(),
-				noHistory ? BASIS_DEFAULT_TEMPLATE : BASIS_RECENT_AVERAGE.formatted(coveredMonthsLabel),
+				noHistory
+						? BASIS_DEFAULT_TEMPLATE
+						: BASIS_RECENT_AVERAGE.formatted(coveredMonthsLabel, coveredFrom, windowEnd.minusDays(1)),
 				proposals);
 	}
 
@@ -265,20 +274,21 @@ public class BudgetService {
 				.orElse(DEFAULT_ANCHOR_DAY);
 	}
 
-	private long coveredDays(long userId, LocalDate windowStart, LocalDate referenceDate) {
-		LocalDate firstTxDate = jdbc.sql(FIRST_TX_DATE_SQL)
+	private TxDateRange txDateRange(long userId, LocalDate referenceDate) {
+		return jdbc.sql(TX_DATE_RANGE_SQL)
 				.param("userId", userId)
 				.param("toDate", referenceDate)
-				.query(LocalDate.class)
-				.optional()
-				.orElse(referenceDate);
-		long windowDays = ChronoUnit.DAYS.between(windowStart, referenceDate);
-		long days = ChronoUnit.DAYS.between(firstTxDate, referenceDate);
-		return Math.max(MIN_COVERED_DAYS, Math.min(windowDays, days));
+				.query((rs, rowNum) -> new TxDateRange(
+						rs.getObject("first_date", LocalDate.class),
+						rs.getObject("last_date", LocalDate.class)))
+				.single();
 	}
 
 	private static long roundToThousand(long amount) {
 		return Math.round(amount / 1000.0) * 1000;
+	}
+
+	private record TxDateRange(LocalDate firstDate, LocalDate lastDate) {
 	}
 
 	private record EnvelopeSpent(int envelopeId, String name, long amount) {

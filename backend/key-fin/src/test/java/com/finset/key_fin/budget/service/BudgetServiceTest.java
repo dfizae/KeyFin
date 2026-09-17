@@ -35,13 +35,13 @@ class BudgetServiceTest extends SpringIntegrationTestSupport {
 	private BudgetEnvelopeRepository budgetEnvelopeRepository;
 
 	@Test
-	@DisplayName("요청 시점 기준 직전 3개월 순소비를 일수 비례 월평균으로 환산해 현재 주기에 봉투 7종 전부 제안한다")
+	@DisplayName("마지막 거래일 기준 직전 3개월 순소비를 일수 비례 월평균으로 환산해 현재 주기에 봉투 7종 전부 제안한다")
 	void proposeFromRecentAverage() {
 		BudgetProposalResponse response = budgetService.propose(USER_WITH_HISTORY);
 
 		assertThat(response.month()).isEqualTo("202609");
 		assertThat(response.status()).isEqualTo("PROPOSED");
-		assertThat(response.basis()).isEqualTo("최근 3개월 평균");
+		assertThat(response.basis()).isEqualTo("최근 3개월 평균 (2026-06-02~2026-09-01)");
 		assertThat(response.envelopes()).hasSize(7);
 
 		EnvelopeProposal dining = response.envelopes().get(0);
@@ -63,19 +63,20 @@ class BudgetServiceTest extends SpringIntegrationTestSupport {
 	void proposeFromShortHistory() {
 		BudgetProposalResponse response = budgetService.propose(USER_WITH_SHORT_HISTORY);
 
-		assertThat(response.basis()).isEqualTo("최근 1개월 평균");
+		assertThat(response.basis()).isEqualTo("최근 1개월 평균 (2026-08-15~2026-08-15)");
 		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(90000);
 		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(90000);
 	}
 
 	@Test
-	@DisplayName("기준일 25 사용자는 현재 주기 라벨이 전월(202608)이고, 부분 달 이력은 커버 일수에 비례해 환산한다")
+	@DisplayName("기준일 25 사용자는 현재 주기 라벨이 전월(202608)이고, 마지막 거래 이후 공백은 커버 일수에서 빠진다")
 	void proposeForAnchor25UserWithFractionalHistory() {
 		BudgetProposalResponse response = budgetService.propose(USER_WITH_ANCHOR_25);
 
 		assertThat(response.month()).isEqualTo("202608");
-		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(89610);
-		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(90000);
+		assertThat(response.basis()).isEqualTo("최근 1개월 평균 (2026-06-25~2026-08-01)");
+		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(181578);
+		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(182000);
 	}
 
 	@Test
