@@ -4,6 +4,8 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -65,5 +67,60 @@ class UserSettingsTest {
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(UserErrorCode.INVALID_TRANSFER_LIMIT));
+	}
+
+	@Test
+	void 알림과_방해금지_설정을_변경한다() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+
+		settings.updateNotificationSettings(
+				true, false, true, false,
+				LocalTime.of(23, 0), LocalTime.of(8, 0));
+
+		assertThat(settings.isNotiCoaching()).isTrue();
+		assertThat(settings.isNotiBudgetAlert()).isFalse();
+		assertThat(settings.isNotiTransfer()).isTrue();
+		assertThat(settings.isNotiCleanup()).isFalse();
+		assertThat(settings.getQuietHoursStart()).isEqualTo(LocalTime.of(23, 0));
+		assertThat(settings.getQuietHoursEnd()).isEqualTo(LocalTime.of(8, 0));
+	}
+
+	@Test
+	void 방해금지_시각을_모두_null로_설정하면_해제한다() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+		settings.updateNotificationSettings(
+				true, true, true, true,
+				LocalTime.of(23, 0), LocalTime.of(8, 0));
+
+		settings.updateNotificationSettings(true, true, true, true, null, null);
+
+		assertThat(settings.getQuietHoursStart()).isNull();
+		assertThat(settings.getQuietHoursEnd()).isNull();
+	}
+
+	@Test
+	void 방해금지_시각을_하나만_입력하면_거절한다() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+
+		assertThatThrownBy(() -> settings.updateNotificationSettings(
+				true, true, true, true, LocalTime.of(23, 0), null))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(UserErrorCode.INVALID_QUIET_HOURS));
+	}
+
+	@Test
+	void 방해금지_시작과_종료가_같으면_거절한다() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+
+		assertThatThrownBy(() -> settings.updateNotificationSettings(
+				true, true, true, true, LocalTime.of(23, 0), LocalTime.of(23, 0)))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(UserErrorCode.INVALID_QUIET_HOURS));
 	}
 }
