@@ -27,6 +27,7 @@ class BudgetServiceTest extends SpringIntegrationTestSupport {
 	private static final long USER_WITHOUT_HISTORY = 996L;
 	private static final long USER_WITH_SHORT_HISTORY = 995L;
 	private static final long USER_WITH_ANCHOR_25 = 994L;
+	private static final long USER_WITH_SEEDED_GAP = 988L;
 
 	@Autowired
 	private BudgetService budgetService;
@@ -77,6 +78,17 @@ class BudgetServiceTest extends SpringIntegrationTestSupport {
 		assertThat(response.basis()).isEqualTo("최근 1개월 평균 (2026-06-25~2026-08-01)");
 		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(181578);
 		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(182000);
+	}
+
+	@Test
+	@DisplayName("시딩처럼 최근 구간이 비어 있으면 마지막 거래일까지의 3개월을 그대로 써서 공백만큼 평균이 깎이지 않는다")
+	void proposeUsesLatestTransactionWindow() {
+		BudgetProposalResponse response = budgetService.propose(USER_WITH_SEEDED_GAP);
+
+		assertThat(response.month()).isEqualTo("202609");
+		assertThat(response.basis()).isEqualTo("최근 3개월 평균 (2026-06-01~2026-08-31)");
+		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(97826);
+		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(98000);
 	}
 
 	@Test
