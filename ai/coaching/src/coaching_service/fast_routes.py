@@ -244,6 +244,135 @@ def natural_what_if(question: str) -> NaturalWhatIf | None:
     return NaturalWhatIf(reduction=reduction / 100, envelope=next(iter(envelopes), None))
 
 
+@dataclass(frozen=True, slots=True)
+class NaturalPurchase:
+    """One explicit lump-sum purchase suitable for a single FDT ``expense`` change.
+
+    This is a Phase 1 shortcut for a single-payment (cash or one-time deferred
+    card) purchase question only. It never infers an account, card, envelope,
+    or calendar date the text does not clearly state, and it never represents
+    a multi-installment purchase. ``payment_hint`` is ``None`` when the text
+    itself does not name cash or card; the caller must then resolve payment
+    only when the user's Twin snapshot has exactly one possible account/card,
+    never by guessing among several.
+    """
+
+    amount_krw: int
+    envelope: str
+    date_token: str
+    payment_hint: Literal["cash", "card"] | None
+    card_payment_date: str | None
+
+
+# Clarification is required, never a guess, whenever one of these fields is
+# missing or ambiguous. Reusing the same small code set as the calendar
+# parser's ``period_clarification_required`` keeps the wire contract uniform:
+# a 4xx code, not a fabricated financial answer.
+_PURCHASE_VERB: Final = re.compile(
+    r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|"
+    r"지르면|질러도|지르려고|구입하면|구입해서"
+)
+_PURCHASE_INSTALLMENT: Final = re.compile(r"할부")
+_PURCHASE_AMOUNT: Final = re.compile(
+    r"(?<![\d,.])(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+))(?P<unit>만원|원)"
+)
+_PURCHASE_DATE_TOMORROW: Final = re.compile(r"내일")
+_PURCHASE_DATE_THIS_WEEK: Final = re.compile(r"이번주")
+_PURCHASE_DATE_TODAY: Final = re.compile(r"오늘")
+_PURCHASE_DATE_ISO: Final = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2})")
+_PURCHASE_CARD: Final = re.compile(r"(?<!체크)카드")
+_PURCHASE_CASH: Final = re.compile(r"현금|계좌|통장|이체|체크카드")
+_PURCHASE_PAYMENT_DATE: Final = re.compile(
+    r"(?:결제일|카드값|출금)\D{0,10}(?P<date>\d{4}-\d{2}-\d{2})"
+    r"|(?P<date2>\d{4}-\d{2}-\d{2})\D{0,10}(?:결제|출금)"
+)
+_PURCHASE_ENVELOPE_ALIASES: Final[dict[str, str]] = {
+    "노트북": "기타", "랩탑": "기타", "맥북": "기타", "폰": "기타", "휴대폰": "기타",
+    "스마트폰": "기타", "아이폰": "기타", "갤럭시": "기타", "태블릿": "기타", "아이패드": "기타",
+    "가전": "기타", "전자제품": "기타", "카메라": "기타",
+    "옷": "쇼핑", "신발": "쇼핑", "가방": "쇼핑", "의류": "쇼핑",
+}
+
+
+def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clarify-vs-admit boundary.
+    question: str,
+) -> NaturalPurchase | str | None:
+    """Admit one clear, single-payment Korean purchase question without a model call.
+
+    Returns ``None`` when the text shows no clear purchase intent at all (the
+    caller must keep its existing finance/out-of-scope routing). Returns one of
+    the ``purchase_*_required``/``purchase_installment_unsupported`` codes when
+    purchase intent is clear but a required field is missing, ambiguous, or out
+    of the supported single-payment scope; the caller must surface this as a
+    clarification, never as a guessed expense change. Returns ``NaturalPurchase``
+    only when amount, item envelope, and purchase date are all unambiguous from
+    the text alone. Account/card selection may still need the caller's Twin
+    snapshot and can still fail closed there.
+    """
+    normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
+    if not normalized or _PURCHASE_VERB.search(normalized) is None:
+        return None
+    if _PURCHASE_INSTALLMENT.search(normalized) is not None:
+        # Multi-installment purchases need a payment schedule the FDT contract
+        # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).
+        return "purchase_installment_unsupported"
+    amounts = tuple(_PURCHASE_AMOUNT.finditer(normalized))
+    if len(amounts) != 1:
+        return "purchase_amount_required"
+    try:
+        amount = int(amounts[0].group("amount").replace(",", ""))
+    except ValueError:
+        return "purchase_amount_required"
+    amount_krw = amount * 10_000 if amounts[0].group("unit") == "만원" else amount
+    if not 0 < amount_krw <= _MAX_NATURAL_GOAL_KRW:
+        return "purchase_amount_required"
+    envelopes = {
+        envelope for alias, envelope in _PURCHASE_ENVELOPE_ALIASES.items() if alias in normalized
+    }
+    if len(envelopes) != 1:
+        return "purchase_envelope_required"
+    is_card = _PURCHASE_CARD.search(normalized) is not None
+    is_cash = _PURCHASE_CASH.search(normalized) is not None
+    if is_card and is_cash:
+        return "purchase_payment_method_required"
+    payment_hint: Literal["cash", "card"] | None = "card" if is_card else "cash" if is_cash else None
+    card_payment_date: str | None = None
+    if payment_hint == "card":
+        payment_match = _PURCHASE_PAYMENT_DATE.search(normalized)
+        if payment_match is None:
+            # A card purchase without its own real payment date would silently
+            # treat the purchase date as the settlement date, which the vendor
+            # contract explicitly forbids (see coaching_contract.py card rule).
+            return "purchase_payment_method_required"
+        card_payment_date = payment_match.group("date") or payment_match.group("date2")
+    date_token = _purchase_date_token(normalized, exclude=card_payment_date)
+    if date_token is None:
+        return "purchase_date_required"
+    return NaturalPurchase(
+        amount_krw=amount_krw,
+        envelope=next(iter(envelopes)),
+        date_token=date_token,
+        payment_hint=payment_hint,
+        card_payment_date=card_payment_date,
+    )
+
+
+def _purchase_date_token(normalized: str, *, exclude: str | None) -> str | None:
+    """Resolve only the four calendar expressions the spec admits, never a guess."""
+    if _PURCHASE_DATE_TOMORROW.search(normalized) is not None:
+        return "tomorrow"
+    if _PURCHASE_DATE_THIS_WEEK.search(normalized) is not None:
+        return "this_week"
+    if _PURCHASE_DATE_TODAY.search(normalized) is not None:
+        return "today"
+    dates = [match.group("date") for match in _PURCHASE_DATE_ISO.finditer(normalized)]
+    if exclude is not None:
+        dates = [found for found in dates if found != exclude]
+    if len(dates) != 1:
+        return None
+    return dates[0]
+
+
 # Model-free only for the twin/FDT-backed topics: an insurance, income,
 # fixed-cost, or goal question resolves against the separately submitted
 # personal-context profile, which is optional and far less established than the

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from hashlib import sha256
 from math import isfinite
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, TypeAlias
+from typing import TYPE_CHECKING, Annotated, ClassVar, Final, Literal, TypeAlias
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError, model_validator
 
@@ -492,6 +492,54 @@ def _matches_receipt(result: ParsedResult, receipt: Receipt) -> bool:
 def _ensure_receipt_match(result: ParsedResult, receipt: Receipt) -> None:
     if not _matches_receipt(result, receipt):
         raise ValueError("numeric result does not belong to this receipt")
+
+
+_PURCHASE_RISK: Final = "구매 후 예측상 예산을 넘겨 이번 기간이 어려울 수 있어요."
+_PURCHASE_OK: Final = "예측상 예산 안에 들어와 괜찮아요."
+
+
+def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: PLR0911 - each shape guard is one explicit fail-closed boundary.
+    """Render one binary purchase verdict, reusing the review engine's own shortfall signal.
+
+    No new probability threshold is invented here. A ``changes:[expense]``
+    review already computes a paired ``baseline`` vs ``planned`` projection
+    (``vendor/fdt/coaching.py`` ``Coach.review``); this only asks whether the
+    planned branch's existing ``period_account_shortfall`` fraction newly
+    appears or grows versus baseline, and reads back the already-computed
+    quantile facts. Returns ``[]`` whenever this receipt has no purchase
+    change or the expected comparison shape is absent, so a non-purchase
+    review is completely unaffected.
+    """
+    changes = receipt.request.root.get("changes")
+    if not isinstance(changes, list) or not changes:
+        return []
+    comparison = receipt.result.root.get("comparison")
+    if not isinstance(comparison, dict):
+        return []
+    baseline, planned = comparison.get("baseline"), comparison.get("planned")
+    if not isinstance(baseline, dict) or not isinstance(planned, dict):
+        return []
+    baseline_cash, planned_cash = baseline.get("cash"), planned.get("cash")
+    if not isinstance(baseline_cash, dict) or not isinstance(planned_cash, dict):
+        return []
+    baseline_shortfall = baseline_cash.get("period_account_shortfall")
+    planned_shortfall = planned_cash.get("period_account_shortfall")
+    if not isinstance(baseline_shortfall, dict) or not isinstance(planned_shortfall, dict):
+        return []
+    baseline_fraction = baseline_shortfall.get("fraction")
+    planned_fraction = planned_shortfall.get("fraction")
+    if isinstance(baseline_fraction, bool) or isinstance(planned_fraction, bool):
+        return []
+    if not isinstance(baseline_fraction, (int, float)) or not isinstance(planned_fraction, (int, float)):
+        return []
+    pieces = [_PURCHASE_RISK if planned_fraction > 0 else _PURCHASE_OK]
+    terminal = planned_cash.get("terminal_balance")
+    if isinstance(terminal, dict):
+        p50 = terminal.get("p50_krw")
+        if isinstance(p50, int) and not isinstance(p50, bool):
+            pieces.append(f"구매 후 기간말 예상 현금 P50은 {p50:,}원입니다.")
+    pieces.append("부족 예측 있음." if planned_fraction > 0 else "부족 예측 없음.")
+    return pieces
 
 
 def numeric_text(receipt: Receipt) -> list[str]:

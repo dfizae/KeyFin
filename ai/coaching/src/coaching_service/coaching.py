@@ -12,6 +12,7 @@ from coaching_service.engine import ENGINE_COMMIT, EngineAdapter
 from coaching_service.evidence import LIMITED_CONTEXT, bounded_evidence, context_limited
 from coaching_service.llm_contract import EvidenceInput, Judgment, Routing, Wording
 from coaching_service.llm_prompt import TEMPLATE_TEXT
+from coaching_service.numeric_rendering import purchase_verdict_text
 from coaching_service.periods import ResolvedPeriod, ThroughDate, resolve_period
 from coaching_service.rendering import authoritative_text
 from coaching_service.repository import Repository, write
@@ -139,7 +140,7 @@ class CoachingCore:
         근거가 한도를 넘거나 문장을 채택하지 못해도 금융 결과를 바꾸지 않는다.
         대체 문구의 출처·원인은 응답에 남겨 실제 모델 성공과 구분한다.
         """
-        answer_text = authoritative_text(receipt)
+        answer_text = "\n".join([authoritative_text(receipt), *purchase_verdict_text(receipt)])
         receipt_wording = authoritative_fdt_wording(receipt)
         if receipt_wording is not None:
             wording = receipt_wording

@@ -1,7 +1,7 @@
 """Owner-bound sessions with engine tools and durable, idempotent turns."""
 
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import assert_never
 from uuid import uuid4
 from zoneinfo import ZoneInfo
@@ -21,10 +21,12 @@ from coaching_service.errors import ServiceError
 from coaching_service.evidence import LIMITED_CONTEXT, bounded_evidence, context_limited
 from coaching_service.fast_routes import (
     NaturalGoal,
+    NaturalPurchase,
     NaturalWhatIf,
     deterministic_analysis_route,
     deterministic_lookup_route,
     natural_goal,
+    natural_purchase,
     natural_what_if,
     stored_coaching_followup,
 )
@@ -92,6 +94,70 @@ def turn_numeric_request(
             {"mode": route.mode, "horizon_days": horizon_days, "paths": 100, "seed": 42}
         )
     return None
+
+
+def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit fail-closed payment boundary.
+    purchase: NaturalPurchase, twin: JsonDocument, reference: date
+) -> JsonDocument:
+    """Turn one text-admitted purchase into a single vendor ``expense`` change.
+
+    The text parser never knows which account or card the change belongs to;
+    it only names cash/card when the user said so. This still refuses to guess
+    among several real candidates, and it still refuses a card purchase with no
+    real settlement account. A resolved account/card is the last gate before
+    the FDT vendor's own ``validate_change`` (``coaching_contract.py``).
+    """
+    snapshot = twin.root.get("snapshot")
+    raw_accounts = snapshot.get("accounts") if isinstance(snapshot, dict) else None
+    raw_cards = snapshot.get("cards") if isinstance(snapshot, dict) else None
+    accounts = raw_accounts if isinstance(raw_accounts, list) else []
+    cards = raw_cards if isinstance(raw_cards, list) else []
+    match purchase.payment_hint:
+        case "cash":
+            use_card = False
+        case "card":
+            use_card = True
+        case None:
+            # Unspecified in the prose is only safe when exactly one real
+            # payment source exists at all; two or more is genuine ambiguity.
+            if len(accounts) + len(cards) != 1:
+                raise ServiceError("purchase_payment_method_required")
+            use_card = len(cards) == 1
+    if use_card and purchase.card_payment_date is None:
+        raise ServiceError("purchase_payment_method_required")
+    if purchase.date_token == "today":  # noqa: S105 - a calendar token, not a credential.
+        purchase_date = reference
+    elif purchase.date_token == "tomorrow":  # noqa: S105 - a calendar token, not a credential.
+        purchase_date = reference + timedelta(days=1)
+    elif purchase.date_token == "this_week":  # noqa: S105 - a calendar token, not a credential.
+        purchase_date = reference
+    else:
+        try:
+            purchase_date = date.fromisoformat(purchase.date_token)
+        except ValueError:
+            raise ServiceError("purchase_date_required") from None
+    change: dict[str, object] = {
+        "kind": "expense",
+        "date": purchase_date.isoformat(),
+        "amount_krw": purchase.amount_krw,
+        "envelope": purchase.envelope,
+    }
+    if use_card:
+        if len(cards) != 1 or not isinstance(cards[0], dict):
+            raise ServiceError("purchase_payment_method_required")
+        card_id = cards[0].get("card_id")
+        if not isinstance(card_id, str):
+            raise ServiceError("purchase_payment_method_required")
+        change["card_id"] = card_id
+        change["payment_date"] = purchase.card_payment_date
+    else:
+        if len(accounts) != 1 or not isinstance(accounts[0], dict):
+            raise ServiceError("purchase_payment_method_required")
+        account_id = accounts[0].get("account_id")
+        if not isinstance(account_id, str):
+            raise ServiceError("purchase_payment_method_required")
+        change["account_id"] = account_id
+    return JsonDocument(change)
 
 
 def chat_history(session: Session, *, include_subject: bool = False) -> tuple[ChatMessage, ...]:
@@ -204,7 +270,9 @@ class Dialogue:
             raise ServiceError("session_turn_limit", 409)
         return session
 
-    async def turn(self, op: Operation, session_id: str, request: TurnRequest) -> JsonDocument:
+    async def turn(  # noqa: C901 - one durable turn orchestrates every admitted no-model shortcut in sequence.
+        self, op: Operation, session_id: str, request: TurnRequest
+    ) -> JsonDocument:
         async def action() -> Mutation:
             session = await self.active_session(op.owner, session_id)
             history = chat_history(session)
@@ -214,8 +282,17 @@ class Dialogue:
             # analysis from an admitted natural-language shortcut.
             parsed_goal = natural_goal(request.question) if request.analysis is None else None
             parsed_what_if = natural_what_if(request.question) if request.analysis is None else None
+            # A purchase clarification is raised immediately, exactly like
+            # ``period_clarification_required``: a 4xx code, before any session
+            # mutation, twin load, or model call, never a guessed expense.
+            parsed_purchase_outcome = natural_purchase(request.question) if request.analysis is None else None
+            if isinstance(parsed_purchase_outcome, str):
+                raise ServiceError(parsed_purchase_outcome)
+            parsed_purchase: NaturalPurchase | None = (
+                parsed_purchase_outcome if isinstance(parsed_purchase_outcome, NaturalPurchase) else None
+            )
             route, finance = await self._route_for_turn(
-                request, session, history, parsed_goal, parsed_what_if,
+                request, session, history, parsed_goal, parsed_what_if, parsed_purchase,
             )
             standalone = await self.standalone_answer(
                 op.owner, request, route,
@@ -316,12 +393,16 @@ class Dialogue:
                     twin, identity, numeric_request, period, replay=reference != today
                 )
             else:
+                changes: tuple[JsonDocument, ...] = ()
+                if parsed_purchase is not None:
+                    changes = (resolve_purchase_change(parsed_purchase, twin, reference),)
                 receipt = await self.core.receipt(
                     twin,
                     ReviewRequest(
                         on_date=reference,
                         through_date=period.forecast_end,
                         replay=reference != today,
+                        changes=changes,
                     ),
                 )
             receipt = receipt.model_copy(
@@ -350,13 +431,14 @@ class Dialogue:
 
         return await self.core.repository.mutate(op, action)
 
-    async def _route_for_turn(
+    async def _route_for_turn(  # noqa: PLR0911, PLR0913, PLR0917 - each admitted no-model shortcut is one explicit route boundary.
         self,
         request: TurnRequest,
         session: Session,
         history: tuple[ChatMessage, ...],
         parsed_goal: NaturalGoal | None,
         parsed_what_if: NaturalWhatIf | None,
+        parsed_purchase: NaturalPurchase | None = None,
     ) -> tuple[Routing, FinanceWording | None]:
         """Choose a route without changing the established FDT/numeric validation path."""
         if (
@@ -389,6 +471,11 @@ class Dialogue:
             # This narrow grammar chooses only an unambiguous personal FDT mode.  Calculation,
             # period validation, and final grounded wording still use the existing path below.
             return Routing(mode=direct_route, source="template"), None
+        if parsed_purchase is not None:
+            # A purchase change rides the same "review" route as any other
+            # engine.review call; it is checked last so it can never pre-empt
+            # an existing forecast/risk/personal-review/lookup grammar above.
+            return Routing(mode="review", source="template"), None
         return await self._route_or_direct_finance(request, session, history)
 
     async def _explicit_analysis_route(
