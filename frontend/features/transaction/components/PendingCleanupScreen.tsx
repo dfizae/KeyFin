@@ -128,7 +128,7 @@ function PendingCard({ transaction, isPending, errorMessage, onConfirm, onOther 
   const confirmLabel = transaction.subcategoryName === null ? null : `${transaction.subcategoryName} 확정`;
 
   return (
-    <View className="gap-3 rounded-2xl bg-card p-5 shadow-sm shadow-black/5 dark:border dark:border-border dark:shadow-none">
+    <View className="gap-3 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1 gap-1">
           <Text className="text-h3 text-foreground" numberOfLines={1}>

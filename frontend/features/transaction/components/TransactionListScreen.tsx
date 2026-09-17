@@ -61,6 +61,7 @@ function TransactionListScreen() {
         />
       ) : (
         <ScreenFlatList
+          overlapHeader={false}
           data={items}
           keyExtractor={(transaction) => String(transaction.id)}
           renderItem={({ item }) => (

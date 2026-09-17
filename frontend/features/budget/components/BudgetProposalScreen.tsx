@@ -172,12 +172,13 @@ function ProposalForm({ budget, analysis, confirm, nextRoute }: ProposalFormProp
 
   return (
     <View className="flex-1">
-      <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-5 pb-6">
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pb-6">
         <Text className="text-body-sm text-card-foreground">{BASIS_DESCRIPTION[kind]}</Text>
 
-        <View className="gap-1.5">
+        {/* Pencil PAGE-07 예산 제안 (g1fhiV) 의 TotalCard: 흰 카드 안에 총 예산 · 근거 한 줄 (2026-09-17) */}
+        <View className="gap-1 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
           <Text className="text-label text-card-foreground">{period} 총 예산</Text>
-          <CountUpAmount value={total} className="text-amount-lg tabular-nums text-foreground" />
+          <CountUpAmount value={total} className="text-amount-md tabular-nums text-foreground" />
           <Text className="text-caption tabular-nums text-card-foreground">{summary}</Text>
         </View>
 

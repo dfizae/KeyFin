@@ -238,10 +238,10 @@ type TransferSummaryProps = {
   accounts: LinkedAccount[] | undefined;
 };
 
-// Pencil 이체 승인 · 카드 정리 대안 (o8TlhF): 카드 없이 금액이 본문에 바로 놓인다.
+// Pencil PAGE-25 이체 승인 (t1kTHP) 의 Card / Summary: 흰 카드 안에 출금일·목적 · 준비할 금액 · 계좌 흐름 (2026-09-17 사용자 결정 — o8TlhF 의 카드 없는 안에서 되돌림).
 function TransferSummary({ transfer, accounts }: TransferSummaryProps) {
   return (
-    <View className="gap-4 pb-1 pt-3">
+    <View className="gap-4 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
       <View className="gap-1">
         <Text className="text-caption text-card-foreground">
           {formatMonthDay(parseKSTDateKey(transfer.dueDate))} 출금 · {transfer.purposeName}

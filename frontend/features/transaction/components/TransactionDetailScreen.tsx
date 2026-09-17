@@ -1,9 +1,10 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, CircleAlert, CircleHelp, Receipt } from "lucide-react-native";
+import { CircleAlert, CircleHelp, Receipt } from "lucide-react-native";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
@@ -80,7 +81,7 @@ function TransactionDetailScreen({ transactionId }: TransactionDetailScreenProps
         />
       ) : (
         <>
-          <ScreenScrollView contentContainerClassName="gap-10 px-6 pb-10">
+          <ScreenScrollView contentContainerClassName="gap-5 px-6 pb-10">
             <AmountSummary transaction={transaction} />
             <ClassificationList
               transaction={transaction}
@@ -113,11 +114,11 @@ function AmountSummary({ transaction }: AmountSummaryProps) {
     ? formatKRW(transaction.amount, { sign: "always" })
     : formatKRW(subtractKRW("0", transaction.amount));
 
-  // 영수증처럼 가맹점·금액·일시를 가운데 모은다. 카드 없이 금액이 화면에서 가장 크다.
+  // Pencil PAGE-21 거래 상세 (AyD8V) 의 Card / Amount: 흰 카드 안에 가맹점 · 금액 · 일시 (2026-09-17 — od8Jc 의 카드 없는 안에서 되돌림).
   return (
-    <View className="items-center gap-1.5 pb-2 pt-4">
+    <View className="gap-2 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
       <View className="flex-row items-center gap-2">
-        <Text className="shrink text-center text-label text-card-foreground" numberOfLines={2}>
+        <Text className="shrink text-h2 text-foreground" numberOfLines={2}>
           {merchantLabel(transaction)}
         </Text>
         {badge === null ? null : (
@@ -148,23 +149,15 @@ type ClassificationListProps = {
   onReclassify: () => void;
 };
 
-// 구분선 목록. 봉투 행이 곧 '분류 바꾸기'라 별도 버튼이 없다.
+// Pencil AyD8V 의 Card / Classification: 흰 카드 안에 봉투 행 · 거래 종류(·메모) · '분류 바꾸기' 버튼.
 function ClassificationList({ transaction, isPending, errorMessage, onReclassify }: ClassificationListProps) {
   const blockedReason = reclassifyBlockedReason(transaction);
   const status = confirmStatusLabel(transaction);
   const disabled = blockedReason !== null || isPending;
 
   return (
-    <View>
-      <Pressable
-        className="flex-row items-center gap-3 border-b border-border py-3.5"
-        accessibilityRole="button"
-        accessibilityLabel="분류 바꾸기"
-        accessibilityHint={blockedReason ?? undefined}
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={onReclassify}
-      >
+    <View className="gap-4 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
+      <View className="flex-row items-center gap-3">
         {transaction.envelopeId === null ? (
           <View className="h-icon-tile w-icon-tile items-center justify-center rounded-md bg-muted">
             <Icon as={CircleHelp} size={20} className="text-card-foreground" />
@@ -179,15 +172,26 @@ function ClassificationList({ transaction, isPending, errorMessage, onReclassify
           <Text className="text-caption text-card-foreground">{transactionCategoryLabel(transaction)}</Text>
         </View>
         <Text className="text-caption text-card-foreground">{isPending ? "저장 중" : status}</Text>
-        {blockedReason === null ? <Icon as={ChevronRight} size={18} className="text-card-foreground" /> : null}
-      </Pressable>
+      </View>
 
       <DetailRow label="거래 종류" value={txTypeLabel(transaction)} />
       {transaction.memo === null ? null : <DetailRow label="메모" value={transaction.memo} />}
 
-      {blockedReason === null ? null : <Text className="pt-3 text-caption text-card-foreground">{blockedReason}</Text>}
+      <Button
+        variant="outline"
+        className="h-button-md rounded-lg"
+        disabled={disabled}
+        accessibilityLabel="분류 바꾸기"
+        accessibilityHint={blockedReason ?? undefined}
+        accessibilityState={{ disabled }}
+        onPress={onReclassify}
+      >
+        <Text>분류 바꾸기</Text>
+      </Button>
+
+      {blockedReason === null ? null : <Text className="text-caption text-card-foreground">{blockedReason}</Text>}
       {errorMessage === null ? null : (
-        <View className="flex-row items-center gap-1.5 pt-3" accessibilityLiveRegion="polite">
+        <View className="flex-row items-center gap-1.5" accessibilityLiveRegion="polite">
           <Icon as={CircleAlert} size={16} className="text-destructive" />
           <Text className="shrink text-caption text-destructive">{errorMessage}</Text>
         </View>
@@ -200,7 +204,7 @@ type DetailRowProps = { label: string; value: string };
 
 function DetailRow({ label, value }: DetailRowProps) {
   return (
-    <View className="flex-row items-start justify-between gap-3 border-b border-border py-3.5">
+    <View className="flex-row items-center justify-between gap-3">
       <Text className="text-caption text-card-foreground">{label}</Text>
       <Text className="shrink text-body-sm text-foreground">{value}</Text>
     </View>
