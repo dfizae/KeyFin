@@ -55,7 +55,8 @@ def _catalog_component_terms(values: tuple[str, ...]) -> frozenset[str]:
     """
     terms: set[str] = set()
     for raw in values:
-        for part in re.findall(r"[A-Za-z0-9]+|[가-힣]{2,}", raw):
+        parts: list[str] = re.findall(r"[A-Za-z0-9]+|[가-힣]{2,}", raw)
+        for part in parts:
             term = compact(part)
             if term and len(term) >= 2:
                 # Source labels can include an attached Korean particle, such
@@ -674,7 +675,7 @@ def _narrative_conjoined_subjects_are_covered(
     """
     match = _NARRATIVE_CONCEPT_REQUEST.search(question)
     prefix = question[: match.start()] if match is not None else question
-    allowed = frozenset().union(*(_COMPONENTS[fact.id] for fact in selected))
+    allowed: frozenset[str] = frozenset[str]().union(*(_COMPONENTS[fact.id] for fact in selected))
     tokens = prefix.split()
     for index, token in enumerate(tokens):
         if _CONJUNCTION.search(token) is None:

@@ -407,8 +407,7 @@ def _what_if(result: WhatIfResult) -> list[str]:
     if isinstance(reductions, dict) and len(reductions) == 1:
         envelope, fraction = next(iter(reductions.items()))
         if (
-            isinstance(envelope, str)
-            and isinstance(fraction, (int, float))
+            isinstance(fraction, (int, float))
             and not isinstance(fraction, bool)
             and 0 < fraction < 1
         ):

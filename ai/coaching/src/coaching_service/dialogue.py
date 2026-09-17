@@ -2,7 +2,7 @@
 
 import time
 from datetime import date, datetime, timedelta
-from typing import assert_never
+from typing import TYPE_CHECKING, assert_never
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -56,6 +56,9 @@ from coaching_service.schemas import (
 )
 from coaching_service.spending_history import spending_answer
 from coaching_service.store import Operation
+
+if TYPE_CHECKING:
+    from pydantic import JsonValue
 
 
 def turn_numeric_request(
@@ -136,7 +139,7 @@ def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit
             purchase_date = date.fromisoformat(purchase.date_token)
         except ValueError:
             raise ServiceError("purchase_date_required") from None
-    change: dict[str, object] = {
+    change: dict[str, JsonValue] = {
         "kind": "expense",
         "date": purchase_date.isoformat(),
         "amount_krw": purchase.amount_krw,
