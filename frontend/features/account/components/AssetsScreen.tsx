@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { CreditCard, Menu, Receipt, WalletMinimal } from "lucide-react-native";
+import { ChevronRight, CreditCard, Menu, Receipt, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View } from "react-native";
 
@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils";
 
 const TRANSACTIONS_ROUTE = "/transaction";
 const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
+/** 카드 청구 상세(PAGE-33, P1). 카드 행을 누르면 간다 */
+const CARD_BILLING_ROUTE = "/payment/card-billing";
 /** 수입 계좌 변경(IncomeAccountScreen 변경 모드). 온보딩 뒤 수입 계좌를 바꾸는 유일한 앱 내 진입점 (Pencil AMSKF, 2026-09-16) */
 const INCOME_ACCOUNT_ROUTE = "/account/income";
 
@@ -171,7 +173,9 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
 
 // 카드 이름·번호를 주는 API 가 없어 금융망 후보의 연결 카드를 쓰고, 금액은 GET /cards/billings 로 채운다(cardId 로 잇는다).
 // 둘 다 이 섹션이 보일 때만 부른다. 청구 조회가 실패해도 카드 목록은 그대로 두고 금액 줄만 빠진다.
+// 카드 행은 청구 요약이 없어도 눌러서 카드 청구 상세(PAGE-33)로 간다.
 function CardSection() {
+  const router = useRouter();
   const candidates = useLinkCandidates();
   const billings = useCardBillings();
 
@@ -179,33 +183,53 @@ function CardSection() {
   if (candidates.isError) {
     return <CandidatesErrorState error={candidates.error} retrying={candidates.isFetching} onRetry={() => candidates.refetch()} />;
   }
-  return <CardList cards={linkedCards(candidates.data)} billings={billings.data} />;
+  return (
+    <CardList
+      cards={linkedCards(candidates.data)}
+      billings={billings.data}
+      onOpen={(cardId) => router.push(`${CARD_BILLING_ROUTE}/${cardId}`)}
+    />
+  );
 }
 
-function CardList({ cards, billings }: { cards: LinkedCard[]; billings: CardBillings | undefined }) {
+type CardListProps = {
+  cards: LinkedCard[];
+  billings: CardBillings | undefined;
+  onOpen: (cardId: number) => void;
+};
+
+function CardList({ cards, billings, onOpen }: CardListProps) {
   if (cards.length === 0) {
     return <EmptyState icon={CreditCard} title="연결된 카드가 없어요" className="py-6" />;
   }
   return (
     <View className="gap-2">
       {cards.map((card) => (
-        <CardRow key={card.cardId} card={card} billing={findCardBilling(billings, card.cardId)} />
+        <CardRow key={card.cardId} card={card} billing={findCardBilling(billings, card.cardId)} onPress={() => onOpen(card.cardId)} />
       ))}
     </View>
   );
 }
 
-function CardRow({ card, billing }: { card: LinkedCard; billing: CardBilling | null }) {
+type CardRowProps = {
+  card: LinkedCard;
+  billing: CardBilling | null;
+  onPress: () => void;
+};
+
+function CardRow({ card, billing, onPress }: CardRowProps) {
   const estimated = billing === null ? null : `이번 주 ${formatKRW(billing.estimatedAmount)}`;
   const unpaid = billing?.statement?.status === "UNPAID" ? billing.statement : null;
 
   return (
-    <View
-      className="flex-row items-center gap-3 rounded-lg bg-card p-4 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
-      accessible
+    <Pressable
+      className="flex-row items-center gap-3 rounded-lg bg-card p-4 active:opacity-70 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
+      accessibilityRole="button"
       accessibilityLabel={[`${card.cardName} ${card.issuerName} ${card.maskedNo}`, estimated, unpaidLabel(unpaid)]
         .filter(Boolean)
         .join(", ")}
+      accessibilityHint="카드 청구 내역을 봅니다"
+      onPress={onPress}
     >
       <BankLogoTile name={card.issuerName} />
       <View className="flex-1 gap-0.5">
@@ -226,7 +250,8 @@ function CardRow({ card, billing }: { card: LinkedCard; billing: CardBilling | n
           </Text>
         </View>
       )}
-    </View>
+      <Icon as={ChevronRight} size={18} className="text-card-foreground" />
+    </Pressable>
   );
 }
 

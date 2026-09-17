@@ -1,4 +1,5 @@
 import { ContractMismatchError } from "@/lib/contract";
+import { formatMonthDay, formatMonthKeyLabel, getKSTParts, KST_LOCAL_DATE_TIME, parseKSTDateKey } from "@/lib/date";
 import { formatKRW, fromServerWon, toWon, type KRW } from "@/lib/money";
 
 /**
@@ -164,18 +165,19 @@ export function toCardBillings(dto: CardBillingsDto): CardBillings {
       estimatedAmount: won(card.estimated.amount, "estimated.amount"),
       approvalCount: card.estimated.approvalCount,
       estimatedWithdrawalDate: card.estimated.withdrawalDate,
-      statement:
-        card.latestStatement === null
-          ? null
-          : {
-              billingId: card.latestStatement.billingId,
-              billingDate: card.latestStatement.billingDate,
-              amount: won(card.latestStatement.amount, "latestStatement.amount"),
-              status: pickStatus(card.latestStatement.status),
-              withdrawalDate: card.latestStatement.withdrawalDate,
-              paidAt: card.latestStatement.paidAt,
-            },
+      statement: card.latestStatement === null ? null : toStatement(card.latestStatement, "latestStatement"),
     })),
+  };
+}
+
+function toStatement(dto: CardBillingStatementDto, field: string): CardBillingStatement {
+  return {
+    billingId: dto.billingId,
+    billingDate: dto.billingDate,
+    amount: won(dto.amount, `${field}.amount`),
+    status: pickStatus(dto.status),
+    withdrawalDate: dto.withdrawalDate,
+    paidAt: dto.paidAt,
   };
 }
 
@@ -186,6 +188,177 @@ function pickStatus(raw: string): BillingStatus {
 /** 카드 한 장의 청구 요약. 아직 동기화 전이면 null 이라 화면이 금액 줄을 생략한다 */
 export function findCardBilling(billings: CardBillings | undefined, cardId: number): CardBilling | null {
   return billings?.cards.find((card) => card.cardId === cardId) ?? null;
+}
+
+/* ───────────── 서버 계약: GET /cards/{cardId}/billings (백엔드 develop CardBillingController, 2026-09-17 대조) ───────────── */
+
+/** 이번 주기 예정액의 근거가 된 승인 한 건. 최신순이고 취소 거래는 서버가 뺀다. merchantName 은 거래 원문이다 */
+export type CardBillingApprovalDto = {
+  transactionId: number;
+  date: string;
+  merchantName: string;
+  amount: number;
+};
+
+export type CardBillingDetailDto = {
+  asOf: string;
+  cycleFrom: string;
+  /** 이번 주기 승인이 청구서로 발행되는 다음 월요일 */
+  nextBillingDate: string;
+  cardId: number;
+  cardName: string;
+  withdrawalWeekday: number | null;
+  withdrawalAccountId: number | null;
+  estimated: { amount: number; withdrawalDate: string | null; approvals: CardBillingApprovalDto[] };
+  /** 청구서 발행 월 범위 "YYYYMM". 요청에서 생략하면 전월~이번 달 */
+  from: string;
+  to: string;
+  /** 발행된 청구서, 최신순 */
+  statements: CardBillingStatementDto[];
+};
+
+export type CardBillingApproval = {
+  transactionId: number;
+  date: string;
+  merchantName: string;
+  amount: KRW;
+};
+
+export type CardBillingDetail = {
+  cardId: number;
+  cardName: string;
+  asOf: string;
+  cycleFrom: string;
+  nextBillingDate: string;
+  /** 이번 주기 승인 합계. 청구서로 발행되기 전의 예상값이다 */
+  estimatedAmount: KRW;
+  /** 출금 요일을 모르는 카드(재연결 필요)는 null */
+  estimatedWithdrawalDate: string | null;
+  approvals: CardBillingApproval[];
+  fromMonth: string;
+  toMonth: string;
+  statements: CardBillingStatement[];
+};
+
+function dateKey(value: unknown, field: string): string {
+  if (typeof value !== "string" || !DATE.test(value)) throw new ContractMismatchError(field);
+  return value;
+}
+
+function optionalDateKey(value: unknown, field: string): string | null {
+  return value === null || value === undefined ? null : dateKey(value, field);
+}
+
+/** 상세 화면은 날짜를 모두 읽어 그리므로 요약(toCardBillings)과 달리 형식까지 검사한다 */
+function toDetailStatement(dto: CardBillingStatementDto): CardBillingStatement {
+  if (dto.paidAt !== null && dto.paidAt !== undefined && !KST_LOCAL_DATE_TIME.test(dto.paidAt)) {
+    throw new ContractMismatchError("statements.paidAt");
+  }
+  return {
+    ...toStatement(dto, "statements"),
+    billingDate: dateKey(dto.billingDate, "statements.billingDate"),
+    withdrawalDate: optionalDateKey(dto.withdrawalDate, "statements.withdrawalDate"),
+    paidAt: dto.paidAt ?? null,
+  };
+}
+
+export function toCardBillingDetail(dto: CardBillingDetailDto): CardBillingDetail {
+  if (!MONTH_KEY.test(dto.from)) throw new ContractMismatchError("from");
+  if (!MONTH_KEY.test(dto.to)) throw new ContractMismatchError("to");
+  return {
+    cardId: dto.cardId,
+    cardName: dto.cardName,
+    asOf: dateKey(dto.asOf, "asOf"),
+    cycleFrom: dateKey(dto.cycleFrom, "cycleFrom"),
+    nextBillingDate: dateKey(dto.nextBillingDate, "nextBillingDate"),
+    estimatedAmount: won(dto.estimated.amount, "estimated.amount"),
+    estimatedWithdrawalDate: optionalDateKey(dto.estimated.withdrawalDate, "estimated.withdrawalDate"),
+    approvals: dto.estimated.approvals.map((approval) => ({
+      transactionId: approval.transactionId,
+      date: dateKey(approval.date, "approvals.date"),
+      merchantName: approval.merchantName,
+      amount: won(approval.amount, "approvals.amount"),
+    })),
+    fromMonth: dto.from,
+    toMonth: dto.to,
+    statements: dto.statements.map(toDetailStatement),
+  };
+}
+
+/** "2026-09-14" → "9월 14일". 한 줄에 날짜가 여럿 들어가 요일은 붙이지 않는다 (Pencil PAGE-33 LsAZT) */
+export function billingDateLabel(key: string): string {
+  const { month, day } = getKSTParts(parseKSTDateKey(key));
+  return `${month}월 ${day}일`;
+}
+
+/** 예정액 아래 한 줄: "9월 14일 ~ 9월 16일 승인 4건 · 9월 23일 출금 예정". 주기 첫날(월요일)이면 날짜 하나만 쓴다 */
+export function cardBillingCycleCaption(detail: CardBillingDetail): string {
+  const period =
+    detail.cycleFrom === detail.asOf
+      ? billingDateLabel(detail.asOf)
+      : `${billingDateLabel(detail.cycleFrom)} ~ ${billingDateLabel(detail.asOf)}`;
+  const withdrawal =
+    detail.estimatedWithdrawalDate === null ? "출금일 확인 필요" : `${billingDateLabel(detail.estimatedWithdrawalDate)} 출금 예정`;
+  return `${period} 승인 ${detail.approvals.length}건 · ${withdrawal}`;
+}
+
+export type CardBillingNotice = { tone: "info" | "warning"; message: string };
+
+/** 예정액이 확정값이 아니라는 안내. 출금 요일을 모르는 카드는 출금일을 계산할 수 없다는 경고로 바꾼다 */
+export function cardBillingNotice(detail: CardBillingDetail): CardBillingNotice {
+  if (detail.estimatedWithdrawalDate === null) {
+    return {
+      tone: "warning",
+      message: "카드사에서 출금 요일을 받지 못해 출금일을 계산할 수 없어요. 청구서가 발행되면 금액은 그대로 보여요.",
+    };
+  }
+  return {
+    tone: "info",
+    message: `${formatMonthDay(parseKSTDateKey(detail.nextBillingDate))}에 청구서로 확정돼요. 그 전까지는 승인이 더해지면 금액이 바뀌어요.`,
+  };
+}
+
+/** "8월 ~ 9월에 발행된 청구서예요." 같은 달이면 한 달만 쓴다 */
+export function statementRangeLabel(detail: CardBillingDetail): string {
+  const to = formatMonthKeyLabel(detail.toMonth);
+  return detail.fromMonth === detail.toMonth
+    ? `${to}에 발행된 청구서예요.`
+    : `${formatMonthKeyLabel(detail.fromMonth)} ~ ${to}에 발행된 청구서예요.`;
+}
+
+const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
+  UNPAID: "미결제",
+  PAID: "결제 완료",
+  UNKNOWN: "확인 중",
+};
+
+export function billingStatusLabel(status: BillingStatus): string {
+  return BILLING_STATUS_LABELS[status];
+}
+
+export function statementTitle(statement: CardBillingStatement): string {
+  return `${billingDateLabel(statement.billingDate)} 발행`;
+}
+
+/**
+ * 청구서 행의 아랫줄. 결제 완료는 결제일, 그 밖에는 출금일을 쓴다.
+ * 동기화(08:00·17:00)가 출금(16:00)보다 늦어 출금일이 지났는데 UNPAID 일 수 있어, 지난 날짜는 '예정' 이라 부르지 않는다.
+ */
+export function statementCaption(statement: CardBillingStatement, todayKey: string): string {
+  if (statement.status === "PAID") {
+    if (statement.paidAt !== null) return `${billingDateLabel(statement.paidAt.slice(0, 10))} 결제`;
+    if (statement.withdrawalDate !== null) return `${billingDateLabel(statement.withdrawalDate)} 결제`;
+    return "결제 완료";
+  }
+  if (statement.withdrawalDate === null) return "출금일 확인 필요";
+  const date = billingDateLabel(statement.withdrawalDate);
+  return statement.withdrawalDate >= todayKey ? `${date} 출금 예정` : `${date} 출금 확인 중`;
+}
+
+/** 카드 청구 상세 라우트(`/payment/card-billing/[id]`)의 카드 id. 양의 정수가 아니면 null (규칙 50: 파라미터는 믿지 않는다) */
+export function parseCardId(value: string | string[] | undefined): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw !== undefined && /^[1-9]\d*$/.test(raw) ? Number(raw) : null;
 }
 
 export function toPaymentCalendar(dto: PaymentCalendarDto): PaymentCalendar {
@@ -234,10 +407,15 @@ export function isEditableEntry(entry: CalendarEntry): entry is CalendarEntry & 
 /**
  * 캘린더 항목을 눌러 고정지출 화면으로 갈 수 있는지. 고정지출 행이 있는 항목은 모두 연다 — 직접 등록한 것은 수정 폼,
  * 동기화된 카드 정기결제는 읽기 전용 상세다(사용자 결정 2026-09-15: 한 항목만 눌리지 않으면 목록의 통일감이 깨진다).
- * 카드 청구(CARD_BILL)는 고정지출 행이 없어 열 곳이 없다.
+ * 카드 청구(CARD_BILL)는 고정지출 행이 없어 여기가 아니라 canOpenCardBilling 으로 카드 청구 상세(PAGE-33)를 연다.
  */
 export function canOpenEntry(entry: CalendarEntry): entry is CalendarEntry & { fixedExpenseId: number } {
   return entry.fixedExpenseId !== null && (entry.type === "FIXED" || entry.type === "CARD_SUBSCRIPTION");
+}
+
+/** 캘린더의 카드 청구 항목을 눌러 카드 청구 상세(PAGE-33, GET /cards/{id}/billings)로 갈 수 있는지. cardId 가 없으면 열 곳이 없다 */
+export function canOpenCardBilling(entry: CalendarEntry): entry is CalendarEntry & { cardId: number } {
+  return entry.type === "CARD_BILL" && entry.cardId !== null;
 }
 
 /** 자산 탭 "이번 달 정기결제 예정": 오늘 포함 이후 건을 날짜순으로 limit 건까지 */

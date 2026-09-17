@@ -37,6 +37,11 @@ export function isStaleFixedExpenseError(error: unknown): boolean {
   return isApiError(error) && STALE_FIXED_EXPENSE_CODES.includes(error.code);
 }
 
+/** 카드 청구 상세의 404. 본인 카드가 아니거나 없는 카드 id 다(딥링크·오래된 화면). 다시 시도해도 풀리지 않는다 */
+export function isCardNotFoundError(error: unknown): boolean {
+  return isApiError(error) && error.code === "PAY_013";
+}
+
 const TRANSFER_UNKNOWN_MESSAGE = "이체를 실행하지 못했어요. 상태를 다시 확인해 주세요.";
 const TRANSFER_UNCONFIRMED_MESSAGE = "연결이 끊겨 이체가 됐는지 확인하지 못했어요. 상태를 새로 고쳐 결과를 확인해 주세요.";
 const POSTPONE_UNKNOWN_MESSAGE = "나중에로 미루지 못했어요. 잠시 뒤 다시 시도해 주세요.";

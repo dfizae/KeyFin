@@ -12,6 +12,7 @@ import { flattenTransfers, usePaymentCalendar, useTransfers } from "@/features/p
 import { calendarEntryIcon } from "@/features/payment/catalog";
 import { CALENDAR_EMPTY_MESSAGE, ESTIMATED_SUFFIX } from "@/features/payment/components/CalendarPopover";
 import {
+  canOpenCardBilling,
   canOpenEntry,
   findTransferForEntry,
   groupEntriesByDate,
@@ -30,6 +31,7 @@ import { cn } from "@/lib/utils";
 const HOME_ROUTE = "/";
 const FIXED_EXPENSE_ROUTE = "/payment/fixed-expense";
 const TRANSFER_ROUTE = "/payment/transfer";
+const CARD_BILLING_ROUTE = "/payment/card-billing";
 
 /** 부족 뱃지 아래 한 줄. 제안이 있는 항목에만 붙는다 (Pencil cSTvK Note) */
 const TRANSFER_NOTE = "탭해서 결제 전에 옮겨요";
@@ -44,7 +46,7 @@ const ENTRY_NOTES: Partial<Record<CalendarEntry["type"], string>> = {
  * PAGE-24 결제 캘린더. GET /payments/calendar 의 날짜별 출금 예정을 달 단위로 보여준다 (FR-PAY-01·02).
  * 준비 상태(prepared·shortage)·estimated 는 서버 값이라 그대로 표시만 하고, 서버가 아직 계산하지 않았으면(null) 뱃지를 그리지 않는다 (규칙 80).
  * 고정지출 항목은 모두 눌러서 연다 — 직접 등록한 것(FIXED)은 수정 폼(PAGE-26), 카드 정기결제(CARD_SUBSCRIPTION)는 읽기 전용 상세.
- * 카드 청구(CARD_BILL)는 고정지출 행이 없어 버튼이 아니다.
+ * 카드 청구(CARD_BILL)는 카드 청구 상세(PAGE-33)로 간다(P1, 2026-09-17).
  * 부족 항목에 승인 가능한 이체 제안이 있으면 뱃지가 이체 승인(PAGE-25)으로 가는 버튼이 된다 — 푸시(P1) 전까지 유일한 앱 내 진입점(2026-09-16).
  * 헤더의 '관리'는 고정지출 관리(PAGE-26B)로 간다.
  * 달력 격자 대신 날짜별 목록으로 만든다(응답이 날짜·항목 목록이고 한 달 건수가 적다).
@@ -111,6 +113,7 @@ function PaymentCalendarScreen() {
               transfers={flattenTransfers(transfers.data)}
               onSelect={(entry) => {
                 if (canOpenEntry(entry)) router.push(`${FIXED_EXPENSE_ROUTE}/${entry.fixedExpenseId}`);
+                else if (canOpenCardBilling(entry)) router.push(`${CARD_BILLING_ROUTE}/${entry.cardId}`);
               }}
               onOpenTransfer={(transfer) => router.push(`${TRANSFER_ROUTE}/${transfer.id}`)}
             />
@@ -202,8 +205,8 @@ type EntryCardProps = {
 // 이체 제안이 있는 부족 항목은 뱃지가 셰브런 달린 버튼이 되고 아래에 한 줄 안내가 붙는다 (Pencil PAGE-24 · 이체 제안 cSTvK, 2026-09-16).
 // 그때 카드는 접근성 컨테이너에서 빠져(accessible=false) 카드 본체와 뱃지가 각각 읽히고 눌린다.
 function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps) {
-  const openable = canOpenEntry(entry);
-  const hint = openable ? (isEditableEntry(entry) ? "고정지출을 수정합니다" : "카드 정기결제 정보를 봅니다") : undefined;
+  const openable = canOpenEntry(entry) || canOpenCardBilling(entry);
+  const hint = entryHint(entry);
   const name = entry.estimated ? `${entry.name} ${ESTIMATED_SUFFIX}` : entry.name;
   const amount = formatKRW(entry.amount);
   const badge = preparationLabel(entry.preparation);
@@ -259,6 +262,12 @@ function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps)
       {openable ? <Icon as={ChevronRight} size={18} className="text-card-foreground" /> : null}
     </Pressable>
   );
+}
+
+function entryHint(entry: CalendarEntry): string | undefined {
+  if (canOpenCardBilling(entry)) return "카드 청구 내역을 봅니다";
+  if (!canOpenEntry(entry)) return undefined;
+  return isEditableEntry(entry) ? "고정지출을 수정합니다" : "카드 정기결제 정보를 봅니다";
 }
 
 const SKELETON_ROWS = [1, 2, 3];
