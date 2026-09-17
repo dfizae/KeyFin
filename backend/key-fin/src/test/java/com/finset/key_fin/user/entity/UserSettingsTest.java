@@ -21,6 +21,7 @@ class UserSettingsTest {
 		assertThat(settings.isTransferConsent()).isFalse();
 		assertThat(settings.getTransferLimitOnce()).isNull();
 		assertThat(settings.getTransferLimitDaily()).isNull();
+		assertThat(settings.getCoachPersona()).isEqualTo(CoachPersona.PLAIN);
 	}
 
 	@Test
@@ -67,6 +68,16 @@ class UserSettingsTest {
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(UserErrorCode.INVALID_TRANSFER_LIMIT));
+	}
+
+	@Test
+	void 코치_말투를_변경한다() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+
+		settings.updateCoachPersona(CoachPersona.DODO);
+
+		assertThat(settings.getCoachPersona()).isEqualTo(CoachPersona.DODO);
 	}
 
 	@Test

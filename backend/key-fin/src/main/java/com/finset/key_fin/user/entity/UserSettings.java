@@ -4,6 +4,8 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -46,6 +48,10 @@ public class UserSettings {
 
 	@Column(name = "transfer_limit_daily")
 	private Long transferLimitDaily;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "coach_persona", nullable = false, length = 20)
+	private CoachPersona coachPersona = CoachPersona.PLAIN;
 
 	@Column(name = "noti_coaching", nullable = false)
 	private boolean notiCoaching = true;
@@ -106,6 +112,10 @@ public class UserSettings {
 		this.notiCleanup = notiCleanup;
 		this.quietHoursStart = quietHoursStart;
 		this.quietHoursEnd = quietHoursEnd;
+	}
+
+	public void updateCoachPersona(CoachPersona coachPersona) {
+		this.coachPersona = Objects.requireNonNull(coachPersona, "coachPersona must not be null");
 	}
 
 	private static void validateQuietHours(LocalTime quietHoursStart, LocalTime quietHoursEnd) {
