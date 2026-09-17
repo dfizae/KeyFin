@@ -41,7 +41,7 @@ public interface BudgetControllerDocs {
 							schema = @Schema(implementation = BaseResponse.class),
 							examples = @ExampleObject(
 									name = "제안 생성 성공",
-									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"budgetId\":11,\"month\":\"202609\",\"status\":\"PROPOSED\",\"basis\":\"최근 3개월 평균\",\"envelopes\":[{\"envelopeId\":1,\"name\":\"외식\",\"proposedAmount\":121000,\"monthlyAvg\":120652}]}}"
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"budgetId\":11,\"month\":\"202609\",\"status\":\"PROPOSED\",\"basis\":\"최근 3개월 평균 (2026-06-02~2026-09-01)\",\"envelopes\":[{\"envelopeId\":1,\"name\":\"외식\",\"proposedAmount\":121000,\"monthlyAvg\":120652}]}}"
 							)
 					)
 			),
