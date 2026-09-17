@@ -169,4 +169,4 @@
 | 마지막 동기화 | `tokens.json` `$source.pencilSyncedAt` |
 | 구현 전 대조 | `design/design-map.json`의 Pencil 노드 id → MCP `Get`·`TakeScreenshot` (`pencil-design` 절차 B) |
 | Pencil 변수에 없는 토큰 | `radius.full`, 타이포 13종, 모션, 그림자 — 코드 전용, 승인 후 `tokens.json`에서 직접 관리 |
-| Figma 내보내기(선택) | `scripts/figma/` 로컬 플러그인(`pnpm figma:build` → Figma 데스크톱 `Import plugin from manifest…`). design.pen 화면 12개 + tokens.json → Variables·Styles·프레임. **출력물이며 코드는 Figma를 읽지 않는다** |
+| Figma 내보내기(선택) | `scripts/figma/` 로컬 플러그인(`pnpm figma:build` → Figma 데스크톱 `Import plugin from manifest…`). design.pen `P0 화면`·`P0 화면 초안` 프레임(`SCREEN_IDS`) + tokens.json → Variables·Styles·프레임. **출력물이며 코드는 Figma를 읽지 않는다** |
