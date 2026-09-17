@@ -1,10 +1,18 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { accountKeys } from "@/features/account/api/queries";
 import { selectAuthStatus, useAuthStore } from "@/features/auth/store";
-import { connectFinanceAccount, createLinks, getFinanceStatus, getLinkCandidates } from "@/features/link/api/link.api";
+import {
+  connectFinanceAccount,
+  createLinks,
+  getFinanceStatus,
+  getLinkCandidates,
+  unlinkAccount,
+  unlinkCard,
+} from "@/features/link/api/link.api";
 import { isStaleCandidateError, needsFinanceReconnect } from "@/features/link/errors";
-import type { FinanceLinkRequest, LinkRequest } from "@/features/link/model";
+import type { FinanceLinkRequest, LinkAssetRef, LinkRequest } from "@/features/link/model";
+import { paymentKeys } from "@/features/payment/api/queries";
 
 export const linkKeys = {
   all: ["link"] as const,
@@ -54,7 +62,16 @@ export function useLinkCandidates() {
 }
 
 /**
- * 연결 성공 후 후보 목록과 계좌 목록(GET /accounts)을 무효화해 서버 기준으로 다시 받는다 (docs/api-guide.md §5).
+ * 연결·해제 뒤 서버 기준으로 다시 받을 캐시 (docs/api-guide.md §5). 후보(managed)와 계좌 목록(해제하면 수입 지정도 풀림)은 항상,
+ * 카드가 바뀌었으면 관리 중인 카드만 조회하는 결제 캘린더(CARD_BILL)와 카드 청구 요약도 (2026-09-17 백엔드 코드 확인).
+ */
+function invalidateLinkedAssets(queryClient: QueryClient, cardsChanged: boolean) {
+  const keys = [linkKeys.candidates(), accountKeys.all, ...(cardsChanged ? [paymentKeys.calendar(), paymentKeys.cardBillings()] : [])];
+  return Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey })));
+}
+
+/**
+ * 연결 성공 후 관련 캐시를 무효화해 서버 기준으로 다시 받는다.
  * 고른 항목이 후보에서 사라졌다는 오류(LINK_004·LINK_005)도 서버 안내대로 목록을 다시 받는다.
  */
 export function useCreateLinks() {
@@ -62,11 +79,23 @@ export function useCreateLinks() {
 
   return useMutation({
     mutationFn: (request: LinkRequest) => createLinks(request),
-    onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: linkKeys.candidates() }),
-        queryClient.invalidateQueries({ queryKey: accountKeys.all }),
-      ]),
+    onSuccess: (_data, request) => invalidateLinkedAssets(queryClient, request.cardIds.length > 0),
+    onError: (error) => {
+      if (isStaleCandidateError(error)) void queryClient.invalidateQueries({ queryKey: linkKeys.candidates() });
+    },
+  });
+}
+
+/**
+ * 연결 해제 (PAGE-32, FR-USR-05). 서버가 멱등이라 재시도해도 안전하지만, 확인 창을 거쳐 한 번만 보내고 요청 중에는 버튼을 잠근다.
+ * 이미 목록에서 사라진 항목(LINK_004·LINK_005)이면 후보를 다시 받는다.
+ */
+export function useUnlinkAsset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ kind, id }: LinkAssetRef) => (kind === "account" ? unlinkAccount(id) : unlinkCard(id)),
+    onSuccess: (_data, { kind }) => invalidateLinkedAssets(queryClient, kind === "card"),
     onError: (error) => {
       if (isStaleCandidateError(error)) void queryClient.invalidateQueries({ queryKey: linkKeys.candidates() });
     },

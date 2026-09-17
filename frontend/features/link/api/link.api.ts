@@ -1,6 +1,14 @@
 import { api, isMocked } from "@/api/client";
+import { releaseIncomeAccountMock } from "@/api/mocks/account";
 import { withMockLatency } from "@/api/mocks/latency";
-import { connectFinanceMock, createLinksMock, financeStatusMock, linkCandidatesMock } from "@/api/mocks/link";
+import {
+  connectFinanceMock,
+  createLinksMock,
+  financeStatusMock,
+  linkCandidatesMock,
+  unlinkAccountMock,
+  unlinkCardMock,
+} from "@/api/mocks/link";
 import {
   toLinkCandidates,
   type FinanceLinkRequest,
@@ -47,4 +55,28 @@ export async function createLinks(request: LinkRequest): Promise<LinkResponseDto
   if (isMocked("link")) return withMockLatency(createLinksMock(request));
   const { data } = await api.post<LinkResponseDto>("/links", request);
   return data;
+}
+
+/**
+ * DELETE /links/accounts/{accountId} — 계좌를 관리 대상에서 뺀다 (FR-USR-05, docs/api-contract.md LINK). 200, data null.
+ * 행은 남아 거래 이력이 보존되고 수입 계좌 지정도 함께 풀린다. 이미 해제된 계좌도 성공이라 재시도해도 안전하다(멱등).
+ */
+export async function unlinkAccount(accountId: number): Promise<void> {
+  if (isMocked("link")) {
+    unlinkAccountMock(accountId);
+    releaseIncomeAccountMock(accountId);
+    await withMockLatency(undefined);
+    return;
+  }
+  await api.delete(`/links/accounts/${accountId}`);
+}
+
+/** DELETE /links/cards/{cardId} — 카드를 관리 대상에서 뺀다 (FR-USR-05). 200, data null, 멱등 */
+export async function unlinkCard(cardId: number): Promise<void> {
+  if (isMocked("link")) {
+    unlinkCardMock(cardId);
+    await withMockLatency(undefined);
+    return;
+  }
+  await api.delete(`/links/cards/${cardId}`);
 }

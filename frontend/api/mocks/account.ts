@@ -34,6 +34,11 @@ export function setIncomeAccountMock(accountId: number): void {
   incomeAccountId = accountId;
 }
 
+/** 계좌 연결 해제(DELETE /links/accounts/{id})와 함께 서버가 is_income 도 푼다(Account.unlink) */
+export function releaseIncomeAccountMock(accountId: number): void {
+  if (incomeAccountId === accountId) incomeAccountId = null;
+}
+
 /** 온보딩을 마친 사용자로 시작할 때: 첫 관리 계좌를 수입 계좌로 */
 export function seedIncomeAccountMock(): void {
   incomeAccountId = managedAccountsMock().sort((a, b) => a.id - b.id)[0]?.id ?? null;

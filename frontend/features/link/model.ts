@@ -200,3 +200,110 @@ export function toggleSelectAllLinks(candidates: LinkCandidates, selected: Reado
   for (const id of ids) next.delete(id);
   return next;
 }
+
+/* ───────────── PAGE-32 연결 관리 (FR-USR-05) ───────────── */
+
+export type LinkAssetKind = "account" | "card";
+
+/** 연결 해제 요청 대상. 계좌·카드는 id 공간이 따로라 종류와 함께 다닌다 */
+export type LinkAssetRef = { kind: LinkAssetKind; id: number };
+
+/** 연결 관리 화면의 한 줄 */
+export type LinkAssetItem = LinkAssetRef & {
+  /** 목록 key. 계좌 1 과 카드 1 이 함께 있을 수 있다 */
+  key: string;
+  /** 계좌는 은행명, 카드는 카드 이름 */
+  title: string;
+  /** 로고를 찾을 은행·카드사 이름. 계좌는 bankCode 로 먼저 찾는다 */
+  logoName: string;
+  bankCode?: string;
+  maskedNo: string;
+  /** 수입 계좌 여부. 카드·연결하지 않은 계좌는 false, 계좌 목록(GET /accounts)을 아직 못 받았으면 null(모름) */
+  isIncome: boolean | null;
+};
+
+export type LinkManagement = {
+  linkedAccounts: LinkAssetItem[];
+  linkedCards: LinkAssetItem[];
+  /** 관리 대상이 아닌 계좌·카드(계좌 먼저). 해제한 항목도 여기로 돌아온다 */
+  unlinked: LinkAssetItem[];
+};
+
+export function linkAssetKey({ kind, id }: LinkAssetRef): string {
+  return `${kind}-${id}`;
+}
+
+function accountAssetItem(account: LinkAccount, incomeAccountId: number | null | undefined): LinkAssetItem {
+  return {
+    kind: "account",
+    id: account.id,
+    key: linkAssetKey({ kind: "account", id: account.id }),
+    title: account.bankName,
+    logoName: account.bankName,
+    bankCode: account.bankCode,
+    maskedNo: account.maskedNo,
+    isIncome: !account.linked ? false : incomeAccountId === undefined ? null : account.id === incomeAccountId,
+  };
+}
+
+function cardAssetItem(card: LinkCard): LinkAssetItem {
+  return {
+    kind: "card",
+    id: card.id,
+    key: linkAssetKey({ kind: "card", id: card.id }),
+    title: card.cardName,
+    logoName: card.issuerName,
+    maskedNo: card.maskedNo,
+    isIncome: false,
+  };
+}
+
+/**
+ * 후보 목록을 연결된 계좌·연결된 카드·연결하지 않은 자산으로 나눈다.
+ * 수입 여부는 후보에 없어 GET /accounts 의 수입 계좌 id 로 채운다 — undefined 는 계좌 목록을 아직 모르는 것이다.
+ * 해제하면 서버가 수입 지정도 풀므로 연결하지 않은 계좌는 수입 계좌일 수 없다.
+ */
+export function toLinkManagement(candidates: LinkCandidates, incomeAccountId: number | null | undefined): LinkManagement {
+  const toAccount = (account: LinkAccount) => accountAssetItem(account, incomeAccountId);
+  return {
+    linkedAccounts: candidates.accounts.filter((account) => account.linked).map(toAccount),
+    linkedCards: candidates.cards.filter((card) => card.linked).map(cardAssetItem),
+    unlinked: [
+      ...candidates.accounts.filter((account) => !account.linked).map(toAccount),
+      ...candidates.cards.filter((card) => !card.linked).map(cardAssetItem),
+    ],
+  };
+}
+
+/** 연결 관리에서는 행마다 바로 연결한다 — 한 항목만 담은 POST /links 본문 */
+export function linkRequestFor({ kind, id }: LinkAssetRef): LinkRequest {
+  return kind === "account" ? { accountIds: [id], cardIds: [] } : { accountIds: [], cardIds: [id] };
+}
+
+/** 연결하지 않은 자산 목록은 계좌·카드가 섞여 종류를 번호 앞에 붙인다 */
+export function linkAssetSubtitle(item: LinkAssetItem, withKind: boolean): string {
+  if (!withKind) return item.maskedNo;
+  return `${item.kind === "account" ? "계좌" : "카드"} · ${item.maskedNo}`;
+}
+
+export type UnlinkNotice = { title: string; description: string; incomeWarning: string | null };
+
+const UNLINK_DESCRIPTION =
+  "해제하면 새 거래를 더 이상 불러오지 않아요. 지금까지의 거래 이력은 그대로 남고, '연결하지 않은 자산'에서 다시 연결할 수 있어요.";
+/** 관리 중인 수입 계좌가 없으면 서버가 결제 준비 이체 제안을 만들지 않는다 (TransferProposalService, 2026-09-17 코드 확인) */
+const INCOME_CONSEQUENCE = "수입 계좌를 다시 지정할 때까지 결제 준비 이체 제안을 받을 수 없어요.";
+
+/**
+ * 해제 확인 창 문구 (Pencil gohga). 계좌 해제는 수입 계좌 지정도 푼다(Account.unlink).
+ * 수입 여부를 모르면(계좌 목록 조회 전·실패) 경고를 빼지 않고 조건부로 알린다.
+ */
+export function unlinkNotice(item: LinkAssetItem): UnlinkNotice {
+  const noun = item.kind === "account" ? "계좌" : "카드";
+  const incomeWarning =
+    item.kind === "card" || item.isIncome === false
+      ? null
+      : item.isIncome === true
+        ? `수입 계좌 지정도 함께 풀려요. ${INCOME_CONSEQUENCE}`
+        : `수입 계좌로 지정돼 있다면 지정도 함께 풀려요. ${INCOME_CONSEQUENCE}`;
+  return { title: `${item.title} ${noun} 연결을 해제할까요?`, description: UNLINK_DESCRIPTION, incomeWarning };
+}

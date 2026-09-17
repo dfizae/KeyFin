@@ -1,4 +1,5 @@
 import { ApiError } from "@/api/error";
+import { accountListMock, releaseIncomeAccountMock, resetAccountMocks, setIncomeAccountMock } from "@/api/mocks/account";
 import { ContractMismatchError } from "@/lib/contract";
 import {
   connectFinanceMock,
@@ -8,14 +9,19 @@ import {
   MOCK_FINANCE_EMAIL,
   MOCK_TAKEN_FINANCE_EMAIL,
   resetLinkMocks,
+  unlinkAccountMock,
+  unlinkCardMock,
 } from "@/api/mocks/link";
-import { financeErrorMessage, isRetryableFinanceError } from "@/features/link/errors";
+import { incomeAccountIdOf, toLinkedAccounts } from "@/features/account/model";
+import { financeErrorMessage, isRetryableFinanceError, unlinkErrorMessage } from "@/features/link/errors";
 import {
   areAllLinksSelected,
   canSubmitFinanceEmail,
   canSubmitLinks,
   countLinkRequest,
+  linkAssetSubtitle,
   linkCtaAction,
+  linkRequestFor,
   FINANCE_EMAIL_MAX_LENGTH,
   hasNoLinkCandidates,
   isLinkSelectable,
@@ -23,7 +29,9 @@ import {
   toggleLinkSelection,
   toggleSelectAllLinks,
   toLinkCandidates,
+  toLinkManagement,
   toLinkRequest,
+  unlinkNotice,
 } from "@/features/link/model";
 
 beforeEach(resetLinkMocks);
@@ -261,5 +269,133 @@ describe("linkCtaAction", () => {
     createLinksMock({ accountIds: [3], cardIds: [] });
     const candidates = toLinkCandidates(linkCandidatesMock());
     expect(linkCtaAction(candidates, toLinkRequest(candidates, new Set(["5310123412341234"])))).toBe("link");
+  });
+});
+
+describe("toLinkManagement (PAGE-32 연결 관리)", () => {
+  it("연결된 계좌·연결된 카드·연결하지 않은 자산(계좌 먼저)으로 나눈다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [2] });
+    const { linkedAccounts, linkedCards, unlinked } = toLinkManagement(toLinkCandidates(linkCandidatesMock()), null);
+    expect(linkedAccounts.map((item) => item.key)).toEqual(["account-1", "account-2"]);
+    expect(linkedCards.map((item) => item.key)).toEqual(["card-2"]);
+    expect(unlinked.map((item) => item.key)).toEqual(["account-3", "account-4", "card-1"]);
+  });
+
+  it("계좌 1 과 카드 1 처럼 id 가 겹쳐도 key 는 다르다", () => {
+    const { unlinked } = toLinkManagement(toLinkCandidates(linkCandidatesMock()), null);
+    const keys = unlinked.map((item) => item.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it("수입 뱃지는 계좌 목록의 수입 계좌로 채우고, 목록을 모르면 null 이다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [1] });
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    expect(toLinkManagement(candidates, 2).linkedAccounts.map((item) => item.isIncome)).toEqual([false, true]);
+    expect(toLinkManagement(candidates, undefined).linkedAccounts.map((item) => item.isIncome)).toEqual([null, null]);
+    expect(toLinkManagement(candidates, undefined).linkedCards[0].isIncome).toBe(false);
+  });
+
+  it("연결하지 않은 계좌는 수입 계좌일 수 없다", () => {
+    const { unlinked } = toLinkManagement(toLinkCandidates(linkCandidatesMock()), 3);
+    expect(unlinked.find((item) => item.key === "account-3")?.isIncome).toBe(false);
+  });
+
+  it("카드는 카드 이름을 제목으로, 카드사를 로고 이름으로 쓴다", () => {
+    const card = toLinkManagement(toLinkCandidates(linkCandidatesMock()), null).unlinked.find((item) => item.kind === "card");
+    expect(card).toEqual(expect.objectContaining({ title: "Deep Dream 체크", logoName: "신한카드" }));
+    expect(card?.bankCode).toBeUndefined();
+  });
+});
+
+describe("linkRequestFor · linkAssetSubtitle", () => {
+  it("행 하나만 담은 POST /links 본문을 만든다", () => {
+    expect(linkRequestFor({ kind: "account", id: 3 })).toEqual({ accountIds: [3], cardIds: [] });
+    expect(linkRequestFor({ kind: "card", id: 1 })).toEqual({ accountIds: [], cardIds: [1] });
+  });
+
+  it("계좌·카드가 섞인 목록에서만 종류를 붙인다", () => {
+    const [account] = toLinkManagement(toLinkCandidates(linkCandidatesMock()), null).unlinked;
+    expect(linkAssetSubtitle(account, false)).toBe(account.maskedNo);
+    expect(linkAssetSubtitle(account, true)).toBe(`계좌 · ${account.maskedNo}`);
+  });
+});
+
+describe("unlinkNotice (해제 확인 창)", () => {
+  const managedItems = (incomeAccountId: number | null | undefined) => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [1] });
+    return toLinkManagement(toLinkCandidates(linkCandidatesMock()), incomeAccountId);
+  };
+
+  it("수입 계좌면 지정 해제와 이체 제안 중단을 경고한다", () => {
+    const [income] = managedItems(1).linkedAccounts;
+    const notice = unlinkNotice(income);
+    expect(notice.title).toBe("신한은행 계좌 연결을 해제할까요?");
+    expect(notice.incomeWarning).toBe(
+      "수입 계좌 지정도 함께 풀려요. 수입 계좌를 다시 지정할 때까지 결제 준비 이체 제안을 받을 수 없어요."
+    );
+  });
+
+  it("수입 계좌가 아니거나 카드면 경고가 없다", () => {
+    const { linkedAccounts, linkedCards } = managedItems(1);
+    expect(unlinkNotice(linkedAccounts[1]).incomeWarning).toBeNull();
+    expect(unlinkNotice(linkedCards[0])).toEqual(
+      expect.objectContaining({ title: "Deep Dream 체크 카드 연결을 해제할까요?", incomeWarning: null })
+    );
+  });
+
+  it("수입 여부를 모르면 경고를 빼지 않고 조건부로 알린다", () => {
+    const [account] = managedItems(undefined).linkedAccounts;
+    expect(unlinkNotice(account).incomeWarning).toMatch(/^수입 계좌로 지정돼 있다면/);
+  });
+});
+
+describe("연결 해제 목 (DELETE /links/accounts|cards/{id})", () => {
+  beforeEach(resetAccountMocks);
+
+  it("관리 대상에서 빼고, 이미 해제된 항목을 다시 해제해도 성공한다(멱등)", () => {
+    createLinksMock({ accountIds: [1], cardIds: [1] });
+    unlinkAccountMock(1);
+    unlinkCardMock(1);
+    expect(() => unlinkAccountMock(1)).not.toThrow();
+    const candidates = toLinkCandidates(linkCandidatesMock());
+    expect(candidates.accounts[0].linked).toBe(false);
+    expect(candidates.cards[0].linked).toBe(false);
+  });
+
+  it("없는 계좌는 LINK_004, 없는 카드는 LINK_005 다", () => {
+    expect(() => unlinkAccountMock(999)).toThrow(expect.objectContaining({ status: 404, code: "LINK_004" }));
+    expect(() => unlinkCardMock(999)).toThrow(expect.objectContaining({ status: 404, code: "LINK_005" }));
+  });
+
+  it("수입 계좌를 해제하면 다시 연결해도 수입 지정은 돌아오지 않는다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [] });
+    setIncomeAccountMock(1);
+    unlinkAccountMock(1);
+    releaseIncomeAccountMock(1);
+    createLinksMock({ accountIds: [1], cardIds: [] });
+    expect(incomeAccountIdOf(toLinkedAccounts(accountListMock()))).toBeNull();
+  });
+
+  it("다른 계좌를 해제하면 수입 지정은 그대로다", () => {
+    createLinksMock({ accountIds: [1, 2], cardIds: [] });
+    setIncomeAccountMock(1);
+    releaseIncomeAccountMock(2);
+    expect(incomeAccountIdOf(toLinkedAccounts(accountListMock()))).toBe(1);
+  });
+});
+
+describe("unlinkErrorMessage", () => {
+  it("404 는 선택 화면과 달리 다시 고르라고 하지 않는다", () => {
+    expect(unlinkErrorMessage(new ApiError(404, "LINK_004", "계좌를 찾을 수 없습니다."))).toBe(
+      "이미 목록에서 사라진 계좌예요. 목록을 새로 불러왔어요."
+    );
+    expect(unlinkErrorMessage(new ApiError(404, "LINK_005", "카드를 찾을 수 없습니다."))).toBe(
+      "이미 목록에서 사라진 카드예요. 목록을 새로 불러왔어요."
+    );
+  });
+
+  it("모르는 코드는 서버 문구, 네트워크 오류는 기본 문구", () => {
+    expect(unlinkErrorMessage(new ApiError(500, "COMMON_006", "서버 오류"))).toBe("서버 오류");
+    expect(unlinkErrorMessage(new Error("network"))).toBe("연결을 해제하지 못했어요. 잠시 후 다시 시도해 주세요.");
   });
 });
