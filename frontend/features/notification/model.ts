@@ -1,5 +1,5 @@
 import { ContractMismatchError } from "@/lib/contract";
-import { formatMonthDay, formatTime, KST_LOCAL_DATE_TIME, parseKSTDateKey, parseKSTLocalDateTime, toKSTDateKey } from "@/lib/date";
+import { formatDateGroupLabel, formatTime, KST_LOCAL_DATE_TIME, parseKSTLocalDateTime } from "@/lib/date";
 
 /**
  * GET /notifications?unreadOnly=&cursor=&size= 계약 (백엔드 develop NotificationController, 2026-09-17 대조, FR-NTF-02).
@@ -125,13 +125,9 @@ export function groupNotificationsByDate(notifications: InboxNotification[]): No
   return groups;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** 날짜 묶음 제목: 오늘 · 어제 · "9월 14일 (월)" */
+/** 날짜 묶음 제목: 오늘 · 어제 · "9월 14일 (월)" (코인 이력과 같은 규칙, lib/date) */
 export function notificationDateLabel(dateKey: string, todayKey: string): string {
-  if (dateKey === todayKey) return "오늘";
-  if (dateKey === toKSTDateKey(new Date(parseKSTDateKey(todayKey).getTime() - DAY_MS))) return "어제";
-  return formatMonthDay(parseKSTDateKey(dateKey));
+  return formatDateGroupLabel(dateKey, todayKey);
 }
 
 export function notificationTimeLabel(notification: InboxNotification): string {

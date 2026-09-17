@@ -126,6 +126,15 @@ export function currentDateKey(): string {
   return toKSTDateKey(serverClock.now());
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 날짜로 묶은 목록의 제목: 오늘 · 어제 · "9월 14일 (월)". todayKey 는 서버 시각 기준 오늘(currentDateKey) */
+export function formatDateGroupLabel(dateKey: string, todayKey: string): string {
+  if (dateKey === todayKey) return "오늘";
+  if (dateKey === toKSTDateKey(new Date(parseKSTDateKey(todayKey).getTime() - DAY_MS))) return "어제";
+  return formatMonthDay(parseKSTDateKey(dateKey));
+}
+
 /** "202609" → "9월" */
 export function formatMonthKeyLabel(key: string): string {
   if (!MONTH_KEY.test(key)) throw new InvalidDateError();
