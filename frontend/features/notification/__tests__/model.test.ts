@@ -1,7 +1,16 @@
-import { ApiError } from "@/api/error";
-import { markNotificationReadMock, notificationListMock, resetNotificationMocks } from "@/api/mocks/notification";
+import { ApiError, NETWORK_ERROR_CODE } from "@/api/error";
+import {
+  activePushInstallationsMock,
+  markNotificationReadMock,
+  notificationListMock,
+  registerPushDeviceMock,
+  resetNotificationMocks,
+  unregisterPushDeviceMock,
+} from "@/api/mocks/notification";
+import { isRetryablePushError } from "@/features/notification/errors";
 import {
   groupNotificationsByDate,
+  isInstallationId,
   markNotificationReadInPage,
   needsAction,
   notificationDateLabel,
@@ -9,6 +18,7 @@ import {
   notificationTimeLabel,
   toInboxNotification,
   toNotificationPage,
+  toPushDeviceRequest,
   type NotificationItemDto,
 } from "@/features/notification/model";
 import { ContractMismatchError } from "@/lib/contract";
@@ -141,3 +151,65 @@ describe("알림 목 — 서버처럼 쪽을 나누고 읽음을 기억한다", 
     expect(code).toBe("NOTI_001");
   });
 });
+
+describe("푸시 기기 등록 (PUT·DELETE /me/push-devices/{installationId})", () => {
+  const INSTALLATION = "3f2b8c1e-9d4a-4e6b-8a1f-2c3d4e5f6a7b";
+  const TOKEN = "fcm-token:APA91b_example";
+
+  beforeEach(() => resetNotificationMocks(TODAY));
+
+  it("설치 UUID 는 하이픈 있는 표준 36자만 받는다(대소문자 무관)", () => {
+    expect(isInstallationId(INSTALLATION)).toBe(true);
+    expect(isInstallationId(INSTALLATION.toUpperCase())).toBe(true);
+    expect(isInstallationId(INSTALLATION.replaceAll("-", ""))).toBe(false);
+    expect(isInstallationId("../me")).toBe(false);
+    expect(isInstallationId(null)).toBe(false);
+  });
+
+  it("토큰은 서버 검증과 같은 모양일 때만 요청이 되고 platform 은 ANDROID 로 고정이다", () => {
+    expect(toPushDeviceRequest(TOKEN)).toEqual({ token: TOKEN, platform: "ANDROID" });
+    expect(toPushDeviceRequest("")).toBeNull();
+    expect(toPushDeviceRequest("has space")).toBeNull();
+    expect(toPushDeviceRequest("가".repeat(3))).toBeNull();
+    expect(toPushDeviceRequest("a".repeat(2049))).toBeNull();
+    expect(toPushDeviceRequest(undefined)).toBeNull();
+  });
+
+  it("목은 같은 설치를 덮어쓰고, 같은 토큰이 다른 설치에 있으면 그 연결을 푼다", () => {
+    const other = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
+
+    registerPushDeviceMock(other, { token: TOKEN, platform: "ANDROID" });
+    registerPushDeviceMock(INSTALLATION, { token: TOKEN, platform: "ANDROID" });
+    registerPushDeviceMock(INSTALLATION, { token: TOKEN, platform: "ANDROID" });
+
+    expect(activePushInstallationsMock()).toEqual([INSTALLATION]);
+  });
+
+  it("해제는 없는 설치여도 성공하고, UUID 가 아니면 등록·해제 모두 400 COMMON_001 이다", () => {
+    const codeOf = (run: () => void) => {
+      try {
+        run();
+        return null;
+      } catch (error) {
+        return error instanceof ApiError ? error.code : "NOT_API_ERROR";
+      }
+    };
+
+    registerPushDeviceMock(INSTALLATION, { token: TOKEN, platform: "ANDROID" });
+    unregisterPushDeviceMock(INSTALLATION);
+    unregisterPushDeviceMock(INSTALLATION);
+    expect(activePushInstallationsMock()).toEqual([]);
+
+    expect(codeOf(() => registerPushDeviceMock("not-a-uuid", { token: TOKEN, platform: "ANDROID" }))).toBe("COMMON_001");
+    expect(codeOf(() => unregisterPushDeviceMock("not-a-uuid"))).toBe("COMMON_001");
+  });
+
+  it("다시 보낼 오류는 동시 변경(PUSH_001)과 연결 끊김뿐이다", () => {
+    expect(isRetryablePushError(new ApiError(409, "PUSH_001", "기기 정보가 변경 중입니다."))).toBe(true);
+    expect(isRetryablePushError(new ApiError(0, NETWORK_ERROR_CODE, ""))).toBe(true);
+    expect(isRetryablePushError(new ApiError(400, "COMMON_001", ""))).toBe(false);
+    expect(isRetryablePushError(new ApiError(404, "USER_001", ""))).toBe(false);
+    expect(isRetryablePushError(new Error("x"))).toBe(false);
+  });
+});
+

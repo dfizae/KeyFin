@@ -1,7 +1,17 @@
 import { api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
-import { markNotificationReadMock, notificationListMock } from "@/api/mocks/notification";
-import { toNotificationPage, type NotificationListDto, type NotificationPage } from "@/features/notification/model";
+import {
+  markNotificationReadMock,
+  notificationListMock,
+  registerPushDeviceMock,
+  unregisterPushDeviceMock,
+} from "@/api/mocks/notification";
+import {
+  toNotificationPage,
+  type NotificationListDto,
+  type NotificationPage,
+  type PushDeviceRequest,
+} from "@/features/notification/model";
 
 export type NotificationPageParams = { cursor: number | null; size: number };
 
@@ -33,3 +43,28 @@ export async function markNotificationRead(notificationId: number): Promise<void
   }
   await api.patch(`/notifications/${notificationId}/read`);
 }
+
+/**
+ * PUT /me/push-devices/{installationId} — 이 설치의 FCM 토큰 등록·갱신 겸용(멱등, FR-NTF-01). data 는 null.
+ * 같은 설치면 사용자·토큰을 덮어쓰고, 같은 토큰이 다른 설치에 묶여 있으면 서버가 그 연결을 푼다(계정 전환·재설치).
+ * 오류: 400 COMMON_001/002(UUID·토큰·플랫폼) · 404 USER_001 · 409 PUSH_001(동시 변경, 다시 보내도 된다).
+ */
+export async function registerPushDevice(installationId: string, request: PushDeviceRequest): Promise<void> {
+  if (isMocked("notification")) {
+    registerPushDeviceMock(installationId, request);
+    await withMockLatency(undefined);
+    return;
+  }
+  await api.put(`/me/push-devices/${installationId}`, request);
+}
+
+/** DELETE /me/push-devices/{installationId} — 로그아웃 때 이 설치로 푸시가 가지 않게 한다. 이미 해제됐거나 남의 설치여도 200 */
+export async function unregisterPushDevice(installationId: string): Promise<void> {
+  if (isMocked("notification")) {
+    unregisterPushDeviceMock(installationId);
+    await withMockLatency(undefined);
+    return;
+  }
+  await api.delete(`/me/push-devices/${installationId}`);
+}
+

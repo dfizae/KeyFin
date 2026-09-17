@@ -4,12 +4,15 @@ import { View } from "react-native";
 import { TabBar } from "@/components/ui/tab-bar";
 import { selectOnboardingDone, selectTermsAgreed, useAuthStore } from "@/features/auth/store";
 import { useFinanceStatus } from "@/features/link/api/queries";
+import { usePushPermissionPrompt } from "@/features/notification/api/queries";
 
 // Pencil 홈 BottomTabBar (NaYk9): 홈 · 자산 · 예산 · 리포트 · 마이
 export default function TabsLayout() {
   const termsAgreed = useAuthStore(selectTermsAgreed);
   const onboardingDone = useAuthStore(selectOnboardingDone);
   const financeStatus = useFinanceStatus();
+  // 아래 게이트를 통과해 탭이 보일 때만 알림 권한을 묻는다 — 온보딩 중에는 시스템 창을 띄우지 않는다.
+  usePushPermissionPrompt(termsAgreed !== false && (onboardingDone === true || financeStatus.data === true));
 
   // 로그인 여부는 상위 (app) 그룹이 검사한다. 여기서는 온보딩 단계만 본다.
   if (termsAgreed === false) return <Redirect href="/(auth)/terms" />;

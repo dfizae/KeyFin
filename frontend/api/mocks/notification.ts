@@ -1,5 +1,11 @@
 import { ApiError } from "@/api/error";
-import type { NotificationItemDto, NotificationListDto } from "@/features/notification/model";
+import {
+  isInstallationId,
+  toPushDeviceRequest,
+  type NotificationItemDto,
+  type NotificationListDto,
+  type PushDeviceRequest,
+} from "@/features/notification/model";
 import { currentDateKey, parseKSTDateKey, toKSTDateKey } from "@/lib/date";
 
 /**
@@ -130,7 +136,40 @@ export function markNotificationReadMock(notificationId: number): void {
   target.isRead = true;
 }
 
+/** 활성 푸시 기기: 설치 UUID(소문자) → FCM 토큰. 서버 push_devices 의 활성 행 자리 */
+const pushDevices = new Map<string, string>();
+
+function invalidInput(): ApiError {
+  return new ApiError(400, "COMMON_001", "입력값이 올바르지 않습니다.");
+}
+
+/**
+ * PUT /me/push-devices/{installationId} 목. 서버처럼 UUID·토큰 모양을 검사하고,
+ * 같은 설치는 덮어쓰고 같은 토큰이 다른 설치에 있으면 그 연결을 푼다.
+ */
+export function registerPushDeviceMock(installationId: string, request: PushDeviceRequest): void {
+  if (!isInstallationId(installationId) || toPushDeviceRequest(request.token) === null || request.platform !== "ANDROID") {
+    throw invalidInput();
+  }
+  for (const [installation, token] of pushDevices) {
+    if (token === request.token) pushDevices.delete(installation);
+  }
+  pushDevices.set(installationId.toLowerCase(), request.token);
+}
+
+/** DELETE /me/push-devices/{installationId} 목. 없는 설치여도 성공(멱등) */
+export function unregisterPushDeviceMock(installationId: string): void {
+  if (!isInstallationId(installationId)) throw invalidInput();
+  pushDevices.delete(installationId.toLowerCase());
+}
+
+/** 테스트용: 지금 활성인 설치 UUID 목록 */
+export function activePushInstallationsMock(): string[] {
+  return [...pushDevices.keys()];
+}
+
 /** 테스트·개발 재시작용. todayKey 를 주면 그날 기준으로 다시 만든다 */
 export function resetNotificationMocks(todayKey?: string): void {
   notifications = todayKey === undefined ? null : build(todayKey);
+  pushDevices.clear();
 }

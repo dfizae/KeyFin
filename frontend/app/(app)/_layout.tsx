@@ -3,6 +3,7 @@ import { View } from "react-native";
 
 import { loginHref } from "@/features/auth/model";
 import { selectAuthStatus, useAuthStore } from "@/features/auth/store";
+import { usePushDeviceRegistration } from "@/features/notification/api/queries";
 
 /**
  * 로그인이 필요한 화면 그룹. 인증 검사는 여기 한 곳에서만 한다 (규칙 80).
@@ -14,6 +15,8 @@ import { selectAuthStatus, useAuthStore } from "@/features/auth/store";
 export default function AppLayout() {
   const status = useAuthStore(selectAuthStatus);
   const pathname = usePathname();
+  // 로그인한 동안 이 기기를 푸시 대상으로 등록한다(FR-NTF-01). 로그인 직후·앱 재시작 모두 여기를 지난다.
+  usePushDeviceRegistration(status === "authenticated");
 
   // 저장된 세션을 읽는 동안 로그인 화면이 깜빡이지 않도록 빈 배경을 둔다.
   if (status === "loading") return <View className="flex-1 bg-background" />;
