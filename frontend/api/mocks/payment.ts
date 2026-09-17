@@ -1,13 +1,14 @@
 import { ApiError } from "@/api/error";
 import type {
   CalendarItemDto,
+  CardBillingDetailDto,
   CardBillingsDto,
   FixedExpenseDto,
   FixedExpenseListDto,
   FixedExpenseRequest,
   PaymentCalendarDto,
 } from "@/features/payment/model";
-import { currentDateKey } from "@/lib/date";
+import { currentDateKey, shiftMonthKey } from "@/lib/date";
 
 /**
  * GET /payments/calendar · GET/POST/PUT/DELETE /fixed-expenses 목 (docs/api-contract.md PAYMENT).
@@ -191,35 +192,47 @@ export function deleteFixedExpenseMock(id: number): void {
   fixedExpenses = fixedExpenses.filter((expense) => expense !== target);
 }
 
+function shiftDateKey(key: string, days: number): string {
+  const date = new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10)) + days));
+  return date.toISOString().slice(0, 10);
+}
+
+/** 신한 카드의 출금 요일(수). 요일은 1(월)~7(일)이라 청구서 발행일(월요일) + 2일에 나간다 */
+const SHINHAN_WITHDRAWAL_WEEKDAY = 3;
+
 /**
  * GET /cards/billings 목. 카드는 금융망 후보 목(api/mocks/link.ts)의 연결 카드 2장과 같은 id 를 쓴다 —
  * 자산 탭이 두 응답을 cardId 로 잇기 때문이다.
- * 1번(신한 Deep Dream 체크)은 이번 주기 승인 2건과 발행된 청구서가 있고,
+ * 날짜는 서버 규칙(CardBillingQueryService)대로 만든다: 주기는 이번 주 월요일~오늘, 발행은 다음 월요일, 출금은 발행일 + (출금 요일 − 1).
+ * 1번(신한 Deep Dream 체크)은 이번 주기 승인 4건과 이번 주 월요일에 발행된 청구서가 있다 — 출금일이 지났으면 결제 완료로 둔다.
  * 2번(국민 노리 체크)은 출금 요일을 모르는 카드(재연결 필요)라 출금일이 없고 청구서도 없다 — 서버가 null 을 주는 경우를 폰에서 보기 위한 값이다.
  */
 export function cardBillingsMock(todayKey: string = currentDateKey()): CardBillingsDto {
-  const day = Number(todayKey.slice(8, 10));
-  const prefix = todayKey.slice(0, 8);
-  const dayKey = (value: number) => `${prefix}${String(Math.min(Math.max(value, 1), 28)).padStart(2, "0")}`;
+  const weekday = new Date(`${todayKey}T00:00:00Z`).getUTCDay();
+  const monday = shiftDateKey(todayKey, -((weekday + 6) % 7));
+  const nextMonday = shiftDateKey(monday, 7);
+  const withdrawalOffset = SHINHAN_WITHDRAWAL_WEEKDAY - 1;
+  const statementWithdrawal = shiftDateKey(monday, withdrawalOffset);
+  const paid = statementWithdrawal < todayKey;
 
   return {
     asOf: todayKey,
-    cycleFrom: dayKey(day - 2),
-    nextBillingDate: dayKey(day + 5),
+    cycleFrom: monday,
+    nextBillingDate: nextMonday,
     cards: [
       {
         cardId: 1,
         cardName: "Deep Dream 체크",
-        withdrawalWeekday: 3,
+        withdrawalWeekday: SHINHAN_WITHDRAWAL_WEEKDAY,
         withdrawalAccountId: 1,
-        estimated: { amount: 38200, approvalCount: 4, withdrawalDate: dayKey(day + 7) },
+        estimated: { amount: 38200, approvalCount: 4, withdrawalDate: shiftDateKey(nextMonday, withdrawalOffset) },
         latestStatement: {
           billingId: 12,
-          billingDate: dayKey(day - 2),
+          billingDate: monday,
           amount: 214000,
-          status: "UNPAID",
-          withdrawalDate: dayKey(day + 2),
-          paidAt: null,
+          status: paid ? "PAID" : "UNPAID",
+          withdrawalDate: statementWithdrawal,
+          paidAt: paid ? `${statementWithdrawal}T16:00:00` : null,
         },
       },
       {
@@ -231,6 +244,64 @@ export function cardBillingsMock(todayKey: string = currentDateKey()): CardBilli
         latestStatement: null,
       },
     ],
+  };
+}
+
+function laterDateKey(a: string, b: string): string {
+  return a > b ? a : b;
+}
+
+/**
+ * GET /cards/{cardId}/billings 목. 요약 목(cardBillingsMock)과 같은 날짜·금액에서 만들어 두 화면의 숫자가 어긋나지 않게 한다.
+ * 1번은 Pencil PAGE-33 (LsAZT) 의 승인 4건(합계 38,200 = 요약의 예정액)과 청구서 2장(미결제·결제 완료),
+ * 2번은 출금 요일을 모르는 카드라 · 내역 없음 (AcQNS) 과 같다. 금융망 후보 목에 없는 id 는 서버처럼 404 PAY_013 이다.
+ */
+export function cardBillingDetailMock(cardId: number, todayKey: string = currentDateKey()): CardBillingDetailDto {
+  const summary = cardBillingsMock(todayKey);
+  const card = summary.cards.find((candidate) => candidate.cardId === cardId);
+  if (card === undefined) throw new ApiError(404, "PAY_013", "카드를 찾을 수 없습니다.");
+
+  const { asOf, cycleFrom } = summary;
+  const yesterday = laterDateKey(shiftDateKey(asOf, -1), cycleFrom);
+  const approvals =
+    card.estimated.approvalCount === 0
+      ? []
+      : [
+          { transactionId: 504, date: asOf, merchantName: "GS25 역삼점", amount: 6000 },
+          { transactionId: 503, date: yesterday, merchantName: "메가커피 역삼역점", amount: 9000 },
+          { transactionId: 502, date: yesterday, merchantName: "카카오T 택시", amount: 14700 },
+          { transactionId: 501, date: cycleFrom, merchantName: "올리브영 강남점", amount: 8500 },
+        ];
+  const latest = card.latestStatement;
+  const previousBillingDate = latest === null ? null : shiftDateKey(latest.billingDate, -14);
+  const statements =
+    latest === null || previousBillingDate === null
+      ? []
+      : [
+          latest,
+          {
+            billingId: 9,
+            billingDate: previousBillingDate,
+            amount: 30000,
+            status: "PAID",
+            withdrawalDate: shiftDateKey(previousBillingDate, 2),
+            paidAt: `${shiftDateKey(previousBillingDate, 2)}T16:00:00`,
+          },
+        ];
+  const toMonth = `${asOf.slice(0, 4)}${asOf.slice(5, 7)}`;
+
+  return {
+    asOf,
+    cycleFrom,
+    nextBillingDate: summary.nextBillingDate,
+    cardId: card.cardId,
+    cardName: card.cardName,
+    withdrawalWeekday: card.withdrawalWeekday,
+    withdrawalAccountId: card.withdrawalAccountId,
+    estimated: { amount: card.estimated.amount, withdrawalDate: card.estimated.withdrawalDate, approvals },
+    from: shiftMonthKey(toMonth, -1),
+    to: toMonth,
+    statements,
   };
 }
 

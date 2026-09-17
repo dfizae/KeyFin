@@ -14,6 +14,7 @@ import {
   approveTransfer,
   createFixedExpense,
   deleteFixedExpense,
+  getCardBillingDetail,
   getCardBillings,
   getFixedExpenses,
   getPaymentCalendar,
@@ -24,7 +25,7 @@ import {
   updateFixedExpense,
   type TransferListParams,
 } from "@/features/payment/api/payment.api";
-import { isStaleFixedExpenseError } from "@/features/payment/errors";
+import { isCardNotFoundError, isStaleFixedExpenseError } from "@/features/payment/errors";
 import { findFixedExpense, type Transfer, type TransferPage } from "@/features/payment/model";
 import { roomKeys } from "@/features/room/api/queries";
 
@@ -37,6 +38,8 @@ export const paymentKeys = {
   fixedExpenses: () => [...paymentKeys.all, "fixed-expenses"] as const,
   /** 카드별 청구 요약. 주기를 서버가 정해 파라미터가 없다 */
   cardBillings: () => [...paymentKeys.all, "card-billings"] as const,
+  /** 카드 한 장의 청구 상세. card-billings 프리픽스 아래라 카드 연결·해제 뒤 요약과 함께 무효화된다 */
+  cardBillingDetail: (cardId: number) => [...paymentKeys.cardBillings(), "detail", cardId] as const,
   /** 이체 제안·이력. 승인·연기 뒤 달 구분 없이 무효화한다 */
   transfers: () => [...paymentKeys.all, "transfers"] as const,
   transferList: (params: TransferListParams) => [...paymentKeys.transfers(), "list", params] as const,
@@ -184,4 +187,21 @@ export function cardBillingsQueryOptions() {
 /** 자산 탭 카드 섹션이 쓴다. 카드 이름·번호는 금융망 후보에서 오고 금액만 이 조회로 채운다 */
 export function useCardBillings() {
   return useQuery(cardBillingsQueryOptions());
+}
+
+const MAX_CARD_BILLING_DETAIL_RETRY = 1;
+
+/** 없는 카드(404 PAY_013)는 다시 불러도 같으므로 재시도하지 않고 바로 '못 찾음' 을 보여 준다 */
+export function cardBillingDetailQueryOptions(cardId: number) {
+  return queryOptions({
+    queryKey: paymentKeys.cardBillingDetail(cardId),
+    queryFn: ({ signal }) => getCardBillingDetail(cardId, signal),
+    staleTime: 60_000,
+    retry: (failureCount, error) => !isCardNotFoundError(error) && failureCount < MAX_CARD_BILLING_DETAIL_RETRY,
+  });
+}
+
+/** 카드 청구 상세(PAGE-33). 라우트의 카드 id 가 틀리면(null) 조회하지 않는다 */
+export function useCardBillingDetail(cardId: number | null) {
+  return useQuery({ ...cardBillingDetailQueryOptions(cardId ?? 0), enabled: cardId !== null });
 }

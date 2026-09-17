@@ -1,7 +1,8 @@
 import { TIMEOUT_MONEY_MS, api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
-import { cardBillingsMock } from "@/api/mocks/payment";
 import {
+  cardBillingDetailMock,
+  cardBillingsMock,
   createFixedExpenseMock,
   deleteFixedExpenseMock,
   fixedExpenseListMock,
@@ -10,6 +11,7 @@ import {
 } from "@/api/mocks/payment";
 import { approveTransferMock, postponeTransferMock, transferDetailMock, transferListMock } from "@/api/mocks/transfer";
 import {
+  toCardBillingDetail,
   toCardBillings,
   toFixedExpenses,
   toPaymentCalendar,
@@ -20,6 +22,8 @@ import {
   type FixedExpenseListDto,
   type FixedExpenseRequest,
   type FixedExpenseResponseDto,
+  type CardBillingDetail,
+  type CardBillingDetailDto,
   type CardBillings,
   type CardBillingsDto,
   type PaymentCalendar,
@@ -141,4 +145,14 @@ export async function getCardBillings(signal?: AbortSignal): Promise<CardBilling
   if (isMocked("payment")) return toCardBillings(await withMockLatency(cardBillingsMock(), signal));
   const { data } = await api.get<CardBillingsDto>("/cards/billings", { signal });
   return toCardBillings(data);
+}
+
+/**
+ * GET /cards/{cardId}/billings — 카드 한 장의 이번 주기 예정액과 근거 승인 목록, 발행된 청구서 (FR-BGT-06, PAGE-33).
+ * from·to 는 보내지 않아 서버 기본값(전월~이번 달)을 쓴다. 본인 카드가 아니거나 없으면 404 PAY_013.
+ */
+export async function getCardBillingDetail(cardId: number, signal?: AbortSignal): Promise<CardBillingDetail> {
+  if (isMocked("payment")) return toCardBillingDetail(await withMockLatency(cardBillingDetailMock(cardId), signal));
+  const { data } = await api.get<CardBillingDetailDto>(`/cards/${cardId}/billings`, { signal });
+  return toCardBillingDetail(data);
 }
