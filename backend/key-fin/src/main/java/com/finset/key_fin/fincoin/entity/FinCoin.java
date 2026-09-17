@@ -50,6 +50,23 @@ public class FinCoin extends BaseEntity {
 	@Column(name = "ref_id", length = 30)
 	private String refId;
 
+	public static FinCoin forPurchase(User user, LocalDate purchaseDate, long itemId, int price, int balanceBefore) {
+		Objects.requireNonNull(user, "user must not be null");
+		Objects.requireNonNull(purchaseDate, "purchaseDate must not be null");
+		if (itemId <= 0 || price < 0 || balanceBefore < price) {
+			throw new IllegalArgumentException("상품 ID는 양수이고 가격은 0 이상이며 잔액은 가격 이상이어야 합니다.");
+		}
+
+		FinCoin coin = new FinCoin();
+		coin.user = user;
+		coin.delta = -price;
+		coin.balanceAfter = balanceBefore - price;
+		coin.reasonCode = FinCoinReason.PURCHASE;
+		coin.grantDate = purchaseDate;
+		coin.refId = Long.toString(itemId);
+		return coin;
+	}
+
 	public static FinCoin forAttendance(User user, LocalDate grantDate, int reward, int balanceBefore) {
 		Objects.requireNonNull(user, "user must not be null");
 		Objects.requireNonNull(grantDate, "grantDate must not be null");
