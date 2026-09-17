@@ -3,7 +3,19 @@ name = "fdt-coaching-service"
 version = "0.3.0"
 description = "Persistent AI coaching API using the team's pinned FDT engine"
 requires-python = ">=3.11,<3.14"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic>=2.10,<3", "pydantic-settings>=2,<3", "numpy>=2,<3", "jsonschema>=4.18,<5", "anyio>=4,<5", "httpx2[http2,brotli,zstd]==2.12.0", "tzdata>=2025.2", "typing-extensions>=4.12,<5"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.30,<1",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2,<3",
+    "numpy>=2,<3",
+    "jsonschema>=4.18,<5",
+    "anyio>=4,<5",
+    "httpx2[http2,brotli,zstd]==2.12.0",
+    "tzdata>=2025.2",
+    "typing-extensions>=4.12,<5",
+    "websockets>=17.1",
+]
 
 [dependency-groups]
 dev = ["pytest>=8,<10", "ruff>=0.12", "basedpyright>=1.31"]

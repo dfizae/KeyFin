@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["fastapi", "uvicorn", "anyio", "pydantic"]
+# dependencies = ["fastapi", "uvicorn", "anyio", "pydantic", "websockets"]
 # ///
 # How to run: COACH_GPU_MODEL=latest27_nf4 pinned-python gpu_worker.py
 """Authenticated loopback OpenAI subset backed by the pinned GPU runtime."""
@@ -14,7 +14,7 @@ import secrets
 import stat
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal, cast
 
 import anyio
 import uvicorn
@@ -240,7 +240,7 @@ def admission_limit(backend_kind: Literal["transformers", "vllm", "vllm_async"],
     return 16 if backend_kind == "vllm_async" else 8
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901 - one linear, ordered sequence of fail-closed startup checks.
     """Load only on the authorized device; read the private token from disk."""
     from gpu_registry import execution_backend, validate_device  # noqa: PLC0415
 
@@ -266,6 +266,15 @@ def main() -> None:
     file_stat = token_path.stat()
     if stat.S_IMODE(file_stat.st_mode) != 0o600 or file_stat.st_uid != os.getuid():
         raise RuntimeError("token_permissions_invalid")
+    # Reverse-tunnel opt-in (SPEC-ws-tunnel.md): default "loopback" is today's exact
+    # uvicorn-server behavior, unchanged below. "ws" dials OUT to the coaching API
+    # instead, over an outbound WebSocket, for GPU boxes with no inbound connectivity.
+    link_mode = os.environ.get("COACH_GPU_LINK_MODE", "loopback")
+    if link_mode not in {"loopback", "ws"}:
+        raise RuntimeError("gpu_link_mode_invalid")
+    api_url = os.environ.get("COACH_GPU_API_URL", "")
+    if link_mode == "ws" and not api_url.startswith(("ws://", "wss://")):
+        raise RuntimeError("gpu_link_api_url_invalid")
     if backend_kind == "vllm_async":
         from gpu_runtime import AsyncPinnedBackend  # noqa: PLC0415
 
@@ -282,6 +291,38 @@ def main() -> None:
         backend.metadata.model_dump_json(indent=2), encoding="utf-8"
     )
     print("GPU_WORKER_MODEL_READY", flush=True)
+    if link_mode == "ws":
+        # Lazy: websockets is only needed on this rare path.
+        if __package__:
+            from .gpu_ws_worker import run_ws_worker  # noqa: PLC0415
+        else:
+            from gpu_ws_worker import run_ws_worker  # noqa: PLC0415
+
+        execution = WorkerExecution(
+            backend,
+            backend.complete_batch if batch_size else None,
+            max(1, batch_size),
+            validate_prompt_count,
+            async_complete=async_complete,
+            shutdown=shutdown,
+            require_matching_response_format=backend.metadata.grammar_enforced,
+        )
+        ready_payload = {
+            "model_tag": backend.metadata.model,
+            "revision": backend.metadata.revision,
+            "max_input_tokens": backend.metadata.max_input_tokens,
+            "max_output_tokens": backend.metadata.max_output_tokens,
+        }
+        token = token_path.read_text().strip()
+
+        async def serve_ws() -> None:
+            # ``execution.lifespan`` normally runs as a FastAPI ASGI lifespan; here it
+            # is driven directly since there is no ASGI app on the outbound-only path.
+            async with execution.lifespan(cast("FastAPI", None)):
+                await run_ws_worker(api_url, token, execution, backend, ready_payload)
+
+        anyio.run(serve_ws)
+        return
     uvicorn.run(
         create_app(
             backend, token_path.read_text().strip(),
