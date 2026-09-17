@@ -61,3 +61,20 @@ export function linkErrorMessage(error: unknown): string {
   if (!isApiError(error)) return LINK_UNKNOWN_MESSAGE;
   return LINK_MESSAGES[error.code] ?? (error.message !== "" ? error.message : LINK_UNKNOWN_MESSAGE);
 }
+
+/**
+ * 연결 해제(DELETE /links/accounts|cards/{id}) 실패 문구 (docs/api-contract.md LINK, 2026-09-17 코드 대조).
+ * 이미 해제된 항목은 200 이라 404 는 목록에서 사라진(본인 소유가 아닌) 항목이다 — 선택 화면 문구와 달리 다시 고르라고 하지 않는다.
+ */
+const UNLINK_MESSAGES: Record<string, string> = {
+  LINK_004: "이미 목록에서 사라진 계좌예요. 목록을 새로 불러왔어요.",
+  LINK_005: "이미 목록에서 사라진 카드예요. 목록을 새로 불러왔어요.",
+  USER_001: "사용자 정보를 찾을 수 없어요. 다시 로그인해 주세요.",
+};
+
+const UNLINK_UNKNOWN_MESSAGE = "연결을 해제하지 못했어요. 잠시 후 다시 시도해 주세요.";
+
+export function unlinkErrorMessage(error: unknown): string {
+  if (!isApiError(error)) return UNLINK_UNKNOWN_MESSAGE;
+  return UNLINK_MESSAGES[error.code] ?? (error.message !== "" ? error.message : UNLINK_UNKNOWN_MESSAGE);
+}

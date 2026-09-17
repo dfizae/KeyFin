@@ -99,3 +99,22 @@ function manageAll(ids: readonly number[], managed: Set<number>): number {
 export function createLinksMock({ accountIds, cardIds }: LinkRequest): LinkResponseDto {
   return { accounts: manageAll(accountIds, managedAccounts), cards: manageAll(cardIds, managedCards) };
 }
+
+/**
+ * DELETE /links/accounts/{id}. 서버처럼 본인 계좌인지만 보고 관리 대상에서 뺀다 — 이미 해제된 계좌도 성공(멱등).
+ * 수입 계좌 지정 해제는 계좌 목(releaseIncomeAccountMock)이 맡는다(계좌 목이 이 파일을 읽어 순환을 피한다).
+ */
+export function unlinkAccountMock(accountId: number): void {
+  if (!CANDIDATE_ACCOUNTS.some((account) => account.id === accountId)) {
+    throw new ApiError(404, "LINK_004", "계좌를 찾을 수 없습니다. 후보 목록을 다시 조회해 주세요.");
+  }
+  managedAccounts.delete(accountId);
+}
+
+/** DELETE /links/cards/{id}. 본인 카드인지만 보고 관리 대상에서 뺀다(멱등) */
+export function unlinkCardMock(cardId: number): void {
+  if (!CANDIDATE_CARDS.some((card) => card.id === cardId)) {
+    throw new ApiError(404, "LINK_005", "카드를 찾을 수 없습니다. 후보 목록을 다시 조회해 주세요.");
+  }
+  managedCards.delete(cardId);
+}
