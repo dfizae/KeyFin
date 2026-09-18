@@ -10,10 +10,12 @@ import com.finset.key_fin.global.exception.CommonErrorCode;
 import com.finset.key_fin.notification.dto.response.NotificationListResponse;
 import com.finset.key_fin.notification.dto.response.NotificationResponse;
 import com.finset.key_fin.notification.entity.NotificationType;
+import com.finset.key_fin.notification.event.NotificationCreated;
 import com.finset.key_fin.notification.exception.NotificationErrorCode;
 import com.finset.key_fin.notification.repository.NotificationRepository;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,7 @@ public class NotificationService {
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 	private final NotificationRepository repository;
 	private final Clock clock;
+	private final ApplicationEventPublisher events;
 
 	@Transactional
 	public long create(long userId, NotificationType type, String title, String body, String refId,
@@ -36,8 +39,10 @@ public class NotificationService {
 		if (!repository.isActiveUser(userId)) {
 			throw new BusinessException(UserErrorCode.USER_NOT_FOUND);
 		}
-		return repository.insert(userId, type, title, body, refId, requiresAction,
+		long id = repository.insert(userId, type, title, body, refId, requiresAction,
 				LocalDateTime.now(clock.withZone(KST)).truncatedTo(ChronoUnit.SECONDS));
+		events.publishEvent(new NotificationCreated(id, userId, type, title, body, refId, requiresAction));
+		return id;
 	}
 
 	@Transactional(readOnly = true)

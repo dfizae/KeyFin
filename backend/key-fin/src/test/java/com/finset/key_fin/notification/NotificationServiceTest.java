@@ -10,6 +10,7 @@ import com.finset.key_fin.notification.repository.NotificationRepository;
 import com.finset.key_fin.notification.service.NotificationService;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -25,7 +26,8 @@ class NotificationServiceTest {
 	@BeforeEach
 	void setUp() {
 		repository = mock(NotificationRepository.class);
-		service = new NotificationService(repository, Clock.fixed(Instant.parse("2026-09-16T13:00:00Z"), ZoneOffset.UTC));
+		service = new NotificationService(repository, Clock.fixed(Instant.parse("2026-09-16T13:00:00Z"), ZoneOffset.UTC),
+				mock(ApplicationEventPublisher.class));
 	}
 
 	@ParameterizedTest
