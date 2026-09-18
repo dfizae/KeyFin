@@ -37,7 +37,7 @@ public class FdtCategoryMapper {
 			Map.entry(602, new Entry("생활서비스", MART_RAW_LABEL)),
 			Map.entry(603, new Entry("생활서비스", "생활용품")),
 			Map.entry(701, new Entry("교육", "교육")),
-			Map.entry(702, new Entry("기타", "해외 결제")),
+			Map.entry(702, new Entry("사회·경조", "해외 결제")),
 			Map.entry(703, new Entry("사회·경조", "경조사·기타"))
 	);
 
