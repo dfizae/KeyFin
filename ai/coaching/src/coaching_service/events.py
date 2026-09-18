@@ -19,9 +19,6 @@ class Events:
 
     async def bootstrap(self, op: Operation, request: Bootstrap) -> JsonDocument:
         async def action() -> Mutation:
-            existing = await anyio.to_thread.run_sync(self.core.repository.store.load, op.owner, "twin")
-            if existing is not None:
-                raise ServiceError("twin_already_exists", 409)
             if len({row.envelope for row in request.envelopes}) != len(request.envelopes):
                 raise ServiceError("duplicate_envelope")
             twin = await anyio.to_thread.run_sync(self.core.engine.create, request, op.owner)

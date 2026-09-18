@@ -10,11 +10,13 @@ from typing import TYPE_CHECKING, Final, assert_never, cast
 
 import anyio
 import httpx2
+from pydantic import ValidationError
 
 from coaching_service.chart_wording import ChartSelection, selected_chart_wording
 from coaching_service.dialogue_decision import DialogueDecision, DialogueSelection
 from coaching_service.evidence import context_limited, operation_evidence, token_retry_evidence
 from coaching_service.finance_knowledge import FinanceSelection, selected_finance_wording
+from coaching_service.gpu_link import GpuLinkFailure, GpuLinkSubmit, canonical_request_sha256
 from coaching_service.inference_metrics import InferenceTrace, measure_inference
 from coaching_service.llm_contract import (
     CompletionEnvelope,
@@ -29,10 +31,12 @@ from coaching_service.llm_contract import (
 )
 from coaching_service.llm_prompt import TEMPLATE_TEXT, system_prompt, user_payload, wording_problem
 from coaching_service.schemas import JsonDocument
-from coaching_service.token_budget import BudgetFailure, check_token_budget
+from coaching_service.token_budget import BudgetFailure, TokenBudget, check_token_budget
 
 if TYPE_CHECKING:
     from pydantic import BaseModel, JsonValue
+
+    from coaching_service.gpu_link import GpuLinkOutcome
 
 _LIMITS: Final = httpx2.Limits(max_connections=200, max_keepalive_connections=40, keepalive_expiry=30)
 _JSON_FENCE: Final = re.compile(r"```(?:json)?\r?\n(.*?)\r?\n```", re.DOTALL)
@@ -150,9 +154,18 @@ def transport_failure(error: httpx2.RequestError) -> InferenceFailure:
 class OpenAICompatibleCoachModel:
     """Supplementary wording, typed judgment and mode routing over one pinned model endpoint."""
 
-    def __init__(self, config: ModelConfig, *, client: httpx2.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        config: ModelConfig,
+        *,
+        client: httpx2.AsyncClient | None = None,
+        gpu_link_submit: GpuLinkSubmit | None = None,
+    ) -> None:
         self._config: ModelConfig = config
         self._client: httpx2.AsyncClient | None = client
+        # Only set in COACH_GPU_LINK_MODE=ws; the loopback (default) path never sets
+        # this, so ``_execute`` keeps using ``self._client`` exactly as before.
+        self._gpu_link_submit: GpuLinkSubmit | None = gpu_link_submit
         self._limiter: anyio.CapacityLimiter = anyio.CapacityLimiter(config.max_concurrency)
 
     @property
@@ -276,6 +289,23 @@ class OpenAICompatibleCoachModel:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
         if self._config.token is not None:
             headers["Authorization"] = f"Bearer {self._config.token.get_secret_value()}"
+        payload = self._payload(evidence, operation)
+        # A fresh Request avoids copying unrelated client authorization, cookies, or base URL.
+        return httpx2.Request(
+            "POST",
+            self._config.endpoint_url or "",
+            headers=headers,
+            json=payload,
+            extensions={"timeout": request_timeout(self._config).as_dict()},
+        )
+
+    def _payload(self, evidence: EvidenceInput, operation: Operation) -> dict[str, JsonValue]:
+        """Build the exact chat-completion body sent over httpx today.
+
+        In ``COACH_GPU_LINK_MODE=ws`` this same dict travels as a WS request frame's
+        ``payload["body"]`` instead of an httpx JSON body -- the request/response
+        schema is unchanged, only the transport underneath it differs.
+        """
         payload: dict[str, JsonValue] = {
             "model": self._config.model,
             "messages": [
@@ -334,14 +364,7 @@ class OpenAICompatibleCoachModel:
                 }
             case _ as unreachable:
                 assert_never(unreachable)
-        # A fresh Request avoids copying unrelated client authorization, cookies, or base URL.
-        return httpx2.Request(
-            "POST",
-            self._config.endpoint_url or "",
-            headers=headers,
-            json=payload,
-            extensions={"timeout": request_timeout(self._config).as_dict()},
-        )
+        return payload
 
     async def _infer(self, evidence: EvidenceInput, operation: Operation) -> InferenceText | InferenceFailure:
         with measure_inference(operation) as trace:
@@ -353,7 +376,9 @@ class OpenAICompatibleCoachModel:
         if self._config.endpoint_url is None:
             trace.set_outcome("rejected")
             return InferenceFailure("disabled")
-        if self._client is None or self._client.is_closed:
+        # In COACH_GPU_LINK_MODE=ws there is no httpx client transport; the loopback
+        # (default) path is unchanged and still requires an open client.
+        if self._gpu_link_submit is None and (self._client is None or self._client.is_closed):
             trace.set_outcome("rejected")
             return InferenceFailure("client_unavailable" if self._client is None else "client_closed")
         evidence = operation_evidence(evidence, operation)
@@ -366,12 +391,7 @@ class OpenAICompatibleCoachModel:
                 with trace.phase("limiter_wait"):
                     await self._limiter.acquire()
                 try:
-                    result = await self._send(
-                        self._client,
-                        self._request(evidence, operation),
-                        self._output_tokens(evidence, operation),
-                        trace,
-                    )
+                    result = await self._dispatch(evidence, operation, trace)
                     # The first request is the only trustworthy way to learn the
                     # serving tokenizer's limit. A supplementary writer may then
                     # retry once with no financial payload; selection calls never
@@ -379,12 +399,7 @@ class OpenAICompatibleCoachModel:
                     if isinstance(result, InferenceFailure) and result.reason == "input_token_limit":
                         retry = token_retry_evidence(evidence)
                         if retry is not None:
-                            return await self._send(
-                                self._client,
-                                self._request(retry, operation),
-                                self._output_tokens(retry, operation),
-                                trace,
-                            )
+                            return await self._dispatch(retry, operation, trace)
                     return result
                 finally:
                     self._limiter.release()
@@ -394,6 +409,16 @@ class OpenAICompatibleCoachModel:
         except httpx2.RequestError as error:
             trace.set_outcome("timeout" if isinstance(error, httpx2.TimeoutException) else "failure")
             return transport_failure(error)
+
+    async def _dispatch(
+        self, evidence: EvidenceInput, operation: Operation, trace: InferenceTrace,
+    ) -> InferenceText | InferenceFailure:
+        """Route to the WS tunnel when configured, otherwise the unchanged httpx path."""
+        max_tokens = self._output_tokens(evidence, operation)
+        if self._gpu_link_submit is not None:
+            return await self._send_ws(self._gpu_link_submit, evidence, operation, max_tokens, trace)
+        assert self._client is not None  # noqa: S101 - guaranteed by the guard at the top of ``_execute``.
+        return await self._send(self._client, self._request(evidence, operation), max_tokens, trace)
 
     async def _send(
         self,
@@ -421,6 +446,72 @@ class OpenAICompatibleCoachModel:
             if response is not None:
                 with anyio.move_on_after(0.1, shield=True):
                     await response.aclose()
+
+    async def _send_ws(
+        self,
+        submit: GpuLinkSubmit,
+        evidence: EvidenceInput,
+        operation: Operation,
+        max_tokens: int,
+        trace: InferenceTrace,
+    ) -> InferenceText | InferenceFailure:
+        """WS-tunnel twin of ``_send``: same payload, timeouts and fallback contract.
+
+        The frozen dict from ``_payload`` becomes ``payload["body"]`` on the request
+        frame for both ``tokenize`` and ``complete`` ops, instead of an httpx JSON body.
+        """
+        body = self._payload(evidence, operation)
+        expected_prompt_sha256: str | None = None
+        if self._config.token_preflight:
+            with trace.phase("token_preflight"):
+                outcome = await submit("tokenize", {"body": body}, self._config.timeout_seconds)
+            budget = self._ws_budget(outcome, body, max_tokens)
+            if isinstance(budget, InferenceFailure):
+                trace.set_outcome("rejected")
+                return budget
+            expected_prompt_sha256 = budget
+        with trace.phase("generation_http"):
+            outcome = await submit(
+                "complete", {"body": body, "expected_prompt_sha256": expected_prompt_sha256},
+                self._config.timeout_seconds,
+            )
+            result = self._read_ws(outcome)
+        trace.set_outcome("failure" if isinstance(result, InferenceFailure) else "success")
+        return result
+
+    def _ws_budget(
+        self, outcome: GpuLinkOutcome, body: dict[str, JsonValue], max_tokens: int,
+    ) -> str | InferenceFailure:
+        """WS-tunnel twin of ``token_budget.validate_budget`` operating on a parsed dict."""
+        if isinstance(outcome, GpuLinkFailure):
+            return InferenceFailure(outcome.reason)
+        try:
+            budget = TokenBudget.model_validate(outcome.result)
+        except ValidationError:
+            return InferenceFailure("token_preflight_invalid_schema")
+        if budget.request_sha256 != canonical_request_sha256(body):
+            return InferenceFailure("token_preflight_request_mismatch")
+        if budget.prompt_tokens > budget.max_input_tokens:
+            return InferenceFailure("input_token_limit")
+        if max_tokens > budget.max_output_tokens:
+            return InferenceFailure("output_token_limit")
+        return budget.prompt_sha256
+
+    def _read_ws(self, outcome: GpuLinkOutcome) -> InferenceText | InferenceFailure:
+        """WS-tunnel twin of ``_read`` operating on an already-decoded response dict."""
+        if isinstance(outcome, GpuLinkFailure):
+            return InferenceFailure(outcome.reason)
+        encoded = json.dumps(outcome.result, ensure_ascii=False).encode()
+        if len(encoded) > self._config.max_response_bytes:
+            return InferenceFailure("response_too_large")
+        try:
+            # ``model_validate_json`` (not ``model_validate``) so a JSON array survives
+            # this strict contract's tuple-typed fields exactly like the httpx path,
+            # which always validates raw response bytes rather than a parsed dict.
+            completion = CompletionEnvelope.model_validate_json(encoded)
+        except ValidationError:
+            return InferenceFailure("invalid_response")
+        return InferenceText(completion.choices[0].message.content)
 
     def _output_tokens(self, evidence: EvidenceInput, operation: Operation) -> int:
         """Match the generation ceiling to the validated response shape.
