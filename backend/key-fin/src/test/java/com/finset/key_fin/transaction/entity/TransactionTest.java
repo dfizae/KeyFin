@@ -121,6 +121,25 @@ class TransactionTest {
 								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
 	}
 
+	@Test
+	void 거래_메모의_앞뒤_공백을_제거해_저장한다() {
+		Transaction transaction = cardTransaction(40_000L);
+
+		transaction.updateMemo("  회식 — 회사에서 정산 예정  ");
+
+		assertThat(transaction.getMemo()).isEqualTo("회식 — 회사에서 정산 예정");
+	}
+
+	@Test
+	void 빈_거래_메모는_기존_메모를_삭제한다() {
+		Transaction transaction = cardTransaction(40_000L);
+		transaction.updateMemo("기존 메모");
+
+		transaction.updateMemo("   ");
+
+		assertThat(transaction.getMemo()).isNull();
+	}
+
 	private Transaction cardTransaction(long amount) {
 		Transaction transaction = new Transaction();
 		ReflectionTestUtils.setField(transaction, "transactionType", TransactionType.CARD);

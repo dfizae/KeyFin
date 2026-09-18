@@ -2,6 +2,7 @@ package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.ConfirmStatus;
@@ -181,6 +182,32 @@ class TransactionServiceTest {
 		assertThat(response.subcategoryId()).isEqualTo(301);
 		assertThat(response.excludeTag()).isEqualTo(ExcludeTag.RESTORE);
 		assertThat(response.confirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
+	void 거래_메모를_수정한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(transactionRepository.findByIdAndUserId(501L, USER_ID)).willReturn(Optional.of(transaction));
+
+		transactionService.updateTransactionMemo(
+				USER_ID, 501L, new TransactionMemoUpdateRequest("  회식 메모  "));
+
+		assertThat(transaction.getMemo()).isEqualTo("회식 메모");
+	}
+
+	@Test
+	void 다른_사용자의_거래_메모는_수정할_수_없다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		given(transactionRepository.findByIdAndUserId(999L, USER_ID)).willReturn(Optional.empty());
+
+		assertThatThrownBy(() -> transactionService.updateTransactionMemo(
+				USER_ID, 999L, new TransactionMemoUpdateRequest("메모")))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.TRANSACTION_NOT_FOUND));
 	}
 
 	@Test

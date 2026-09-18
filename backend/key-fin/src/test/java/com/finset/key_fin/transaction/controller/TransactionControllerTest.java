@@ -3,6 +3,7 @@ package com.finset.key_fin.transaction.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse.TransactionItem;
@@ -29,6 +30,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
@@ -130,5 +132,38 @@ class TransactionControllerTest {
 				.andExpect(jsonPath("$.data.confirmStatus").value("CONFIRMED"));
 
 		verify(transactionService).classifyTransaction(USER_ID, 501L, request);
+	}
+
+	@Test
+	void 거래_메모를_수정한다() throws Exception {
+		TransactionMemoUpdateRequest request = new TransactionMemoUpdateRequest("회식 — 회사에서 정산 예정");
+
+		mockMvc.perform(put("/api/v1/transactions/{id}/memo", 501L)
+						.contentType("application/json")
+						.content(objectMapper.writeValueAsString(request)))
+				.andExpect(status().isOk())
+				.andExpect(content().string(""));
+
+		verify(transactionService).updateTransactionMemo(USER_ID, 501L, request);
+	}
+
+	@Test
+	void 거래_메모가_누락되면_400을_반환한다() throws Exception {
+		mockMvc.perform(put("/api/v1/transactions/{id}/memo", 501L)
+						.contentType("application/json")
+						.content("{}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
+	@Test
+	void 거래_메모가_255자를_초과하면_400을_반환한다() throws Exception {
+		TransactionMemoUpdateRequest request = new TransactionMemoUpdateRequest("a".repeat(256));
+
+		mockMvc.perform(put("/api/v1/transactions/{id}/memo", 501L)
+						.contentType("application/json")
+						.content(objectMapper.writeValueAsString(request)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 }

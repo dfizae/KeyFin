@@ -2,6 +2,7 @@ package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse.TransactionItem;
@@ -132,6 +133,18 @@ public class TransactionService {
 		}
 
 		return TransactionClassificationResponse.from(transaction);
+	}
+
+	@Transactional
+	public void updateTransactionMemo(
+			long userId,
+			long transactionId,
+			TransactionMemoUpdateRequest request
+	) {
+		validateActiveUser(userId);
+		var transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
+				.orElseThrow(() -> new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND));
+		transaction.updateMemo(request.memo());
 	}
 
 	private void validateSubcategory(int subcategoryId) {

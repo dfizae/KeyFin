@@ -222,6 +222,12 @@ public class Transaction extends BaseEntity {
 		this.confirmStatus = ConfirmStatus.CONFIRMED;
 	}
 
+	public void updateMemo(String memo) {
+		Objects.requireNonNull(memo, "memo must not be null");
+		String normalizedMemo = memo.trim();
+		this.memo = normalizedMemo.isEmpty() ? null : normalizedMemo;
+	}
+
 	private void validateClassifiable() {
 		if (transactionType == TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
 			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);

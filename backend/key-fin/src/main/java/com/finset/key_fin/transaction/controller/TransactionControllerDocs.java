@@ -2,6 +2,7 @@ package com.finset.key_fin.transaction.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ResponseEntity;
 
 import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 
@@ -111,5 +113,29 @@ public interface TransactionControllerDocs {
 			@Parameter(hidden = true) Long userId,
 			@Parameter(description = "거래 ID", example = "501", required = true) Long transactionId,
 			TransactionClassificationRequest request
+	);
+
+	@Operation(
+			summary = "거래 메모 수정",
+			description = "현재 사용자의 거래에 메모를 저장합니다. 앞뒤 공백은 제거하며, 빈 문자열 또는 공백만 입력하면 기존 메모를 삭제합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "거래 메모 수정 성공"),
+			@ApiResponse(responseCode = "400", description = "메모가 누락되었거나 255자를 초과함 (COMMON_001)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "거래 또는 활성 사용자를 찾을 수 없음 (TRANSACTION_004, USER_001)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	ResponseEntity<Void> updateTransactionMemo(
+			@Parameter(hidden = true) Long userId,
+			@Parameter(description = "거래 ID", example = "501", required = true) Long transactionId,
+			TransactionMemoUpdateRequest request
 	);
 }
