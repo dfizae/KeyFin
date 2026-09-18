@@ -4,6 +4,7 @@ import com.finset.key_fin.transaction.entity.ConfirmStatus;
 import com.finset.key_fin.transaction.entity.ExcludeTag;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.TransactionStatus;
+import com.finset.key_fin.transaction.entity.TransactionType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -17,6 +18,15 @@ import java.util.Optional;
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
 
 	Optional<Transaction> findByIdAndUserId(Long id, Long userId);
+
+	List<Transaction> findAllByIdInAndUserId(Collection<Long> ids, Long userId);
+
+	long countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
+			Long userId,
+			ConfirmStatus confirmStatus,
+			TransactionStatus status,
+			TransactionType transactionType
+	);
 
 	boolean existsByUserIdAndFinTransactionUniqueNo(Long userId, String finTransactionUniqueNo);
 

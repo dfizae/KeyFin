@@ -2,6 +2,9 @@ package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
+import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest.Item;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.ConfirmStatus;
@@ -37,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionServiceTest {
@@ -181,6 +185,110 @@ class TransactionServiceTest {
 		assertThat(response.subcategoryId()).isEqualTo(301);
 		assertThat(response.excludeTag()).isEqualTo(ExcludeTag.RESTORE);
 		assertThat(response.confirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
+	void 거래_메모를_수정한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(transactionRepository.findByIdAndUserId(501L, USER_ID)).willReturn(Optional.of(transaction));
+
+		transactionService.updateTransactionMemo(
+				USER_ID, 501L, new TransactionMemoUpdateRequest("  회식 메모  "));
+
+		assertThat(transaction.getMemo()).isEqualTo("회식 메모");
+	}
+
+	@Test
+	void 다른_사용자의_거래_메모는_수정할_수_없다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		given(transactionRepository.findByIdAndUserId(999L, USER_ID)).willReturn(Optional.empty());
+
+		assertThatThrownBy(() -> transactionService.updateTransactionMemo(
+				USER_ID, 999L, new TransactionMemoUpdateRequest("메모")))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.TRANSACTION_NOT_FOUND));
+	}
+
+	@Test
+	void 미확정_거래를_일괄_분류한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		Transaction first = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		Transaction second = transaction(502L, TransactionType.WITHDRAW, TransactionStatus.NORMAL, 30_000L);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L, 502L), USER_ID))
+				.willReturn(List.of(first, second));
+		given(transactionQueryRepository.existsSubcategory(102)).willReturn(true);
+		given(transactionRepository.countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
+				USER_ID, ConfirmStatus.PENDING, TransactionStatus.NORMAL, TransactionType.DEPOSIT))
+				.willReturn(0L);
+		var request = new BulkTransactionClassificationRequest(List.of(
+				new Item(501L, 102, null, null),
+				new Item(502L, null, ExcludeTag.DUTCH, 15_000L)
+		));
+
+		var response = transactionService.classifyPendingTransactions(USER_ID, request);
+
+		assertThat(response.confirmed()).isEqualTo(2);
+		assertThat(response.pendingRemain()).isZero();
+		assertThat(first.getSubcategoryId()).isEqualTo(102);
+		assertThat(second.getExcludeTag()).isEqualTo(ExcludeTag.DUTCH);
+		assertThat(second.getAdjustedAmount()).isEqualTo(15_000L);
+	}
+
+	@Test
+	void 일괄_분류에_중복_거래_ID가_있으면_거절한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		var request = new BulkTransactionClassificationRequest(List.of(
+				new Item(501L, 102, null, null),
+				new Item(501L, null, ExcludeTag.SELF_TRANSFER, null)
+		));
+
+		assertThatThrownBy(() -> transactionService.classifyPendingTransactions(USER_ID, request))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.INVALID_CLASSIFICATION));
+		verify(transactionRepository, never()).findAllByIdInAndUserId(
+				org.mockito.ArgumentMatchers.anyCollection(), org.mockito.ArgumentMatchers.anyLong());
+	}
+
+	@Test
+	void 일괄_분류에_다른_사용자의_거래가_포함되면_거절한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		Transaction first = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L, 999L), USER_ID))
+				.willReturn(List.of(first));
+		var request = new BulkTransactionClassificationRequest(List.of(
+				new Item(501L, 102, null, null),
+				new Item(999L, 102, null, null)
+		));
+
+		assertThatThrownBy(() -> transactionService.classifyPendingTransactions(USER_ID, request))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.TRANSACTION_NOT_FOUND));
+	}
+
+	@Test
+	void 이미_확정된_거래가_일괄_분류에_포함되면_거절한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
+		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		ReflectionTestUtils.setField(transaction, "confirmStatus", ConfirmStatus.CONFIRMED);
+		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L), USER_ID))
+				.willReturn(List.of(transaction));
+		var request = new BulkTransactionClassificationRequest(
+				List.of(new Item(501L, 102, null, null)));
+
+		assertThatThrownBy(() -> transactionService.classifyPendingTransactions(USER_ID, request))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
 	}
 
 	@Test

@@ -2,10 +2,15 @@ package com.finset.key_fin.transaction.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
+import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.BulkTransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.service.TransactionService;
 import lombok.RequiredArgsConstructor;
+import jakarta.validation.Valid;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,5 +64,25 @@ public class TransactionController implements TransactionControllerDocs {
 			@RequestBody TransactionClassificationRequest request
 	) {
 		return BaseResponse.ok(transactionService.classifyTransaction(userId, transactionId, request));
+	}
+
+	@PutMapping(value = "/{id}/memo", consumes = APPLICATION_JSON_VALUE)
+	@Override
+	public ResponseEntity<Void> updateTransactionMemo(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable("id") Long transactionId,
+			@Valid @RequestBody TransactionMemoUpdateRequest request
+	) {
+		transactionService.updateTransactionMemo(userId, transactionId, request);
+		return ResponseEntity.ok().build();
+	}
+
+	@PutMapping(value = "/classifications", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<BulkTransactionClassificationResponse> classifyPendingTransactions(
+			@AuthenticationPrincipal Long userId,
+			@Valid @RequestBody BulkTransactionClassificationRequest request
+	) {
+		return BaseResponse.ok(transactionService.classifyPendingTransactions(userId, request));
 	}
 }
