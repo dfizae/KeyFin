@@ -1,11 +1,18 @@
 package com.finset.key_fin.room.service;
 
 import com.finset.key_fin.furniture.service.FurnitureService;
+import com.finset.key_fin.fincoin.entity.FinCoin;
+import com.finset.key_fin.fincoin.entity.FinCoinReason;
+import com.finset.key_fin.fincoin.repository.FinCoinRepository;
 import com.finset.key_fin.item.service.ItemService;
 import com.finset.key_fin.room.dto.response.RoomResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -13,21 +20,22 @@ public class RoomServiceImpl implements RoomService {
 
 	private final ItemService itemService;
 	private final FurnitureService furnitureService;
+	private final FinCoinRepository finCoins;
+	private final Clock clock;
 
 	@Transactional(readOnly = true)
 	@Override
 	public RoomResponse getRoom(long userId) {
-		// TODO: 사용자의 최신 FinCoin 원장에서 현재 잔액을 조회한다.
-		// TODO: 오늘 ATTEND 사유의 FinCoin 원장이 존재하는지 조회한다.
-		// TODO: 현재 아바타 반응 상태와 활성 방 테마를 조회한다.
 		var equipped = itemService.getEquipment(userId).equipped();
 		var furnitures = furnitureService.getPlacedFurnitures(userId);
 
 		return new RoomResponse(
 				new RoomResponse.AvatarResponse(equipped, null),
 				furnitures,
-				new RoomResponse.CoinResponse(1250),
-				new RoomResponse.AttendanceResponse(false)
+				new RoomResponse.CoinResponse(finCoins.findFirstByUserIdOrderByIdDesc(userId)
+						.map(FinCoin::getBalanceAfter).orElse(0)),
+				new RoomResponse.AttendanceResponse(finCoins.existsByUserIdAndGrantDateAndReasonCode(
+						userId, LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))), FinCoinReason.ATTEND))
 		);
 	}
 }
