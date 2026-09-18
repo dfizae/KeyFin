@@ -4,6 +4,8 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
+import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
 import com.finset.key_fin.user.entity.UserSettings;
 import com.finset.key_fin.user.exception.UserErrorCode;
@@ -24,6 +26,18 @@ public class UserSettingsService {
 	public TransferSettingsResponse getTransferSettings(long userId) {
 		validateActiveUser(userId);
 		return TransferSettingsResponse.from(findSettings(userId));
+	}
+
+	@Transactional(readOnly = true)
+	public NotificationSettingsResponse getNotificationSettings(long userId) {
+		validateActiveUser(userId);
+		return NotificationSettingsResponse.from(findSettings(userId));
+	}
+
+	@Transactional(readOnly = true)
+	public CoachPersonaResponse getCoachPersona(long userId) {
+		validateActiveUser(userId);
+		return CoachPersonaResponse.from(findSettings(userId));
 	}
 
 	@Transactional

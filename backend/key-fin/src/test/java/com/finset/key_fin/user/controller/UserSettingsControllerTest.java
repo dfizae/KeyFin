@@ -4,7 +4,10 @@ import com.finset.key_fin.global.exception.GlobalExceptionHandler;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
+import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
+import com.finset.key_fin.user.entity.CoachPersona;
 import com.finset.key_fin.user.service.UserSettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -16,6 +19,7 @@ import org.springframework.security.web.method.annotation.AuthenticationPrincipa
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.time.LocalTime;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -65,6 +69,36 @@ class UserSettingsControllerTest {
 				.andExpect(jsonPath("$.data.transferLimitOnce").value(1_000_000));
 
 		verify(userSettingsService).getTransferSettings(USER_ID);
+	}
+
+	@Test
+	void 알림_설정을_조회한다() throws Exception {
+		when(userSettingsService.getNotificationSettings(USER_ID))
+				.thenReturn(new NotificationSettingsResponse(
+						true, false, true, false, LocalTime.of(23, 0), LocalTime.of(8, 0)));
+
+		mockMvc.perform(get("/api/v1/settings/notifications"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.notiCoaching").value(true))
+				.andExpect(jsonPath("$.data.notiBudgetAlert").value(false))
+				.andExpect(jsonPath("$.data.notiTransfer").value(true))
+				.andExpect(jsonPath("$.data.notiCleanup").value(false))
+				.andExpect(jsonPath("$.data.quietHoursStart").value("23:00:00"))
+				.andExpect(jsonPath("$.data.quietHoursEnd").value("08:00:00"));
+
+		verify(userSettingsService).getNotificationSettings(USER_ID);
+	}
+
+	@Test
+	void 코치_말투를_조회한다() throws Exception {
+		when(userSettingsService.getCoachPersona(USER_ID))
+				.thenReturn(new CoachPersonaResponse(CoachPersona.DODO));
+
+		mockMvc.perform(get("/api/v1/settings/coach"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.coachPersona").value("DODO"));
+
+		verify(userSettingsService).getCoachPersona(USER_ID);
 	}
 
 	@Test
