@@ -12,6 +12,10 @@ const ACCESS_KEY = "keyfin.accessToken";
 const REFRESH_KEY = "keyfin.refreshToken";
 const USER_KEY = "keyfin.user";
 const TERMS_KEY_PREFIX = "keyfin.terms.";
+const ONBOARDING_KEY_PREFIX = "keyfin.onboarding.";
+/** 기기(설치) 단위 값이라 로그아웃해도 지우지 않는다 */
+const INSTALLATION_KEY = "keyfin.installationId";
+const PUSH_PERMISSION_ASKED_KEY = "keyfin.pushPermissionAsked";
 
 const isWeb = Platform.OS === "web";
 
@@ -96,3 +100,34 @@ export async function loadTermsAgreed(userId: number): Promise<boolean> {
 export async function saveTermsAgreed(userId: number): Promise<void> {
   await write(`${TERMS_KEY_PREFIX}${userId}`, "1");
 }
+
+/**
+ * 온보딩 완료 여부. 백엔드와 합의한 판정("첫 예산 확정 성공 = 완료", 2026-09-11)을 서버 필드가 생기기 전까지 기기에 기록한다.
+ * 홈 게이트가 이 값을 먼저 보므로 금융망 상태 조회(목은 리로드마다 초기화된다)에 흔들리지 않는다. 서버 값이 오면 그걸로 바꾼다.
+ */
+export async function loadOnboardingDone(userId: number): Promise<boolean> {
+  return (await read(`${ONBOARDING_KEY_PREFIX}${userId}`)) === "1";
+}
+
+export async function saveOnboardingDone(userId: number): Promise<void> {
+  await write(`${ONBOARDING_KEY_PREFIX}${userId}`, "1");
+}
+
+/** 푸시 기기 등록(PUT /me/push-devices/{installationId})에 쓰는 설치 UUID. 앱을 지우기 전까지 같은 값을 쓴다 */
+export async function loadInstallationId(): Promise<string | null> {
+  return read(INSTALLATION_KEY);
+}
+
+export async function saveInstallationId(installationId: string): Promise<void> {
+  await write(INSTALLATION_KEY, installationId);
+}
+
+/** 알림 권한을 이 설치에서 한 번 물어봤는지. 거절한 사람에게 실행할 때마다 다시 묻지 않는다 */
+export async function loadPushPermissionAsked(): Promise<boolean> {
+  return (await read(PUSH_PERMISSION_ASKED_KEY)) === "1";
+}
+
+export async function savePushPermissionAsked(): Promise<void> {
+  await write(PUSH_PERMISSION_ASKED_KEY, "1");
+}
+

@@ -11,7 +11,8 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.jykim7568.myfirstapp",
+      "package": "com.finset.keyfin",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -25,6 +26,12 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default"
+        }
+      ],
       [
         "expo-font",
         {
@@ -63,6 +70,12 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1b676e6b-6d89-4b98-82b0-f57c071b4f80"
+      }
+    }
   }
 }

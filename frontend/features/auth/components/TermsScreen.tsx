@@ -1,18 +1,27 @@
 import { useRouter } from "expo-router";
-import { ChevronLeft, Circle, CircleCheckBig } from "lucide-react-native";
+import { Circle, CircleCheckBig } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, ScrollView, View } from "react-native";
+import { Pressable, View } from "react-native";
+import Animated from "react-native-reanimated";
 
 import { Button } from "@/components/ui/button";
+import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
+import { useIntroReveal } from "@/components/ui/intro-reveal";
+import { Screen, ScreenScrollView } from "@/components/ui/screen";
+import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
-import { canAgreeToTerms, TERMS_ITEMS } from "@/features/auth/model";
+import { canAgreeToTerms, HOME_ROUTE, TERMS_ITEMS } from "@/features/auth/model";
 import { useAuthStore } from "@/features/auth/store";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { saveTermsAgreed } from "@/lib/session-storage";
 import { cn } from "@/lib/utils";
 
-/** 약관 다음은 금융망 이메일 연결(PAGE-03B)이다 (유저 플로우 v2, 2026-09-10). */
-const NEXT_ROUTE = "/onboarding/finance-email";
+/**
+ * 약관 다음 단계는 홈 게이트(app/(app)/(tabs)/_layout)가 정한다. 금융망 미연결이면 금융망 이메일(PAGE-03B)로,
+ * 이미 연결된 계정(새 기기·웹 새로고침으로 동의 기록만 없는 경우)이면 홈으로 간다.
+ */
+const NEXT_ROUTE = HOME_ROUTE;
 
 const CLAUSES = [
   {
@@ -29,9 +38,10 @@ const CLAUSES = [
   },
 ];
 
-// Pencil terms (R2GYj). 서버 호출이 없어 동의는 기기에만 남긴다.
+// Pencil 약관 동의 · 캐릭터 대안 (f0WyT). 서버 호출이 없어 동의는 기기에만 남긴다.
 function TermsScreen() {
   const router = useRouter();
+  const intro = useIntroReveal("terms");
   const user = useAuthStore((state) => state.user);
   const agreeToTerms = useAuthStore((state) => state.agreeToTerms);
 
@@ -55,41 +65,32 @@ function TermsScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
-      <View className="flex-row items-center gap-3 px-6 pb-2">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="뒤로"
-          hitSlop={10}
-          onPress={() => router.canGoBack() && router.back()}
-        >
-          <Icon as={ChevronLeft} size={24} className="text-foreground" />
-        </Pressable>
-        <Text className="text-h3 text-foreground" accessibilityRole="header">
-          약관 동의
-        </Text>
-      </View>
+    <Screen>
+      <Animated.View style={intro.revealStyle}>
+        <ScreenHeader flat title="약관에 동의해 주세요" />
+      </Animated.View>
 
-      <ScrollView className="flex-1" contentContainerClassName="gap-5 px-6 pt-4">
-        <View className="gap-2">
-          <Text className="text-h1 text-foreground" accessibilityRole="header">
-            약관에 동의해 주세요
-          </Text>
-          <Text className="text-body-sm text-muted-foreground">자산을 연결하고 예산을 만들려면 아래 약관이 필요해요.</Text>
-        </View>
+      <ScreenScrollView className="flex-1" contentContainerClassName="gap-5 px-6">
+        <CoachRow
+          intro={intro}
+          frames={CHARACTER_FRAMES.phone}
+          message={"약관은 제가 미리 읽어 봤어요.\n필수 2개만 체크하면 바로 시작할 수 있어요."}
+        />
 
+        <Animated.View style={intro.revealStyle}>
+        <View className="gap-5">
         <View className="gap-2.5 rounded-lg bg-muted p-4">
           {CLAUSES.map((clause) => (
             <View key={clause.title} className="gap-1">
               <Text className="text-label text-foreground">{clause.title}</Text>
-              <Text className="text-caption text-muted-foreground">{clause.body}</Text>
+              <Text className="text-caption text-card-foreground">{clause.body}</Text>
             </View>
           ))}
         </View>
 
         <View className="gap-3.5">
           <Pressable
-            className="flex-row items-center gap-2.5 rounded-lg bg-accent px-4 py-3.5"
+            className="flex-row items-center gap-2.5 rounded-lg bg-card px-4 py-3.5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
             accessibilityRole="checkbox"
             accessibilityLabel="전체 동의"
             accessibilityState={{ checked: allChecked }}
@@ -113,7 +114,7 @@ function TermsScreen() {
                   hitSlop={6}
                 >
                   <CheckMark checked={checked} />
-                  <Text className={cn("flex-1 text-body-sm", checked ? "text-foreground" : "text-muted-foreground")}>
+                  <Text className={cn("flex-1 text-body-sm", checked ? "text-foreground" : "text-card-foreground")}>
                     {item.label}
                   </Text>
                 </Pressable>
@@ -121,8 +122,11 @@ function TermsScreen() {
             })}
           </View>
         </View>
-      </ScrollView>
+        </View>
+        </Animated.View>
+      </ScreenScrollView>
 
+      <Animated.View style={intro.revealStyle}>
       <View className="px-6 pb-8 pt-3">
         <Button
           size="lg"
@@ -134,7 +138,8 @@ function TermsScreen() {
           <Text>동의하고 계속하기</Text>
         </Button>
       </View>
-    </View>
+      </Animated.View>
+    </Screen>
   );
 }
 
@@ -143,7 +148,7 @@ function CheckMark({ checked }: { checked: boolean }) {
     <Icon
       as={checked ? CircleCheckBig : Circle}
       size={20}
-      className={checked ? "text-primary" : "text-muted-foreground"}
+      className={checked ? "text-primary" : "text-card-foreground"}
     />
   );
 }

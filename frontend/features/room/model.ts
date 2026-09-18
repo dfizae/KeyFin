@@ -51,6 +51,11 @@ export function getSpriteRect(anchor: ScenePoint, size: SceneSize, anchorRatio: 
   };
 }
 
+/** 벽 오브젝트 아래에 팝오버를 붙일 좌상단(씬 단위). 오브젝트가 어디로 옮겨져도 팝오버는 씬 폭 안에 남는다 */
+export function popoverBelow(rect: SceneRect, width: number, gap = 8): ScenePoint {
+  return { x: clamp(rect.x, 0, SCENE_WIDTH - width), y: rect.y + rect.height + gap };
+}
+
 /** 씬 단위 사각형을 캔버스 픽셀 사각형으로 바꾼다. */
 export function sceneRectToCanvas(rect: SceneRect, scale: number): SceneRect {
   "worklet";
@@ -238,7 +243,8 @@ export function hitTestTopmost<TId>(point: ScenePoint, targets: readonly HitTarg
 
 /* ───────────── 서버 계약: GET /room (docs/api-contract.md GAME, FR-GAM-01) ───────────── */
 
-export const SLOT_TYPES = ["WALLPAPER", "FLOOR", "FURNITURE", "HAIR", "OUTFIT", "FACE"] as const;
+/** 서버 ItemSlotType (2026-09-16 Swagger 대조). 앞 6종은 아바타 착장, WALL·FLOOR 는 가구다 */
+export const SLOT_TYPES = ["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR", "WALL", "FLOOR"] as const;
 export type KnownSlotType = (typeof SLOT_TYPES)[number];
 /** 계약에 없는 값은 UNKNOWN 으로 흡수한다 (규칙 90) */
 export type SlotType = KnownSlotType | "UNKNOWN";
@@ -247,17 +253,34 @@ export type SlotType = KnownSlotType | "UNKNOWN";
 export const SURFACE_TYPES = ["FLOOR", "WALL_LEFT", "WALL_RIGHT"] as const;
 export type Surface = (typeof SURFACE_TYPES)[number];
 
+/**
+ * GET /room 응답 (2026-09-16 Swagger 대조).
+ * `theme` 과 `board` 는 서버 응답에 없다 — board 는 develop d80e569 에서 빠졌고 벽 보드 수치는 GET /budgets/current 로 받는다.
+ * `furnitures` 는 설치된 가구의 씬 좌표다. 방 3단계에서 쓰고 지금은 받아만 둔다.
+ */
 export type RoomDto = {
-  theme: string;
   avatar: {
-    equipped: { slotType: string; itemId: number; assetKey: string }[];
+    equipped: { userItemId?: number; slotType: string; itemId: number; assetKey: string }[];
     reaction: { type: string; until: string } | null;
   };
+  furnitures?: PlacedFurnitureDto[];
   coin: { balance: number };
-  board: { month: string; totalRemainingRate: number };
   attendance: { checkedToday: boolean };
   stickers?: { count: number; total: number; removableToday: boolean };
   overEnvelopes?: number[];
+};
+
+/** 설치된 가구 한 개. 좌표는 327×404 씬 기준이라 ScenePoint 와 같은 축이다 (3단계) */
+export type PlacedFurnitureDto = {
+  userFurnitureId: number;
+  itemId: number;
+  slotType: string;
+  assetKey: string;
+  placementStatus: string;
+  placementDirection: string;
+  positionX: number;
+  positionY: number;
+  layer: number;
 };
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };
@@ -266,11 +289,11 @@ export type AvatarReaction = { type: string; until: string };
 export type RoomStickers = { count: number; total: number; removableToday: boolean };
 
 export type Room = {
-  theme: string;
   equipped: EquippedItem[];
+  /** 설치된 가구. 씬 배치로 바꾸는 것은 furniture.ts 가 한다 (3단계) */
+  furnitures: PlacedFurnitureDto[];
   reaction: AvatarReaction | null;
   coinBalance: number;
-  board: { month: string; totalRemainingRate: number };
   checkedInToday: boolean;
   /** P1 압류 딱지. 응답에 없으면 null */
   stickers: RoomStickers | null;
@@ -286,26 +309,23 @@ function isKnownSlotType(value: string): value is KnownSlotType {
 
 export function toRoom(dto: RoomDto): Room {
   if (!Number.isSafeInteger(dto.coin.balance) || dto.coin.balance < 0) throw new ContractMismatchError("coin.balance");
-  if (!MONTH_KEY.test(dto.board.month)) throw new ContractMismatchError("board.month");
-  if (!Number.isInteger(dto.board.totalRemainingRate)) throw new ContractMismatchError("board.totalRemainingRate");
 
   return {
-    theme: dto.theme,
     equipped: dto.avatar.equipped.map((item) => ({
       slotType: isKnownSlotType(item.slotType) ? item.slotType : "UNKNOWN",
       itemId: item.itemId,
       assetKey: item.assetKey,
     })),
     reaction: dto.avatar.reaction,
+    furnitures: dto.furnitures ?? [],
     coinBalance: dto.coin.balance,
-    board: { month: dto.board.month, totalRemainingRate: dto.board.totalRemainingRate },
     checkedInToday: dto.attendance.checkedToday,
     stickers: dto.stickers ?? null,
     overEnvelopeIds: dto.overEnvelopes ?? [],
   };
 }
 
-/* ───────────── 서버 계약: POST /attendance (docs/api-contract.md GAME, FR-GAM-03) ───────────── */
+/* ───────────── 서버 계약: POST /fin-coins/attendance (docs/api-contract.md GAME, FR-GAM-03) ───────────── */
 
 /** granted 는 이번 요청에서 지급된 코인(당일 이미 출석했으면 0), balance 는 지급 후 잔액 */
 export type AttendanceDto = { granted: number; balance: number };

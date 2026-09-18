@@ -17,7 +17,7 @@ public record SignupRequest(
 		@NotBlank
 		String password,
 
-		@Schema(description = "사용자 이름", example = "김싸피", maxLength = 30)
+		@Schema(description = "사용자 이름", example = "김예린", maxLength = 30)
 		@NotBlank
 		@Size(max = 30)
 		String name

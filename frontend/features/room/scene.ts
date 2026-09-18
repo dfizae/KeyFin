@@ -1,16 +1,48 @@
-import { FURNITURE, type FurnitureItem, type FurnitureId } from "@/features/room/catalog";
-import { anchorToCell, cellAnchor, cellCorners, type GridCell, type GridFootprint, type SurfaceDef } from "@/features/room/grid";
-import { isPointInPolygon, type ScenePoint, type ScenePolygon, type SceneSize, type Surface } from "@/features/room/model";
+import {
+  FURNITURE,
+  WALL_ITEMS,
+  isWallItemId,
+  type FurnitureId,
+  type FurnitureItem,
+  type RoomItemId,
+  type WallItemId,
+  type WallSurface,
+} from "@/features/room/catalog";
+import {
+  anchorToCell,
+  cellAnchor,
+  cellCorners,
+  fitsOnSurface,
+  type GridCell,
+  type GridFootprint,
+  type SurfaceDef,
+} from "@/features/room/grid";
+import {
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  getSpriteRect,
+  isPointInPolygon,
+  type ScenePoint,
+  type ScenePolygon,
+  type SceneRect,
+  type SceneSize,
+  type Surface,
+} from "@/features/room/model";
 
 /**
- * 씬 배치. 좌표는 모두 씬 단위(327×404)이며 anchor 는 가구 발끝(바닥에 닿는 점)이다.
- * 백엔드 `GET/PUT /room/layout` 이 생기면 이 파일의 DEFAULT_LAYOUT 은 목 데이터로 옮긴다. (TBD, 3단계)
+ * 씬 배치. 좌표는 모두 씬 단위(327×404)이며 anchor 는 가구는 발끝(바닥에 닿는 점), 벽 오브젝트는 스프라이트 중심이다.
+ * surface 가 없으면 바닥이다. 백엔드 `user_furnitures.placement_status`(FLOOR/LEFT_WALL/RIGHT_WALL)와 같은 뜻이고
+ * 변환은 furniture.ts 가 한다. DEFAULT_LAYOUT 은 서버에 설치된 가구가 없을 때 쓰는 폴백이다(아이템 시드 전까지, 2026-09-16).
  */
 export type Placement = {
-  itemId: FurnitureId;
+  itemId: RoomItemId;
+  /** 서버 보유 가구 id (GET /room·/furnitures). 기본 배치 폴백에는 없어 저장 대상에서 빠진다 (3단계) */
+  userFurnitureId?: number;
   anchor: ScenePoint;
   /** 깊이 보정. 카탈로그 layer 보다 우선한다 */
   layer?: number;
+  /** 놓인 면. 생략하면 FLOOR */
+  surface?: Surface;
 };
 
 /**
@@ -48,7 +80,8 @@ export const SURFACES: Record<Surface, SurfaceDef> = {
     rows: 8,
   },
   // 벽은 걸레받이를 따라가는 방향이 col, 수직이 row 다. 벽면은 수직이라 행 경계는 화면에서도 수평이다.
-  // 왼쪽 벽은 폭 134, 오른쪽은 193 이라 칸 폭을 맞추려고 칸 수를 다르게 뒀다(24.7 대 26.9, 차이 8%).
+  // 벽걸이 아이템이 1×1 칸이라 칸을 크게 잡았다(사용자 결정 2026-09-15): 왼쪽 3×3(칸 45×58), 오른쪽 4×3(칸 48×63).
+  // 왼쪽 벽은 폭 134, 오른쪽은 193 이라 칸 폭을 맞추려고 칸 수를 다르게 뒀다. 바닥 이미지의 창문은 없앴다(floor-default.png 재크롭).
   WALL_LEFT: {
     quad: [
       { x: 0, y: 15 },
@@ -56,8 +89,8 @@ export const SURFACES: Record<Surface, SurfaceDef> = {
       { x: 134, y: 125 },
       { x: 0, y: 188 },
     ],
-    cols: 6,
-    rows: 7,
+    cols: 3,
+    rows: 3,
   },
   WALL_RIGHT: {
     quad: [
@@ -66,8 +99,8 @@ export const SURFACES: Record<Surface, SurfaceDef> = {
       { x: 327, y: 219 },
       { x: 134, y: 125 },
     ],
-    cols: 8,
-    rows: 7,
+    cols: 4,
+    rows: 3,
   },
 };
 
@@ -103,10 +136,56 @@ export const DEFAULT_CELLS: readonly { itemId: FurnitureId; cell: GridCell }[] =
   { itemId: "sofa", cell: { col: 4, row: 2 } },
 ];
 
-export const DEFAULT_LAYOUT: readonly Placement[] = DEFAULT_CELLS.map(({ itemId, cell }) => ({
-  itemId,
-  anchor: cellAnchor(SURFACES.FLOOR, cell, FURNITURE[itemId].grid),
-}));
+/**
+ * 벽에 실제로 붙일 수 있는 자리인지. 벽 격자는 위쪽이 화면 밖까지 뻗어 있으므로(왼쪽 벽 윗변 y -48, 오른쪽 -63)
+ * 스프라이트 칸의 네 꼭짓점이 모두 씬 안에 들어와야 한다. 아랫변은 걸레받이선이라 격자가 이미 막는다.
+ */
+export function isPlaceableOnWall(surface: WallSurface, cell: GridCell, footprint: GridFootprint): boolean {
+  const def = SURFACES[surface];
+  if (!fitsOnSurface(def, cell, footprint)) return false;
+  return cellCorners(def, cell, footprint).every(
+    (corner) => corner.x >= 0 && corner.x <= SCENE_WIDTH && corner.y >= 0 && corner.y <= SCENE_HEIGHT
+  );
+}
+
+/**
+ * 벽 오브젝트 기본 자리(반 칸 단위). 둘 다 오른쪽 벽 가운데 줄에 나란히 — 보드는 코너 쪽 둘째 칸, 캘린더는 그 옆.
+ * 오른쪽 끝 칸은 기본 배치의 냉장고에 아랫부분이 가려져 비워 둔다(웹 확인 2026-09-15).
+ * 오른쪽 벽 맨 윗줄은 코너 쪽 꼭짓점이 화면 위로 나가(y -63) 놓을 수 없다.
+ */
+export const DEFAULT_WALL_CELLS: readonly { itemId: WallItemId; cell: GridCell }[] = [
+  { itemId: "board", cell: { col: 2, row: 2 } },
+  { itemId: "calendar", cell: { col: 4, row: 2 } },
+];
+
+export const DEFAULT_LAYOUT: readonly Placement[] = [
+  ...DEFAULT_CELLS.map(
+    ({ itemId, cell }): Placement => ({
+      itemId,
+      anchor: cellAnchor(SURFACES.FLOOR, cell, FURNITURE[itemId].grid),
+    })
+  ),
+  ...DEFAULT_WALL_CELLS.map(({ itemId, cell }): Placement => {
+    const item = WALL_ITEMS[itemId];
+    return { itemId, surface: item.surface, anchor: cellAnchor(SURFACES[item.surface], cell, item.grid) };
+  }),
+];
+
+/** 배치가 바닥 가구인지(벽 오브젝트가 아닌지). 깊이 정렬·캐릭터 경로 계산은 이것만 본다 */
+export function isFloorPlacement(placement: Placement): placement is Placement & { itemId: FurnitureId } {
+  return !isWallItemId(placement.itemId);
+}
+
+/**
+ * 벽 오브젝트가 지금 놓인 씬 사각형. RN 오버레이(숫자·칩)와 팝오버가 이 위에 붙는다.
+ * 배치에 없으면 null — 그때는 오버레이도 그리지 않는다.
+ */
+export function getWallItemRect(placements: readonly Placement[], id: WallItemId): SceneRect | null {
+  const placement = placements.find((p) => p.itemId === id);
+  if (!placement) return null;
+  const item = WALL_ITEMS[id];
+  return getSpriteRect(placement.anchor, item.size, item.anchor);
+}
 
 /**
  * 가구가 바닥에서 차지하는 발자국. 캐릭터 발끝이 들어가거나 경로가 지나가면 안 되는 영역이며,

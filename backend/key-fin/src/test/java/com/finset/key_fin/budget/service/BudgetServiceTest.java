@@ -3,17 +3,10 @@ package com.finset.key_fin.budget.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneId;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,26 +15,19 @@ import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopePro
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.support.FixedClockConfig;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
+@Import(FixedClockConfig.class)
 @Sql("/sql/budget-proposal-fixture.sql")
-class BudgetServiceTest {
+class BudgetServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long USER_WITH_HISTORY = 997L;
 	private static final long USER_WITHOUT_HISTORY = 996L;
 	private static final long USER_WITH_SHORT_HISTORY = 995L;
 	private static final long USER_WITH_ANCHOR_25 = 994L;
-
-	@TestConfiguration
-	static class FixedClockConfig {
-
-		@Bean
-		@Primary
-		Clock fixedClock() {
-			return Clock.fixed(Instant.parse("2026-09-10T03:00:00Z"), ZoneId.of("Asia/Seoul"));
-		}
-	}
+	private static final long USER_WITH_SEEDED_GAP = 988L;
 
 	@Autowired
 	private BudgetService budgetService;
@@ -50,13 +36,13 @@ class BudgetServiceTest {
 	private BudgetEnvelopeRepository budgetEnvelopeRepository;
 
 	@Test
-	@DisplayName("요청 시점 기준 직전 3개월 순소비를 일수 비례 월평균으로 환산해 현재 주기에 봉투 7종 전부 제안한다")
+	@DisplayName("마지막 거래일 기준 직전 3개월 순소비를 일수 비례 월평균으로 환산해 현재 주기에 봉투 7종 전부 제안한다")
 	void proposeFromRecentAverage() {
 		BudgetProposalResponse response = budgetService.propose(USER_WITH_HISTORY);
 
 		assertThat(response.month()).isEqualTo("202609");
 		assertThat(response.status()).isEqualTo("PROPOSED");
-		assertThat(response.basis()).isEqualTo("최근 3개월 평균");
+		assertThat(response.basis()).isEqualTo("최근 3개월 평균 (2026-06-02~2026-09-01)");
 		assertThat(response.envelopes()).hasSize(7);
 
 		EnvelopeProposal dining = response.envelopes().get(0);
@@ -78,19 +64,31 @@ class BudgetServiceTest {
 	void proposeFromShortHistory() {
 		BudgetProposalResponse response = budgetService.propose(USER_WITH_SHORT_HISTORY);
 
-		assertThat(response.basis()).isEqualTo("최근 1개월 평균");
+		assertThat(response.basis()).isEqualTo("최근 1개월 평균 (2026-08-15~2026-08-15)");
 		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(90000);
 		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(90000);
 	}
 
 	@Test
-	@DisplayName("기준일 25 사용자는 현재 주기 라벨이 전월(202608)이고, 부분 달 이력은 커버 일수에 비례해 환산한다")
+	@DisplayName("기준일 25 사용자는 현재 주기 라벨이 전월(202608)이고, 마지막 거래 이후 공백은 커버 일수에서 빠진다")
 	void proposeForAnchor25UserWithFractionalHistory() {
 		BudgetProposalResponse response = budgetService.propose(USER_WITH_ANCHOR_25);
 
 		assertThat(response.month()).isEqualTo("202608");
-		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(89610);
-		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(90000);
+		assertThat(response.basis()).isEqualTo("최근 1개월 평균 (2026-06-25~2026-08-01)");
+		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(181578);
+		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(182000);
+	}
+
+	@Test
+	@DisplayName("시딩처럼 최근 구간이 비어 있으면 마지막 거래일까지의 3개월을 그대로 써서 공백만큼 평균이 깎이지 않는다")
+	void proposeUsesLatestTransactionWindow() {
+		BudgetProposalResponse response = budgetService.propose(USER_WITH_SEEDED_GAP);
+
+		assertThat(response.month()).isEqualTo("202609");
+		assertThat(response.basis()).isEqualTo("최근 3개월 평균 (2026-06-01~2026-08-31)");
+		assertThat(response.envelopes().get(0).monthlyAvg()).isEqualTo(97826);
+		assertThat(response.envelopes().get(0).proposedAmount()).isEqualTo(98000);
 	}
 
 	@Test

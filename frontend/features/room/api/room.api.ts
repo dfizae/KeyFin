@@ -1,18 +1,23 @@
-import { USE_MOCKS, api } from "@/api/client";
+import { api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
+import { placedFurnitureMock } from "@/api/mocks/furniture";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
 import { toAttendance, toRoom, type Attendance, type AttendanceDto, type Room, type RoomDto } from "@/features/room/model";
 
-/** GET /room — 방 홈 화면 데이터: 테마·착장·반응·코인·보드 요약·출석 상태 (docs/api-contract.md GAME, FR-GAM-01) */
+/** GET /room — 방 홈 화면 데이터: 착장·반응·설치 가구·코인·출석 상태 (docs/api-contract.md GAME, FR-GAM-01) */
 export async function getRoom(signal?: AbortSignal): Promise<Room> {
-  if (USE_MOCKS) return toRoom(await withMockLatency(roomMock, signal));
+  // 가구는 목도 서버처럼 상태를 들고 있어 방 꾸미기에서 옮긴 자리가 유지된다
+  if (isMocked("room")) return toRoom(await withMockLatency({ ...roomMock, furnitures: placedFurnitureMock() }, signal));
   const { data } = await api.get<RoomDto>("/room", { signal });
   return toRoom(data);
 }
 
-/** POST /attendance — 당일 출석 처리. 이미 출석했으면 granted=0 이고 중복 지급은 서버 유니크 제약이 막는다 (FR-GAM-03) */
+/**
+ * POST /fin-coins/attendance — 당일 첫 출석에 10코인 (FR-GAM-03, 2026-09-16 Swagger 대조로 경로 정정).
+ * 날짜는 서버가 사용자 잠금을 잡고 KST 로 정한다. 당일 재요청도 200 이고 granted=0 · balance 는 최신 잔액이다.
+ */
 export async function checkAttendance(): Promise<Attendance> {
-  if (USE_MOCKS) return toAttendance(await withMockLatency(attendanceMock));
-  const { data } = await api.post<AttendanceDto>("/attendance");
+  if (isMocked("room")) return toAttendance(await withMockLatency(attendanceMock));
+  const { data } = await api.post<AttendanceDto>("/fin-coins/attendance");
   return toAttendance(data);
 }

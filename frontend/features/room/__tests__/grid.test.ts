@@ -15,7 +15,7 @@ import {
   type GridPlacement,
   type SurfaceDef,
 } from "@/features/room/grid";
-import { DEFAULT_CELLS, DEFAULT_LAYOUT, SURFACES, isPlaceableOnFloor } from "@/features/room/scene";
+import { DEFAULT_CELLS, DEFAULT_LAYOUT, SURFACES, isFloorPlacement, isPlaceableOnFloor } from "@/features/room/scene";
 
 const FLOOR = SURFACES.FLOOR;
 
@@ -134,14 +134,14 @@ describe("배치 가능 판정", () => {
 });
 
 describe("세 면의 격자 정의", () => {
-  it("바닥은 8 × 8, 벽은 각각 6 × 7 과 8 × 7 이다", () => {
+  it("바닥은 8 × 8, 벽은 각각 3 × 3 과 4 × 3 이다(벽걸이 1×1 기준, 2026-09-15)", () => {
     expect([SURFACES.FLOOR.cols, SURFACES.FLOOR.rows]).toEqual([8, 8]);
-    expect([SURFACES.WALL_LEFT.cols, SURFACES.WALL_LEFT.rows]).toEqual([6, 7]);
-    expect([SURFACES.WALL_RIGHT.cols, SURFACES.WALL_RIGHT.rows]).toEqual([8, 7]);
+    expect([SURFACES.WALL_LEFT.cols, SURFACES.WALL_LEFT.rows]).toEqual([3, 3]);
+    expect([SURFACES.WALL_RIGHT.cols, SURFACES.WALL_RIGHT.rows]).toEqual([4, 3]);
   });
 
   it("두 벽의 평균 칸 폭 차이가 10% 안이다", () => {
-    // 칸 수를 6 과 8 로 다르게 준 이유. 같게 두면 칸 크기가 1.4배 벌어진다.
+    // 칸 수를 3 과 4 로 다르게 준 이유. 같게 두면 칸 크기가 1.4배 벌어진다.
     const averageCellWidth = (surface: SurfaceDef) => {
       const span = halfSpan(surface);
       return dist(cellToScene(surface, { col: 0, row: 0 }), cellToScene(surface, { col: span.cols, row: 0 })) / surface.cols;
@@ -160,16 +160,16 @@ describe("세 면의 격자 정의", () => {
   });
 
   it("두 벽은 코너 (134, 125) 를 공유한다", () => {
-    const leftCorner = cellToScene(SURFACES.WALL_LEFT, { col: 12, row: 14 });
-    const rightCorner = cellToScene(SURFACES.WALL_RIGHT, { col: 0, row: 14 });
+    const leftCorner = cellToScene(SURFACES.WALL_LEFT, { col: 6, row: 6 });
+    const rightCorner = cellToScene(SURFACES.WALL_RIGHT, { col: 0, row: 6 });
     expect(leftCorner.x).toBeCloseTo(rightCorner.x, 6);
     expect(leftCorner.y).toBeCloseTo(rightCorner.y, 6);
     expect(leftCorner.x).toBeCloseTo(134, 6);
     expect(leftCorner.y).toBeCloseTo(125, 6);
   });
 
-  it("기본 배치의 발끝은 모두 바닥 면 안에 있다", () => {
-    for (const placed of DEFAULT_LAYOUT) {
+  it("기본 배치의 가구 발끝은 모두 바닥 면 안에 있다", () => {
+    for (const placed of DEFAULT_LAYOUT.filter(isFloorPlacement)) {
       expect(isOnSurface(SURFACES.FLOOR, placed.anchor)).toBe(true);
     }
   });

@@ -2,8 +2,11 @@ import { useRouter } from "expo-router";
 import * as React from "react";
 import { Image, View } from "react-native";
 
+import { LottieLoop } from "@/components/ui/lottie-loop";
+import { Sprite } from "@/components/ui/sprite";
 import { Text } from "@/components/ui/text";
-import { CHARACTER_CELEBRATE } from "@/features/room/assets";
+import { useCurrentBudget } from "@/features/budget/api/queries";
+import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { useRoom } from "@/features/room/api/queries";
 import { cn } from "@/lib/utils";
 
@@ -18,10 +21,17 @@ const DOTS = [0, 1, 2];
 const CIRCLE_STYLE = { width: 200, height: 200 } as const;
 const CHARACTER_STYLE = { width: 160, height: 160 } as const;
 
+/** 원 둘레에서 별이 번갈아 반짝이는 장식(직접 만든 Lottie, 240×240). 원보다 20씩 크게 겹친다 */
+const SPARKLES = require("@/assets/lottie/moving-in-sparkles.json");
+const SPARKLES_STYLE = { width: 240, height: 240 } as const;
+
 // Pencil character-moving-in (sla4v). GET /room 을 미리 받아 두고 홈으로 넘긴다 (PAGE-08).
 function MovingInScreen() {
   const router = useRouter();
   const room = useRoom();
+  // 예산 승인 직후라 현재 예산 캐시가 새로 받는 중이다. 여기서 구독해 두면 홈에 들어갈 때 이미 CONFIRMED 라
+  // 홈이 확정 화면으로 되돌려 보내는 깜빡임이 없다(2026-09-14).
+  const budget = useCurrentBudget();
   const [waited, setWaited] = React.useState(false);
 
   React.useEffect(() => {
@@ -29,8 +39,8 @@ function MovingInScreen() {
     return () => clearTimeout(timer);
   }, []);
 
-  // 방을 못 받아도 홈이 스스로 오류·재시도를 보여주므로 여기서 붙잡지 않는다.
-  const settled = !room.isPending;
+  // 방·예산을 못 받아도 홈이 스스로 오류·재시도를 보여주므로 여기서 붙잡지 않는다. 받는 중일 때만 기다린다.
+  const settled = !room.isPending && !budget.isFetching;
 
   React.useEffect(() => {
     if (waited && settled) router.replace(HOME_ROUTE);
@@ -38,15 +48,20 @@ function MovingInScreen() {
 
   return (
     <View className="flex-1 items-center justify-center gap-8 bg-background px-6" accessibilityLiveRegion="polite">
-      <View className="items-center justify-center overflow-hidden rounded-full bg-muted" style={CIRCLE_STYLE}>
-        <Image source={CHARACTER_CELEBRATE} style={CHARACTER_STYLE} resizeMode="contain" accessibilityRole="image" />
+      <View className="items-center justify-center" style={SPARKLES_STYLE}>
+        <View className="absolute" pointerEvents="none">
+          <LottieLoop source={SPARKLES} width={SPARKLES_STYLE.width} height={SPARKLES_STYLE.height} />
+        </View>
+        <View className="items-center justify-center overflow-hidden rounded-full bg-muted" style={CIRCLE_STYLE}>
+          <Sprite frames={CHARACTER_FRAMES.celebrate} style={CHARACTER_STYLE} accessibilityLabel="입주하는 캐릭터" />
+        </View>
       </View>
 
       <View className="items-center gap-2">
         <Text className="text-h1 text-foreground" accessibilityRole="header">
           캐릭터가 입주하고 있어요
         </Text>
-        <Text className="text-center text-body-sm text-muted-foreground">
+        <Text className="text-center text-body-sm text-card-foreground">
           잠시만 기다려 주세요.{"\n"}방을 준비하고 있어요.
         </Text>
       </View>

@@ -15,13 +15,11 @@ describe("toAttendance", () => {
 });
 
 describe("toRoom", () => {
-  it("코인·보드 요약·출석·기본 착장을 화면 모델로 옮기고 선택 필드는 기본값을 채운다", () => {
+  it("코인·출석·기본 착장을 화면 모델로 옮기고 선택 필드는 기본값을 채운다", () => {
     const room = toRoom(roomMock);
-    expect(room.theme).toBe("AUTUMN_2026");
     expect(room.coinBalance).toBe(1250);
-    expect(room.board).toEqual({ month: "202609", totalRemainingRate: 36 });
     expect(room.checkedInToday).toBe(false);
-    expect(room.equipped.map((item) => item.slotType)).toEqual(["HAIR", "OUTFIT", "FACE"]);
+    expect(room.equipped.map((item) => item.slotType)).toEqual(["HEAD", "UPPER_BODY", "FACE"]);
     expect(room.reaction).toBeNull();
     expect(room.stickers).toBeNull();
     expect(room.overEnvelopeIds).toEqual([]);
@@ -40,10 +38,42 @@ describe("toRoom", () => {
     expect(room.overEnvelopeIds).toEqual([5]);
   });
 
-  it("코인이 음수·소수이거나 보드 월 형식·잔여율이 틀리면 계약 불일치다", () => {
+  it("코인이 음수·소수면 계약 불일치다", () => {
     expect(() => toRoom({ ...roomMock, coin: { balance: -1 } })).toThrow(ContractMismatchError);
     expect(() => toRoom({ ...roomMock, coin: { balance: 1.5 } })).toThrow(ContractMismatchError);
-    expect(() => toRoom({ ...roomMock, board: { month: "2026-09", totalRemainingRate: 36 } })).toThrow(ContractMismatchError);
-    expect(() => toRoom({ ...roomMock, board: { month: "202609", totalRemainingRate: 36.5 } })).toThrow(ContractMismatchError);
+  });
+
+  it("설치된 가구를 그대로 싣는다 — 씬 배치 변환은 furniture.ts 가 한다 (3단계)", () => {
+    const room = toRoom({
+      ...roomMock,
+      furnitures: [
+        {
+          userFurnitureId: 3,
+          itemId: 21,
+          slotType: "FLOOR",
+          assetKey: "sofa_basic",
+          placementStatus: "FLOOR",
+          placementDirection: "FRONT_LEFT",
+          positionX: 165,
+          positionY: 280,
+          layer: 0,
+        },
+      ],
+    });
+
+    expect(room.furnitures).toEqual([
+      {
+        userFurnitureId: 3,
+        itemId: 21,
+        slotType: "FLOOR",
+        assetKey: "sofa_basic",
+        placementStatus: "FLOOR",
+        placementDirection: "FRONT_LEFT",
+        positionX: 165,
+        positionY: 280,
+        layer: 0,
+      },
+    ]);
+    expect(toRoom(roomMock).furnitures).toEqual([]);
   });
 });

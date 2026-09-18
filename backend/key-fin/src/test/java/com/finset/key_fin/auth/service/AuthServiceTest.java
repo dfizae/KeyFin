@@ -34,7 +34,7 @@ import static org.mockito.Mockito.when;
 class AuthServiceTest {
 
 	private static final long USER_ID = 1L;
-	private static final String EMAIL = "kim@ssafy.io";
+	private static final String EMAIL = "qwer@qwer.com";
 	private static final String RAW_PASSWORD = "P@ssw0rd!";
 	private static final String ENCODED_PASSWORD = "encoded-password";
 	private static final String ACCESS_TOKEN = "access-token";
@@ -74,7 +74,7 @@ class AuthServiceTest {
 		when(passwordEncoder.encode(RAW_PASSWORD)).thenReturn(ENCODED_PASSWORD);
 		when(userRepository.save(org.mockito.ArgumentMatchers.any(User.class))).thenReturn(savedUser);
 
-		SignupResponse response = authService.signup(new SignupRequest(EMAIL, RAW_PASSWORD, "김싸피"));
+		SignupResponse response = authService.signup(new SignupRequest(EMAIL, RAW_PASSWORD, "김예린"));
 
 		assertThat(response.userId()).isEqualTo(USER_ID);
 		verify(passwordEncoder).encode(RAW_PASSWORD);
@@ -115,7 +115,7 @@ class AuthServiceTest {
 		assertThat(response.accessToken()).isEqualTo(ACCESS_TOKEN);
 		assertThat(response.refreshToken()).isEqualTo(REFRESH_TOKEN);
 		assertThat(response.user().id()).isEqualTo(USER_ID);
-		assertThat(response.user().name()).isEqualTo("김싸피");
+		assertThat(response.user().name()).isEqualTo("김예린");
 		verify(refreshTokenRepository).save(USER_ID, REFRESH_TOKEN);
 	}
 
@@ -195,7 +195,7 @@ class AuthServiceTest {
 		User user = mock(User.class);
 		when(user.getId()).thenReturn(USER_ID);
 		when(user.getPassword()).thenReturn(ENCODED_PASSWORD);
-		when(user.getName()).thenReturn("김싸피");
+		when(user.getName()).thenReturn("김예린");
 		return user;
 	}
 
@@ -207,7 +207,7 @@ class AuthServiceTest {
 	}
 
 	private void assertSignupError(UserErrorCode errorCode) {
-		assertThatThrownBy(() -> authService.signup(new SignupRequest(EMAIL, RAW_PASSWORD, "김싸피")))
+		assertThatThrownBy(() -> authService.signup(new SignupRequest(EMAIL, RAW_PASSWORD, "김예린")))
 				.isInstanceOf(BusinessException.class)
 				.extracting(exception -> ((BusinessException) exception).getErrorCode())
 				.isEqualTo(errorCode);

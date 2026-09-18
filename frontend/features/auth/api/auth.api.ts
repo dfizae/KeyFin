@@ -1,4 +1,4 @@
-import { USE_MOCKS, api } from "@/api/client";
+import { api, isMocked } from "@/api/client";
 import { loginMock, signupMock } from "@/api/mocks/auth";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
@@ -12,7 +12,7 @@ import {
 
 /** POST /auth/login — Access 30분 · Refresh 14일 (docs/api-contract.md AUTH, FR-USR-01). Bearer 불필요. */
 export async function login(request: LoginRequest): Promise<AuthSession> {
-  if (USE_MOCKS) return toAuthSession(await withMockLatency(loginMock(request)));
+  if (isMocked("auth")) return toAuthSession(await withMockLatency(loginMock(request)));
   const { data } = await api.post<LoginResponseDto>("/auth/login", request);
   return toAuthSession(data);
 }
@@ -23,7 +23,7 @@ export async function login(request: LoginRequest): Promise<AuthSession> {
  * 409 USER_002 = 이미 사용 중이거나 탈퇴 이력이 있는 이메일.
  */
 export async function signup(request: SignupRequest): Promise<number> {
-  if (USE_MOCKS) {
+  if (isMocked("auth")) {
     const { userId } = await withMockLatency(signupMock(request));
     return userId;
   }
@@ -37,7 +37,7 @@ export async function signup(request: SignupRequest): Promise<number> {
  * 서버가 실패해도 로컬 세션은 끝내야 하므로 오류를 삼킨다.
  */
 export async function logout(): Promise<void> {
-  if (USE_MOCKS) {
+  if (isMocked("auth")) {
     await withMockLatency(null);
     return;
   }

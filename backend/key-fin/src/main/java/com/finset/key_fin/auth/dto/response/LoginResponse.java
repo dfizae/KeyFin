@@ -15,7 +15,7 @@ public record LoginResponse(
 	@Schema(description = "로그인 사용자 요약 정보")
 	public record UserSummary(
 			@Schema(description = "사용자 ID", example = "1") Long id,
-			@Schema(description = "사용자 이름", example = "김싸피") String name
+			@Schema(description = "사용자 이름", example = "김예린") String name
 	) {
 	}
 }

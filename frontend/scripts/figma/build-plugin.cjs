@@ -101,14 +101,13 @@ function loadLucideIcon(name) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="__SIZE__" height="__SIZE__" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
 }
 
-// ---------- design.pen → 화면 12개 (킷 10 + 구현 기준 home·home/dark) ----------
+// ---------- design.pen → 최상위 프레임(SCREEN_IDS) ----------
 // design.pen은 평문 JSON이다. 최상위 프레임을 id로 찾아 서브트리를 그대로 심고, 플러그인의 buildPenNode가 Figma 노드로 변환한다.
 // 색 변수(`$primary` …)는 치환하지 않고 남겨 플러그인이 Figma 변수에 바인딩하게 하고, 숫자·문자열 변수는 값으로 치환한다.
 const PEN_PATH = path.join(ROOT, "design.pen");
 const SCREEN_IDS = [
-  "aXqux", "ACqgw", "Snfjp", "h6Ziyl", "wV0pm", // 킷: Sign in, Sign up #1·#2, Forgot password #1·#2
-  "QvgnZ", "vbpej", "jiH3j", "Fo8cc", "CbQy2", // 킷: Forgot password #3·#4, Change password #1·#2, Home
-  "ClQlB", "DyDYf", // 구현 기준: home, home/dark (변수 참조·auto-layout·lucide 아이콘)
+  "L36Q0u", // P0 화면 — 구현 기준 아트보드(흐름 순 배치)
+  "n3r9i", // P0 화면 초안 — 사용자 스냅샷 복사본
 ];
 const pen = JSON.parse(fs.readFileSync(PEN_PATH, "utf8"));
 const penTop = new Map(pen.children.map((n) => [n.id, n]));
@@ -193,12 +192,13 @@ function resolvePenRefs(node, stack = []) {
   delete instance.reusable;
   return resolvePenRefs(instance, [...stack, node.ref]);
 }
-const requestedScreens = SCREEN_IDS.map((id) => penTop.get(id));
-const screenSources = requestedScreens.every(Boolean)
-  ? requestedScreens
-  : pen.children.filter((node) => node.type === "frame");
-if (!screenSources.length) throw new Error("design.pen 최상위에서 내보낼 frame을 찾을 수 없습니다");
-const penScreens = screenSources.map((screen) => compactPen(resolvePenRefs(screen)));
+// 없는 id를 조용히 건너뛰거나 문서 전체로 대체하면 옛 화면·엉뚱한 범위가 내보내지므로 멈춘다.
+const missingScreens = SCREEN_IDS.filter((id) => !penTop.has(id));
+if (missingScreens.length) {
+  const available = pen.children.map((n) => `${n.id}(${n.name})`).join(", ");
+  throw new Error(`design.pen 최상위에 없는 SCREEN_IDS: ${missingScreens.join(", ")}\n  최상위 노드: ${available}`);
+}
+const penScreens = SCREEN_IDS.map((id) => compactPen(resolvePenRefs(penTop.get(id))));
 // Pencil 캔버스 좌표를 그대로 옮기되 원점만 화면들의 좌상단으로 맞춘다
 const origin = { x: Math.min(...penScreens.map((s) => s.x)), y: Math.min(...penScreens.map((s) => s.y)) };
 for (const s of penScreens) {
@@ -215,16 +215,30 @@ const collectIcons = (n) => {
   for (const c of n.children ?? []) collectIcons(c);
 };
 penScreens.forEach(collectIcons);
+// 이미지 fill은 url(design.pen 기준 상대경로)의 파일을 base64로 심는다. 플러그인은 networkAccess가 없어 파일을 직접 읽지 못한다.
+const images = {};
+const collectImages = (n) => {
+  for (const f of [].concat(n.fill ?? [])) {
+    if (!f || f.type !== "image" || !f.url || images[f.url]) continue;
+    const file = path.resolve(path.dirname(PEN_PATH), f.url);
+    if (!fs.existsSync(file)) throw new Error(`이미지 파일을 찾을 수 없습니다: ${f.url} (${n.id})`);
+    images[f.url] = fs.readFileSync(file).toString("base64");
+  }
+  for (const c of n.children ?? []) collectImages(c);
+};
+penScreens.forEach(collectImages);
 const SCREENS = { source: "design.pen", screens: penScreens };
 
 const TOKENS = { colors, typography, radius: dims(tokens.semantic.radius), size: dims(tokens.semantic.size), samples };
 const template = fs.readFileSync(path.join(__dirname, "code.template.js"), "utf8");
+// 치환 문자열의 `$&`·`$'` 같은 패턴이 해석되지 않게 함수로 넘긴다.
 const code = template
-  .replace("__TOKENS__", JSON.stringify(TOKENS, null, 2))
-  .replace("__ICONS__", JSON.stringify(icons, null, 2))
-  .replace("__SCREENS__", JSON.stringify(SCREENS));
+  .replace("__TOKENS__", () => JSON.stringify(TOKENS, null, 2))
+  .replace("__ICONS__", () => JSON.stringify(icons, null, 2))
+  .replace("__IMAGES__", () => JSON.stringify(images))
+  .replace("__SCREENS__", () => JSON.stringify(SCREENS));
 fs.writeFileSync(path.join(__dirname, "code.js"), code);
 const totalNodes = penScreens.reduce((acc, s) => acc + penNodeCount(s), 0);
 console.log(
-  `생성: scripts/figma/code.js (색 ${Object.keys(colors.light).length} × ${MODES.length}모드, 타이포 ${Object.keys(typography).length}, 아이콘 ${Object.keys(icons).length}, 화면 ${penScreens.length}개 · 노드 ${totalNodes}개, ${Math.round(code.length / 1024)}KB)`
+  `생성: scripts/figma/code.js (색 ${Object.keys(colors.light).length} × ${MODES.length}모드, 타이포 ${Object.keys(typography).length}, 아이콘 ${Object.keys(icons).length}, 이미지 ${Object.keys(images).length}, 화면 ${penScreens.length}개 · 노드 ${totalNodes}개, ${Math.round(code.length / 1024)}KB)`
 );

@@ -35,7 +35,7 @@ public class User extends BaseEntity {
 	@Column(nullable = false, length = 30)
 	private String name;
 
-	@Column(name = "fin_user_key", length = 60)
+	@Column(name = "fin_user_key", unique = true, length = 60)
 	private String finUserKey;
 
 	@Column(name = "deleted_at")
@@ -69,6 +69,13 @@ public class User extends BaseEntity {
 
 	public boolean isDeleted() {
 		return deletedAt != null;
+	}
+
+	public void softDelete(LocalDateTime deletedAt) {
+		if (isDeleted()) {
+			throw new BusinessException(UserErrorCode.DELETED_USER);
+		}
+		this.deletedAt = Objects.requireNonNull(deletedAt, "deletedAt must not be null");
 	}
 
 	private String validateFinUserKey(String finUserKey) {

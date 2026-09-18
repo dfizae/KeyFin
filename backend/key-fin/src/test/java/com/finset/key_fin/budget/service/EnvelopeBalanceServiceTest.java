@@ -8,16 +8,15 @@ import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finset.key_fin.budget.service.EnvelopeBalanceService.EnvelopeBalance;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@SpringBootTest
 @Transactional
 @Sql("/sql/envelope-balance-fixture.sql")
-class EnvelopeBalanceServiceTest {
+class EnvelopeBalanceServiceTest extends SpringIntegrationTestSupport {
 
 	private static final long USER = 999L;
 	private static final String MONTH = "202609";

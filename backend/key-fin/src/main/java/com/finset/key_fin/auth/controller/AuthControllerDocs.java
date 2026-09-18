@@ -92,7 +92,7 @@ public interface AuthControllerDocs {
 							schema = @Schema(implementation = BaseResponse.class),
 							examples = @ExampleObject(
 									name = "로그인 성공",
-									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"accessToken\":\"eyJhbGciOiJIUzI1NiJ9...\",\"refreshToken\":\"eyJhbGciOiJIUzI1NiJ9...\",\"user\":{\"id\":1,\"name\":\"김싸피\"}}}"
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"accessToken\":\"eyJhbGciOiJIUzI1NiJ9...\",\"refreshToken\":\"eyJhbGciOiJIUzI1NiJ9...\",\"user\":{\"id\":1,\"name\":\"김예린\"}}}"
 							)
 					)
 			),

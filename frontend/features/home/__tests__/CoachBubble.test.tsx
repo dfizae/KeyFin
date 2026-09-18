@@ -1,40 +1,27 @@
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen } from "@testing-library/react-native";
 import * as React from "react";
 
-import { pendingTransactionsMock } from "@/api/mocks/transaction";
-import { COACH_COLLAPSE_MS, CoachBubble } from "@/features/home/components/CoachBubble";
-import { toTransaction } from "@/features/transaction/model";
-
-const transaction = toTransaction(pendingTransactionsMock().items[0]);
+import { COACH_PLACEHOLDER, CoachBubble, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
 
 describe("CoachBubble", () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
+  it("코치를 탭하면 임시 말풍선 '?' 이 열리고 다시 탭하면 닫힌다", async () => {
+    await render(<CoachBubble width={327} />);
+    expect(screen.queryByText(COACH_PLACEHOLDER)).toBeNull();
 
-  it("30초 무응답이면 말풍선만 접히고, 코치를 탭하면 다시 편다", async () => {
-    await render(<CoachBubble width={327} transaction={transaction} isPending={false} errorMessage={null} onConfirm={jest.fn()} onOther={jest.fn()} />);
-    expect(screen.getByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "코치" }));
+    expect(screen.getByText(COACH_PLACEHOLDER)).toBeTruthy();
+    expect(screen.queryByRole("link")).toBeNull();
 
-    await act(async () => {
-      jest.advanceTimersByTime(COACH_COLLAPSE_MS);
-    });
-    expect(screen.queryByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeNull();
-
-    await fireEvent.press(screen.getByRole("button", { name: "코치, 확인할 결제 있음" }));
-    expect(screen.getByText("『메가커피 역삼점 4,500원』 카페 맞나냥?")).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "코치" }));
+    expect(screen.queryByText(COACH_PLACEHOLDER)).toBeNull();
   });
 
-  it("질문이 없으면 코치만 보이고 버튼이 없다", async () => {
-    await render(<CoachBubble width={327} transaction={null} isPending={false} errorMessage={null} onConfirm={jest.fn()} onOther={jest.fn()} />);
-    expect(screen.getByRole("button", { name: "코치" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "다른 카테고리" })).toBeNull();
-  });
+  it("미확정 결제가 있으면 정리 링크를 함께 보여주고 누르면 알린다", async () => {
+    const onCleanup = jest.fn();
+    await render(<CoachBubble width={327} pendingCount={2} onCleanup={onCleanup} />);
+    await fireEvent.press(screen.getByRole("button", { name: "코치" }));
 
-  it("저장 중에는 버튼을 비활성화하고 오류 문구를 보여준다", async () => {
-    await render(
-      <CoachBubble width={327} transaction={transaction} isPending errorMessage="분류를 저장하지 못했어요." onConfirm={jest.fn()} onOther={jest.fn()} />
-    );
-    expect(screen.getByText("분류를 저장하지 못했어요.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "카페 확정" }).props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(screen.getByRole("link", { name: cleanupLinkLabel(2) }));
+    expect(onCleanup).toHaveBeenCalledTimes(1);
   });
 });

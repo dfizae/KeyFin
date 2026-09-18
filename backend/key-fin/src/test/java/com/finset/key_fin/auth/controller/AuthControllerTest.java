@@ -45,7 +45,7 @@ class AuthControllerTest {
 		mockMvc.perform(post("/api/v1/auth/signup")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"email":"kim@ssafy.io","password":"P@ssw0rd!","name":"김싸피"}
+								{"email":"qwer@qwer.com","password":"qwer1234@","name":"김예린"}
 								"""))
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.success").value(true))
@@ -66,20 +66,20 @@ class AuthControllerTest {
 		when(authService.login(any(LoginRequest.class))).thenReturn(new LoginResponse(
 				"access-token",
 				"refresh-token",
-				new LoginResponse.UserSummary(1L, "김싸피")
+				new LoginResponse.UserSummary(1L, "김예린")
 		));
 
 		mockMvc.perform(post("/api/v1/auth/login")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
-								{"email":"kim@ssafy.io","password":"P@ssw0rd!"}
+								{"email":"qwer@qwer.com","password":"qwer1234@"}
 								"""))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.accessToken").value("access-token"))
 				.andExpect(jsonPath("$.data.refreshToken").value("refresh-token"))
 				.andExpect(jsonPath("$.data.user.id").value(1))
-				.andExpect(jsonPath("$.data.user.name").value("김싸피"));
+				.andExpect(jsonPath("$.data.user.name").value("김예린"));
 	}
 
 	@Test

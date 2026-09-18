@@ -50,4 +50,20 @@ public class Budget extends BaseEntity {
 		budget.budgetMonth = budgetMonth;
 		return budget;
 	}
+
+	public boolean isConfirmed() {
+		return status == BudgetStatus.CONFIRMED;
+	}
+
+	public void confirm() {
+		this.status = BudgetStatus.CONFIRMED;
+	}
+
+	/** 0 = 미설정(해제). 확정 여부와 무관하게 주기 중 언제든 바꿀 수 있다. */
+	public void updateEmergencyAmount(long amount) {
+		if (amount < 0) {
+			throw new IllegalArgumentException("emergencyAmount must not be negative");
+		}
+		this.emergencyAmount = amount;
+	}
 }

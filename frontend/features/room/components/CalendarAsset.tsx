@@ -1,12 +1,11 @@
 import { Pressable, View } from "react-native";
 
-import { Text } from "@/components/ui/text";
-import { getSceneScale } from "@/features/room/model";
+import { getSceneScale, type SceneRect } from "@/features/room/model";
 
-// Pencil home/p0 Calendar Asset (lrclI): 오른쪽 벽 씬 단위 (242,26) 폭 64. 상단 $destructive 스트립 + 날짜 + 이름의 카드형 자리표시자이며,
-// 캘린더 스프라이트가 오면 그림은 Skia 씬이 그리고 이 컴포넌트는 탭 영역과 숫자만 남는다. 부족 점은 Calendar ShortageDot (Fycy2).
-export const CALENDAR_SCENE_RECT = { x: 242, y: 26, width: 64 } as const;
-export const CALENDAR_DOT_SCENE_RECT = { x: 298, y: 20, size: 12 } as const;
+// Pencil home/p0 Calendar Asset (lrclI). 그림(나무 레일 + 달력 종이)은 Skia 씬이 스프라이트(WALL_ITEMS.calendar)로 그리고,
+// 이 컴포넌트는 그 위에 얹는 탭 영역과 준비 부족 점(Calendar ShortageDot, Fycy2)뿐이다 — 벽걸이가 1×1 칸이라 글자를 얹지 않고
+// 월·날짜·이름은 팝오버(CalendarPopover)가 보여준다(사용자 결정 2026-09-15). 자리는 배치(스토어)에서 온 사각형이다.
+const SHORTAGE_DOT_SIZE = 12;
 export const CALENDAR_EMPTY_LABEL = "예정 없음";
 
 /** 방 컴포넌트는 결제 도메인 타입에 의존하지 않는다 — 다음 출금 한 건만 받는다 */
@@ -20,6 +19,8 @@ export type UpcomingPayment = {
 type CalendarAssetProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
   width: number;
+  /** 캘린더 스프라이트가 놓인 씬 사각형 */
+  rect: SceneRect;
   /** "9월" */
   monthLabel: string;
   /** 이번 달 출금 예정이 없으면 null */
@@ -27,11 +28,12 @@ type CalendarAssetProps = {
   onPress: () => void;
 };
 
-function CalendarAsset({ width, monthLabel, upcoming, onPress }: CalendarAssetProps) {
+function CalendarAsset({ width, rect, monthLabel, upcoming, onPress }: CalendarAssetProps) {
   const scale = getSceneScale(width);
   const status = upcoming
     ? `${upcoming.day}일 ${upcoming.name}${upcoming.hasShortage ? ", 준비 부족" : ""}`
     : `출금 ${CALENDAR_EMPTY_LABEL}`;
+  const dot = SHORTAGE_DOT_SIZE * scale;
 
   return (
     <>
@@ -41,29 +43,14 @@ function CalendarAsset({ width, monthLabel, upcoming, onPress }: CalendarAssetPr
         accessibilityHint="이번 달 출금 일정을 엽니다"
         onPress={onPress}
         hitSlop={8}
-        className="absolute overflow-hidden rounded-sm border-2 border-border bg-card active:opacity-80"
-        style={{ left: CALENDAR_SCENE_RECT.x * scale, top: CALENDAR_SCENE_RECT.y * scale, width: CALENDAR_SCENE_RECT.width * scale }}
-      >
-        <View className="w-full items-center bg-destructive" accessible={false}>
-          <Text className="text-caption text-destructive-foreground">{monthLabel}</Text>
-        </View>
-        <View className="items-center px-1 pb-1.5 pt-1" accessible={false}>
-          <Text className="text-h2 tabular-nums text-foreground">{upcoming ? upcoming.day : "–"}</Text>
-          <Text className="text-caption text-muted-foreground" numberOfLines={1}>
-            {upcoming ? upcoming.name : CALENDAR_EMPTY_LABEL}
-          </Text>
-        </View>
-      </Pressable>
+        className="absolute active:opacity-80"
+        style={{ left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale }}
+      />
       {upcoming?.hasShortage ? (
         <View
           accessible={false}
           className="absolute rounded-full bg-destructive"
-          style={{
-            left: CALENDAR_DOT_SCENE_RECT.x * scale,
-            top: CALENDAR_DOT_SCENE_RECT.y * scale,
-            width: CALENDAR_DOT_SCENE_RECT.size * scale,
-            height: CALENDAR_DOT_SCENE_RECT.size * scale,
-          }}
+          style={{ left: (rect.x + rect.width) * scale - dot * 0.6, top: rect.y * scale - dot * 0.4, width: dot, height: dot }}
         />
       ) : null}
     </>

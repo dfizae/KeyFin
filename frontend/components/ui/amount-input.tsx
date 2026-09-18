@@ -38,6 +38,11 @@ type AmountInputProps = Omit<
   max?: KRW;
   maxDigits?: number;
   errorMessage?: string;
+  /**
+   * `hero`(기본): 이체 금액처럼 화면의 주인공 — 36pt 숫자 + 빠른 금액 칩.
+   * `field`: 고정지출 등록처럼 폼의 한 칸 — 다른 입력칸과 같은 16pt, 칩 없음 (Pencil PAGE-26 Input / amount).
+   */
+  variant?: "hero" | "field";
 };
 
 function AmountInput({
@@ -49,8 +54,10 @@ function AmountInput({
   editable = true,
   className,
   accessibilityLabel = "금액",
+  variant = "hero",
   ...props
 }: AmountInputProps) {
+  const isField = variant === "field";
   const overMax = exceedsMax(value, max);
   const message = errorMessage ?? (overMax && max !== undefined ? `${formatKRW(max)}까지 입력할 수 있어요` : undefined);
   const invalid = message !== undefined;
@@ -84,13 +91,14 @@ function AmountInput({
           aria-invalid={invalid}
           maxFontSizeMultiplier={1.3}
           className={cn(
-            "h-input flex-1 rounded-lg text-amount-lg tabular-nums",
+            "h-input flex-1 rounded-lg tabular-nums",
+            isField ? "text-body" : "text-amount-lg",
             invalid && "border-destructive",
             className
           )}
           {...props}
         />
-        <Text className="text-amount-md text-foreground" maxFontSizeMultiplier={1.3}>
+        <Text className={cn(isField ? "text-body" : "text-amount-md", "text-foreground")} maxFontSizeMultiplier={1.3}>
           원
         </Text>
       </View>
@@ -101,19 +109,21 @@ function AmountInput({
         </Text>
       ) : null}
 
-      <View className="flex-row flex-wrap gap-2">
-        {QUICK_AMOUNTS.map((quick) => (
-          <QuickAmountChip
-            key={quick.value}
-            label={quick.label}
-            disabled={!editable}
-            onPress={() => handleAdd(quick.value)}
-          />
-        ))}
-        {max !== undefined ? (
-          <QuickAmountChip label={FULL_AMOUNT_LABEL} disabled={!editable} onPress={handleFullAmount} />
-        ) : null}
-      </View>
+      {isField ? null : (
+        <View className="flex-row flex-wrap gap-2">
+          {QUICK_AMOUNTS.map((quick) => (
+            <QuickAmountChip
+              key={quick.value}
+              label={quick.label}
+              disabled={!editable}
+              onPress={() => handleAdd(quick.value)}
+            />
+          ))}
+          {max !== undefined ? (
+            <QuickAmountChip label={FULL_AMOUNT_LABEL} disabled={!editable} onPress={handleFullAmount} />
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
