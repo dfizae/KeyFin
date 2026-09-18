@@ -3,10 +3,16 @@ package com.finset.key_fin.transaction.service;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
 import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
+import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.BulkTransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse.TransactionItem;
 import com.finset.key_fin.transaction.entity.ExcludeTag;
+import com.finset.key_fin.transaction.entity.ConfirmStatus;
+import com.finset.key_fin.transaction.entity.Transaction;
+import com.finset.key_fin.transaction.entity.TransactionStatus;
+import com.finset.key_fin.transaction.entity.TransactionType;
 import com.finset.key_fin.transaction.exception.TransactionErrorCode;
 import com.finset.key_fin.transaction.repository.TransactionQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionQueryRow;
@@ -24,6 +30,10 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -105,6 +115,46 @@ public class TransactionService {
 
 		var transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
 				.orElseThrow(() -> new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND));
+		applyClassification(transaction, request);
+		return TransactionClassificationResponse.from(transaction);
+	}
+
+	@Transactional
+	public BulkTransactionClassificationResponse classifyPendingTransactions(
+			long userId,
+			BulkTransactionClassificationRequest request
+	) {
+		validateActiveUser(userId);
+		List<BulkTransactionClassificationRequest.Item> items = request.items();
+		Set<Long> transactionIds = items.stream()
+				.map(BulkTransactionClassificationRequest.Item::transactionId)
+				.collect(Collectors.toSet());
+		if (transactionIds.size() != items.size()) {
+			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
+		}
+
+		Map<Long, Transaction> transactionsById = transactionRepository
+				.findAllByIdInAndUserId(transactionIds, userId)
+				.stream()
+				.collect(Collectors.toMap(Transaction::getId, Function.identity()));
+		if (transactionsById.size() != transactionIds.size()) {
+			throw new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND);
+		}
+
+		for (BulkTransactionClassificationRequest.Item item : items) {
+			Transaction transaction = transactionsById.get(item.transactionId());
+			transaction.validatePendingClassificationTarget();
+			applyClassification(transaction, item.toClassificationRequest());
+		}
+
+		long pendingRemain = transactionRepository
+				.countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
+						userId, ConfirmStatus.PENDING, TransactionStatus.NORMAL, TransactionType.DEPOSIT
+				);
+		return new BulkTransactionClassificationResponse(items.size(), pendingRemain);
+	}
+
+	private void applyClassification(Transaction transaction, TransactionClassificationRequest request) {
 		boolean hasSubcategory = request.subcategoryId() != null;
 		boolean hasExcludeTag = request.excludeTag() != null;
 		boolean isRestore = request.excludeTag() == ExcludeTag.RESTORE;
@@ -115,7 +165,7 @@ public class TransactionService {
 			}
 			validateSubcategory(request.subcategoryId());
 			transaction.confirmRestore(request.subcategoryId());
-			return TransactionClassificationResponse.from(transaction);
+			return;
 		}
 
 		if (hasSubcategory == hasExcludeTag) {
@@ -132,7 +182,6 @@ public class TransactionService {
 			transaction.confirmExclusion(request.excludeTag(), request.adjustedAmount());
 		}
 
-		return TransactionClassificationResponse.from(transaction);
 	}
 
 	@Transactional

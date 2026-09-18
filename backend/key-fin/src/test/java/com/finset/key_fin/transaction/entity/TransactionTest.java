@@ -122,6 +122,29 @@ class TransactionTest {
 	}
 
 	@Test
+	void 비상금_거래로_확정한다() {
+		Transaction transaction = cardTransaction(40_000L);
+
+		transaction.confirmExclusion(ExcludeTag.EMERGENCY, null);
+
+		assertThat(transaction.getSubcategoryId()).isNull();
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.EMERGENCY);
+		assertThat(transaction.getAdjustedAmount()).isNull();
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
+	void 이미_확정된_거래는_미확정_일괄_분류_대상이_아니다() {
+		Transaction transaction = cardTransaction(40_000L);
+		ReflectionTestUtils.setField(transaction, "confirmStatus", ConfirmStatus.CONFIRMED);
+
+		assertThatThrownBy(transaction::validatePendingClassificationTarget)
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
+	}
+
+	@Test
 	void 거래_메모의_앞뒤_공백을_제거해_저장한다() {
 		Transaction transaction = cardTransaction(40_000L);
 

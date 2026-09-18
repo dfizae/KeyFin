@@ -179,7 +179,9 @@ public class Transaction extends BaseEntity {
 
 	public void confirmExclusion(ExcludeTag excludeTag, Long adjustedAmount) {
 		validateClassifiable();
-		if (excludeTag == null || (excludeTag != ExcludeTag.DUTCH && excludeTag != ExcludeTag.SELF_TRANSFER)) {
+		if (excludeTag == null || (excludeTag != ExcludeTag.DUTCH
+				&& excludeTag != ExcludeTag.SELF_TRANSFER
+				&& excludeTag != ExcludeTag.EMERGENCY)) {
 			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
 		}
 		if (excludeTag == ExcludeTag.DUTCH) {
@@ -220,6 +222,14 @@ public class Transaction extends BaseEntity {
 		this.excludeTag = ExcludeTag.SELF_TRANSFER;
 		this.adjustedAmount = null;
 		this.confirmStatus = ConfirmStatus.CONFIRMED;
+	}
+
+	public void validatePendingClassificationTarget() {
+		if (confirmStatus != ConfirmStatus.PENDING
+				|| status != TransactionStatus.NORMAL
+				|| transactionType == TransactionType.DEPOSIT) {
+			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
+		}
 	}
 
 	public void updateMemo(String memo) {

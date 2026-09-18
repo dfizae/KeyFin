@@ -3,6 +3,8 @@ package com.finset.key_fin.transaction.controller;
 import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
 import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
+import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
+import com.finset.key_fin.transaction.dto.response.BulkTransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionClassificationResponse;
 import com.finset.key_fin.transaction.dto.response.TransactionListResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -85,7 +87,7 @@ public interface TransactionControllerDocs {
 
 	@Operation(
 			summary = "거래 분류 확정·수정",
-			description = "거래를 세분류로 확정하거나 DUTCH·SELF_TRANSFER로 처리합니다. "
+			description = "거래를 세분류로 확정하거나 DUTCH·SELF_TRANSFER·EMERGENCY로 처리합니다. "
 					+ "일반 지출은 subcategoryId와 excludeTag 중 하나만 입력하고, 환급 입금은 subcategoryId와 RESTORE를 함께 입력합니다. "
 					+ "이미 확정된 거래도 수정할 수 있습니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
@@ -137,5 +139,36 @@ public interface TransactionControllerDocs {
 			@Parameter(hidden = true) Long userId,
 			@Parameter(description = "거래 ID", example = "501", required = true) Long transactionId,
 			TransactionMemoUpdateRequest request
+	);
+
+	@Operation(
+			summary = "미확정 거래 일괄 분류 확정",
+			description = "정리 세션에서 여러 PENDING 거래의 세분류 또는 제외 태그를 한 번에 확정합니다. "
+					+ "요청은 최대 100건이며 하나라도 실패하면 전체 요청을 롤백합니다. "
+					+ "일반 소비는 subcategoryId, DUTCH는 adjustedAmount, 환급은 subcategoryId와 RESTORE를 함께 입력합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "미확정 거래 일괄 분류 성공", useReturnTypeSchema = true,
+					content = @Content(mediaType = APPLICATION_JSON_VALUE,
+							examples = @ExampleObject(value = """
+									{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{"confirmed":2,"pendingRemain":0}}
+									"""))),
+			@ApiResponse(responseCode = "400", description = "목록 크기, 중복 거래 ID 또는 분류 조합이 올바르지 않음 (COMMON_001, TRANSACTION_006, TRANSACTION_008)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "거래·세분류 또는 활성 사용자를 찾을 수 없음 (TRANSACTION_004~005, USER_001)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "409", description = "PENDING 상태가 아니거나 취소·입금 거래가 포함됨 (TRANSACTION_007)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<BulkTransactionClassificationResponse> classifyPendingTransactions(
+			@Parameter(hidden = true) Long userId,
+			BulkTransactionClassificationRequest request
 	);
 }
