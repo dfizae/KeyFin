@@ -26,8 +26,9 @@ public class FdtSnapshotAssembler {
 	private static final String SOURCE_LIVE = "LIVE";
 	private static final String MONTHLY = "MONTHLY";
 	private static final String FIXED_EXPENSE = "fixed_expense";
+	/** 스키마는 fixed_expense 에 fixed_group 을 필수로 요구한다. 대출 상환은 대응 묶음이 없어 별도 kind 로 보낸다. */
+	private static final String DEBT_SERVICE = "debt_service";
 
-	/** 엔진의 fixed_group 어휘. LOAN·CARD_BILL 은 대응 값이 없어 비워 보낸다. */
 	private static final Map<ExpenseType, String> FIXED_GROUP = Map.of(
 			ExpenseType.RENT, "주거",
 			ExpenseType.UTILITY, "공과금",
@@ -108,14 +109,15 @@ public class FdtSnapshotAssembler {
 			if (expense.getExpenseType() == ExpenseType.CARD_BILL || expense.getAmount() == null) {
 				continue;
 			}
+			String fixedGroup = FIXED_GROUP.get(expense.getExpenseType());
 			schedules.add(new FdtSnapshot.Schedule(
 					id(expense.getId()),
-					FIXED_EXPENSE,
+					fixedGroup == null ? DEBT_SERVICE : FIXED_EXPENSE,
 					expense.getAmount(),
 					MONTHLY,
 					nextDate(expense, asOf).toString(),
 					expense.getPaymentDay(),
-					FIXED_GROUP.get(expense.getExpenseType()),
+					fixedGroup,
 					expense.getWithdrawalAccountId() == null ? null : id(expense.getWithdrawalAccountId())
 			));
 		}
