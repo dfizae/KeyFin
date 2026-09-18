@@ -25,6 +25,7 @@ import org.hibernate.generator.EventType;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Getter
 @Entity
@@ -69,6 +70,18 @@ public class UserFurniture {
 	@Generated(event = EventType.INSERT)
 	@Column(name = "acquired_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime acquiredAt;
+
+	public static UserFurniture acquire(User user, Item item) {
+		Objects.requireNonNull(user, "user must not be null");
+		Objects.requireNonNull(item, "item must not be null");
+		if (item.getItemCategory() != ItemCategory.FURNITURE) {
+			throw new IllegalArgumentException("가구 아이템만 보유할 수 있습니다.");
+		}
+		UserFurniture furniture = new UserFurniture();
+		furniture.user = user;
+		furniture.item = item;
+		return furniture;
+	}
 
 	public void place(FurniturePlacementStatus status, FurniturePlacementDirection direction,
 			BigDecimal positionX, BigDecimal positionY, int layer) {

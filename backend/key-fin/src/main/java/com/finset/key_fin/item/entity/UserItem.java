@@ -19,6 +19,7 @@ import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 
 @Getter
 @Entity
@@ -50,6 +51,18 @@ public class UserItem {
 	@Generated(event = EventType.INSERT)
 	@Column(name = "acquired_at", nullable = false, insertable = false, updatable = false)
 	private LocalDateTime acquiredAt;
+
+	public static UserItem acquire(User user, Item item) {
+		Objects.requireNonNull(user, "user must not be null");
+		Objects.requireNonNull(item, "item must not be null");
+		if (item.getItemCategory() != ItemCategory.AVATAR) {
+			throw new IllegalArgumentException("아바타 아이템만 보유할 수 있습니다.");
+		}
+		UserItem userItem = new UserItem();
+		userItem.user = user;
+		userItem.item = item;
+		return userItem;
+	}
 
 	public void equip() {
 		this.equippedSlot = item.getSlotType();
