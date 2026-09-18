@@ -37,17 +37,16 @@ if TYPE_CHECKING:
 
 if __package__:
     from . import gpu_contracts as contracts
-    from .gpu_worker import generation_messages
+    from .gpu_worker import INPUT_CHARACTER_LIMIT, generation_messages
 else:
     import gpu_contracts as contracts  # type: ignore[no-redef]
-    from gpu_worker import generation_messages  # type: ignore[no-redef]
+    from gpu_worker import INPUT_CHARACTER_LIMIT, generation_messages  # type: ignore[no-redef]
 
 CompletionRequest = contracts.CompletionRequest
 
 RECONNECT_MIN_SECONDS: Final = 0.5
 RECONNECT_MAX_SECONDS: Final = 30.0
 RECONNECT_JITTER_RATIO: Final = 0.3
-_INPUT_CHARACTER_LIMIT: Final = 48000
 
 
 def canonical_request_sha256(body: dict[str, object]) -> str:
@@ -79,7 +78,7 @@ async def dispatch_op(  # noqa: PLR0911 - each terminal outcome carries a distin
     if request.model not in {backend.metadata.model, backend.metadata.model_id}:
         return {"error": {"status": 404, "detail": "model_not_loaded"}}
     character_count = sum(len(message.content) for message in generation_messages(request))
-    if character_count > _INPUT_CHARACTER_LIMIT:
+    if character_count > INPUT_CHARACTER_LIMIT:
         return {"error": {"status": 413, "detail": "input_character_limit"}}
     try:
         execution.slots.acquire_nowait()

@@ -14,7 +14,7 @@ import secrets
 import stat
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
 
 import anyio
 import uvicorn
@@ -43,6 +43,8 @@ if TYPE_CHECKING:
 
 Backend = contracts.Backend
 CompletionRequest = contracts.CompletionRequest
+# 입력 문자 상한. gpu_ws_worker.py와 공유해 WS·loopback 경로가 어긋나지 않게 한다.
+INPUT_CHARACTER_LIMIT: Final = 48000
 Frozen = contracts.Frozen
 Generated = contracts.Generated
 Message = contracts.Message
@@ -163,7 +165,7 @@ def create_app(  # noqa: PLR0913 - dependency injection keeps worker variants te
             raise HTTPException(status_code=401, detail="unauthorized")
         if request.model not in {backend.metadata.model, backend.metadata.model_id}:
             raise HTTPException(status_code=404, detail="model_not_loaded")
-        if sum(len(message.content) for message in generation_messages(request)) > 48000:
+        if sum(len(message.content) for message in generation_messages(request)) > INPUT_CHARACTER_LIMIT:
             raise HTTPException(status_code=413, detail="input_character_limit")
         try:
             execution.slots.acquire_nowait()
