@@ -21,6 +21,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
 	List<Transaction> findAllByIdInAndUserId(Collection<Long> ids, Long userId);
 
+	List<Transaction> findAllByUserIdOrderByTransactionDateAscTransactionTimeAscIdAsc(Long userId);
+
 	long countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
 			Long userId,
 			ConfirmStatus confirmStatus,
