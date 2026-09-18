@@ -1,0 +1,143 @@
+package com.finset.key_fin.furniture;
+
+import com.finset.key_fin.auth.dto.request.SignupRequest;
+import com.finset.key_fin.auth.jwt.JwtTokenProvider;
+import com.finset.key_fin.auth.service.AuthService;
+import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
+import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
+import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
+import com.finset.key_fin.furniture.service.DefaultFurnitureService;
+import com.finset.key_fin.furniture.service.FurnitureService;
+import com.finset.key_fin.room.service.RoomService;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
+import com.finset.key_fin.user.entity.User;
+import com.finset.key_fin.user.repository.UserRepository;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.*;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+
+@AutoConfigureMockMvc
+@Transactional
+class DefaultFurnitureIntegrationTest extends SpringIntegrationTestSupport {
+
+	@Autowired private AuthService auth;
+	@Autowired private UserRepository users;
+	@Autowired private DefaultFurnitureService defaults;
+	@Autowired private FurnitureService furnitures;
+	@Autowired private RoomService rooms;
+	@Autowired private JdbcClient jdbc;
+	@Autowired private MockMvc mvc;
+	@Autowired private JwtTokenProvider tokens;
+
+	@Test
+	void signupInstallsThreeDefaultsAtInitialPositionsAndRoomReturnsThem() {
+		long userId = signup();
+		var owned = furnitures.getFurnitures(userId, null);
+		assertThat(owned).hasSize(3).allSatisfy(f -> {
+			assertThat(f.placed()).isTrue();
+			assertThat(f.canUnplace()).isFalse();
+			assertThat(f.placementStatus()).isEqualTo(FurniturePlacementStatus.FLOOR);
+			assertThat(f.placementDirection()).isEqualTo(FurniturePlacementDirection.FRONT_RIGHT);
+			assertThat(f.layer()).isZero();
+			switch (f.defaultFurnitureType()) {
+				case FRIDGE -> {
+					assertThat(f.positionX()).isEqualByComparingTo("280.438");
+					assertThat(f.positionY()).isEqualByComparingTo("217.813");
+				}
+				case SOFA -> {
+					assertThat(f.positionX()).isEqualByComparingTo("164.875");
+					assertThat(f.positionY()).isEqualByComparingTo("226.000");
+				}
+				case TV -> {
+					assertThat(f.positionX()).isEqualByComparingTo("172.719");
+					assertThat(f.positionY()).isEqualByComparingTo("176.094");
+				}
+			}
+		});
+		assertThat(owned).extracting(f -> f.defaultFurnitureType())
+				.containsExactlyInAnyOrder(DefaultFurnitureType.values());
+		assertThat(rooms.getRoom(userId).furnitures()).extracting(f -> f.userFurnitureId())
+				.containsExactlyElementsOf(owned.stream().map(f -> f.userFurnitureId()).toList());
+	}
+
+	@Test
+	void provisioningReusesOwnedFurnitureFillsMissingAndPreservesPlacement() {
+		long userId = users.save(User.create(UUID.randomUUID() + "@defaults.test", "encoded", "가구테스터")).getId();
+		jdbc.sql("""
+				INSERT INTO user_furnitures (user_id, item_id, placement_status, placement_direction, position_x, position_y, layer)
+				SELECT :user, id, IF(default_furniture_type = 'SOFA', 'FLOOR', NULL),
+				       IF(default_furniture_type = 'SOFA', 'FRONT_LEFT', NULL),
+				       IF(default_furniture_type = 'SOFA', 100.123, NULL),
+				       IF(default_furniture_type = 'SOFA', 200.456, NULL),
+				       IF(default_furniture_type = 'SOFA', 2, 0)
+				FROM items WHERE default_furniture_type IN ('FRIDGE', 'SOFA')
+				""").param("user", userId).update();
+		var originalIds = furnitures.getFurnitures(userId, null).stream().map(f -> f.userFurnitureId()).toList();
+		defaults.provision(userId);
+		defaults.provision(userId);
+		var owned = furnitures.getFurnitures(userId, null);
+		assertThat(owned).hasSize(3).allSatisfy(f -> assertThat(f.placed()).isTrue());
+		assertThat(owned).extracting(f -> f.userFurnitureId()).containsAll(originalIds);
+		var sofa = owned.stream().filter(f -> f.defaultFurnitureType() == DefaultFurnitureType.SOFA).findFirst().orElseThrow();
+		assertThat(sofa.positionX()).isEqualByComparingTo("100.123");
+		assertThat(sofa.positionY()).isEqualByComparingTo("200.456");
+		assertThat(sofa.placementDirection()).isEqualTo(FurniturePlacementDirection.FRONT_LEFT);
+		assertThat(sofa.layer()).isEqualTo(2);
+		var fridge = owned.stream().filter(f -> f.defaultFurnitureType() == DefaultFurnitureType.FRIDGE).findFirst().orElseThrow();
+		assertThat(fridge.positionX()).isEqualByComparingTo("280.438");
+		assertThat(fridge.positionY()).isEqualByComparingTo("217.813");
+	}
+
+	@Test
+	void defaultsCanMoveButCannotBeUnplaced() throws Exception {
+		long userId = signup();
+		var owned = furnitures.getFurnitures(userId, null);
+		for (var furniture : owned) {
+			mvc.perform(authenticated(patch("/api/v1/furnitures/" + furniture.userFurnitureId())
+					.contentType(APPLICATION_JSON).content("{\"placed\":false}"), userId))
+					.andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("FURNITURE_003"));
+		}
+		long sofa = owned.stream().filter(f -> f.defaultFurnitureType() == DefaultFurnitureType.SOFA)
+				.findFirst().orElseThrow().userFurnitureId();
+		mvc.perform(authenticated(patch("/api/v1/furnitures/" + sofa).contentType(APPLICATION_JSON).content("""
+				{"placed":true,"placementStatus":"FLOOR","placementDirection":"FRONT_LEFT","positionX":100.123,"positionY":200.456,"layer":2}
+				"""), userId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.defaultFurnitureType").value("SOFA"))
+				.andExpect(jsonPath("$.data.canUnplace").value(false));
+		defaults.provision(userId);
+		var placed = rooms.getRoom(userId).furnitures().stream().filter(f -> f.userFurnitureId() == sofa).findFirst().orElseThrow();
+		assertThat(placed.positionX()).isEqualByComparingTo("100.123");
+		assertThat(placed.placementDirection()).isEqualTo(FurniturePlacementDirection.FRONT_LEFT);
+	}
+
+	@Test
+	void defaultsAreExcludedFromShopAndCannotBePurchased() throws Exception {
+		long userId = signup();
+		for (var furniture : furnitures.getFurnitures(userId, null)) {
+			mvc.perform(authenticated(get("/api/v1/shop"), userId)).andExpect(status().isOk())
+					.andExpect(jsonPath("$.data[*].itemId", not(hasItem(furniture.itemId().intValue()))));
+			mvc.perform(authenticated(post("/api/v1/shop/purchase").contentType(APPLICATION_JSON)
+					.content("{\"itemId\":" + furniture.itemId() + "}"), userId)).andExpect(status().isNotFound());
+		}
+	}
+
+	private long signup() {
+		return auth.signup(new SignupRequest(UUID.randomUUID() + "@defaults.test", "Passw0rd!", "가구테스터")).userId();
+	}
+
+	private MockHttpServletRequestBuilder authenticated(MockHttpServletRequestBuilder request, long userId) {
+		return request.header("Authorization", "Bearer " + tokens.generateAccessToken(userId));
+	}
+}

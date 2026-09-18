@@ -10,9 +10,12 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 public interface ItemRepository extends JpaRepository<Item, Long> {
+	List<Item> findByDefaultFurnitureTypeIsNotNullOrderByIdAsc();
+
 	@Query("""
 			select i from Item i
 			where i.active = true
+			  and i.defaultFurnitureType is null
 			  and (:category is null or i.itemCategory = :category)
 			  and (:slotType is null or i.slotType = :slotType)
 			order by i.id
