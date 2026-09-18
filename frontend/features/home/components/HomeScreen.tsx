@@ -1,4 +1,4 @@
-import { Redirect, useFocusEffect } from "expo-router";
+import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View } from "react-native";
@@ -134,30 +134,45 @@ function HomeHeader({ coinBalance }: HomeHeaderProps) {
   );
 }
 
+const COIN_HISTORY_ROUTE = "/coin";
+
 // Pencil CoinBadge (DsQOx): bg-accent 알약 · 16pt 노란 원(#F5D547 — 토큰 없음, warning 으로 대체) · 14/500 숫자.
+// 누르면 코인 이력(PAGE-30, P1)으로 간다. 알약이 작아 hitSlop 으로 터치 영역을 채운다.
 function CoinBadge({ balance }: { balance: number }) {
+  const router = useRouter();
   const text = formatKRW(String(balance), { unit: false });
 
   return (
-    <View className="flex-row items-center gap-1 rounded-full bg-accent px-2 py-1" accessible accessibilityLabel={`코인 ${text}개`}>
+    <Pressable
+      className="flex-row items-center gap-1 rounded-full bg-accent px-2 py-1 active:opacity-70"
+      accessibilityRole="button"
+      accessibilityLabel={`코인 ${text}개`}
+      accessibilityHint="코인 이력을 엽니다"
+      hitSlop={10}
+      onPress={() => router.push(COIN_HISTORY_ROUTE)}
+    >
       <View className="h-4 w-4 items-center justify-center rounded-full bg-warning" accessible={false}>
         <Icon as={Coins} size={10} className="text-foreground" />
       </View>
       <Text className="text-label tabular-nums text-foreground">{text}</Text>
-    </View>
+    </Pressable>
   );
 }
 
-// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide bell. 알림함(PAGE-28)은 P1 이라 진입은 아직 없고 미읽음 배지도 P1 API 다.
+const NOTIFICATION_ROUTE = "/notification";
+
+// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide bell. 누르면 알림함(PAGE-28, P1)으로 간다.
 function NotificationButton() {
+  const router = useRouter();
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="알림"
-      accessibilityState={{ disabled: true }}
-      disabled
+      accessibilityHint="알림함을 엽니다"
       hitSlop={8}
-      className="h-10 w-10 items-center justify-center rounded-full bg-accent"
+      className="h-10 w-10 items-center justify-center rounded-full bg-accent active:opacity-70"
+      onPress={() => router.push(NOTIFICATION_ROUTE)}
     >
       <Icon as={Bell} size={20} className="text-foreground" />
     </Pressable>

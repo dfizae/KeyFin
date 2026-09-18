@@ -71,6 +71,13 @@ public class User extends BaseEntity {
 		return deletedAt != null;
 	}
 
+	public void softDelete(LocalDateTime deletedAt) {
+		if (isDeleted()) {
+			throw new BusinessException(UserErrorCode.DELETED_USER);
+		}
+		this.deletedAt = Objects.requireNonNull(deletedAt, "deletedAt must not be null");
+	}
+
 	private String validateFinUserKey(String finUserKey) {
 		if (finUserKey == null || finUserKey.isBlank()) {
 			throw new IllegalArgumentException("금융망 사용자 키는 비어 있을 수 없습니다.");

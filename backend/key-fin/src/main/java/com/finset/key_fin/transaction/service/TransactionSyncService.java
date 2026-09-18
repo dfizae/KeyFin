@@ -21,7 +21,9 @@ import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -45,6 +47,8 @@ public class TransactionSyncService {
 	private final FinanceAccountTransactionClient accountTransactionClient;
 	private final FinanceCardTransactionClient cardTransactionClient;
 	private final TransactionClassificationService classificationService;
+	private final TransactionSyncWriter syncWriter;
+	private final Clock clock;
 
 	public void sync(long userId, LocalDate startDate, LocalDate endDate) {
 		validatePeriod(startDate, endDate);
@@ -53,14 +57,15 @@ public class TransactionSyncService {
 		List<Account> accounts = accountRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(userId);
 		List<Card> cards = cardRepository.findAllByUserIdAndManagedTrueOrderByIdAsc(userId);
 		List<Transaction> newTransactions = new ArrayList<>();
+		List<Account> balanceUpdatedAccounts = new ArrayList<>();
 		Set<String> transactionNumbers = new HashSet<>();
 		syncAccountTransactions(
 				user, userKey, accounts, startDate, endDate,
-				transactionNumbers, newTransactions);
+				transactionNumbers, newTransactions, balanceUpdatedAccounts);
 		syncCardTransactions(
 				user, userKey, cards, startDate, endDate,
 				transactionNumbers, newTransactions);
-		saveTransactions(newTransactions, Map.of());
+		syncWriter.save(balanceUpdatedAccounts, newTransactions, Map.of());
 	}
 
 	public void syncAccountTransactions(
@@ -73,10 +78,11 @@ public class TransactionSyncService {
 		validateManagedAccount(user, account);
 		String userKey = requireFinanceUserKey(user);
 		List<Transaction> newTransactions = new ArrayList<>();
+		List<Account> balanceUpdatedAccounts = new ArrayList<>();
 		syncAccountTransactions(
 				user, userKey, List.of(account), startDate, endDate,
-				new HashSet<>(), newTransactions);
-		saveTransactions(newTransactions, Map.of());
+				new HashSet<>(), newTransactions, balanceUpdatedAccounts);
+		syncWriter.save(balanceUpdatedAccounts, newTransactions, Map.of());
 	}
 
 	public void syncCardTransactions(
@@ -92,7 +98,7 @@ public class TransactionSyncService {
 		syncCardTransactions(
 				user, userKey, List.of(card), startDate, endDate,
 				new HashSet<>(), newTransactions);
-		saveTransactions(newTransactions, Map.of());
+		syncWriter.save(List.of(), newTransactions, Map.of());
 	}
 
 	public void syncNewlyManagedAccountHistory(
@@ -107,11 +113,12 @@ public class TransactionSyncService {
 		Account account = requireManagedAccount(userId, accountId);
 		List<Transaction> newTransactions = new ArrayList<>();
 		Map<Long, Transaction> reclassifiedTransactions = new LinkedHashMap<>();
+		List<Account> balanceUpdatedAccounts = new ArrayList<>();
 
 		syncNewlyManagedAccountTransactions(
 				user, userKey, account, startDate, endDate,
-				new HashSet<>(), newTransactions, reclassifiedTransactions);
-		saveTransactions(newTransactions, reclassifiedTransactions);
+				new HashSet<>(), newTransactions, reclassifiedTransactions, balanceUpdatedAccounts);
+		syncWriter.save(balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 	}
 
 	private void syncAccountTransactions(
@@ -121,7 +128,8 @@ public class TransactionSyncService {
 			LocalDate startDate,
 			LocalDate endDate,
 			Set<String> transactionNumbers,
-			List<Transaction> newTransactions
+			List<Transaction> newTransactions,
+			List<Account> balanceUpdatedAccounts
 	) {
 		for (Account account : accounts) {
 			List<FinanceAccountTransaction> financeTransactions = accountTransactionClient.findTransactions(
@@ -133,6 +141,8 @@ public class TransactionSyncService {
 				Transaction transaction = classificationService.fromAccount(user, account, financeTransaction);
 				newTransactions.add(transaction);
 			}
+			updateBalanceFromLatestFinanceTransaction(
+					account, financeTransactions, balanceUpdatedAccounts);
 		}
 	}
 
@@ -144,7 +154,8 @@ public class TransactionSyncService {
 			LocalDate endDate,
 			Set<String> transactionNumbers,
 			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+			Map<Long, Transaction> reclassifiedTransactions,
+			List<Account> balanceUpdatedAccounts
 	) {
 		List<FinanceAccountTransaction> financeTransactions = accountTransactionClient.findTransactions(
 				userKey, account.getFinAccountNo(), startDate, endDate);
@@ -157,6 +168,8 @@ public class TransactionSyncService {
 					user.getId(), transaction, financeTransaction, reclassifiedTransactions);
 			newTransactions.add(transaction);
 		}
+		updateBalanceFromLatestFinanceTransaction(
+				account, financeTransactions, balanceUpdatedAccounts);
 	}
 
 	private void syncCardTransactions(
@@ -180,15 +193,21 @@ public class TransactionSyncService {
 		}
 	}
 
-	private void saveTransactions(
-			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+	private void updateBalanceFromLatestFinanceTransaction(
+			Account account,
+			List<FinanceAccountTransaction> financeTransactions,
+			List<Account> balanceUpdatedAccounts
 	) {
-		List<Transaction> transactionsToSave = new ArrayList<>(reclassifiedTransactions.values());
-		transactionsToSave.addAll(newTransactions);
-		if (!transactionsToSave.isEmpty()) {
-			transactionRepository.saveAll(transactionsToSave);
+		if (financeTransactions.isEmpty()) {
+			return;
 		}
+		FinanceAccountTransaction latestTransaction = financeTransactions.getLast();
+		account.updateBalanceSnapshot(
+				account.getBankName(),
+				latestTransaction.transactionAfterBalance(),
+				LocalDateTime.now(clock)
+		);
+		balanceUpdatedAccounts.add(account);
 	}
 
 	private boolean isDuplicate(long userId, String transactionNumber, Set<String> transactionNumbers) {

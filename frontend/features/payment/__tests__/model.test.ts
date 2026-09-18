@@ -1,5 +1,6 @@
 import { ApiError } from "@/api/error";
 import {
+  cardBillingDetailMock,
   cardBillingsMock,
   createFixedExpenseMock,
   deleteFixedExpenseMock,
@@ -16,11 +17,16 @@ import {
   transferDetailMock,
   transferListMock,
 } from "@/api/mocks/transfer";
+import { isCardNotFoundError } from "@/features/payment/errors";
 import {
   EMPTY_FIXED_EXPENSE_FORM,
+  billingStatusLabel,
   canApproveTransfer,
+  canOpenCardBilling,
   canOpenEntry,
   canPostponeTransfer,
+  cardBillingCycleCaption,
+  cardBillingNotice,
   findCardBilling,
   findFixedExpense,
   findTransfer,
@@ -29,14 +35,19 @@ import {
   groupEntriesByDate,
   isEditableEntry,
   parseCalendarMonth,
+  parseCardId,
   parseFixedExpenseRoute,
   parseTransferId,
   paymentDayLabel,
   preparationLabel,
   splitFixedExpenses,
+  statementCaption,
+  statementRangeLabel,
+  statementTitle,
   toFixedExpenseForm,
   toFixedExpenseRequest,
   toFixedExpenses,
+  toCardBillingDetail,
   toCardBillings,
   toPaymentCalendar,
   toTransferDetail,
@@ -47,11 +58,14 @@ import {
   upcomingEntries,
   upcomingEntry,
   type CalendarItemDto,
+  type CardBillingDetailDto,
+  type CardBillingStatement,
   type FixedExpenseDto,
   type FixedExpenseForm,
   type FixedExpenseRequest,
 } from "@/features/payment/model";
 import { ContractMismatchError } from "@/lib/contract";
+import { addKRW } from "@/lib/money";
 
 const MONTH = "202609";
 
@@ -207,6 +221,26 @@ describe("isEditableEntry · canOpenEntry", () => {
     expect(canOpenEntry(fixed)).toBe(true);
     expect(canOpenEntry(subscription)).toBe(true);
     expect(canOpenEntry(bill)).toBe(false);
+  });
+
+  it("카드 청구는 cardId 가 있을 때만 카드 청구 상세로 열린다", () => {
+    const [fixed, bill, billWithoutCard] = toPaymentCalendar({
+      month: MONTH,
+      days: [
+        {
+          date: "2026-09-15",
+          items: [
+            item(),
+            item({ type: "CARD_BILL", fixedExpenseId: null, cardId: 2, expenseType: "CARD_BILL" }),
+            item({ type: "CARD_BILL", fixedExpenseId: null, cardId: null, expenseType: "CARD_BILL" }),
+          ],
+        },
+      ],
+    }).entries;
+
+    expect(canOpenCardBilling(bill)).toBe(true);
+    expect(canOpenCardBilling(billWithoutCard)).toBe(false);
+    expect(canOpenCardBilling(fixed)).toBe(false);
   });
 });
 
@@ -602,5 +636,124 @@ describe("카드 청구 요약 (GET /cards/billings)", () => {
     expect(toCardBillings(withUnknown).cards[0].statement?.status).toBe("UNKNOWN");
     expect(findCardBilling(toCardBillings(dto), 999)).toBeNull();
     expect(findCardBilling(undefined, 1)).toBeNull();
+  });
+});
+
+describe("카드 청구 상세 (GET /cards/{cardId}/billings)", () => {
+  const TODAY = "2026-09-16";
+
+  function statement(overrides: Partial<CardBillingStatement> = {}): CardBillingStatement {
+    return {
+      billingId: 12,
+      billingDate: "2026-09-14",
+      amount: "214000",
+      status: "UNPAID",
+      withdrawalDate: "2026-09-16",
+      paidAt: null,
+      ...overrides,
+    };
+  }
+
+  function withDto(patch: (dto: CardBillingDetailDto) => CardBillingDetailDto) {
+    return () => toCardBillingDetail(patch(cardBillingDetailMock(1, TODAY)));
+  }
+
+  it("예정액·근거 승인·청구서를 화면 모델로 옮기고, 요약 목과 같은 숫자를 준다", () => {
+    const detail = toCardBillingDetail(cardBillingDetailMock(1, TODAY));
+    const summary = toCardBillings(cardBillingsMock(TODAY)).cards[0];
+
+    expect(detail).toMatchObject({
+      cardId: 1,
+      cardName: "Deep Dream 체크",
+      asOf: TODAY,
+      cycleFrom: "2026-09-14",
+      nextBillingDate: "2026-09-21",
+      estimatedAmount: summary.estimatedAmount,
+      estimatedWithdrawalDate: summary.estimatedWithdrawalDate,
+      fromMonth: "202608",
+      toMonth: "202609",
+    });
+    expect(detail.approvals.map((approval) => approval.date)).toEqual(["2026-09-16", "2026-09-15", "2026-09-15", "2026-09-14"]);
+    expect(addKRW(...detail.approvals.map((approval) => approval.amount))).toBe(detail.estimatedAmount);
+    expect(detail.statements).toEqual([
+      expect.objectContaining({ billingId: 12, amount: "214000", status: "UNPAID" }),
+      expect.objectContaining({ billingDate: "2026-08-31", amount: "30000", status: "PAID", paidAt: "2026-09-02T16:00:00" }),
+    ]);
+  });
+
+  it("출금 요일을 모르는 카드는 출금일이 없고 승인·청구서가 비어 있다", () => {
+    const detail = toCardBillingDetail(cardBillingDetailMock(2, TODAY));
+
+    expect(detail).toMatchObject({ estimatedAmount: "0", estimatedWithdrawalDate: null, approvals: [], statements: [] });
+  });
+
+  it("없는 카드는 목도 서버처럼 404 PAY_013 이고, 화면은 그것만 '못 찾음' 으로 본다", () => {
+    expect(errorCodeOf(() => cardBillingDetailMock(999, TODAY))).toBe("PAY_013");
+    expect(isCardNotFoundError(new ApiError(404, "PAY_013", "카드를 찾을 수 없습니다."))).toBe(true);
+    expect(isCardNotFoundError(new ApiError(404, "PAY_005", "이체 제안을 찾을 수 없습니다."))).toBe(false);
+    expect(isCardNotFoundError(new Error("network"))).toBe(false);
+  });
+
+  it("모르는 청구서 상태는 UNKNOWN 으로 흡수한다", () => {
+    const detail = withDto((dto) => ({ ...dto, statements: [{ ...dto.statements[0], status: "SETTLING" }] }))();
+
+    expect(detail.statements[0].status).toBe("UNKNOWN");
+    expect(billingStatusLabel("UNKNOWN")).toBe("확인 중");
+  });
+
+  it("날짜·월·결제 시각·금액 형식이 틀리면 계약 불일치다", () => {
+    expect(withDto((dto) => ({ ...dto, asOf: "2026/09/16" }))).toThrow(ContractMismatchError);
+    expect(withDto((dto) => ({ ...dto, from: "2026-08" }))).toThrow(ContractMismatchError);
+    expect(
+      withDto((dto) => ({ ...dto, estimated: { ...dto.estimated, withdrawalDate: "9월 23일" } }))
+    ).toThrow(ContractMismatchError);
+    expect(
+      withDto((dto) => ({ ...dto, estimated: { ...dto.estimated, approvals: [{ ...dto.estimated.approvals[0], amount: 1.5 }] } }))
+    ).toThrow(ContractMismatchError);
+    expect(withDto((dto) => ({ ...dto, statements: [{ ...dto.statements[1], paidAt: "2026-09-02" }] }))).toThrow(ContractMismatchError);
+  });
+
+  it("예정액 아래 한 줄은 주기·승인 건수·출금일이고, 주기 첫날이면 날짜를 하나만 쓴다", () => {
+    const detail = toCardBillingDetail(cardBillingDetailMock(1, TODAY));
+
+    expect(cardBillingCycleCaption(detail)).toBe("9월 14일 ~ 9월 16일 승인 4건 · 9월 23일 출금 예정");
+    expect(cardBillingCycleCaption({ ...detail, asOf: "2026-09-14", approvals: [] })).toBe("9월 14일 승인 0건 · 9월 23일 출금 예정");
+    expect(cardBillingCycleCaption({ ...detail, estimatedWithdrawalDate: null })).toBe("9월 14일 ~ 9월 16일 승인 4건 · 출금일 확인 필요");
+  });
+
+  it("안내 띠는 청구서 확정일을 알리고, 출금일을 모르면 경고로 바뀐다", () => {
+    const detail = toCardBillingDetail(cardBillingDetailMock(1, TODAY));
+
+    expect(cardBillingNotice(detail)).toEqual({
+      tone: "info",
+      message: "9월 21일 (월)에 청구서로 확정돼요. 그 전까지는 승인이 더해지면 금액이 바뀌어요.",
+    });
+    expect(cardBillingNotice({ ...detail, estimatedWithdrawalDate: null }).tone).toBe("warning");
+  });
+
+  it("청구서 범위 문구는 발행 월로 쓴다", () => {
+    const detail = toCardBillingDetail(cardBillingDetailMock(1, TODAY));
+
+    expect(statementRangeLabel(detail)).toBe("8월 ~ 9월에 발행된 청구서예요.");
+    expect(statementRangeLabel({ ...detail, fromMonth: "202609" })).toBe("9월에 발행된 청구서예요.");
+  });
+
+  it("청구서 행: 결제 완료는 결제일, 미결제는 출금일 — 지난 출금일은 '예정' 이라 부르지 않는다", () => {
+    expect(statementTitle(statement())).toBe("9월 14일 발행");
+    expect(statementCaption(statement({ status: "PAID", paidAt: "2026-09-02T16:00:00" }), TODAY)).toBe("9월 2일 결제");
+    expect(statementCaption(statement({ status: "PAID", paidAt: null }), TODAY)).toBe("9월 16일 결제");
+    expect(statementCaption(statement({ status: "PAID", paidAt: null, withdrawalDate: null }), TODAY)).toBe("결제 완료");
+    expect(statementCaption(statement(), TODAY)).toBe("9월 16일 출금 예정");
+    expect(statementCaption(statement({ withdrawalDate: "2026-09-09" }), TODAY)).toBe("9월 9일 출금 확인 중");
+    expect(statementCaption(statement({ withdrawalDate: null }), TODAY)).toBe("출금일 확인 필요");
+    expect(statementCaption(statement({ status: "UNKNOWN" }), TODAY)).toBe("9월 16일 출금 예정");
+  });
+
+  it("라우트의 카드 id 는 양의 정수만 받는다", () => {
+    expect(parseCardId("3")).toBe(3);
+    expect(parseCardId(["4", "5"])).toBe(4);
+    expect(parseCardId("0")).toBeNull();
+    expect(parseCardId("3abc")).toBeNull();
+    expect(parseCardId(undefined)).toBeNull();
   });
 });

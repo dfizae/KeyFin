@@ -264,13 +264,15 @@ type LinkRowProps = {
 };
 
 // Pencil 행(Lb1GR · a9XLX9 · n4oRz7): 체크 + 36 로고 타일 + 이름/마스킹 번호 + 우측 값.
-// 이미 연결된 행은 bg-muted 로 잠기고 '연결됨'만 보여 준다.
+// 이미 연결된 행은 bg-muted 로 잠기고 체크된 채 '연결됨'만 보여 준다.
 function LinkRow({ logo, title, subtitle, right, linked, selected, onToggle }: LinkRowProps) {
+  const checked = linked || selected;
+
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={`${title} ${subtitle}`}
-      accessibilityState={{ checked: selected, disabled: linked }}
+      accessibilityState={{ checked, disabled: linked }}
       disabled={linked}
       onPress={onToggle}
       className={cn(
@@ -279,9 +281,9 @@ function LinkRow({ logo, title, subtitle, right, linked, selected, onToggle }: L
       )}
     >
       <Icon
-        as={selected ? CircleCheckBig : Circle}
+        as={checked ? CircleCheckBig : Circle}
         size={20}
-        className={selected ? "text-primary" : "text-card-foreground"}
+        className={checked ? "text-primary" : "text-card-foreground"}
       />
 
       {logo}

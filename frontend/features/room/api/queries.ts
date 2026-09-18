@@ -4,6 +4,7 @@ import { getFurnitures, updateFurniturePlacement, type FurnitureSlotType } from 
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import type { PlacementSave } from "@/features/room/furniture";
 import type { Room } from "@/features/room/model";
+import { shopKeys } from "@/features/shop/api/queries";
 
 export const roomKeys = {
   all: ["room"] as const,
@@ -24,7 +25,10 @@ export function useRoom() {
   return useQuery(roomQueryOptions());
 }
 
-/** 출석 결과의 잔액을 방 캐시에 바로 반영한다 (docs/api-guide.md §5). 재조회는 하지 않는다 — 서버 잔액이 응답에 있다. */
+/**
+ * 출석 결과의 잔액을 방 캐시에 바로 반영한다 (docs/api-guide.md §5). 방은 재조회하지 않는다 — 서버 잔액이 응답에 있다.
+ * 코인이 실제로 지급됐으면 새 이력이 생겼으니 코인 잔액·이력(PAGE-30)은 다시 받는다.
+ */
 export function useCheckAttendance() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -33,6 +37,7 @@ export function useCheckAttendance() {
       queryClient.setQueryData<Room>(roomKeys.home(), (old) =>
         old ? { ...old, coinBalance: attendance.balance, checkedInToday: true } : old
       );
+      if (attendance.granted > 0) void queryClient.invalidateQueries({ queryKey: shopKeys.coins() });
     },
   });
 }

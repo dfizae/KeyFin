@@ -30,13 +30,18 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -49,6 +54,7 @@ class TransactionSyncServiceTest {
 	private static final long USER_ID = 1L;
 	private static final LocalDate START_DATE = LocalDate.of(2026, 9, 14);
 	private static final LocalDate END_DATE = LocalDate.of(2026, 9, 15);
+	private static final LocalDateTime SYNC_TIME = LocalDateTime.of(2026, 9, 15, 11, 0);
 
 	@Mock
 	private UserRepository userRepository;
@@ -64,6 +70,8 @@ class TransactionSyncServiceTest {
 	private FinanceCardTransactionClient cardTransactionClient;
 	@Mock
 	private TransactionClassificationService classificationService;
+	@Mock
+	private TransactionSyncWriter syncWriter;
 
 	private TransactionSyncService syncService;
 	private User user;
@@ -77,7 +85,12 @@ class TransactionSyncServiceTest {
 				transactionRepository,
 				accountTransactionClient,
 				cardTransactionClient,
-				classificationService
+				classificationService,
+				syncWriter,
+				Clock.fixed(
+						Instant.parse("2026-09-15T02:00:00Z"),
+						ZoneId.of("Asia/Seoul")
+				)
 		);
 		user = User.create("qwer@qwer.com", "password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
@@ -105,8 +118,10 @@ class TransactionSyncServiceTest {
 		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		ArgumentCaptor<List<Transaction>> captor = ArgumentCaptor.forClass(List.class);
-		verify(transactionRepository).saveAll(captor.capture());
+		verify(syncWriter).save(anyList(), captor.capture(), anyMap());
 		assertThat(captor.getValue()).containsExactly(accountTransaction, cardTransaction);
+		assertThat(account.getBalance()).isEqualTo(990_000L);
+		assertThat(account.getBalanceUpdatedAt()).isEqualTo(SYNC_TIME);
 	}
 
 	@Test
@@ -126,7 +141,7 @@ class TransactionSyncServiceTest {
 
 		syncService.sync(USER_ID, START_DATE, END_DATE);
 
-		verify(transactionRepository).saveAll(List.of(transaction));
+		verify(syncWriter).save(List.of(account), List.of(transaction), Map.of());
 		verify(classificationService, never()).fromAccount(user, account, stored);
 	}
 
@@ -137,7 +152,7 @@ class TransactionSyncServiceTest {
 		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		verifyNoInteractions(accountTransactionClient, cardTransactionClient, classificationService);
-		verify(transactionRepository, never()).saveAll(anyList());
+		verify(syncWriter).save(List.of(), List.of(), Map.of());
 	}
 
 	@Test
@@ -175,8 +190,10 @@ class TransactionSyncServiceTest {
 		assertThat(existing.getExcludeTag()).isEqualTo(ExcludeTag.SELF_TRANSFER);
 		assertThat(existing.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
 		ArgumentCaptor<List<Transaction>> captor = ArgumentCaptor.forClass(List.class);
-		verify(transactionRepository).saveAll(captor.capture());
-		assertThat(captor.getValue()).containsExactly(existing, current);
+		ArgumentCaptor<Map<Long, Transaction>> reclassifiedCaptor = ArgumentCaptor.forClass(Map.class);
+		verify(syncWriter).save(anyList(), captor.capture(), reclassifiedCaptor.capture());
+		assertThat(captor.getValue()).containsExactly(current);
+		assertThat(reclassifiedCaptor.getValue()).containsEntry(existing.getId(), existing);
 	}
 
 	@Test
@@ -195,7 +212,7 @@ class TransactionSyncServiceTest {
 
 		verify(accountRepository, never())
 				.findByUserIdAndFinAccountNoAndManagedTrue(any(), any());
-		verify(transactionRepository).saveAll(List.of(current));
+		verify(syncWriter).save(List.of(source), List.of(current), Map.of());
 	}
 
 	@Test
@@ -217,7 +234,7 @@ class TransactionSyncServiceTest {
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(FinanceErrorCode.SERVICE_UNAVAILABLE));
-		verify(transactionRepository, never()).saveAll(anyList());
+		verifyNoInteractions(syncWriter);
 	}
 
 	@Test
@@ -245,7 +262,7 @@ class TransactionSyncServiceTest {
 
 		syncService.syncAccountTransactions(user, account, START_DATE, END_DATE);
 
-		verify(transactionRepository).saveAll(List.of(transaction));
+		verify(syncWriter).save(List.of(account), List.of(transaction), Map.of());
 		verifyNoInteractions(cardTransactionClient);
 	}
 
@@ -262,8 +279,9 @@ class TransactionSyncServiceTest {
 
 		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
 
-		verify(transactionRepository).saveAll(List.of(transaction));
+		verify(syncWriter).save(List.of(), List.of(transaction), Map.of());
 		verifyNoInteractions(accountTransactionClient);
+		assertThat(account.getBalance()).isEqualTo(1_000_000L);
 	}
 
 	private void givenCommonAssets(List<Account> accounts, List<Card> cards) {

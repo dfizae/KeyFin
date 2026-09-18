@@ -4,6 +4,8 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -17,6 +19,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 import java.util.Objects;
+import java.time.LocalTime;
 
 @Getter
 @Entity
@@ -46,6 +49,28 @@ public class UserSettings {
 	@Column(name = "transfer_limit_daily")
 	private Long transferLimitDaily;
 
+	@Enumerated(EnumType.STRING)
+	@Column(name = "coach_persona", nullable = false, length = 20)
+	private CoachPersona coachPersona = CoachPersona.PLAIN;
+
+	@Column(name = "noti_coaching", nullable = false)
+	private boolean notiCoaching = true;
+
+	@Column(name = "noti_budget_alert", nullable = false)
+	private boolean notiBudgetAlert = true;
+
+	@Column(name = "noti_transfer", nullable = false)
+	private boolean notiTransfer = true;
+
+	@Column(name = "noti_cleanup", nullable = false)
+	private boolean notiCleanup = true;
+
+	@Column(name = "quiet_hours_start")
+	private LocalTime quietHoursStart;
+
+	@Column(name = "quiet_hours_end")
+	private LocalTime quietHoursEnd;
+
 	private UserSettings(User user) {
 		this.user = Objects.requireNonNull(user, "user must not be null");
 	}
@@ -70,6 +95,35 @@ public class UserSettings {
 		this.transferConsent = transferConsent;
 		this.transferLimitOnce = transferLimitOnce;
 		this.transferLimitDaily = transferLimitDaily;
+	}
+
+	public void updateNotificationSettings(
+			boolean notiCoaching,
+			boolean notiBudgetAlert,
+			boolean notiTransfer,
+			boolean notiCleanup,
+			LocalTime quietHoursStart,
+			LocalTime quietHoursEnd
+	) {
+		validateQuietHours(quietHoursStart, quietHoursEnd);
+		this.notiCoaching = notiCoaching;
+		this.notiBudgetAlert = notiBudgetAlert;
+		this.notiTransfer = notiTransfer;
+		this.notiCleanup = notiCleanup;
+		this.quietHoursStart = quietHoursStart;
+		this.quietHoursEnd = quietHoursEnd;
+	}
+
+	public void updateCoachPersona(CoachPersona coachPersona) {
+		this.coachPersona = Objects.requireNonNull(coachPersona, "coachPersona must not be null");
+	}
+
+	private static void validateQuietHours(LocalTime quietHoursStart, LocalTime quietHoursEnd) {
+		boolean hasStart = quietHoursStart != null;
+		boolean hasEnd = quietHoursEnd != null;
+		if (hasStart != hasEnd || (hasStart && quietHoursStart.equals(quietHoursEnd))) {
+			throw new BusinessException(UserErrorCode.INVALID_QUIET_HOURS);
+		}
 	}
 
 	private static void validateTransferLimit(Long transferLimit) {
