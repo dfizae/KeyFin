@@ -100,12 +100,13 @@ class FdtSnapshotAssemblerTest {
 	}
 
 	@Test
-	void 대출은_fixed_group을_비워_보낸다() {
+	void 대출은_debt_service로_보내고_fixed_group을_비운다() {
 		FixedExpense loan = fixedExpense(33L, "학자금 상환", ExpenseType.LOAN, 200_000L, 15, 1L);
 
 		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(loan), 0L, Map.of());
 
 		assertThat(snapshot.schedules()).hasSize(1);
+		assertThat(snapshot.schedules().get(0).kind()).isEqualTo("debt_service");
 		assertThat(snapshot.schedules().get(0).fixedGroup()).isNull();
 	}
 
