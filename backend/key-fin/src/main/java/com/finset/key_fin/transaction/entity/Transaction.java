@@ -21,13 +21,26 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Set;
 
 @Getter
 @Entity
 @Table(name = "transactions")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Transaction extends BaseEntity {
+
+	/**
+	 * 사용자가 분류 화면에서 직접 고를 수 있는 제외 태그.
+	 * NONE은 세분류 확정 경로, RESTORE는 환급 입금 경로, CARRYOVER는 시스템이 부여하므로 여기에 포함하지 않는다.
+	 */
+	private static final Set<ExcludeTag> USER_SELECTABLE_EXCLUDE_TAGS = EnumSet.of(
+			ExcludeTag.DUTCH,
+			ExcludeTag.SELF_TRANSFER,
+			ExcludeTag.BUDGET_EXCLUDED,
+			ExcludeTag.EMERGENCY
+	);
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -179,9 +192,7 @@ public class Transaction extends BaseEntity {
 
 	public void confirmExclusion(ExcludeTag excludeTag, Long adjustedAmount) {
 		validateClassifiable();
-		if (excludeTag == null || (excludeTag != ExcludeTag.DUTCH
-				&& excludeTag != ExcludeTag.SELF_TRANSFER
-				&& excludeTag != ExcludeTag.EMERGENCY)) {
+		if (excludeTag == null || !USER_SELECTABLE_EXCLUDE_TAGS.contains(excludeTag)) {
 			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
 		}
 		if (excludeTag == ExcludeTag.DUTCH) {

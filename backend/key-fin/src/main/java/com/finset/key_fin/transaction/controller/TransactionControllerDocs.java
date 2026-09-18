@@ -87,8 +87,9 @@ public interface TransactionControllerDocs {
 
 	@Operation(
 			summary = "거래 분류 확정·수정",
-			description = "거래를 세분류로 확정하거나 DUTCH·SELF_TRANSFER·EMERGENCY로 처리합니다. "
+			description = "거래를 세분류로 확정하거나 DUTCH·SELF_TRANSFER·BUDGET_EXCLUDED·EMERGENCY로 처리합니다. "
 					+ "일반 지출은 subcategoryId와 excludeTag 중 하나만 입력하고, 환급 입금은 subcategoryId와 RESTORE를 함께 입력합니다. "
+					+ "adjustedAmount는 DUTCH에서만 사용하며, BUDGET_EXCLUDED는 예산 계산에서 전액 제외됩니다. "
 					+ "이미 확정된 거래도 수정할 수 있습니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
@@ -145,7 +146,8 @@ public interface TransactionControllerDocs {
 			summary = "미확정 거래 일괄 분류 확정",
 			description = "정리 세션에서 여러 PENDING 거래의 세분류 또는 제외 태그를 한 번에 확정합니다. "
 					+ "요청은 최대 100건이며 하나라도 실패하면 전체 요청을 롤백합니다. "
-					+ "일반 소비는 subcategoryId, DUTCH는 adjustedAmount, 환급은 subcategoryId와 RESTORE를 함께 입력합니다.",
+					+ "일반 소비는 subcategoryId, DUTCH는 adjustedAmount, 환급은 subcategoryId와 RESTORE를 함께 입력합니다. "
+					+ "SELF_TRANSFER·BUDGET_EXCLUDED·EMERGENCY는 excludeTag만 입력합니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
 	@ApiResponses({
