@@ -122,6 +122,38 @@ class TransactionTest {
 	}
 
 	@Test
+	void 예산_제외_거래로_확정한다() {
+		Transaction transaction = cardTransaction(40_000L);
+
+		transaction.confirmExclusion(ExcludeTag.BUDGET_EXCLUDED, null);
+
+		assertThat(transaction.getSubcategoryId()).isNull();
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.BUDGET_EXCLUDED);
+		assertThat(transaction.getAdjustedAmount()).isNull();
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
+	void 예산_제외_거래에_부담액을_함께_보내면_거절한다() {
+		Transaction transaction = cardTransaction(40_000L);
+
+		assertThatThrownBy(() -> transaction.confirmExclusion(ExcludeTag.BUDGET_EXCLUDED, 20_000L))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.INVALID_CLASSIFICATION));
+	}
+
+	@Test
+	void 사용자가_고를_수_없는_제외_태그는_거절한다() {
+		Transaction transaction = cardTransaction(40_000L);
+
+		assertThatThrownBy(() -> transaction.confirmExclusion(ExcludeTag.CARRYOVER, null))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.INVALID_CLASSIFICATION));
+	}
+
+	@Test
 	void 비상금_거래로_확정한다() {
 		Transaction transaction = cardTransaction(40_000L);
 

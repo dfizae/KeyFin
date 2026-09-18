@@ -144,6 +144,23 @@ class TransactionServiceTest {
 	}
 
 	@Test
+	void 거래를_예산_제외로_확정한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(transactionRepository.findByIdAndUserId(501L, USER_ID)).willReturn(Optional.of(transaction));
+
+		var response = transactionService.classifyTransaction(
+				USER_ID, 501L, new TransactionClassificationRequest(null, ExcludeTag.BUDGET_EXCLUDED, null)
+		);
+
+		assertThat(response.excludeTag()).isEqualTo(ExcludeTag.BUDGET_EXCLUDED);
+		assertThat(response.subcategoryId()).isNull();
+		assertThat(response.adjustedAmount()).isNull();
+		assertThat(response.confirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
 	void 세분류와_제외_태그를_동시에_입력하면_거절한다() {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
@@ -237,6 +254,29 @@ class TransactionServiceTest {
 		assertThat(first.getSubcategoryId()).isEqualTo(102);
 		assertThat(second.getExcludeTag()).isEqualTo(ExcludeTag.DUTCH);
 		assertThat(second.getAdjustedAmount()).isEqualTo(15_000L);
+	}
+
+	@Test
+	void 미확정_거래를_예산_제외로_일괄_분류한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L), USER_ID))
+				.willReturn(List.of(transaction));
+		given(transactionRepository.countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
+				USER_ID, ConfirmStatus.PENDING, TransactionStatus.NORMAL, TransactionType.DEPOSIT))
+				.willReturn(0L);
+		var request = new BulkTransactionClassificationRequest(List.of(
+				new Item(501L, null, ExcludeTag.BUDGET_EXCLUDED, null)
+		));
+
+		var response = transactionService.classifyPendingTransactions(USER_ID, request);
+
+		assertThat(response.confirmed()).isEqualTo(1);
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.BUDGET_EXCLUDED);
+		assertThat(transaction.getSubcategoryId()).isNull();
+		assertThat(transaction.getAdjustedAmount()).isNull();
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
 	}
 
 	@Test

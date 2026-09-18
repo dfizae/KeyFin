@@ -32,7 +32,13 @@ public record BulkTransactionClassificationRequest(
 			@Positive(message = "세분류 ID는 0보다 커야 합니다.")
 			Integer subcategoryId,
 
-			@Schema(description = "제외 태그. DUTCH, SELF_TRANSFER, EMERGENCY 또는 RESTORE", example = "DUTCH", nullable = true)
+			@Schema(
+					description = "제외 태그. DUTCH(더치페이), SELF_TRANSFER(내 계좌 이동), "
+							+ "BUDGET_EXCLUDED(예산에서 제외), EMERGENCY(비상금) 또는 RESTORE(환급 입금)",
+					example = "DUTCH",
+					allowableValues = {"DUTCH", "SELF_TRANSFER", "BUDGET_EXCLUDED", "EMERGENCY", "RESTORE"},
+					nullable = true
+			)
 			ExcludeTag excludeTag,
 
 			@Schema(description = "더치페이 실제 부담액. DUTCH일 때만 필수", example = "15000", nullable = true)
