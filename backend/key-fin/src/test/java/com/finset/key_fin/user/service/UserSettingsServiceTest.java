@@ -4,6 +4,8 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
+import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
 import com.finset.key_fin.user.entity.CoachPersona;
 import com.finset.key_fin.user.entity.User;
@@ -61,6 +63,32 @@ class UserSettingsServiceTest {
 		assertThat(response)
 				.extracting("transferConsent", "transferLimitOnce", "transferLimitDaily")
 				.containsExactly(true, 1_000_000L, 2_000_000L);
+	}
+
+	@Test
+	void 알림_설정을_조회한다() {
+		settings.updateNotificationSettings(
+				true, false, true, false, LocalTime.of(23, 0), LocalTime.of(8, 0));
+		givenActiveUserAndSettings();
+
+		NotificationSettingsResponse response = userSettingsService.getNotificationSettings(USER_ID);
+
+		assertThat(response.notiCoaching()).isTrue();
+		assertThat(response.notiBudgetAlert()).isFalse();
+		assertThat(response.notiTransfer()).isTrue();
+		assertThat(response.notiCleanup()).isFalse();
+		assertThat(response.quietHoursStart()).isEqualTo(LocalTime.of(23, 0));
+		assertThat(response.quietHoursEnd()).isEqualTo(LocalTime.of(8, 0));
+	}
+
+	@Test
+	void 코치_말투를_조회한다() {
+		settings.updateCoachPersona(CoachPersona.DODO);
+		givenActiveUserAndSettings();
+
+		CoachPersonaResponse response = userSettingsService.getCoachPersona(USER_ID);
+
+		assertThat(response.coachPersona()).isEqualTo(CoachPersona.DODO);
 	}
 
 	@Test

@@ -4,6 +4,8 @@ import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
+import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
 import com.finset.key_fin.user.service.UserSettingsService;
 import jakarta.validation.Valid;
@@ -31,6 +33,22 @@ public class UserSettingsController implements UserSettingsControllerDocs {
 			@AuthenticationPrincipal Long userId
 	) {
 		return BaseResponse.ok(userSettingsService.getTransferSettings(userId));
+	}
+
+	@GetMapping(value = "/notifications", produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<NotificationSettingsResponse> getNotificationSettings(
+			@AuthenticationPrincipal Long userId
+	) {
+		return BaseResponse.ok(userSettingsService.getNotificationSettings(userId));
+	}
+
+	@GetMapping(value = "/coach", produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<CoachPersonaResponse> getCoachPersona(
+			@AuthenticationPrincipal Long userId
+	) {
+		return BaseResponse.ok(userSettingsService.getCoachPersona(userId));
 	}
 
 	@PutMapping(value = "/transfer", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)

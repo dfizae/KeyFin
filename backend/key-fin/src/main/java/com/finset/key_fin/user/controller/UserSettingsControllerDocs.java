@@ -4,6 +4,8 @@ import com.finset.key_fin.global.base.BaseResponse;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
+import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -65,6 +67,50 @@ public interface UserSettingsControllerDocs {
 			@Parameter(hidden = true) Long userId,
 			TransferSettingsUpdateRequest request
 	);
+
+	@Operation(
+			summary = "알림 설정 조회",
+			description = "현재 로그인한 사용자의 알림 유형별 수신 여부와 방해금지 시간을 조회합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "알림 설정 조회 성공", useReturnTypeSchema = true,
+					content = @Content(mediaType = APPLICATION_JSON_VALUE,
+							examples = @ExampleObject(value = """
+									{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{"notiCoaching":true,"notiBudgetAlert":true,"notiTransfer":true,"notiCleanup":false,"quietHoursStart":"23:00:00","quietHoursEnd":"08:00:00"}}
+									"""))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "활성 사용자 또는 사용자 설정을 찾을 수 없음 (USER_001, USER_006)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<NotificationSettingsResponse> getNotificationSettings(@Parameter(hidden = true) Long userId);
+
+	@Operation(
+			summary = "코치 말투 조회",
+			description = "현재 로그인한 사용자가 선택한 코치 말투를 조회합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "코치 말투 조회 성공", useReturnTypeSchema = true,
+					content = @Content(mediaType = APPLICATION_JSON_VALUE,
+							examples = @ExampleObject(value = """
+									{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{"coachPersona":"DODO"}}
+									"""))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "활성 사용자 또는 사용자 설정을 찾을 수 없음 (USER_001, USER_006)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<CoachPersonaResponse> getCoachPersona(@Parameter(hidden = true) Long userId);
 
 	@Operation(
 			summary = "알림 설정 변경",
