@@ -49,7 +49,7 @@ ignore = ["D203", "D213", "COM812", "CPY001", "FBT001", "FBT002", "D100", "D101"
 [tool.ruff.lint.per-file-ignores]
 # Standalone pytest modules, synthetic tokens, and end-to-end assertion sequences.
 "tests/**" = ["S101", "S105", "D", "SLF001", "ARG", "PLR0915"]
-"tests/{test_api,test_engine,test_failures,test_gpu_configuration,test_payments,test_store}.py" = ["INP001"]
+"tests/{test_api,test_engine,test_failures,test_gpu_configuration,test_payments,test_store,test_twin_rebootstrap}.py" = ["INP001"]
 "tests/test_chart*.py" = ["INP001"]
 "scripts/**" = ["T201", "INP001"]
 
