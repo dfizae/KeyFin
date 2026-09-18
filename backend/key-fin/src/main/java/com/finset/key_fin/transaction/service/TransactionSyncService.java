@@ -118,7 +118,7 @@ public class TransactionSyncService {
 		syncNewlyManagedAccountTransactions(
 				user, userKey, account, startDate, endDate,
 				new HashSet<>(), newTransactions, reclassifiedTransactions, balanceUpdatedAccounts);
-		syncWriter.save(balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
+		syncWriter.saveHistory(balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 	}
 
 	private void syncAccountTransactions(

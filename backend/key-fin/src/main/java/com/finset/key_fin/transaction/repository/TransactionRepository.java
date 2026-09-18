@@ -30,6 +30,17 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 			TransactionType transactionType
 	);
 
+	@Query("""
+			select t.user.id as userId, count(t.id) as pendingCount
+			from Transaction t
+			where t.confirmStatus = com.finset.key_fin.transaction.entity.ConfirmStatus.PENDING
+			  and t.status = com.finset.key_fin.transaction.entity.TransactionStatus.NORMAL
+			  and t.transactionType <> com.finset.key_fin.transaction.entity.TransactionType.DEPOSIT
+			  and t.user.deletedAt is null
+			group by t.user.id
+			""")
+	List<PendingTransactionSummary> findPendingTransactionSummaries();
+
 	boolean existsByUserIdAndFinTransactionUniqueNo(Long userId, String finTransactionUniqueNo);
 
 	Optional<Transaction> findFirstByUserIdAndAccountIdAndTransactionDateAndTransactionTimeAndAmountAndStatusAndExcludeTagNotAndConfirmStatusInOrderByIdDesc(

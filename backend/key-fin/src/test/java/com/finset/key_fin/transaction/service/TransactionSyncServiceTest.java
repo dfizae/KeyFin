@@ -191,7 +191,7 @@ class TransactionSyncServiceTest {
 		assertThat(existing.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
 		ArgumentCaptor<List<Transaction>> captor = ArgumentCaptor.forClass(List.class);
 		ArgumentCaptor<Map<Long, Transaction>> reclassifiedCaptor = ArgumentCaptor.forClass(Map.class);
-		verify(syncWriter).save(anyList(), captor.capture(), reclassifiedCaptor.capture());
+		verify(syncWriter).saveHistory(anyList(), captor.capture(), reclassifiedCaptor.capture());
 		assertThat(captor.getValue()).containsExactly(current);
 		assertThat(reclassifiedCaptor.getValue()).containsEntry(existing.getId(), existing);
 	}
