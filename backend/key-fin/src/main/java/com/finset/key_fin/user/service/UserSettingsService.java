@@ -1,6 +1,8 @@
 package com.finset.key_fin.user.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
+import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
 import com.finset.key_fin.user.entity.UserSettings;
@@ -13,7 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-public class TransferSettingsService {
+public class UserSettingsService {
 
 	private final UserRepository userRepository;
 	private final UserSettingsRepository userSettingsRepository;
@@ -37,6 +39,26 @@ public class TransferSettingsService {
 				request.transferLimitDaily()
 		);
 		return TransferSettingsResponse.from(settings);
+	}
+
+	@Transactional
+	public void updateNotificationSettings(long userId, NotificationSettingsUpdateRequest request) {
+		validateActiveUser(userId);
+		UserSettings settings = findSettings(userId);
+		settings.updateNotificationSettings(
+				request.notiCoaching(),
+				request.notiBudgetAlert(),
+				request.notiTransfer(),
+				request.notiCleanup(),
+				request.quietHoursStart(),
+				request.quietHoursEnd()
+		);
+	}
+
+	@Transactional
+	public void updateCoachPersona(long userId, CoachPersonaUpdateRequest request) {
+		validateActiveUser(userId);
+		findSettings(userId).updateCoachPersona(request.coachPersona());
 	}
 
 	private UserSettings findSettings(long userId) {

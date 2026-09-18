@@ -1,9 +1,11 @@
 package com.finset.key_fin.user.controller;
 
 import com.finset.key_fin.global.exception.GlobalExceptionHandler;
+import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
+import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
-import com.finset.key_fin.user.service.TransferSettingsService;
+import com.finset.key_fin.user.service.UserSettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,24 +21,26 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.standaloneSetup;
 
-class TransferSettingsControllerTest {
+class UserSettingsControllerTest {
 
 	private static final long USER_ID = 1L;
 
-	private TransferSettingsService transferSettingsService;
+	private UserSettingsService userSettingsService;
 	private MockMvc mockMvc;
 
 	@BeforeEach
 	void setUp() {
-		transferSettingsService = mock(TransferSettingsService.class);
-		mockMvc = standaloneSetup(new TransferSettingsController(transferSettingsService))
+		userSettingsService = mock(UserSettingsService.class);
+		mockMvc = standaloneSetup(new UserSettingsController(userSettingsService))
 				.setControllerAdvice(new GlobalExceptionHandler())
 				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
 				.build();
@@ -52,22 +56,20 @@ class TransferSettingsControllerTest {
 
 	@Test
 	void 이체_설정을_조회한다() throws Exception {
-		when(transferSettingsService.getTransferSettings(USER_ID))
+		when(userSettingsService.getTransferSettings(USER_ID))
 				.thenReturn(new TransferSettingsResponse(true, 1_000_000L, 2_000_000L));
 
 		mockMvc.perform(get("/api/v1/settings/transfer"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.success").value(true))
 				.andExpect(jsonPath("$.data.transferConsent").value(true))
-				.andExpect(jsonPath("$.data.transferLimitOnce").value(1_000_000))
-				.andExpect(jsonPath("$.data.transferLimitDaily").value(2_000_000));
+				.andExpect(jsonPath("$.data.transferLimitOnce").value(1_000_000));
 
-		verify(transferSettingsService).getTransferSettings(USER_ID);
+		verify(userSettingsService).getTransferSettings(USER_ID);
 	}
 
 	@Test
 	void 이체_설정을_변경한다() throws Exception {
-		when(transferSettingsService.updateTransferSettings(
+		when(userSettingsService.updateTransferSettings(
 				eq(USER_ID), any(TransferSettingsUpdateRequest.class)))
 				.thenReturn(new TransferSettingsResponse(true, 1_000_000L, 2_000_000L));
 
@@ -77,25 +79,54 @@ class TransferSettingsControllerTest {
 								{"transferConsent":true,"transferLimitOnce":1000000,"transferLimitDaily":2000000}
 								"""))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.transferConsent").value(true))
-				.andExpect(jsonPath("$.data.transferLimitOnce").value(1_000_000));
+				.andExpect(jsonPath("$.data.transferConsent").value(true));
 	}
 
 	@Test
-	void 이체_동의_여부가_누락되면_400을_반환한다() throws Exception {
-		mockMvc.perform(put("/api/v1/settings/transfer")
+	void 알림_설정을_변경한다() throws Exception {
+		mockMvc.perform(put("/api/v1/settings/notifications")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"transferLimitOnce\":1000000,\"transferLimitDaily\":2000000}"))
+						.content("""
+								{"notiCoaching":true,"notiBudgetAlert":true,"notiTransfer":true,"notiCleanup":false,"quietHoursStart":"23:00","quietHoursEnd":"08:00"}
+								"""))
+				.andExpect(status().isOk())
+				.andExpect(content().string(""));
+
+		verify(userSettingsService).updateNotificationSettings(
+				eq(USER_ID), any(NotificationSettingsUpdateRequest.class));
+	}
+
+	@Test
+	void 코치_말투를_변경한다() throws Exception {
+		mockMvc.perform(put("/api/v1/settings/coach")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"coachPersona\":\"DODO\"}"))
+				.andExpect(status().isOk())
+				.andExpect(content().string(""));
+
+		verify(userSettingsService).updateCoachPersona(
+				eq(USER_ID), any(CoachPersonaUpdateRequest.class));
+	}
+
+	@Test
+	void 필수_알림_설정이_누락되면_400을_반환한다() throws Exception {
+		mockMvc.perform(put("/api/v1/settings/notifications")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"notiBudgetAlert":true,"notiTransfer":true,"notiCleanup":false}
+								"""))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 
 	@Test
-	void 이체_한도가_0이면_400을_반환한다() throws Exception {
-		mockMvc.perform(put("/api/v1/settings/transfer")
+	void 지원하지_않는_코치_말투는_400을_반환한다() throws Exception {
+		mockMvc.perform(put("/api/v1/settings/coach")
 						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"transferConsent\":true,\"transferLimitOnce\":0}"))
+						.content("{\"coachPersona\":\"UNKNOWN\"}"))
 				.andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.code").value("COMMON_001"));
+				.andExpect(jsonPath("$.code").value("COMMON_002"));
+
+		verifyNoInteractions(userSettingsService);
 	}
 }

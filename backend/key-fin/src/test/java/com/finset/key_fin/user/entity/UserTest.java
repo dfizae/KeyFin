@@ -4,11 +4,24 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDateTime;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class UserTest {
+
+	@Test
+	void 회원을_소프트_삭제한다() {
+		User user = User.create("qwer@qwer.com", "password", "김예린");
+		LocalDateTime deletedAt = LocalDateTime.of(2026, 9, 17, 10, 0);
+
+		user.softDelete(deletedAt);
+
+		assertThat(user.isDeleted()).isTrue();
+		assertThat(user.getDeletedAt()).isEqualTo(deletedAt);
+	}
 
 	private static final String FIN_USER_KEY = "cf1d49ba-663b-495d-9227-fc2643aa7c5e";
 

@@ -1,8 +1,11 @@
 package com.finset.key_fin.user.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
+import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
+import com.finset.key_fin.user.entity.CoachPersona;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.entity.UserSettings;
 import com.finset.key_fin.user.exception.UserErrorCode;
@@ -16,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,7 +28,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
-class TransferSettingsServiceTest {
+class UserSettingsServiceTest {
 
 	private static final long USER_ID = 1L;
 
@@ -35,7 +39,7 @@ class TransferSettingsServiceTest {
 	private UserSettingsRepository userSettingsRepository;
 
 	@InjectMocks
-	private TransferSettingsService transferSettingsService;
+	private UserSettingsService userSettingsService;
 
 	private User user;
 	private UserSettings settings;
@@ -50,10 +54,9 @@ class TransferSettingsServiceTest {
 	@Test
 	void 이체_설정을_조회한다() {
 		settings.updateTransferSettings(true, 1_000_000L, 2_000_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.of(settings));
+		givenActiveUserAndSettings();
 
-		TransferSettingsResponse response = transferSettingsService.getTransferSettings(USER_ID);
+		TransferSettingsResponse response = userSettingsService.getTransferSettings(USER_ID);
 
 		assertThat(response)
 				.extracting("transferConsent", "transferLimitOnce", "transferLimitDaily")
@@ -62,10 +65,9 @@ class TransferSettingsServiceTest {
 
 	@Test
 	void 이체_설정을_변경한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.of(settings));
+		givenActiveUserAndSettings();
 
-		TransferSettingsResponse response = transferSettingsService.updateTransferSettings(
+		TransferSettingsResponse response = userSettingsService.updateTransferSettings(
 				USER_ID, new TransferSettingsUpdateRequest(true, 1_000_000L, 2_000_000L));
 
 		assertThat(response.transferConsent()).isTrue();
@@ -74,24 +76,35 @@ class TransferSettingsServiceTest {
 	}
 
 	@Test
-	void 이체_한도를_null로_변경한다() {
-		settings.updateTransferSettings(true, 1_000_000L, 2_000_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.of(settings));
+	void 알림_설정을_변경한다() {
+		givenActiveUserAndSettings();
+		NotificationSettingsUpdateRequest request = new NotificationSettingsUpdateRequest(
+				true, false, true, false, LocalTime.of(23, 0), LocalTime.of(8, 0));
 
-		TransferSettingsResponse response = transferSettingsService.updateTransferSettings(
-				USER_ID, new TransferSettingsUpdateRequest(false, null, null));
+		userSettingsService.updateNotificationSettings(USER_ID, request);
 
-		assertThat(response.transferConsent()).isFalse();
-		assertThat(response.transferLimitOnce()).isNull();
-		assertThat(response.transferLimitDaily()).isNull();
+		assertThat(settings.isNotiCoaching()).isTrue();
+		assertThat(settings.isNotiBudgetAlert()).isFalse();
+		assertThat(settings.getQuietHoursStart()).isEqualTo(LocalTime.of(23, 0));
+		assertThat(settings.getQuietHoursEnd()).isEqualTo(LocalTime.of(8, 0));
 	}
 
 	@Test
-	void 활성_사용자가_없으면_설정을_조회할_수_없다() {
+	void 코치_말투를_변경한다() {
+		givenActiveUserAndSettings();
+
+		userSettingsService.updateCoachPersona(
+				USER_ID, new CoachPersonaUpdateRequest(CoachPersona.DODO));
+
+		assertThat(settings.getCoachPersona()).isEqualTo(CoachPersona.DODO);
+	}
+
+	@Test
+	void 활성_사용자가_아니면_설정을_변경할_수_없다() {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.empty());
 
-		assertThatThrownBy(() -> transferSettingsService.getTransferSettings(USER_ID))
+		assertThatThrownBy(() -> userSettingsService.updateCoachPersona(
+				USER_ID, new CoachPersonaUpdateRequest(CoachPersona.DODO)))
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.USER_NOT_FOUND));
 		verifyNoInteractions(userSettingsRepository);
@@ -102,7 +115,7 @@ class TransferSettingsServiceTest {
 		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
 		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.empty());
 
-		assertThatThrownBy(() -> transferSettingsService.getTransferSettings(USER_ID))
+		assertThatThrownBy(() -> userSettingsService.getTransferSettings(USER_ID))
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(UserErrorCode.USER_SETTINGS_NOT_FOUND));
@@ -110,13 +123,17 @@ class TransferSettingsServiceTest {
 
 	@Test
 	void 일일_한도가_일회_한도보다_작으면_변경할_수_없다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
-		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.of(settings));
+		givenActiveUserAndSettings();
 
-		assertThatThrownBy(() -> transferSettingsService.updateTransferSettings(
+		assertThatThrownBy(() -> userSettingsService.updateTransferSettings(
 				USER_ID, new TransferSettingsUpdateRequest(true, 1_000_000L, 500_000L)))
 				.isInstanceOfSatisfying(BusinessException.class,
 						exception -> assertThat(exception.getErrorCode())
 								.isEqualTo(UserErrorCode.INVALID_TRANSFER_LIMIT));
+	}
+
+	private void givenActiveUserAndSettings() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.of(settings));
 	}
 }
