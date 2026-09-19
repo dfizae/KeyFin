@@ -123,7 +123,7 @@ public class TransactionService {
 
 		var transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
 				.orElseThrow(() -> new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND));
-		applyClassification(transaction, request);
+		applyClassification(userId, transaction, request);
 		return TransactionClassificationResponse.from(transaction);
 	}
 
@@ -152,7 +152,7 @@ public class TransactionService {
 		for (BulkTransactionClassificationRequest.Item item : items) {
 			Transaction transaction = transactionsById.get(item.transactionId());
 			transaction.validatePendingClassificationTarget();
-			applyClassification(transaction, item.toClassificationRequest());
+			applyClassification(userId, transaction, item.toClassificationRequest());
 		}
 
 		long pendingRemain = transactionRepository
@@ -162,10 +162,11 @@ public class TransactionService {
 		return new BulkTransactionClassificationResponse(items.size(), pendingRemain);
 	}
 
-	private void applyClassification(Transaction transaction, TransactionClassificationRequest request) {
+	private void applyClassification(long userId, Transaction transaction,
+			TransactionClassificationRequest request) {
 		Integer before = transaction.getSubcategoryId();
 		applyClassificationInternal(transaction, request);
-		publishEnvelopeChanged(transaction.getUser().getId(), before, transaction.getSubcategoryId());
+		publishEnvelopeChanged(userId, before, transaction.getSubcategoryId());
 	}
 
 	private void publishEnvelopeChanged(long userId, Integer before, Integer after) {
