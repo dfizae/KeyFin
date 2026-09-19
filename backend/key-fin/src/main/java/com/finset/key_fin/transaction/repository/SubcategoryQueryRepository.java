@@ -5,12 +5,23 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 @RequiredArgsConstructor
 public class SubcategoryQueryRepository {
 
 	private final EntityManager entityManager;
+
+	public Optional<Integer> findEnvelopeId(int subcategoryId) {
+		@SuppressWarnings("unchecked")
+		List<Object> rows = entityManager
+				.createNativeQuery("SELECT envelope_id FROM subcategories WHERE id = :subcategoryId")
+				.setParameter("subcategoryId", subcategoryId)
+				.setMaxResults(1)
+				.getResultList();
+		return rows.stream().findFirst().map(value -> ((Number) value).intValue());
+	}
 
 	public List<SubcategoryQueryRow> findAllWithEnvelope() {
 		@SuppressWarnings("unchecked")
