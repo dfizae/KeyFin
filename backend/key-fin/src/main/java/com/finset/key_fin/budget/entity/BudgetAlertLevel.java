@@ -1,6 +1,5 @@
 package com.finset.key_fin.budget.entity;
 
-/** 봉투 잔여율 알림 단계. 아래로 갈수록 심각하다. */
 public enum BudgetAlertLevel {
 
 	NONE,
@@ -9,7 +8,6 @@ public enum BudgetAlertLevel {
 	REMAINING_5,
 	EXCEEDED;
 
-	/** 확정액이 없거나 0인 봉투는 잔여율이 정의되지 않아 판정하지 않는다. */
 	public static BudgetAlertLevel of(Long confirmedAmount, long remaining) {
 		if (confirmedAmount == null || confirmedAmount <= 0) {
 			return null;
