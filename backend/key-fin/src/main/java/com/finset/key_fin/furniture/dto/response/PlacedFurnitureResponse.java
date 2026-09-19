@@ -3,6 +3,7 @@ package com.finset.key_fin.furniture.dto.response;
 import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.furniture.entity.UserFurniture;
+import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
 import com.finset.key_fin.item.entity.ItemSlotType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -20,12 +21,15 @@ public record PlacedFurnitureResponse(
 		@Schema(requiredMode = REQUIRED) FurniturePlacementDirection placementDirection,
 		@Schema(requiredMode = REQUIRED) BigDecimal positionX,
 		@Schema(requiredMode = REQUIRED) BigDecimal positionY,
-		@Schema(requiredMode = REQUIRED) int layer
+		@Schema(requiredMode = REQUIRED) int layer,
+		@Schema(requiredMode = REQUIRED, nullable = true) DefaultFurnitureType defaultFurnitureType,
+		@Schema(requiredMode = REQUIRED) boolean canUnplace
 ) {
 	public static PlacedFurnitureResponse from(UserFurniture furniture) {
 		var item = furniture.getItem();
 		return new PlacedFurnitureResponse(furniture.getId(), item.getId(), item.getSlotType(), item.getAssetKey(),
 				furniture.getPlacementStatus(), furniture.getPlacementDirection(),
-				furniture.getPositionX(), furniture.getPositionY(), furniture.getLayer());
+				furniture.getPositionX(), furniture.getPositionY(), furniture.getLayer(),
+				item.getDefaultFurnitureType(), furniture.canUnplace());
 	}
 }
