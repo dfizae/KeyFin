@@ -104,6 +104,37 @@ class FdtTransactionMapperTest {
 	}
 
 	@Test
+	void BUDGET_EXCLUDED는_INTERNAL_TRANSFER로_보낸다() {
+		Transaction transaction = accountTransaction(TransactionType.WITHDRAW, ExcludeTag.BUDGET_EXCLUDED);
+
+		FdtTransaction result = mapper.map(transaction);
+
+		assertThat(result.excludeTag()).isEqualTo("INTERNAL_TRANSFER");
+	}
+
+	/** 엔진이 받지 않는 값을 보내면 원장 적재가 통째로 거부된다. 태그가 늘어나면 여기서 걸린다. */
+	@Test
+	void 모든_태그가_엔진_enum_안의_값으로_나간다() {
+		List<String> engineEnum = List.of("NONE", "INTERNAL_TRANSFER", "SELF_TRANSFER", "DUTCH",
+				"EMERGENCY", "CARRYOVER");
+
+		for (ExcludeTag tag : ExcludeTag.values()) {
+			if (tag == ExcludeTag.CARRYOVER) {
+				continue; // 원장에서 제외되어 전송되지 않는다
+			}
+			Transaction transaction = accountTransaction(
+					tag == ExcludeTag.RESTORE ? TransactionType.DEPOSIT : TransactionType.WITHDRAW, tag);
+			if (tag == ExcludeTag.DUTCH) {
+				ReflectionTestUtils.setField(transaction, "adjustedAmount", 10_000L);
+			}
+
+			assertThat(mapper.map(transaction).excludeTag())
+					.as("태그 %s", tag)
+					.isIn(engineEnum);
+		}
+	}
+
+	@Test
 	void CARRYOVER는_원장에서_제외한다() {
 		Transaction carryover = accountTransaction(TransactionType.DEPOSIT, ExcludeTag.CARRYOVER);
 		Transaction normal = accountTransaction(TransactionType.WITHDRAW, ExcludeTag.NONE);
