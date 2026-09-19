@@ -1,5 +1,6 @@
 package com.finset.key_fin.transaction.service;
 
+import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
 import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
@@ -19,6 +20,7 @@ import com.finset.key_fin.transaction.repository.TransactionSearchCondition;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.never;
@@ -61,7 +64,9 @@ class TransactionServiceTest {
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-14T00:00:00Z"), ZoneOffset.UTC);
-		transactionService = new TransactionService(userRepository, transactionRepository, transactionQueryRepository, clock);
+		transactionService = new TransactionService(mock(ApplicationEventPublisher.class),
+				mock(SubcategoryQueryRepository.class), userRepository, transactionRepository,
+				transactionQueryRepository, clock);
 	}
 
 	@Test
