@@ -19,6 +19,7 @@ public class FdtTransactionMapper {
 
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 	private static final String UNMAPPED_MERCHANT_PREFIX = "raw:";
+	private static final String ENGINE_INTERNAL_TRANSFER = "INTERNAL_TRANSFER";
 
 	private final FdtCategoryMapper categoryMapper;
 
@@ -66,10 +67,17 @@ public class FdtTransactionMapper {
 		return transaction.getExcludeTag() == ExcludeTag.SELF_TRANSFER ? "TRANSFER" : "TRANSFER_OUT";
 	}
 
+	/**
+	 * 엔진 enum 은 NONE·INTERNAL_TRANSFER·SELF_TRANSFER·DUTCH·EMERGENCY·CARRYOVER 여섯 종이다.
+	 * 여기 없는 값을 보내면 원장 적재가 통째로 거부된다.
+	 */
 	private String excludeTag(Transaction transaction) {
-		return transaction.getExcludeTag() == ExcludeTag.RESTORE
-				? ExcludeTag.NONE.name()
-				: transaction.getExcludeTag().name();
+		return switch (transaction.getExcludeTag()) {
+			case RESTORE -> ExcludeTag.NONE.name();
+			// 예산 제외는 엔진에 대응 값이 없다. 내부 이체로 보내 봉투 집계에서 빠지게 한다.
+			case BUDGET_EXCLUDED -> ENGINE_INTERNAL_TRANSFER;
+			default -> transaction.getExcludeTag().name();
+		};
 	}
 
 	/**
