@@ -14,6 +14,8 @@ import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.TransactionStatus;
 import com.finset.key_fin.transaction.entity.TransactionType;
 import com.finset.key_fin.transaction.exception.TransactionErrorCode;
+import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
+import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionQueryRow;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
@@ -21,6 +23,7 @@ import com.finset.key_fin.transaction.repository.TransactionSearchCondition;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +36,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Stream;
 import java.util.stream.Collectors;
 
 @Service
@@ -44,6 +50,8 @@ public class TransactionService {
 	private static final DateTimeFormatter MONTH_FORMAT = DateTimeFormatter.ofPattern("yyyyMM");
 	private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
+	private final ApplicationEventPublisher events;
+	private final SubcategoryQueryRepository subcategoryQueryRepository;
 	private final UserRepository userRepository;
 	private final TransactionRepository transactionRepository;
 	private final TransactionQueryRepository transactionQueryRepository;
@@ -155,6 +163,22 @@ public class TransactionService {
 	}
 
 	private void applyClassification(Transaction transaction, TransactionClassificationRequest request) {
+		Integer before = transaction.getSubcategoryId();
+		applyClassificationInternal(transaction, request);
+		publishEnvelopeChanged(transaction.getUser().getId(), before, transaction.getSubcategoryId());
+	}
+
+	private void publishEnvelopeChanged(long userId, Integer before, Integer after) {
+		Stream.of(before, after)
+				.filter(Objects::nonNull)
+				.distinct()
+				.map(subcategoryQueryRepository::findEnvelopeId)
+				.flatMap(Optional::stream)
+				.distinct()
+				.forEach(envelopeId -> events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId)));
+	}
+
+	private void applyClassificationInternal(Transaction transaction, TransactionClassificationRequest request) {
 		boolean hasSubcategory = request.subcategoryId() != null;
 		boolean hasExcludeTag = request.excludeTag() != null;
 		boolean isRestore = request.excludeTag() == ExcludeTag.RESTORE;

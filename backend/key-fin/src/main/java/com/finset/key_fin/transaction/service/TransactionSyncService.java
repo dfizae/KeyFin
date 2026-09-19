@@ -14,11 +14,14 @@ import com.finset.key_fin.transaction.entity.ConfirmStatus;
 import com.finset.key_fin.transaction.entity.ExcludeTag;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.TransactionStatus;
+import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
+import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -40,6 +43,8 @@ public class TransactionSyncService {
 			ConfirmStatus.AUTO
 	);
 
+	private final ApplicationEventPublisher events;
+	private final SubcategoryQueryRepository subcategoryQueryRepository;
 	private final UserRepository userRepository;
 	private final AccountRepository accountRepository;
 	private final CardRepository cardRepository;
@@ -240,8 +245,14 @@ public class TransactionSyncService {
 								RECLASSIFIABLE_STATUSES
 						))
 				.ifPresent(counterpartTransaction -> {
+					Integer before = counterpartTransaction.getSubcategoryId();
 					counterpartTransaction.markAsSelfTransfer();
 					reclassifiedTransactions.put(counterpartTransaction.getId(), counterpartTransaction);
+					if (before != null) {
+						subcategoryQueryRepository.findEnvelopeId(before)
+								.ifPresent(envelopeId ->
+										events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId)));
+					}
 				});
 	}
 

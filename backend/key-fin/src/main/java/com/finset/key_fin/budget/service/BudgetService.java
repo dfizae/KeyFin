@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +29,7 @@ import com.finset.key_fin.budget.entity.BudgetEnvelope;
 import com.finset.key_fin.budget.entity.BudgetStatus;
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
+import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
 import com.finset.key_fin.budget.repository.BudgetRepository;
 import com.finset.key_fin.budget.service.EnvelopeBalanceService.EnvelopeBalance;
 import com.finset.key_fin.global.exception.BusinessException;
@@ -103,6 +105,7 @@ public class BudgetService {
 			6, 150_000L,
 			7, 100_000L);
 
+	private final ApplicationEventPublisher events;
 	private final JdbcClient jdbc;
 	private final Clock clock;
 	private final EnvelopeBalanceService envelopeBalanceService;
@@ -192,6 +195,7 @@ public class BudgetService {
 
 		rows.forEach(row -> row.confirm(amounts.get(row.getEnvelopeId())));
 		budget.confirm();
+		rows.forEach(row -> events.publishEvent(new EnvelopeSpendingChanged(userId, row.getEnvelopeId())));
 		return new BudgetConfirmResponse(budget.getId(), budget.getBudgetMonth(), budget.getStatus().name());
 	}
 
