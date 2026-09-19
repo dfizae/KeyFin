@@ -35,7 +35,7 @@ class RoomServiceTest {
 		when(items.getEquipment(1L)).thenReturn(new AvatarEquipmentResponse(List.of()));
 		var placed = new PlacedFurnitureResponse(201L, 4L, ItemSlotType.FLOOR, "sofa_blue",
 				FurniturePlacementStatus.FLOOR, FurniturePlacementDirection.FRONT_LEFT,
-				new BigDecimal("165.123"), new BigDecimal("280.456"), -2);
+				new BigDecimal("165.123"), new BigDecimal("280.456"), -2, null, true);
 		when(furnitures.getPlacedFurnitures(1L)).thenReturn(List.of(placed)).thenReturn(List.of());
 		assertThat(service.getRoom(1).furnitures()).containsExactly(placed);
 		assertThat(service.getRoom(1).furnitures()).isEmpty();

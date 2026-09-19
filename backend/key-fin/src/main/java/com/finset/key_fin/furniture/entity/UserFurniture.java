@@ -99,6 +99,9 @@ public class UserFurniture {
 	}
 
 	public void unplace() {
+		if (!canUnplace()) {
+			throw new BusinessException(FurnitureErrorCode.DEFAULT_FURNITURE_CANNOT_UNPLACE);
+		}
 		this.placementStatus = null;
 		this.placementDirection = null;
 		this.positionX = null;
@@ -109,4 +112,9 @@ public class UserFurniture {
 	public boolean isPlaced() {
 		return placementStatus != null;
 	}
+
+	public boolean canUnplace() {
+		return item.getDefaultFurnitureType() == null;
+	}
+
 }

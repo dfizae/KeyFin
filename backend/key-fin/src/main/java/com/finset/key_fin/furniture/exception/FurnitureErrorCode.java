@@ -9,7 +9,8 @@ import org.springframework.http.HttpStatus;
 @RequiredArgsConstructor
 public enum FurnitureErrorCode implements ErrorCode {
 	USER_FURNITURE_NOT_FOUND(HttpStatus.NOT_FOUND, "FURNITURE_001", "보유 가구를 찾을 수 없습니다."),
-	PLACEMENT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "FURNITURE_002", "가구를 설치할 수 없는 면입니다.");
+	PLACEMENT_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "FURNITURE_002", "가구를 설치할 수 없는 면입니다."),
+	DEFAULT_FURNITURE_CANNOT_UNPLACE(HttpStatus.CONFLICT, "FURNITURE_003", "기본 가구는 설치 해제할 수 없습니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;

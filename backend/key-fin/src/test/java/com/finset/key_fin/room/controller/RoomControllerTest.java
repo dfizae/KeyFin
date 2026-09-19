@@ -8,6 +8,7 @@ import com.finset.key_fin.furniture.dto.response.PlacedFurnitureResponse;
 import com.finset.key_fin.item.entity.ItemSlotType;
 import com.finset.key_fin.item.dto.response.EquippedItemResponse;
 import com.finset.key_fin.room.service.RoomService;
+import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -93,7 +94,7 @@ class RoomControllerTest {
 								FurniturePlacementDirection.FRONT_RIGHT,
 								new BigDecimal("165.000"),
 								new BigDecimal("280.000"),
-								0
+								0, DefaultFurnitureType.SOFA, false
 						)
 				),
 				new RoomResponse.CoinResponse(1250),

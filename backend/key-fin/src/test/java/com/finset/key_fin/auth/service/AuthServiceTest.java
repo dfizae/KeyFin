@@ -11,6 +11,7 @@ import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.auth.jwt.TokenType;
 import com.finset.key_fin.auth.repository.RefreshTokenRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.furniture.service.DefaultFurnitureService;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.entity.UserProfile;
 import com.finset.key_fin.user.entity.UserSettings;
@@ -47,6 +48,7 @@ class AuthServiceTest {
 	private JwtTokenProvider jwtTokenProvider;
 	private RefreshTokenRepository refreshTokenRepository;
 	private AuthService authService;
+	private final DefaultFurnitureService defaultFurnitureService = mock(DefaultFurnitureService.class);
 
 	@BeforeEach
 	void setUp() {
@@ -62,7 +64,8 @@ class AuthServiceTest {
 				userSettingsRepository,
 				passwordEncoder,
 				jwtTokenProvider,
-				refreshTokenRepository
+				refreshTokenRepository,
+				defaultFurnitureService
 		);
 	}
 
@@ -80,6 +83,7 @@ class AuthServiceTest {
 		verify(passwordEncoder).encode(RAW_PASSWORD);
 		verify(userProfileRepository).save(org.mockito.ArgumentMatchers.any(UserProfile.class));
 		verify(userSettingsRepository).save(org.mockito.ArgumentMatchers.any(UserSettings.class));
+		verify(defaultFurnitureService).provision(USER_ID);
 	}
 
 	@Test

@@ -34,13 +34,14 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 })
 public interface FurnitureControllerDocs {
 	@Operation(summary = "보유 가구 조회", description = "설치·미설치 가구를 보유 가구 ID 오름차순으로 반환합니다. "
-			+ "slotType 생략 시 전체 조회하며 결과가 없으면 빈 배열입니다. 판매 중지된 상품도 이미 보유했다면 포함합니다.")
+			+ "slotType 생략 시 전체 조회하며 결과가 없으면 빈 배열입니다. 판매 중지된 상품도 이미 보유했다면 포함합니다. "
+			+ "defaultFurnitureType은 기본 가구 식별값이며 일반 가구는 null입니다. canUnplace는 설치 해제 가능 여부입니다.")
 	@ApiResponse(responseCode = "200", description = "조회 성공", useReturnTypeSchema = true,
 			content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(value = """
 					{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
 					 "data":[{"userFurnitureId":201,"itemId":4,"name":"파란 소파","slotType":"FLOOR",
 					 "assetKey":"sofa_blue","placed":false,"placementStatus":null,"placementDirection":null,
-					 "positionX":null,"positionY":null,"layer":0}]}
+					 "positionX":null,"positionY":null,"layer":0,"defaultFurnitureType":null,"canUnplace":true}]}
 					""")))
 	BaseResponse<List<UserFurnitureResponse>> getFurnitures(
 			@Parameter(hidden = true) Long userId,
@@ -50,7 +51,8 @@ public interface FurnitureControllerDocs {
 
 	@Operation(summary = "가구 배치 상태 변경", description = "placed=true이면 면·방향·좌표를 모두 보내 설치하거나 현재 배치를 교체합니다. "
 			+ "layer는 생략 또는 null이면 0이며 음수도 허용합니다. placed=false이면 나머지 필드는 생략 또는 null이어야 합니다. "
-			+ "해제 시 면·방향·좌표는 null, layer는 0으로 초기화하고 보유 내역은 유지합니다. "
+			+ "일반 가구 해제 시 면·방향·좌표는 null, layer는 0으로 초기화하고 보유 내역은 유지합니다. "
+			+ "defaultFurnitureType이 있는 기본 가구는 canUnplace=false이며 이동만 가능합니다. "
 			+ "같은 요청을 반복해도 성공하며 변경된 가구를 반환합니다. 타인 소유와 미존재 가구는 같은 오류입니다. "
 			+ "좌표는 327×404 씬 기준으로 소수점 최대 3자리입니다. 겹침·격자·실제 면 내부 판정은 클라이언트가 담당합니다.")
 	@ApiResponse(responseCode = "200", description = "변경된 가구", useReturnTypeSchema = true,
@@ -59,17 +61,19 @@ public interface FurnitureControllerDocs {
 							{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
 							 "data":{"userFurnitureId":201,"itemId":4,"name":"파란 소파","slotType":"FLOOR",
 							 "assetKey":"sofa_blue","placed":true,"placementStatus":"FLOOR","placementDirection":"FRONT_RIGHT",
-							 "positionX":165.000,"positionY":280.000,"layer":0}}
+							 "positionX":165.000,"positionY":280.000,"layer":0,"defaultFurnitureType":null,"canUnplace":true}}
 							"""),
 					@ExampleObject(name = "해제 후", value = """
 							{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.",
 							 "data":{"userFurnitureId":201,"itemId":4,"name":"파란 소파","slotType":"FLOOR",
 							 "assetKey":"sofa_blue","placed":false,"placementStatus":null,"placementDirection":null,
-							 "positionX":null,"positionY":null,"layer":0}}
+							 "positionX":null,"positionY":null,"layer":0,"defaultFurnitureType":null,"canUnplace":true}}
 							""")
 			}))
 	@ApiResponse(responseCode = "400", description = "필수값 누락·좌표 범위/정밀도·해제 필드 오류 (COMMON_001), "
 			+ "본문 누락·JSON 파싱 오류 (COMMON_002), 가구 유형과 설치 면 불일치 (FURNITURE_002)",
+			content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	@ApiResponse(responseCode = "409", description = "기본 가구 설치 해제 불가 (FURNITURE_003)",
 			content = @Content(schema = @Schema(implementation = BaseResponse.class)))
 	BaseResponse<UserFurnitureResponse> updatePlacement(
 			@Parameter(hidden = true) Long userId,

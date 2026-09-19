@@ -11,6 +11,7 @@ import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.auth.jwt.TokenType;
 import com.finset.key_fin.auth.repository.RefreshTokenRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.furniture.service.DefaultFurnitureService;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.entity.UserProfile;
 import com.finset.key_fin.user.entity.UserSettings;
@@ -33,6 +34,7 @@ public class AuthService {
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
 	private final RefreshTokenRepository refreshTokenRepository;
+	private final DefaultFurnitureService defaultFurnitureService;
 
 	@Transactional
 	public SignupResponse signup(SignupRequest request) {
@@ -46,6 +48,7 @@ public class AuthService {
 		User savedUser = userRepository.save(user);
 		userProfileRepository.save(UserProfile.create(savedUser));
 		userSettingsRepository.save(UserSettings.create(savedUser));
+		defaultFurnitureService.provision(savedUser.getId());
 
 		return new SignupResponse(savedUser.getId());
 	}
