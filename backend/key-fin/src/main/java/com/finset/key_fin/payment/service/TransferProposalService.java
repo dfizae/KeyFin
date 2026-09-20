@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.account.entity.Account;
@@ -18,6 +19,7 @@ import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Item;
 import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
 import com.finset.key_fin.payment.entity.PrepareTransfer;
+import com.finset.key_fin.payment.event.TransferProposed;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
 import com.finset.key_fin.payment.service.RequiredAmountService.Entry;
@@ -34,6 +36,7 @@ public class TransferProposalService {
 	private final PrepareTransferRepository prepareTransferRepository;
 	private final AccountRepository accountRepository;
 	private final AuditLogRepository auditLogRepository;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 
 	@Transactional
@@ -53,6 +56,7 @@ public class TransferProposalService {
 		rows.forEach(t -> byKey.put(key(t), t));
 		Set<String> seen = new HashSet<>();
 		int created = 0, updated = 0, reopened = 0;
+		Set<Long> notifyAccounts = new HashSet<>();
 		for (Entry entry : entriesIn(userId, today, tomorrow)) {
 			Item item = entry.item();
 			if (item.shortage() == null || item.shortage() <= 0
@@ -73,6 +77,7 @@ public class TransferProposalService {
 			if (existing != null) {
 				if (existing.isFailed()) {
 					existing.reopen(today, item.shortage());
+					notifyAccounts.add(item.withdrawalAccountId());
 					reopened++;
 				}
 				continue;
@@ -83,6 +88,7 @@ public class TransferProposalService {
 					: PrepareTransfer.proposeForFixedExpense(userId, item.fixedExpenseId(), today, entry.date(),
 							item.shortage(), income.getId(), item.withdrawalAccountId());
 			prepareTransferRepository.save(transfer);
+			notifyAccounts.add(item.withdrawalAccountId());
 			created++;
 		}
 		for (PrepareTransfer transfer : byKey.values()) {
@@ -91,6 +97,7 @@ public class TransferProposalService {
 				canceled++;
 			}
 		}
+		notifyAccounts.forEach(accountId -> events.publishEvent(new TransferProposed(userId, accountId)));
 		return new ProposalResult(true, created + reopened, updated, canceled);
 	}
 

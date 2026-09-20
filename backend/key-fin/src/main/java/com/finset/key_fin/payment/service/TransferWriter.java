@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.account.entity.Account;
@@ -15,6 +16,7 @@ import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
 import com.finset.key_fin.payment.entity.PrepareTransfer;
 import com.finset.key_fin.payment.entity.TransferStatus;
+import com.finset.key_fin.payment.event.TransferCompleted;
 import com.finset.key_fin.payment.exception.PaymentErrorCode;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
@@ -31,6 +33,7 @@ public class TransferWriter {
 	private final UserRepository userRepository;
 	private final AuditLogRepository auditLogRepository;
 	private final TransferPurposeResolver purposeResolver;
+	private final ApplicationEventPublisher events;
 
 	public record ApprovalContext(long transferId, long userId, String userKey, TransferStatus status, String institutionTxNo,
 			long amount, Long fromAccountId, String fromAccountNo, String toAccountNo, String purposeName) {
@@ -75,7 +78,8 @@ public class TransferWriter {
 	}
 
 	@Transactional
-	public TransferApproveResponse complete(long userId, long transferId, FinanceTransferResult result, LocalDateTime now) {
+	public TransferApproveResponse complete(long userId, long transferId, FinanceTransferResult result, LocalDateTime now,
+			boolean notify) {
 		PrepareTransfer transfer = lockedTransfer(userId, transferId);
 		if (!transfer.isApproved()) {
 			return response(transfer);
@@ -92,6 +96,9 @@ public class TransferWriter {
 			transfer.markFailed(reason);
 			auditLogRepository.save(AuditLog.transfer(userId, AuditAction.FAIL, transferId,
 					reason + " — 기관거래고유번호 " + transfer.getInstitutionTxNo() + ", 금액 " + transfer.getRequiredAmount()));
+		}
+		if (notify) {
+			events.publishEvent(new TransferCompleted(userId, transferId, transfer.getStatus()));
 		}
 		return response(transfer);
 	}

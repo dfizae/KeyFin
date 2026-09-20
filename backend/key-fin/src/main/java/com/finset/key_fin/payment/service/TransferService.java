@@ -119,7 +119,7 @@ public class TransferService {
 					transferId, userId, institutionTxNo, ctx.amount());
 		}
 		FinanceTransferResult result = transfer(ctx, institutionTxNo);
-		TransferApproveResponse response = writer.complete(userId, transferId, result, LocalDateTime.now(clock));
+		TransferApproveResponse response = writer.complete(userId, transferId, result, LocalDateTime.now(clock), true);
 		if (!result.isSuccess()) {
 			throw new BusinessException(result.status() == FinanceTransferResult.Status.INSUFFICIENT_BALANCE
 					? PaymentErrorCode.TRANSFER_INSUFFICIENT_BALANCE
@@ -136,7 +136,7 @@ public class TransferService {
 			try {
 				ApprovalContext ctx = writer.load(transfer.getUserId(), transfer.getId());
 				FinanceTransferResult result = transfer(ctx, ctx.institutionTxNo());
-				writer.complete(ctx.userId(), ctx.transferId(), result, LocalDateTime.now(clock));
+				writer.complete(ctx.userId(), ctx.transferId(), result, LocalDateTime.now(clock), false);
 			} catch (RuntimeException e) {
 				failed++;
 				log.warn("이체 복구 실패 — 다음 회차에 재시도: transferId={}, cause={}", transfer.getId(), e.toString());

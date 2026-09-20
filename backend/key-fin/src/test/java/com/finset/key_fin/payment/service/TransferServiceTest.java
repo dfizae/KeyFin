@@ -233,7 +233,7 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 	@DisplayName("이미 종결된 건에 complete가 다시 오면 아무것도 쓰지 않고 현재 상태를 돌려준다(중복 감사 없음)")
 	void completeIsIdempotentOnFinalState() {
 		TransferApproveResponse response = transferWriter.complete(
-				USER, 9904L, FinanceTransferResult.EXECUTED, java.time.LocalDateTime.now());
+				USER, 9904L, FinanceTransferResult.EXECUTED, java.time.LocalDateTime.now(), true);
 
 		assertThat(response.status()).isEqualTo(TransferStatus.EXECUTED);
 		assertThat(auditOf(9904L)).isEmpty();
