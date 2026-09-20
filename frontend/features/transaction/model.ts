@@ -311,3 +311,50 @@ export function toClassifyResult(dto: ClassifyResponseDto): ClassifyResult {
     adjustedAmount: dto.adjustedAmount === null || dto.adjustedAmount === undefined ? null : won(dto.adjustedAmount, "adjustedAmount"),
   };
 }
+
+/* ───────────── 일괄 확정: PUT /transactions/classifications (배포 서버 Swagger 2026-09-20 대조, FR-TXN-03 P1) ───────────── */
+
+/**
+ * 정리 세션에서 여러 건을 한 번에 확정한다. 한 건이라도 실패하면 서버가 전체를 되돌리므로 부분 성공은 없다.
+ * 한 요청에 100건까지고, 넘기면 400 COMMON_001 이다. 항목은 단건 확정과 같은 조합 규칙을 따른다
+ * (일반 소비는 subcategoryId, DUTCH 는 adjustedAmount, 내 계좌 이동 등은 excludeTag).
+ */
+export const BULK_CLASSIFY_MAX = 100;
+
+export type BulkClassifyItemDto = {
+  transactionId: number;
+  subcategoryId?: number | null;
+  excludeTag?: string | null;
+  adjustedAmount?: number | null;
+};
+
+export type BulkClassifyRequest = { items: BulkClassifyItemDto[] };
+
+export type BulkClassifyResultDto = { confirmed: number; pendingRemain: number };
+
+/** confirmed: 확정한 건수 · pendingRemain: 처리 뒤 서버에 남은 미확정 건수(받아 둔 쪽과 무관한 전체 수다) */
+export type BulkClassifyResult = { confirmed: number; pendingRemain: number };
+
+function count(value: number, field: string): number {
+  if (!Number.isSafeInteger(value) || value < 0) throw new ContractMismatchError(field);
+  return value;
+}
+
+export function toBulkClassifyResult(dto: BulkClassifyResultDto): BulkClassifyResult {
+  return { confirmed: count(dto.confirmed, "confirmed"), pendingRemain: count(dto.pendingRemain, "pendingRemain") };
+}
+
+/** 제안 세분류가 있어 한 번에 확정할 수 있는 거래. 제안이 없는 건은 고를 것이 없어 빠진다 */
+export function suggestedForBulk(transactions: readonly Transaction[]): Transaction[] {
+  return transactions.filter((transaction) => transaction.subcategoryId !== null).slice(0, BULK_CLASSIFY_MAX);
+}
+
+/** 제안대로 확정할 요청. 제안이 없는 건은 빠지고 100건을 넘으면 앞에서부터 자른다 */
+export function toSuggestedBulkRequest(transactions: readonly Transaction[]): BulkClassifyRequest {
+  return {
+    items: suggestedForBulk(transactions).map((transaction) => ({
+      transactionId: transaction.id,
+      subcategoryId: transaction.subcategoryId,
+    })),
+  };
+}
