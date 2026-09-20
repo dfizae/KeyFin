@@ -18,10 +18,29 @@ export const HEADER_CONTENT_GAP = 24;
 /** 상태바 아래 헤더 제목 행 높이(`min-h-20`) + 하단 보더 1 */
 export const HEADER_BAR_HEIGHT = 80 + 1;
 
+/** 헤더가 없는 화면에서 본문이 상태바를 피하도록 두는 간격 (2026-09-18: 12 → 20, 자산·예산 탭이 너무 붙어 보인다는 사용자 요청) */
+export const HEADERLESS_TOP_GAP = 20;
+
 /** 헤더 전체 높이 = 상태바 영역 + 제목 행. 측정하지 않고 계산한다 — 측정에 기대면 첫 렌더에 본문이 헤더 아래로 들어간다 */
 export function useHeaderHeight(): number {
   const insets = React.useContext(SafeAreaInsetsContext);
   return (insets?.top ?? 0) + HEADER_BAR_HEIGHT;
+}
+
+/**
+ * 상태바 높이. `useSafeAreaInsets` 는 프로바이더가 없으면 던지므로(테스트) 컨텍스트를 직접 읽는다.
+ */
+export function useTopInset(): number {
+  return React.useContext(SafeAreaInsetsContext)?.top ?? 0;
+}
+
+/**
+ * 헤더 없는 화면(탭 화면)의 본문 위 여백 (2026-09-18 코치 피드백으로 탭 헤더 제거).
+ * 탭바가 현재 위치를 알려 주므로 탭 화면에는 제목 헤더를 두지 않는다.
+ * 뒤로가기가 있는 상세·온보딩 화면은 돌아갈 방법이 사라지므로 `ScreenHeader` 를 그대로 쓴다.
+ */
+export function useHeaderlessTop(): number {
+  return useTopInset() + HEADERLESS_TOP_GAP;
 }
 
 type ScreenScrollContextValue = {

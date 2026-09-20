@@ -12,6 +12,7 @@ import {
   isPointInPolygon,
   MAX_ZOOM,
   MIN_ZOOM,
+  overflowsViewport,
   pickWaypoint,
   rectContainsPoint,
   rectsIntersect,
@@ -27,16 +28,16 @@ import {
 import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintPolygon, isFloorPlacement } from "@/features/room/scene";
 
 describe("room scene 좌표계", () => {
-  it("씬 단위는 Pencil CharacterRoom 327×404 이다", () => {
+  it("씬 단위는 세로 긴 방 그림과 같은 327×586 이다", () => {
     expect(SCENE_WIDTH).toBe(327);
-    expect(SCENE_HEIGHT).toBe(404);
-    expect(SCENE_ASPECT_RATIO).toBeCloseTo(327 / 404);
+    expect(SCENE_HEIGHT).toBe(586);
+    expect(SCENE_ASPECT_RATIO).toBeCloseTo(327 / 586);
   });
 
   it("캔버스 폭에 따라 scale 과 높이를 구한다", () => {
     expect(getSceneScale(327)).toBe(1);
     expect(getSceneScale(654)).toBe(2);
-    expect(getCanvasSize(654)).toEqual({ width: 654, height: 808 });
+    expect(getCanvasSize(654)).toEqual({ width: 654, height: 1172 });
   });
 
   it("발끝 기준점으로 스프라이트 사각형을 구한다", () => {
@@ -65,17 +66,35 @@ describe("room scene 좌표계", () => {
 
 
 describe("씬 카메라 (확대·이동)", () => {
-  const canvas = getCanvasSize(327); // 327×404
+  const canvas = getCanvasSize(327); // 327×586
 
   it("배율은 1~2 로, 평행이동은 방 밖 여백이 안 보이는 범위로 가둔다", () => {
     expect(clampCamera({ scale: 3, tx: 0, ty: 0 }, canvas).scale).toBe(MAX_ZOOM);
     expect(clampCamera({ scale: 0.5, tx: 0, ty: 0 }, canvas).scale).toBe(MIN_ZOOM);
     // 1배에서는 움직일 여지가 없다
     expect(clampCamera({ scale: 1, tx: 50, ty: -50 }, canvas)).toEqual({ scale: 1, tx: 0, ty: 0 });
-    // 2배에서는 캔버스 한 장만큼(-327, -404) 까지만 밀 수 있다
+    // 2배에서는 캔버스 한 장만큼(-327, -586) 까지만 밀 수 있다
     expect(clampCamera({ scale: 2, tx: 10, ty: 10 }, canvas)).toEqual({ scale: 2, tx: 0, ty: 0 });
-    expect(clampCamera({ scale: 2, tx: -400, ty: -500 }, canvas)).toEqual({ scale: 2, tx: -327, ty: -404 });
+    expect(clampCamera({ scale: 2, tx: -400, ty: -700 }, canvas)).toEqual({ scale: 2, tx: -327, ty: -586 });
     expect(clampCamera({ scale: 2, tx: -100, ty: -200 }, canvas)).toEqual({ scale: 2, tx: -100, ty: -200 });
+  });
+
+  it("캔버스가 화면보다 넓으면(홈 cover 맞춤) 1배에서도 넘치는 절반까지 좌우로 밀 수 있다", () => {
+    const cover = getCanvasSize(419); // 419×751 — 390×750 화면을 채우는 폭
+    const viewport = { width: 390, height: 750 };
+    const half = (cover.width - viewport.width) / 2;
+
+    expect(clampCamera({ scale: 1, tx: 0, ty: 0 }, cover, viewport)).toEqual({ scale: 1, tx: 0, ty: 0 });
+    expect(clampCamera({ scale: 1, tx: 999, ty: 0 }, cover, viewport).tx).toBeCloseTo(half);
+    expect(clampCamera({ scale: 1, tx: -999, ty: 0 }, cover, viewport).tx).toBeCloseTo(-half);
+    // 세로는 딱 맞게 채워져 움직일 여지가 반올림 오차(1px 미만)뿐이다
+    expect(Math.abs(clampCamera({ scale: 1, tx: 0, ty: 999 }, cover, viewport).ty)).toBeLessThan(1);
+    expect(Math.abs(clampCamera({ scale: 1, tx: 0, ty: -999 }, cover, viewport).ty)).toBeLessThan(1);
+
+    expect(overflowsViewport(cover, viewport)).toBe(true);
+    // 캔버스가 화면에 딱 맞는 화면(방 꾸미기)은 전과 같이 1배에서 못 움직인다
+    expect(overflowsViewport(canvas, canvas)).toBe(false);
+    expect(clampCamera({ scale: 1, tx: 50, ty: -50 }, canvas, canvas)).toEqual({ scale: 1, tx: 0, ty: 0 });
   });
 
   it("핀치 중심으로 확대하면 그 점은 화면에서 제자리에 남는다", () => {

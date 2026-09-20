@@ -22,13 +22,33 @@ type CoachBubbleProps = {
   /** 서버에 더 남아 있어(다음 커서 있음) 건수가 전부가 아닐 때 */
   pendingMore?: boolean;
   onCleanup?: () => void;
+  /**
+   * 말풍선·코치를 오른쪽으로 미는 거리(pt). 홈은 방이 화면보다 넓어(cover 맞춤) 씬 x 0 이 화면 밖이므로,
+   * 넘친 절반만큼 밀어 화면 왼쪽 끝에 맞춘다. 패널 레이어는 카메라를 따라가지 않아 고정값이면 된다.
+   */
+  offsetX?: number;
+  /** 첫 진입 안내(useRoomGuide). 있으면 말풍선이 열린 채 안내를 보여 주고, 끝나면 평소 말풍선으로 돌아간다 */
+  guide?: CoachGuide | null;
 };
+
+export type CoachGuide = {
+  message: string;
+  /** "1/2" */
+  progress: string;
+  isLast: boolean;
+  onNext: () => void;
+  onSkip: () => void;
+};
+
+export const GUIDE_NEXT_LABEL = "다음";
+export const GUIDE_DONE_LABEL = "알겠어요";
+export const GUIDE_SKIP_LABEL = "그만 보기";
 
 export function cleanupLinkLabel(pendingCount: number, pendingMore = false): string {
   return `미확정 결제 ${pendingCount}건${pendingMore ? "+" : ""} 정리`;
 }
 
-function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup }: CoachBubbleProps) {
+function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup, offsetX = 0, guide = null }: CoachBubbleProps) {
   const scale = getSceneScale(width);
   const [open, setOpen] = React.useState(false);
 
@@ -42,7 +62,7 @@ function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup }
         hitSlop={8}
         className="absolute items-center justify-center rounded-full bg-accent"
         style={{
-          left: AVATAR_SCENE.x * scale,
+          left: AVATAR_SCENE.x * scale + offsetX,
           top: AVATAR_SCENE.y * scale,
           width: AVATAR_SCENE.size * scale,
           height: AVATAR_SCENE.size * scale,
@@ -51,10 +71,32 @@ function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup }
         <Icon as={Cat} size={18} className="text-foreground" />
         {pendingCount > 0 ? <View className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-destructive" accessible={false} /> : null}
       </Pressable>
-      {open ? (
+      {guide ? (
         <View
           className="absolute gap-2 rounded-lg border border-border bg-card p-3"
-          style={{ left: BUBBLE_SCENE.x * scale, top: BUBBLE_SCENE.y * scale, width: BUBBLE_SCENE.width * scale }}
+          style={{ left: BUBBLE_SCENE.x * scale + offsetX, top: BUBBLE_SCENE.y * scale, width: BUBBLE_SCENE.width * scale }}
+          accessibilityLiveRegion="polite"
+        >
+          <Text className="text-body-sm text-foreground">{guide.message}</Text>
+          <View className="flex-row items-center justify-between">
+            <Text className="text-caption tabular-nums text-muted-foreground">{guide.progress}</Text>
+            <View className="flex-row items-center gap-4">
+              {guide.isLast ? null : (
+                <Pressable accessibilityRole="button" hitSlop={12} onPress={guide.onSkip} className="active:opacity-70">
+                  <Text className="text-caption text-muted-foreground">{GUIDE_SKIP_LABEL}</Text>
+                </Pressable>
+              )}
+              <Pressable accessibilityRole="button" hitSlop={12} onPress={guide.onNext} className="active:opacity-70">
+                <Text className="text-label text-primary">{guide.isLast ? GUIDE_DONE_LABEL : GUIDE_NEXT_LABEL}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      ) : null}
+      {open && !guide ? (
+        <View
+          className="absolute gap-2 rounded-lg border border-border bg-card p-3"
+          style={{ left: BUBBLE_SCENE.x * scale + offsetX, top: BUBBLE_SCENE.y * scale, width: BUBBLE_SCENE.width * scale }}
           accessibilityLiveRegion="polite"
         >
           <Text className="text-body-sm text-foreground">{COACH_PLACEHOLDER}</Text>

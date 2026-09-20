@@ -1,10 +1,12 @@
 import type { SpriteFrames } from "@/components/ui/sprite";
 
 // 방 씬 에셋. 스프라이트는 앱 에셋이므로 assets/sprites 에만 둔다(Git LFS 대상). 가구는 features/room/catalog.ts 에 있다.
-// 바닥은 Pencil AI 생성 원본(design/images/ai/floor-default.jpg)을 x 416 부터 622×768 로 잘라낸 이미지다(씬 비율 327:404).
-// 2026-09-09 판은 창문(window.jpg)을 합성했지만, 벽걸이 아이템을 격자에 채우려고 2026-09-15 창문 없이 다시 잘랐다(사용자 결정).
-// 벽·바닥 경계선(scene.ts FLOOR_POLYGON·SURFACES)은 같은 크롭이라 그대로다.
-export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-default.png");
+// 바닥은 Pencil AI 로 만든 세로 긴 방(design/images/ai/floor-tall-c.jpg, 768×1376)을 그대로 쓴다 — 씬 비율 327:586 (2026-09-18).
+// 같은 날 흰색 타일 줄(바닥 이음선·벽 타일선)을 빼고 다시 생성했다(사용자 결정) — a 판은 줄이 있어 버렸다.
+// 홈이 하단 탭바 위 화면 전체를 방으로 채우게 되면서 327:404 로는 좌우가 17%씩 잘려 코치·화분이 화면 밖으로 나갔다(사용자 결정).
+// 벽·바닥 경계선(scene.ts FLOOR_POLYGON·SURFACES)은 이 그림을 픽셀로 다시 재서 얻었다.
+// 옛 그림(floor-default.png, 327:404)은 되돌릴 때를 위해 남겨 두었고 지금은 쓰지 않는다.
+export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-tall.jpg");
 export const CHARACTER_IDLE = require("@/assets/sprites/char1-idle.png");
 /** 입주 연출(PAGE-08)에서만 쓰는 환호 포즈 */
 export const CHARACTER_CELEBRATE = require("@/assets/sprites/char1-celebrate.png");

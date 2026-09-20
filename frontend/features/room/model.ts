@@ -6,7 +6,7 @@ import { ContractMismatchError } from "@/lib/contract";
  * Reanimated 워크릿 안에서도 부르므로 순수 함수마다 "worklet" 지시자를 둔다.
  */
 export const SCENE_WIDTH = 327;
-export const SCENE_HEIGHT = 404;
+export const SCENE_HEIGHT = 586;
 export const SCENE_ASPECT_RATIO = SCENE_WIDTH / SCENE_HEIGHT;
 
 export type ScenePoint = { x: number; y: number };
@@ -33,6 +33,22 @@ export function getSceneScale(canvasWidth: number): number {
 export function getCanvasSize(canvasWidth: number): SceneSize {
   "worklet";
   return { width: canvasWidth, height: canvasWidth / SCENE_ASPECT_RATIO };
+}
+
+/**
+ * 주어진 영역(탭바 위 화면 전체 등)을 방 씬으로 빈틈 없이 채우는 캔버스 폭 (2026-09-18 코치 피드백).
+ * 영역이 씬(327:404)보다 세로로 길면 폭이 영역보다 넓어지고, 넘치는 좌우는 부모가 잘라 낸다 — cover 맞춤이다.
+ */
+export function coverSceneWidth(boxWidth: number, boxHeight: number): number {
+  return Math.max(boxWidth, Math.round(boxHeight * SCENE_ASPECT_RATIO));
+}
+
+/**
+ * 주어진 영역 안에 방 전체가 들어가는 캔버스 폭 (contain 맞춤).
+ * 방 꾸미기 화면처럼 바닥이 전부 보여야 끌어다 놓을 수 있는 화면에서 쓴다 — 홈의 coverSceneWidth 와 반대다.
+ */
+export function containSceneWidth(boxWidth: number, boxHeight: number): number {
+  return Math.min(boxWidth, Math.round(boxHeight * SCENE_ASPECT_RATIO));
 }
 
 export function clamp(value: number, min: number, max: number): number {
@@ -71,14 +87,31 @@ export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 2;
 
 /** 확대해도 방 바깥(캔버스 밖 여백)이 드러나지 않도록 배율과 평행이동을 가둔다. */
-export function clampCamera(camera: Camera, canvas: SceneSize): Camera {
+/**
+ * 카메라를 "방 밖 여백이 안 보이는" 범위로 가둔다.
+ * viewport 는 실제로 보이는 영역이고 생략하면 캔버스와 같다(캔버스가 화면에 딱 맞는 기존 배치 — 1배에서는 못 움직인다).
+ * 홈처럼 캔버스가 화면보다 넓으면(coverSceneWidth) 캔버스가 가운데 정렬로 놓이므로 **1배에서도 넘치는 절반까지 좌우로 밀 수 있다** (2026-09-18).
+ */
+export function clampCamera(camera: Camera, canvas: SceneSize, viewport: SceneSize = canvas): Camera {
   "worklet";
   const scale = clamp(camera.scale, MIN_ZOOM, MAX_ZOOM);
+  // 두 한계는 "내용의 끝이 화면 끝에 닿는 지점"이다. 캔버스가 화면보다 크면 가운데 정렬 때문에 그 절반만큼 양(+)으로도 밀린다.
+  // 캔버스가 그 축에서 화면보다 (반올림 오차만큼이라도) 작으면 두 한계가 뒤집히므로 Math.min/max 로 바로잡아 0 에 묶는다.
+  // (헬퍼 함수로 빼면 Reanimated 워크릿 변환에서 호출이 깨져 여기 그대로 둔다)
+  const txStart = (canvas.width - viewport.width) / 2;
+  const txEnd = (viewport.width + canvas.width) / 2 - canvas.width * scale;
+  const tyStart = (canvas.height - viewport.height) / 2;
+  const tyEnd = (viewport.height + canvas.height) / 2 - canvas.height * scale;
   return {
     scale,
-    tx: clamp(camera.tx, canvas.width * (1 - scale), 0),
-    ty: clamp(camera.ty, canvas.height * (1 - scale), 0),
+    tx: clamp(camera.tx, Math.min(txEnd, txStart), Math.max(txEnd, txStart)),
+    ty: clamp(camera.ty, Math.min(tyEnd, tyStart), Math.max(tyEnd, tyStart)),
   };
+}
+
+/** 확대하지 않아도 캔버스가 보이는 영역을 넘치는지. 1배에서 드래그를 켤지 가른다 */
+export function overflowsViewport(canvas: SceneSize, viewport: SceneSize): boolean {
+  return canvas.width > viewport.width + 0.5 || canvas.height > viewport.height + 0.5;
 }
 
 /** 캔버스의 한 점(핀치 중심)을 제자리에 둔 채 배율만 바꾼다. 가둔 결과가 아니므로 clampCamera 와 함께 쓴다. */

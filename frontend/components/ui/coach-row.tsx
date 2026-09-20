@@ -70,9 +70,8 @@ function CoachMessage({ message }: { message: string }) {
   return (
     <View className="overflow-hidden" onLayout={(event) => setBoxWidth(event.nativeEvent.layout.width)}>
       <View
-        className="absolute left-0 top-0 items-start opacity-0"
+        className="pointer-events-none absolute left-0 top-0 items-start opacity-0"
         style={MEASURE_STYLE}
-        pointerEvents="none"
         aria-hidden
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"

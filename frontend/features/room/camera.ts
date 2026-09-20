@@ -3,7 +3,16 @@ import * as React from "react";
 import { Gesture } from "react-native-gesture-handler";
 import { cancelAnimation, runOnJS, useAnimatedReaction, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 
-import { clampCamera, getCanvasSize, MAX_ZOOM, MIN_ZOOM, zoomAround, type Camera } from "@/features/room/model";
+import {
+  clampCamera,
+  getCanvasSize,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  overflowsViewport,
+  zoomAround,
+  type Camera,
+  type SceneSize,
+} from "@/features/room/model";
 
 /**
  * 방 씬을 확대·이동하는 카메라. 셰어드 값이라 Skia 캔버스(Group transform)와 RN 오버레이(Animated.View)가
@@ -58,13 +67,16 @@ type UseRoomCameraControlOptions = {
   locked: boolean;
   /** 확대 여부가 바뀔 때 알린다(부모 스크롤 잠금용). 참조가 안정적이어야 한다 */
   onZoomedChange?: (zoomed: boolean) => void;
+  /** 실제로 보이는 영역(pt). 캔버스가 화면보다 넓은 홈에서 넘긴다. 생략하면 캔버스와 같다 */
+  viewport?: SceneSize;
 };
 
 /**
- * 방 씬의 카메라와 제스처. 핀치는 두 손가락 중심을 고정한 채 1~2배로 확대하고,
- * 드래그는 확대했을 때만 씬을 옮기며(1배에서 켜 두면 홈의 세로 스크롤을 뺏는다), 더블탭은 1배로 되돌린다.
+ * 방 씬의 카메라와 제스처. 핀치는 두 손가락 중심을 고정한 채 1~2배로 확대하고 더블탭은 1배로 되돌린다.
+ * 드래그는 ① 확대했을 때, 또는 ② 1배인데도 캔버스가 화면을 넘칠 때(홈의 cover 맞춤) 켠다 — 넘친 좌우를 볼 방법이 그것뿐이다.
+ * 캔버스가 화면에 딱 맞는 화면(방 꾸미기)에서는 전과 같이 확대해야만 드래그된다.
  */
-export function useRoomCameraControl({ width, locked, onZoomedChange }: UseRoomCameraControlOptions) {
+export function useRoomCameraControl({ width, locked, onZoomedChange, viewport }: UseRoomCameraControlOptions) {
   const scale = useSharedValue(MIN_ZOOM);
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
@@ -99,9 +111,15 @@ export function useRoomCameraControl({ width, locked, onZoomedChange }: UseRoomC
     if (locked) resetCamera(camera);
   }, [locked, camera]);
 
+  // 객체를 그대로 의존성에 두면 매 렌더 새 참조라 제스처가 다시 만들어진다 — 숫자로 쪼개 둔다
+  const viewportWidth = viewport?.width ?? 0;
+  const viewportHeight = viewport?.height ?? 0;
+
   const gesture = React.useMemo(() => {
     const enabled = !locked && width > 0;
     const canvas = getCanvasSize(width);
+    const view = viewportWidth > 0 && viewportHeight > 0 ? { width: viewportWidth, height: viewportHeight } : canvas;
+    const overflows = overflowsViewport(canvas, view);
 
     const pinch = Gesture.Pinch()
       .enabled(enabled)
@@ -111,7 +129,7 @@ export function useRoomCameraControl({ width, locked, onZoomedChange }: UseRoomC
       })
       .onUpdate((event) => {
         const zoomedCamera = zoomAround(readCamera(camera), { x: event.focalX, y: event.focalY }, startScale.value * event.scale);
-        const next = clampCamera(zoomedCamera, canvas);
+        const next = clampCamera(zoomedCamera, canvas, view);
         camera.scale.value = next.scale;
         camera.tx.value = next.tx;
         camera.ty.value = next.ty;
@@ -121,7 +139,7 @@ export function useRoomCameraControl({ width, locked, onZoomedChange }: UseRoomC
       });
 
     const pan = Gesture.Pan()
-      .enabled(enabled && zoomed)
+      .enabled(enabled && (zoomed || overflows))
       .averageTouches(true)
       .onStart(() => {
         stopCamera(camera);
@@ -131,7 +149,8 @@ export function useRoomCameraControl({ width, locked, onZoomedChange }: UseRoomC
       .onUpdate((event) => {
         const next = clampCamera(
           { scale: camera.scale.value, tx: startTx.value + event.translationX, ty: startTy.value + event.translationY },
-          canvas
+          canvas,
+          view
         );
         camera.tx.value = next.tx;
         camera.ty.value = next.ty;
@@ -147,14 +166,14 @@ export function useRoomCameraControl({ width, locked, onZoomedChange }: UseRoomC
           resetCamera(camera);
           return;
         }
-        const next = clampCamera(zoomAround(readCamera(camera), { x: event.x, y: event.y }, MAX_ZOOM), canvas);
+        const next = clampCamera(zoomAround(readCamera(camera), { x: event.x, y: event.y }, MAX_ZOOM), canvas, view);
         camera.scale.value = withTiming(next.scale, RESET_TIMING);
         camera.tx.value = withTiming(next.tx, RESET_TIMING);
         camera.ty.value = withTiming(next.ty, RESET_TIMING);
       });
 
     return Gesture.Exclusive(doubleTap, Gesture.Simultaneous(pinch, pan));
-  }, [locked, width, zoomed, camera, startScale, startTx, startTy]);
+  }, [locked, width, zoomed, viewportWidth, viewportHeight, camera, startScale, startTx, startTy]);
 
   return { camera, gesture, zoomed };
 }

@@ -69,7 +69,7 @@ describe("격자 ↔ 씬 좌표 변환", () => {
   it("면 안팎을 판정한다", () => {
     expect(isOnSurface(FLOOR, cellToScene(FLOOR, { col: 8, row: 8 }))).toBe(true);
     // 뒤 코너보다 위 = 벽 쪽
-    expect(isOnSurface(FLOOR, { x: 134, y: 60 })).toBe(false);
+    expect(isOnSurface(FLOOR, { x: 164, y: 120 })).toBe(false);
   });
 });
 
@@ -92,8 +92,8 @@ describe("스냅과 배치 검증", () => {
   });
 
   it("발자국이 온전히 들어가야 유효하다", () => {
-    expect(fitsOnSurface(FLOOR, { col: 8, row: 12 }, sofa)).toBe(true);
-    expect(fitsOnSurface(FLOOR, { col: 9, row: 12 }, sofa)).toBe(false); // 9 + 8 > 16
+    expect(fitsOnSurface(FLOOR, { col: 16, row: 12 }, sofa)).toBe(true);
+    expect(fitsOnSurface(FLOOR, { col: 17, row: 12 }, sofa)).toBe(false); // 17 + 8 > 24
     expect(fitsOnSurface(FLOOR, { col: -1, row: 0 }, sofa)).toBe(false);
     expect(fitsOnSurface(FLOOR, { col: 0.5, row: 0 }, sofa)).toBe(false); // 정수만 허용
   });
@@ -134,14 +134,14 @@ describe("배치 가능 판정", () => {
 });
 
 describe("세 면의 격자 정의", () => {
-  it("바닥은 8 × 8, 벽은 각각 3 × 3 과 4 × 3 이다(벽걸이 1×1 기준, 2026-09-15)", () => {
-    expect([SURFACES.FLOOR.cols, SURFACES.FLOOR.rows]).toEqual([8, 8]);
-    expect([SURFACES.WALL_LEFT.cols, SURFACES.WALL_LEFT.rows]).toEqual([3, 3]);
-    expect([SURFACES.WALL_RIGHT.cols, SURFACES.WALL_RIGHT.rows]).toEqual([4, 3]);
+  it("바닥은 12 × 12, 두 벽은 각각 3 × 4 이다(줄 없는 세로 긴 방, 2026-09-18)", () => {
+    expect([SURFACES.FLOOR.cols, SURFACES.FLOOR.rows]).toEqual([12, 12]);
+    expect([SURFACES.WALL_LEFT.cols, SURFACES.WALL_LEFT.rows]).toEqual([3, 4]);
+    expect([SURFACES.WALL_RIGHT.cols, SURFACES.WALL_RIGHT.rows]).toEqual([3, 4]);
   });
 
   it("두 벽의 평균 칸 폭 차이가 10% 안이다", () => {
-    // 칸 수를 3 과 4 로 다르게 준 이유. 같게 두면 칸 크기가 1.4배 벌어진다.
+    // 새 방은 코너가 정중앙이라 좌우 벽 폭이 164·163 으로 같다. 그래서 칸 수도 3 으로 같다.
     const averageCellWidth = (surface: SurfaceDef) => {
       const span = halfSpan(surface);
       return dist(cellToScene(surface, { col: 0, row: 0 }), cellToScene(surface, { col: span.cols, row: 0 })) / surface.cols;
@@ -159,13 +159,13 @@ describe("세 면의 격자 정의", () => {
     expect(nearEdge).toBeCloseTo(nearCorner, 6);
   });
 
-  it("두 벽은 코너 (134, 125) 를 공유한다", () => {
-    const leftCorner = cellToScene(SURFACES.WALL_LEFT, { col: 6, row: 6 });
-    const rightCorner = cellToScene(SURFACES.WALL_RIGHT, { col: 0, row: 6 });
+  it("두 벽은 코너 (164, 286) 을 공유한다", () => {
+    const leftCorner = cellToScene(SURFACES.WALL_LEFT, { col: 6, row: 8 });
+    const rightCorner = cellToScene(SURFACES.WALL_RIGHT, { col: 0, row: 8 });
     expect(leftCorner.x).toBeCloseTo(rightCorner.x, 6);
     expect(leftCorner.y).toBeCloseTo(rightCorner.y, 6);
-    expect(leftCorner.x).toBeCloseTo(134, 6);
-    expect(leftCorner.y).toBeCloseTo(125, 6);
+    expect(leftCorner.x).toBeCloseTo(164, 6);
+    expect(leftCorner.y).toBeCloseTo(286, 6);
   });
 
   it("기본 배치의 가구 발끝은 모두 바닥 면 안에 있다", () => {

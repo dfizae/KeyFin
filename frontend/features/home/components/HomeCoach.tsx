@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 
-import { CoachBubble } from "@/features/home/components/CoachBubble";
+import { CoachBubble, type CoachGuide } from "@/features/home/components/CoachBubble";
 import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 
 const CLEANUP_ROUTE = "/transaction/pending";
@@ -8,6 +8,10 @@ const CLEANUP_ROUTE = "/transaction/pending";
 type HomeCoachProps = {
   /** 캔버스 폭(pt) */
   width: number;
+  /** 화면 왼쪽 끝에 맞추려고 미는 거리(pt). 방이 화면보다 넓을 때 넘친 절반이다 */
+  offsetX?: number;
+  /** 첫 진입 안내. 없으면 평소 코치다 */
+  guide?: CoachGuide | null;
 };
 
 /**
@@ -15,7 +19,7 @@ type HomeCoachProps = {
  * 거래 분류는 서버가 제안 세분류를 주지 않아 말풍선에서 하지 않고 PAGE-22 에서 한다 (FR-TXN-03).
  * 미확정 조회 실패는 코치만 두고 조용히 넘긴다 — 홈의 다른 영역을 막지 않는다. (TBD: 실패 문구)
  */
-function HomeCoach({ width }: HomeCoachProps) {
+function HomeCoach({ width, offsetX, guide }: HomeCoachProps) {
   const router = useRouter();
   const pending = usePendingTransactions();
 
@@ -23,6 +27,8 @@ function HomeCoach({ width }: HomeCoachProps) {
   return (
     <CoachBubble
       width={width}
+      offsetX={offsetX}
+      guide={guide}
       pendingCount={flattenPending(pending.data).length}
       pendingMore={pending.hasNextPage}
       onCleanup={() => router.push(CLEANUP_ROUTE)}

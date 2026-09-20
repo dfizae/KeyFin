@@ -13,6 +13,7 @@ const REFRESH_KEY = "keyfin.refreshToken";
 const USER_KEY = "keyfin.user";
 const TERMS_KEY_PREFIX = "keyfin.terms.";
 const ONBOARDING_KEY_PREFIX = "keyfin.onboarding.";
+const ROOM_GUIDE_KEY_PREFIX = "keyfin.roomGuide.";
 /** 기기(설치) 단위 값이라 로그아웃해도 지우지 않는다 */
 const INSTALLATION_KEY = "keyfin.installationId";
 const PUSH_PERMISSION_ASKED_KEY = "keyfin.pushPermissionAsked";
@@ -111,6 +112,18 @@ export async function loadOnboardingDone(userId: number): Promise<boolean> {
 
 export async function saveOnboardingDone(userId: number): Promise<void> {
   await write(`${ONBOARDING_KEY_PREFIX}${userId}`, "1");
+}
+
+/**
+ * 홈 첫 진입 안내(코치가 벽 리스트·캘린더를 알려 준다)를 봤는지 (사용자 결정 2026-09-20).
+ * 서버 필드가 없어 기기에만 남기고 사용자별로 둔다. 웹은 메모리 저장이라 새로고침하면 다시 보인다.
+ */
+export async function loadRoomGuideSeen(userId: number): Promise<boolean> {
+  return (await read(`${ROOM_GUIDE_KEY_PREFIX}${userId}`)) === "1";
+}
+
+export async function saveRoomGuideSeen(userId: number): Promise<void> {
+  await write(`${ROOM_GUIDE_KEY_PREFIX}${userId}`, "1");
 }
 
 /** 푸시 기기 등록(PUT /me/push-devices/{installationId})에 쓰는 설치 UUID. 앱을 지우기 전까지 같은 값을 쓴다 */

@@ -1,13 +1,12 @@
 import { useRouter } from "expo-router";
-import { ChevronRight, CreditCard, Menu, Receipt, WalletMinimal } from "lucide-react-native";
+import { ChevronRight, CreditCard, Receipt, WalletMinimal } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View } from "react-native";
 
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { Screen, ScreenScrollView } from "@/components/ui/screen";
-import { ScreenHeader } from "@/components/ui/screen-header";
+import { Screen, ScreenScrollView, useHeaderlessTop } from "@/components/ui/screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useAccounts } from "@/features/account/api/queries";
@@ -51,11 +50,11 @@ function AssetsScreen() {
   const accounts = useAccounts();
   // 잔액은 실시간이 아니라 서버가 갱신한 스냅샷이라 기준 시각을 함께 보여 준다 (사용자 결정 2026-09-12)
   const asOf = accounts.data ? balanceAsOfLabel(accounts.data) : null;
+  const topInset = useHeaderlessTop();
 
   return (
     <Screen>
-      <ScreenHeader title="자산관리" right={<MenuButton />} />
-      <ScreenScrollView className="flex-1" contentContainerClassName="gap-10 pb-8">
+      <ScreenScrollView className="flex-1" overlapHeader={false} contentContainerClassName="gap-10 pb-8" style={{ paddingTop: topInset }}>
       <View className="gap-4">
       <View className="gap-1 px-6">
         <Text className="text-caption text-card-foreground">내 총 자산</Text>
@@ -112,15 +111,6 @@ function AssetsScreen() {
       <RecentTransactions />
       </ScreenScrollView>
     </Screen>
-  );
-}
-
-// Pencil menu (S7AAx). 예산 탭과 같이 동작이 명세에 없어 자리만 두고 비활성으로 둔다. (TBD)
-function MenuButton() {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel="메뉴" accessibilityState={{ disabled: true }} disabled hitSlop={10}>
-      <Icon as={Menu} size={24} className="text-foreground" />
-    </Pressable>
   );
 }
 

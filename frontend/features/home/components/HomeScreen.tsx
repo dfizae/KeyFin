@@ -1,87 +1,123 @@
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
 import { Bell, Coins, WifiOff } from "lucide-react-native";
 import * as React from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, View, type LayoutChangeEvent } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Screen, ScreenScrollView } from "@/components/ui/screen";
-import { ScreenHeader } from "@/components/ui/screen-header";
+import { Screen, useTopInset } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
-import { selectUserName, useAuthStore } from "@/features/auth/store";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
-import { HomeCalendar, HomeCalendarPanel } from "@/features/home/components/HomeCalendar";
+import { HomeCalendar } from "@/features/home/components/HomeCalendar";
 import { HomeCoach } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
+import { ROOM_GUIDE_STEPS, useRoomGuide } from "@/features/home/useRoomGuide";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
+import { coverSceneWidth } from "@/features/room/model";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 
-/** 벽 오브젝트의 패널(예산 시트·캘린더 팝오버)은 한 번에 하나만 연다. */
-type RoomPanel = "board" | "calendar" | null;
+/** 벽 오브젝트가 여는 패널. 지금은 예산 보드 시트 하나뿐이다 — 캘린더는 팝오버를 거치지 않고 결제 캘린더 화면으로 간다(2026-09-18). */
+type RoomPanel = "board" | null;
+
+/** 벽 캘린더를 누르면 바로 여는 화면 (PAGE-24). 중간 팝오버를 거치지 않는다 (사용자 결정 2026-09-18) */
+const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
+
+/** 상태바 아래로 사이드 버튼을 내리는 간격 */
+const SIDE_ACTION_GAP = 8;
+/** 오류 화면은 헤더가 없으니 상태바만큼 내려 준다 */
+const ERROR_TOP_GAP = 24;
 
 function HomeScreen() {
+  const router = useRouter();
   const room = useRoom();
   useRoomLayoutSync();
+  const topInset = useTopInset();
   const month = currentMonthKey();
   const budget = useCurrentBudget();
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
-  // 확대 중에는 방을 끌어 움직이므로 홈의 세로 스크롤을 잠근다.
-  const [roomZoomed, setRoomZoomed] = React.useState(false);
+  const [box, setBox] = React.useState({ width: 0, height: 0 });
+  const guide = useRoomGuide(room.isSuccess);
+
+  const handleLayout = React.useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setBox({ width: Math.round(width), height: Math.round(height) });
+  }, []);
 
   // 이번 주기 예산이 확정 전이면 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12). 방·보드가 확정 예산을 기준으로 동작한다.
   if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
-  // 방이 홈의 주인공이다(사용자 결정 2026-09-15): 화면 폭 가득, 아래 예산 카드 없음. 예산은 벽의 리스트를 탭해 시트로 본다.
-  // 작은 화면에서 방이 다 안 들어갈 때만 스크롤된다.
+  // 방이 홈의 주인공이다(사용자 결정 2026-09-15). 2026-09-18 코치 피드백 반영: **헤더를 없애고 하단 탭바를 뺀 화면 전체를 방으로 채운다.**
+  // 화면은 씬(327:404)보다 세로로 길기 때문에 폭을 넘치게 키워(coverSceneWidth) 가운데를 보여 주고 좌우는 잘라 낸다.
+  // 인사말은 버렸고 코인·알림만 방 위에 뜨는 사이드 버튼으로 남는다. 방이 화면을 꽉 채우니 세로 스크롤도 없다.
+  const roomWidth = box.width > 0 && box.height > 0 ? coverSceneWidth(box.width, box.height) : 0;
+  // 방이 화면보다 넓으면 씬 x 0 이 화면 밖이다. 코치는 카메라를 따라가지 않는 패널이라 넘친 절반만큼 밀어 화면 안에 둔다.
+  const coachOffsetX = Math.max(0, (roomWidth - box.width) / 2);
+
+  // 안내 중에 에셋을 직접 누르면 목적을 이룬 것이라 안내를 끝낸다
+  const openBoard = () => {
+    guide.finish();
+    setPanel("board");
+  };
+  const openCalendar = () => {
+    guide.finish();
+    router.push(PAYMENT_CALENDAR_ROUTE);
+  };
+  const coachGuide = guide.step
+    ? {
+        message: guide.step.message,
+        progress: `${guide.step.index + 1}/${ROOM_GUIDE_STEPS.length}`,
+        isLast: guide.step.isLast,
+        onNext: guide.next,
+        onSkip: guide.finish,
+      }
+    : null;
+
   return (
     <Screen>
-      {room.isSuccess ? <HomeHeader coinBalance={room.data.coinBalance} /> : null}
-      <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow justify-center pb-6" scrollEnabled={!roomZoomed}>
-      {room.isPending ? <HomeSkeleton /> : null}
-      {room.isError ? (
-        <View className="flex-1 px-6 pt-6">
-          <EmptyState
-            icon={WifiOff}
-            title="방 정보를 불러오지 못했어요"
-            description="연결 상태를 확인한 뒤 다시 시도해 주세요."
-            action={{ label: "다시 시도", onPress: () => room.refetch(), disabled: room.isFetching }}
-          />
-        </View>
-      ) : null}
-      {room.isSuccess ? (
-        <>
-          <View className="relative">
-            <CharacterRoom
-              locked={panel !== null}
-              onZoomedChange={setRoomZoomed}
-              sceneObjects={(width) => (
-                <>
-                  <HomeWallBoard width={width} budget={budget} onOpen={() => setPanel("board")} />
-                  <HomeCalendar width={width} month={month} onOpen={() => setPanel("calendar")} />
-                </>
-              )}
-              panels={(width) => (
-                <>
-                  {panel === "calendar" ? <HomeCalendarPanel width={width} month={month} onClose={() => setPanel(null)} /> : null}
-                  <HomeCoach width={width} />
-                  {panel === null ? <RoomEditorOverlay /> : null}
-                </>
-              )}
+      <View className="flex-1 items-center justify-center overflow-hidden" onLayout={handleLayout}>
+        {room.isPending ? <Skeleton className="h-full w-full" accessibilityLabel="불러오는 중" /> : null}
+        {room.isError ? (
+          <View className="w-full flex-1 px-6" style={{ paddingTop: topInset + ERROR_TOP_GAP }}>
+            <EmptyState
+              icon={WifiOff}
+              title="방 정보를 불러오지 못했어요"
+              description="연결 상태를 확인한 뒤 다시 시도해 주세요."
+              action={{ label: "다시 시도", onPress: () => room.refetch(), disabled: room.isFetching }}
             />
-            {attendance.isSuccess && attendance.data.granted > 0 ? <AttendanceToast granted={attendance.data.granted} /> : null}
           </View>
-          <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
-        </>
-      ) : null}
-      </ScreenScrollView>
+        ) : null}
+        {room.isSuccess ? (
+          <CharacterRoom
+            width={roomWidth > 0 ? roomWidth : undefined}
+            viewport={roomWidth > 0 ? box : undefined}
+            locked={panel !== null}
+            sceneObjects={(width) => (
+              <>
+                <HomeWallBoard width={width} budget={budget} onOpen={openBoard} highlighted={guide.step?.target === "board"} />
+                <HomeCalendar width={width} month={month} onOpen={openCalendar} highlighted={guide.step?.target === "calendar"} />
+              </>
+            )}
+            panels={(width) => (
+              <>
+                <HomeCoach width={width} offsetX={coachOffsetX} guide={coachGuide} />
+              </>
+            )}
+          />
+        ) : null}
+        {room.isSuccess && attendance.isSuccess && attendance.data.granted > 0 ? (
+          <AttendanceToast granted={attendance.data.granted} />
+        ) : null}
+      </View>
+      <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
+      {room.isSuccess ? <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null} /> : null}
     </Screen>
   );
 }
@@ -106,53 +142,47 @@ function useHomeAttendance(shouldCheckIn: boolean) {
   return attendance;
 }
 
-type HomeHeaderProps = {
-  coinBalance: number;
-};
-
-// Pencil home/p0 (EWfx2) HomeHeader: space_between · 좌측 caption+h2 · 우측 코인 배지 + 알림 벨.
-// 다른 화면과 같은 ScreenHeader(흰 면·그림자·스크롤 시 투명)인데 제목이 두 줄이라 행만 바꿔 넣는다 (2026-09-16).
-function HomeHeader({ coinBalance }: HomeHeaderProps) {
-  const userName = useAuthStore(selectUserName);
-  const greeting = userName ? `${userName}님, 안녕하세요!` : "안녕하세요!";
+/**
+ * 방 위에 떠 있는 사이드 버튼 줄. 왼쪽에 코인·알림을 세로로, 오른쪽에 꾸미기 버튼을 둔다 (2026-09-18 코치 피드백).
+ * 방은 화면보다 넓을 수 있어(cover 맞춤) 방 기준이 아니라 **화면 기준**으로 놓는다 — 방 레이어에 두면 오른쪽 버튼이 화면 밖으로 나간다.
+ */
+function HomeSideActions({ coinBalance, showEdit }: { coinBalance: number; showEdit: boolean }) {
+  const topInset = useTopInset();
 
   return (
-    <ScreenHeader title={greeting}>
-      <View className="flex-row items-center justify-between">
-        <View className="gap-1">
-          <Text className="text-caption text-card-foreground">환영합니다</Text>
-          <Text className="text-h2 text-foreground" accessibilityRole="header">
-            {greeting}
-          </Text>
-        </View>
-        <View className="flex-row items-center gap-2">
-          <CoinBadge balance={coinBalance} />
-          <NotificationButton />
-        </View>
+    <View
+      className="absolute left-0 right-0 flex-row items-start justify-between px-4"
+      style={{ top: topInset + SIDE_ACTION_GAP }}
+      pointerEvents="box-none"
+    >
+      <View className="items-start gap-2" pointerEvents="box-none">
+        <CoinBadge balance={coinBalance} />
+        <NotificationButton />
       </View>
-    </ScreenHeader>
+      {showEdit ? <RoomEditorOverlay /> : null}
+    </View>
   );
 }
 
 const COIN_HISTORY_ROUTE = "/coin";
 
-// Pencil CoinBadge (DsQOx): bg-accent 알약 · 16pt 노란 원(#F5D547 — 토큰 없음, warning 으로 대체) · 14/500 숫자.
-// 누르면 코인 이력(PAGE-30, P1)으로 간다. 알약이 작아 hitSlop 으로 터치 영역을 채운다.
+// Pencil CoinBadge (DsQOx): bg-accent 알약 · 노란 원 + 숫자. 누르면 코인 이력(PAGE-30)으로 간다.
+// 방 그림 위에 떠 있어 그림자로 면을 띄우고, 알림 버튼과 같은 40pt 높이로 맞췄다 (2026-09-18).
 function CoinBadge({ balance }: { balance: number }) {
   const router = useRouter();
   const text = formatKRW(String(balance), { unit: false });
 
   return (
     <Pressable
-      className="flex-row items-center gap-1 rounded-full bg-accent px-2 py-1 active:opacity-70"
+      className="h-10 flex-row items-center gap-1.5 rounded-full bg-accent px-3 shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
       accessibilityRole="button"
       accessibilityLabel={`코인 ${text}개`}
       accessibilityHint="코인 이력을 엽니다"
-      hitSlop={10}
+      hitSlop={8}
       onPress={() => router.push(COIN_HISTORY_ROUTE)}
     >
-      <View className="h-4 w-4 items-center justify-center rounded-full bg-warning" accessible={false}>
-        <Icon as={Coins} size={10} className="text-foreground" />
+      <View className="h-5 w-5 items-center justify-center rounded-full bg-warning" accessible={false}>
+        <Icon as={Coins} size={12} className="text-foreground" />
       </View>
       <Text className="text-label tabular-nums text-foreground">{text}</Text>
     </Pressable>
@@ -161,7 +191,7 @@ function CoinBadge({ balance }: { balance: number }) {
 
 const NOTIFICATION_ROUTE = "/notification";
 
-// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide bell. 누르면 알림함(PAGE-28, P1)으로 간다.
+// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide bell. 누르면 알림함(PAGE-28)으로 간다.
 function NotificationButton() {
   const router = useRouter();
 
@@ -171,28 +201,11 @@ function NotificationButton() {
       accessibilityLabel="알림"
       accessibilityHint="알림함을 엽니다"
       hitSlop={8}
-      className="h-10 w-10 items-center justify-center rounded-full bg-accent active:opacity-70"
+      className="h-10 w-10 items-center justify-center rounded-full bg-accent shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
       onPress={() => router.push(NOTIFICATION_ROUTE)}
     >
       <Icon as={Bell} size={20} className="text-foreground" />
     </Pressable>
-  );
-}
-
-const ROOM_SKELETON_ASPECT_RATIO = 327 / 404;
-
-function HomeSkeleton() {
-  return (
-    <View className="flex-1" accessibilityLabel="불러오는 중" accessible>
-      <View className="flex-row items-center justify-between px-6 py-4">
-        <View className="gap-2">
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-7 w-48" />
-        </View>
-        <Skeleton className="h-10 w-10 rounded-full" />
-      </View>
-      <Skeleton className="w-full rounded-xl" style={{ aspectRatio: ROOM_SKELETON_ASPECT_RATIO }} />
-    </View>
   );
 }
 

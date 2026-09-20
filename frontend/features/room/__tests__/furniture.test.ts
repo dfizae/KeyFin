@@ -9,7 +9,9 @@ import {
   toUserFurnitures,
 } from "@/features/room/furniture";
 import type { PlacedFurnitureDto } from "@/features/room/model";
-import type { Placement } from "@/features/room/scene";
+import { FURNITURE, type FurnitureId } from "@/features/room/catalog";
+import { anchorToCell, cellAnchor, cellsOverlap } from "@/features/room/grid";
+import { DEFAULT_LAYOUT, SURFACES, isPlaceableOnFloor, withDefaultWallItems, type Placement } from "@/features/room/scene";
 
 const sofa: PlacedFurnitureDto = {
   userFurnitureId: 204,
@@ -67,6 +69,48 @@ describe("toPlacement — 서버 가구를 씬 배치로", () => {
   it("목록은 그릴 수 있는 것만 남긴다", () => {
     expect(toPlacements([sofa, { ...board, assetKey: "unknown_key" }])).toHaveLength(1);
   });
+
+  it("옛 방 좌표처럼 바닥 밖에 저장된 가구는 가장 가까운 빈 칸에 앉힌다", () => {
+    const fridge: PlacedFurnitureDto = { ...sofa, userFurnitureId: 206, assetKey: "fridge_default", positionX: 170, positionY: 275 };
+    const settled = toPlacements([sofa, fridge]);
+    const cells = settled.map((placement) => anchorToCell(SURFACES.FLOOR, placement.anchor, FURNITURE[placement.itemId as FurnitureId].grid));
+
+    expect(settled.map((placement) => placement.userFurnitureId)).toEqual([204, 206]);
+    cells.forEach((cell, index) => {
+      const footprint = FURNITURE[settled[index].itemId as FurnitureId].grid;
+      expect(isPlaceableOnFloor(cell, footprint)).toBe(true);
+      expect(settled[index].anchor).toEqual(cellAnchor(SURFACES.FLOOR, cell, footprint));
+    });
+    expect(cellsOverlap(cells[0], FURNITURE.sofa.grid, cells[1], FURNITURE.fridge.grid)).toBe(false);
+  });
+
+  it("이미 제자리인 가구는 그대로 둔다", () => {
+    const anchor = cellAnchor(SURFACES.FLOOR, { col: 6, row: 4 }, FURNITURE.sofa.grid);
+
+    expect(toPlacements([{ ...sofa, positionX: anchor.x, positionY: anchor.y }])[0].anchor).toEqual(anchor);
+  });
+});
+
+describe("withDefaultWallItems — 서버에 없는 벽 오브젝트를 기본 자리에 채운다", () => {
+  const sofaOnFloor: Placement = { itemId: "sofa", userFurnitureId: 204, anchor: cellAnchor(SURFACES.FLOOR, { col: 6, row: 4 }, FURNITURE.sofa.grid) };
+  const defaultAnchor = (itemId: "board" | "calendar") => DEFAULT_LAYOUT.find((p) => p.itemId === itemId)!.anchor;
+
+  it("보드·캘린더가 없으면 기본 자리에 더하고 서버 가구는 그대로 둔다", () => {
+    const layout = withDefaultWallItems([sofaOnFloor]);
+
+    expect(layout[0]).toEqual(sofaOnFloor);
+    expect(layout.find((p) => p.itemId === "board")).toEqual({ itemId: "board", surface: "WALL_RIGHT", anchor: defaultAnchor("board") });
+    expect(layout.find((p) => p.itemId === "calendar")?.anchor).toEqual(defaultAnchor("calendar"));
+  });
+
+  it("서버에 있는 벽 오브젝트는 서버 자리를 쓰고 중복해 더하지 않는다", () => {
+    const board: Placement = { itemId: "board", userFurnitureId: 205, surface: "WALL_RIGHT", anchor: defaultAnchor("calendar") };
+    const layout = withDefaultWallItems([sofaOnFloor, board]);
+
+    expect(layout.filter((p) => p.itemId === "board")).toEqual([board]);
+    // 캘린더 기본 자리를 서버 보드가 차지했으므로 캘린더는 다른 칸으로 비킨다
+    expect(layout.find((p) => p.itemId === "calendar")?.anchor).not.toEqual(defaultAnchor("calendar"));
+  });
 });
 
 describe("toPlacementRequest — 씬 배치를 저장 요청으로", () => {
@@ -84,9 +128,9 @@ describe("toPlacementRequest — 씬 배치를 저장 요청으로", () => {
   });
 
   it("씬 밖으로 나간 좌표는 경계로 당겨 400 을 피한다", () => {
-    const request = toPlacementRequest({ itemId: "plant", anchor: { x: -5, y: 500 } });
+    const request = toPlacementRequest({ itemId: "plant", anchor: { x: -5, y: 700 } });
 
-    expect(request).toMatchObject({ positionX: 0, positionY: 404 });
+    expect(request).toMatchObject({ positionX: 0, positionY: 586 });
   });
 });
 
@@ -129,15 +173,17 @@ describe("가구 목 — 서버처럼 상태를 지킨다", () => {
   it("배치를 바꾸면 방 응답에도 반영되고, 해제하면 목록에서 빠진다", () => {
     const sofaId = furnitureListMock().find((item) => item.assetKey === "sofa_default")!.userFurnitureId;
 
+    const moved = cellAnchor(SURFACES.FLOOR, { col: 8, row: 8 }, FURNITURE.sofa.grid);
+
     updateFurniturePlacementMock(sofaId, {
       placed: true,
       placementStatus: "FLOOR",
       placementDirection: "FRONT_RIGHT",
-      positionX: 130,
-      positionY: 300,
+      positionX: moved.x,
+      positionY: moved.y,
       layer: 0,
     });
-    expect(toPlacements(placedFurnitureMock()).find((placement) => placement.itemId === "sofa")?.anchor).toEqual({ x: 130, y: 300 });
+    expect(toPlacements(placedFurnitureMock()).find((placement) => placement.itemId === "sofa")?.anchor).toEqual(moved);
 
     updateFurniturePlacementMock(sofaId, { placed: false });
     expect(placedFurnitureMock().some((item) => item.assetKey === "sofa_default")).toBe(false);

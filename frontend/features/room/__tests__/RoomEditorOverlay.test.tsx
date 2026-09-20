@@ -5,7 +5,9 @@ import * as React from "react";
 import { resetFurnitureMocks } from "@/api/mocks/furniture";
 import { EDIT_LABEL, ROOM_EDIT_ROUTE, RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { EDIT_HINT, RoomEditScreen } from "@/features/room/components/RoomEditScreen";
-import { DEFAULT_LAYOUT } from "@/features/room/scene";
+import { FURNITURE } from "@/features/room/catalog";
+import { cellAnchor } from "@/features/room/grid";
+import { DEFAULT_LAYOUT, SURFACES } from "@/features/room/scene";
 import { useRoomStore } from "@/features/room/store";
 
 // 목 응답이 act 범위 안에서 반영되도록 쿼리 알림을 그 자리에서 보낸다(HomeScreen 테스트와 같은 설정).
@@ -20,6 +22,9 @@ jest.mock("expo-router", () => {
     useFocusEffect: (effect: () => void) => ReactActual.useEffect(effect, [effect]),
   };
 });
+
+/** 소파를 옮겨 놓는 자리. 드래그는 칸에만 놓이므로 실제 칸의 기준점을 쓴다 (111.625, 538) */
+const SOFA_MOVED = cellAnchor(SURFACES.FLOOR, { col: 8, row: 10 }, FURNITURE.sofa.grid);
 
 const sofaAnchor = () => useRoomStore.getState().layout.find((p) => p.itemId === "sofa")!.anchor;
 
@@ -58,7 +63,7 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     await renderEditing();
     expect(screen.getByText(EDIT_HINT)).toBeTruthy();
 
-    useRoomStore.getState().moveItem("sofa", { x: 130, y: 300 });
+    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
     await fireEvent.press(screen.getByRole("button", { name: "편집 취소" }));
     expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!.anchor);
     expect(useRoomStore.getState().draft).toBeNull();
@@ -67,31 +72,31 @@ describe("방 꾸미기 진입과 편집 화면", () => {
 
   it("완료는 옮긴 가구를 서버에 저장한 뒤 확정하고 돌아간다 — 벽 오브젝트도 같은 사본에서 옮긴다", async () => {
     await renderEditing();
-    useRoomStore.getState().moveItem("sofa", { x: 130, y: 300 });
+    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
     useRoomStore.getState().moveItem("board", { x: 70, y: 80 });
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
 
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1), { timeout: 3000 });
-    expect(sofaAnchor()).toEqual({ x: 130, y: 300 });
+    expect(sofaAnchor()).toEqual(SOFA_MOVED);
     expect(useRoomStore.getState().layout.find((p) => p.itemId === "board")!.anchor).toEqual({ x: 70, y: 80 });
     expect(useRoomStore.getState().draft).toBeNull();
   });
 
   it("옮긴 자리는 서버 목에 남아 다시 들어와도 그대로다", async () => {
     const first = await renderEditing();
-    useRoomStore.getState().moveItem("sofa", { x: 130, y: 300 });
+    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1), { timeout: 3000 });
     await first.unmount();
 
     useRoomStore.setState({ layout: DEFAULT_LAYOUT, draft: null, selectedId: null });
     await renderEditing();
-    await waitFor(() => expect(sofaAnchor()).toEqual({ x: 130, y: 300 }), { timeout: 3000 });
+    await waitFor(() => expect(sofaAnchor()).toEqual(SOFA_MOVED), { timeout: 3000 });
   });
 
   it("화면을 떠나면(언마운트) 남은 사본은 버린다", async () => {
     const view = await renderEditing();
-    useRoomStore.getState().moveItem("sofa", { x: 130, y: 300 });
+    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
     await view.unmount();
     expect(useRoomStore.getState().draft).toBeNull();
     expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!.anchor);

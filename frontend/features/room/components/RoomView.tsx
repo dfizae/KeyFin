@@ -4,6 +4,7 @@ import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import { RoomCameraProvider, useRoomCameraControl } from "@/features/room/camera";
+import type { SceneSize } from "@/features/room/model";
 import { RoomSceneLoader } from "@/features/room/components/RoomSceneLoader";
 import { selectIsEditing, useRoomStore } from "@/features/room/store";
 
@@ -20,6 +21,13 @@ type RoomViewProps = {
   locked?: boolean;
   /** 확대 여부가 바뀔 때 알린다. 부모 스크롤을 잠그는 데 쓰며 참조가 안정적이어야 한다 */
   onZoomedChange?: (zoomed: boolean) => void;
+  /**
+   * 씬 폭을 밖에서 정한다. 생략하면 부모 폭을 재서 쓴다(기존 동작).
+   * 홈은 화면을 꽉 채우려고 부모보다 넓은 폭(coverSceneWidth)을 넘기고, 넘치는 좌우는 부모가 잘라 낸다 (2026-09-18).
+   */
+  width?: number;
+  /** 실제로 보이는 영역(pt). 방이 화면보다 넓을 때 1배 드래그 범위를 정하는 데 쓴다 */
+  viewport?: SceneSize;
 };
 
 /**
@@ -27,13 +35,14 @@ type RoomViewProps = {
  * 핀치·드래그로 씬을 확대·이동하며, 편집 모드에서는 오브젝트 드래그와 겹치지 않도록 카메라를 잠근다.
  * 편집 진입 버튼·취소·완료는 여기 없다 — 홈은 RoomEditorOverlay, 편집 화면은 자기 헤더·하단 버튼이 맡는다(2026-09-15).
  */
-function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, onZoomedChange }: RoomViewProps) {
-  const [width, setWidth] = React.useState(0);
+function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, onZoomedChange, width: fixedWidth, viewport }: RoomViewProps) {
+  const [measuredWidth, setMeasuredWidth] = React.useState(0);
+  const width = fixedWidth ?? measuredWidth;
   const isEditing = useRoomStore(selectIsEditing);
-  const { camera, gesture } = useRoomCameraControl({ width, locked: locked || isEditing, onZoomedChange });
+  const { camera, gesture } = useRoomCameraControl({ width, locked: locked || isEditing, onZoomedChange, viewport });
 
   const handleLayout = React.useCallback((event: LayoutChangeEvent) => {
-    setWidth(Math.round(event.nativeEvent.layout.width));
+    setMeasuredWidth(Math.round(event.nativeEvent.layout.width));
   }, []);
 
   const cameraStyle = useAnimatedStyle(() => ({
@@ -42,14 +51,19 @@ function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, on
 
   return (
     <GestureDetector gesture={gesture}>
-      <View className="relative" onLayout={handleLayout} testID={ROOM_VIEW_TEST_ID}>
+      <View
+        className="relative"
+        style={fixedWidth === undefined ? undefined : { width: fixedWidth }}
+        onLayout={handleLayout}
+        testID={ROOM_VIEW_TEST_ID}
+      >
         <RoomCameraProvider value={camera}>
           <View accessible accessibilityRole="image" accessibilityLabel={accessibilityLabel}>
             <RoomSceneLoader />
           </View>
         </RoomCameraProvider>
         {sceneObjects && width > 0 ? (
-          <View className="absolute inset-0 overflow-hidden rounded-xl" pointerEvents="box-none">
+          <View className="absolute inset-0 overflow-hidden" pointerEvents="box-none">
             <Animated.View style={[SCENE_LAYER_STYLE, cameraStyle]} pointerEvents="box-none">
               {sceneObjects(width)}
             </Animated.View>
@@ -65,6 +79,8 @@ function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, on
   );
 }
 
+// pointerEvents 는 prop 으로 준다. RN Web 은 StyleSheet.create 를 거치지 않은 style 의 pointerEvents 를 버려서(2026-09-20 실측: computed auto)
+// 오버레이가 방 전체의 터치를 가로챈다 — 웹의 deprecated 경고는 감수한다.
 // Skia Group 의 변환 기준점이 (0,0) 이라 RN 쪽도 좌상단으로 맞춰야 두 레이어가 어긋나지 않는다.
 const SCENE_LAYER_STYLE = { flex: 1, transformOrigin: "0% 0%" } as const;
 

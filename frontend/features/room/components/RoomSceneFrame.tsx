@@ -16,7 +16,7 @@ function RoomSceneFrame({ children }: RoomSceneFrameProps) {
   }, []);
 
   return (
-    <View className="w-full overflow-hidden rounded-xl" style={{ aspectRatio: SCENE_ASPECT_RATIO }} onLayout={handleLayout}>
+    <View className="w-full overflow-hidden" style={{ aspectRatio: SCENE_ASPECT_RATIO }} onLayout={handleLayout}>
       {width > 0 ? children(width) : null}
     </View>
   );

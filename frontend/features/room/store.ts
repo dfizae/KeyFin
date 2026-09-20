@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import type { RoomItemId } from "@/features/room/catalog";
 import type { ScenePoint } from "@/features/room/model";
-import { DEFAULT_LAYOUT, type Placement } from "@/features/room/scene";
+import { DEFAULT_LAYOUT, withDefaultWallItems, type Placement } from "@/features/room/scene";
 
 /**
  * 방 배치 상태. 가구(바닥)와 벽 오브젝트(보드·캘린더)를 한 배열에 둔다.
@@ -19,7 +19,7 @@ export type RoomState = {
   commitEdit: () => void;
   select: (id: RoomItemId | null) => void;
   moveItem: (id: RoomItemId, anchor: ScenePoint) => void;
-  /** 서버에서 받은 배치로 맞춘다. 편집 중이거나 설치된 가구가 없으면 지금 배치를 유지한다 */
+  /** 서버에서 받은 배치로 맞춘다. 편집 중이거나 설치된 가구가 없으면 지금 배치를 유지한다. 서버에 없는 벽 오브젝트는 기본 자리에 채운다 */
   hydrate: (placements: readonly Placement[]) => void;
 };
 
@@ -38,8 +38,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   hydrate: (placements) =>
     set((state) => {
       if (state.draft !== null || placements.length === 0) return state;
-      if (samePlacements(state.layout, placements)) return state;
-      return { layout: placements.map((placement) => ({ ...placement })) };
+      const layout = withDefaultWallItems(placements);
+      if (samePlacements(state.layout, layout)) return state;
+      return { layout };
     }),
   moveItem: (id, anchor) =>
     set((state) => {
