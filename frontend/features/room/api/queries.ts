@@ -1,8 +1,10 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { getFurnitures, updateFurniturePlacement, type FurnitureSlotType } from "@/features/room/api/furniture.api";
+import { getUserItems, updateItemEquipment } from "@/features/room/api/item.api";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import type { PlacementSave } from "@/features/room/furniture";
+import { applyAvatarEquipment, type UserItem } from "@/features/room/items";
 import type { Room } from "@/features/room/model";
 import { shopKeys } from "@/features/shop/api/queries";
 
@@ -11,6 +13,8 @@ export const roomKeys = {
   home: () => [...roomKeys.all, "home"] as const,
   /** 보유 가구. 배치를 저장하면 방 홈과 함께 무효화한다 */
   furnitures: (slotType?: FurnitureSlotType) => [...roomKeys.all, "furnitures", slotType ?? "all"] as const,
+  /** 보유 아바타 아이템(옷장). 갈아입으면 방 홈의 착장도 함께 무효화한다 */
+  items: () => [...roomKeys.all, "items"] as const,
 };
 
 export function roomQueryOptions() {
@@ -69,5 +73,37 @@ export function useSavePlacements() {
       return saves.length;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: roomKeys.all }),
+  });
+}
+
+export function userItemsQueryOptions() {
+  return queryOptions({
+    queryKey: roomKeys.items(),
+    queryFn: ({ signal }) => getUserItems(undefined, signal),
+    staleTime: 30_000,
+  });
+}
+
+/** 옷장의 보유 아이템. 부위가 6종뿐이라 한 번에 받아 화면에서 탭으로 나눈다 */
+export function useUserItems() {
+  return useQuery(userItemsQueryOptions());
+}
+
+type EquipmentChange = { userItemId: number; equipped: boolean };
+
+/**
+ * 아바타 한 벌을 입거나 벗는다 (FR-GAM-05). 서버가 같은 부위의 기존 아이템을 자동으로 벗기고 전체 착장을 돌려주므로,
+ * 그 응답으로 목록의 착용 여부를 다시 맞춘다 — 바뀐 것만 고치면 자동으로 벗겨진 아이템이 입은 채로 남는다.
+ * 방 캐릭터도 이 착장을 그리므로 방 홈을 다시 받는다.
+ */
+export function useUpdateItemEquipment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ userItemId, equipped }: EquipmentChange) => updateItemEquipment(userItemId, { equipped }),
+    onSuccess: (equipment) => {
+      queryClient.setQueryData<UserItem[]>(roomKeys.items(), (old) => (old ? applyAvatarEquipment(old, equipment) : old));
+      void queryClient.invalidateQueries({ queryKey: roomKeys.home() });
+    },
   });
 }
