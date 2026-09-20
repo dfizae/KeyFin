@@ -1,18 +1,16 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { Menu, WalletMinimal, WifiOff } from "lucide-react-native";
-import { Pressable, View } from "react-native";
+import { WalletMinimal, WifiOff } from "lucide-react-native";
+import { View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { FillBar } from "@/components/ui/fill-bar";
-import { Icon } from "@/components/ui/icon";
-import { Screen, ScreenScrollView } from "@/components/ui/screen";
-import { ScreenHeader } from "@/components/ui/screen-header";
+import { Screen, ScreenScrollView, useHeaderlessTop } from "@/components/ui/screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
-import { envelopeIcon, envelopeTone } from "@/features/budget/catalog";
+import { EnvelopeCarousel } from "@/features/budget/components/EnvelopeCarousel";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import {
   budgetHealth,
@@ -30,27 +28,21 @@ import { cn } from "@/lib/utils";
 
 /** 봉투 행 탭 → 봉투 상세(PAGE-23) */
 const ENVELOPE_DETAIL_ROUTE = "/budget";
+const FROM_ENVELOPE = "envelope";
 
 // Pencil budget (kvc1e). 확정 전(PROPOSED) 주기는 이 탭 대신 예산 확정 화면으로 보낸다(노션 예산·잔액 조회, 사용자 결정 2026-09-12).
 function BudgetScreen() {
   const budget = useCurrentBudget();
+  const topInset = useHeaderlessTop();
 
   if (needsConfirmation(budget)) return <Redirect href={PROPOSAL_FROM_HOME_HREF} />;
 
   return (
     <Screen>
-      <ScreenHeader title="예산관리" right={<MenuButton />} />
-      <BudgetContent budget={budget} />
+      <View className="flex-1" style={{ paddingTop: topInset }}>
+        <BudgetContent budget={budget} />
+      </View>
     </Screen>
-  );
-}
-
-// Pencil Menu (CrnXH). 햄버거를 눌렀을 때의 동작이 명세에 없어 자리만 두고 비활성으로 둔다. (TBD)
-function MenuButton() {
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel="메뉴" accessibilityState={{ disabled: true }} disabled hitSlop={10}>
-      <Icon as={Menu} size={24} className="text-foreground" />
-    </Pressable>
   );
 }
 
@@ -77,29 +69,27 @@ function BudgetContent({ budget }: BudgetContentProps) {
   const { total, envelopes } = budget.data;
 
   return (
-    <ScreenScrollView className="flex-1" contentContainerClassName="gap-10 px-6 pb-6">
+    <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6">
       {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
-      <SectionTitle heading="봉투별 잔액" count={envelopes.length} />
-      {envelopes.length === 0 ? (
-        <EmptyState icon={WalletMinimal} title="봉투가 아직 없어요" description="예산이 만들어지면 봉투 7종이 여기에 보여요." />
-      ) : (
-        <View className="gap-4">
-          {envelopes.map((envelope, index) => (
-            <EnvelopeRow
-              key={envelope.envelopeId}
-              envelope={envelope}
-              fillDelay={index * FILL_STAGGER_MS}
-              onPress={() => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelope.envelopeId}`)}
+      {/* 회전판은 하단 탭 바로 위에 붙는다(사용자 결정 2026-09-18) — 남는 높이를 위로 몰아 아래로 내린다. */}
+      <View className="mt-auto gap-4">
+        <SectionTitle heading="봉투별 잔액" count={envelopes.length} />
+        {envelopes.length === 0 ? (
+          <EmptyState icon={WalletMinimal} title="봉투가 아직 없어요" description="예산이 만들어지면 봉투 7종이 여기에 보여요." />
+        ) : (
+          // 좌우로 돌리는 원판이라 화면 폭을 다 써야 옆 카드가 끝에 걸쳐 보인다 — 본문 좌우 여백을 상쇄한다.
+          <View className="-mx-6">
+            <EnvelopeCarousel
+              envelopes={envelopes}
+              // 봉투가 펼쳐져 화면을 덮은 뒤 넘어가므로 스택 전환 애니메이션은 끈다(from=envelope)
+              onSelect={(envelopeId) => router.push(`${ENVELOPE_DETAIL_ROUTE}/${envelopeId}?from=${FROM_ENVELOPE}`)}
             />
-          ))}
-        </View>
-      )}
+          </View>
+        )}
+      </View>
     </ScreenScrollView>
   );
 }
-
-/** 봉투 막대 7개가 위에서부터 차례로 차오른다(소비 분석 봉투별 화면과 같은 간격) */
-const FILL_STAGGER_MS = 80;
 
 // Pencil TotalCard (aAfOZ) 의 Used 막대는 $primary 한 가지뿐이라 경고·초과 색은 홈 BudgetCard 와 같은 기준으로 맞췄다.
 const TOTAL_BAR_CLASS: Record<BudgetHealth, string> = {
@@ -159,56 +149,6 @@ function SectionTitle({ heading, count }: SectionTitleProps) {
       <Text className="text-caption tabular-nums text-card-foreground">{count}개</Text>
     </View>
   );
-}
-
-const ENVELOPE_BAR_CLASS: Record<EnvelopeHealth, string> = {
-  good: "bg-positive",
-  warning: "bg-warning",
-  over: "bg-destructive",
-  unset: "bg-muted",
-};
-
-// Pencil EnvelopeList (MhHC7 / uPyCM) 의 행: 28pt accent 타일 + 아이콘 16 · 이름 14/500 · 금액 16/600 · 사용률 바 6pt.
-// 확정액 0 인 봉투는 잔여율이 없어 빈 트랙이고, 쓴 돈이 있으면 over 색으로 초과 금액을 적는다(사용자 결정 2026-09-12).
-function EnvelopeRow({ envelope, fillDelay, onPress }: { envelope: BudgetEnvelope; fillDelay: number; onPress: () => void }) {
-  const health = envelopeHealth(envelope);
-  const used = usedBarPercent(envelope.remainingRate);
-  const amountText = envelopeAmountText(envelope, health);
-
-  return (
-    <Pressable
-      className="gap-2 active:opacity-70"
-      accessible
-      accessibilityRole="button"
-      accessibilityLabel={`${envelope.name} ${amountText}`}
-      accessibilityHint="봉투 상세를 엽니다"
-      onPress={onPress}
-    >
-      <View className="flex-row items-center justify-between">
-        <View className="flex-row items-center gap-2.5">
-          <View className={cn("h-7 w-7 items-center justify-center rounded-md", envelopeTone(envelope.envelopeId).tile)}>
-            <Icon as={envelopeIcon(envelope.envelopeId)} size={16} className={envelopeTone(envelope.envelopeId).icon} />
-          </View>
-          <Text className="text-label text-foreground">{envelope.name}</Text>
-        </View>
-        <Text
-          className={cn(
-            "text-amount-sm tabular-nums",
-            health === "over" ? "text-destructive" : health === "unset" ? "text-card-foreground" : "text-foreground"
-          )}
-        >
-          {amountText}
-        </Text>
-      </View>
-      <FillBar percent={used} fillClassName={ENVELOPE_BAR_CLASS[health]} className="h-1.5" fillDelay={fillDelay} />
-    </Pressable>
-  );
-}
-
-function envelopeAmountText(envelope: BudgetEnvelope, health: EnvelopeHealth): string {
-  if (health === "unset" || envelope.remaining === null) return envelope.proposed === null ? "-" : `제안 ${formatKRW(envelope.proposed)}`;
-  if (health === "over") return `${formatKRW(envelope.remaining, { sign: "never" })} 초과`;
-  return `${formatKRW(envelope.remaining)} 남음`;
 }
 
 const SKELETON_ROWS = [1, 2, 3, 4, 5, 6, 7];

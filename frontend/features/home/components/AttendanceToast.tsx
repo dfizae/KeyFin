@@ -26,7 +26,7 @@ function AttendanceToast({ granted }: AttendanceToastProps) {
   const label = `출석 +${formatKRW(String(granted), { unit: false })} 코인`;
 
   return (
-    <View className="absolute left-0 right-0 top-24 items-center" pointerEvents="none">
+    <View className="pointer-events-none absolute left-0 right-0 top-24 items-center">
       <View className="flex-row items-center gap-1.5 rounded-full bg-inverse px-3 py-1.5" accessible accessibilityLiveRegion="polite" accessibilityLabel={label}>
         <Icon as={Coins} size={14} className="text-inverse-foreground" />
         <Text className="text-caption text-inverse-foreground">{label}</Text>

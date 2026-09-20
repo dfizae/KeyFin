@@ -4,7 +4,7 @@ import { Pressable, View } from "react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { ScreenHeader } from "@/components/ui/screen-header";
+import { useHeaderlessTop } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
@@ -15,13 +15,14 @@ const MENU = [
 ] as const;
 
 // Pencil 마이페이지 (n374g) — 시안은 있고 구현 전. 설정(PAGE-27)·연결 관리(PAGE-32) 진입과 로그아웃만 먼저 붙였다.
+// 탭 화면이라 제목 헤더를 두지 않는다(2026-09-18).
 export default function MyRoute() {
   const router = useRouter();
   const userName = useAuthStore(selectUserName);
+  const topInset = useHeaderlessTop();
 
   return (
-    <View className="flex-1 bg-background">
-      <ScreenHeader title="마이페이지" />
+    <View className="flex-1 bg-background" style={{ paddingTop: topInset }}>
       <View className="flex-1 bg-background px-6">
       {userName === null ? null : <Text className="text-body text-card-foreground">{userName}님</Text>}
       <View className="gap-2 pt-6">
