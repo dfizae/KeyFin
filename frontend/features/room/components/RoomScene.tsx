@@ -8,6 +8,7 @@ import {
   Path,
   Skia,
   useImage,
+  type SkImage,
 } from "@shopify/react-native-skia";
 import { useColorScheme } from "nativewind";
 import * as React from "react";
@@ -15,6 +16,7 @@ import { View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { CHARACTER_IDLE, ROOM_FLOOR } from "@/features/room/assets";
 import { readCamera, useRoomCamera } from "@/features/room/camera";
 import { FURNITURE, WALL_ITEMS, isWallItemId, type RoomItemId } from "@/features/room/catalog";
@@ -72,6 +74,48 @@ import { getColors } from "@/lib/theme";
 
 const FLOOR_SURFACE = SURFACES.FLOOR;
 
+/**
+ * 방에 쓰이는 스프라이트 전부. 한 장씩 준비되는 대로 그리면 바닥이 먼저 깔리고 가구가 하나씩 튀어나와
+ * 실제보다 오래 걸리는 것처럼 보였다(사용자 지적 2026-09-20). 다 준비될 때까지 기다렸다가 방을 통째로 보여 준다.
+ * 배치에 없는 가구까지 미리 데워 두므로 방 꾸미기에서 가구를 옮겨도 다시 기다리지 않는다.
+ */
+const SCENE_SPRITES: readonly number[] = [
+  ROOM_FLOOR,
+  CHARACTER_IDLE,
+  ...Object.values(FURNITURE).map((item) => item.sprite),
+  ...Object.values(WALL_ITEMS).map((item) => item.sprite),
+];
+
+/**
+ * 스프라이트 한 장을 불러 위로 넘기기만 한다(그리지 않는다).
+ * `useImage` 는 부르는 곳마다 따로 읽어들이므로(캐시가 없다) 이 로더를 계속 띄워 둔 채
+ * 읽어 온 이미지를 그리는 쪽에 넘긴다 — 그리는 쪽에서 다시 부르면 처음부터 다시 읽어 또 하나씩 튀어나온다.
+ */
+function SpriteLoader({ source, onLoad }: { source: number; onLoad: (source: number, image: SkImage) => void }) {
+  const image = useImage(source);
+  React.useEffect(() => {
+    if (image) onLoad(source, image);
+  }, [image, onLoad, source]);
+  return null;
+}
+
+type SceneImages = ReadonlyMap<number, SkImage>;
+
+/** 방 스프라이트를 한 번씩만 읽어 모아 둔다. `loaders` 는 화면에 계속 띄워 둬야 이미지가 살아 있다 */
+function useSceneImages() {
+  const [images, setImages] = React.useState<SceneImages>(() => new Map());
+  const handleLoad = React.useCallback((source: number, image: SkImage) => {
+    setImages((current) => {
+      if (current.get(source) === image) return current;
+      const next = new Map(current);
+      next.set(source, image);
+      return next;
+    });
+  }, []);
+  const loaders = SCENE_SPRITES.map((source) => <SpriteLoader key={source} source={source} onLoad={handleLoad} />);
+  return { images, loaders, ready: images.size === SCENE_SPRITES.length };
+}
+
 // Skia 기본 샘플링은 밉맵 없는 linear 라 크기 차이가 큰 그림이 뭉개진다.
 // 스프라이트 원본은 그려지는 크기의 3~5배라 밉맵으로 줄이고, 바닥(768px)은 화면 픽셀보다 작아 늘어나므로 cubic 으로 윤곽을 지킨다.
 const SPRITE_SAMPLING = { filter: FilterMode.Linear, mipmap: MipmapMode.Linear } as const;
@@ -111,7 +155,8 @@ function RoomScene({ width }: RoomSceneProps) {
   const { height } = getCanvasSize(width);
   const scale = getSceneScale(width);
   const camera = useRoomCamera();
-  const floor = useImage(ROOM_FLOOR);
+  const { images, loaders, ready } = useSceneImages();
+  const floor = images.get(ROOM_FLOOR);
   const { colorScheme } = useColorScheme();
   const themeColors = getColors(colorScheme);
   const cameraTransform = useDerivedValue(() => [{ translateX: camera.tx.value }, { translateY: camera.ty.value }, { scale: camera.scale.value }]);
@@ -227,10 +272,24 @@ function RoomScene({ width }: RoomSceneProps) {
   const behind = stationary.slice(0, Math.min(depthIndex, stationary.length));
   const inFront = stationary.slice(behind.length);
   const highlightId = draggingId ?? (isEditing ? selectedId : null);
-  const spriteProps = { scale, ringColor: themeColors.primary };
+  const spriteProps = { scale, ringColor: themeColors.primary, images };
+
+  // 로더는 두 갈래 모두에서 같은 자리에 둔다 — 자리가 바뀌면 다시 마운트되어 이미지를 또 읽는다.
+  if (!ready) {
+    return (
+      <>
+        {loaders}
+        <View style={{ width, height }}>
+          <Skeleton className="h-full w-full" accessibilityLabel="방을 불러오는 중" />
+        </View>
+      </>
+    );
+  }
 
   return (
-    <GestureDetector gesture={pan}>
+    <>
+      {loaders}
+      <GestureDetector gesture={pan}>
       <View style={{ width, height }} collapsable={false}>
         <Canvas style={{ width, height }}>
           <Group transform={cameraTransform}>
@@ -242,7 +301,7 @@ function RoomScene({ width }: RoomSceneProps) {
             {behind.map((p) => (
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}
-            <CharacterSprite walker={walker} scale={scale} />
+            <CharacterSprite walker={walker} scale={scale} image={images.get(CHARACTER_IDLE)} />
             {inFront.map((p) => (
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}
@@ -259,7 +318,8 @@ function RoomScene({ width }: RoomSceneProps) {
           </Group>
         </Canvas>
       </View>
-    </GestureDetector>
+      </GestureDetector>
+    </>
   );
 }
 
@@ -339,10 +399,10 @@ function outlinePath(surface: SurfaceDef, footprint: GridFootprint, scale: numbe
   return path.detach();
 }
 
-type ItemSpriteProps = { placed: PlacedItem; scale: number; highlighted?: boolean; ringColor: string };
+type ItemSpriteProps = { placed: PlacedItem; scale: number; highlighted?: boolean; ringColor: string; images: SceneImages };
 
-function ItemSprite({ placed, scale, highlighted = false, ringColor }: ItemSpriteProps) {
-  const image = useImage(placed.item.sprite);
+function ItemSprite({ placed, scale, highlighted = false, ringColor, images }: ItemSpriteProps) {
+  const image = images.get(placed.item.sprite);
   const rect = React.useMemo(
     () => sceneRectToCanvas(getSpriteRect(placed.anchor, placed.item.size, placed.item.anchor), scale),
     [placed, scale]
@@ -371,11 +431,12 @@ type DraggingSpriteProps = {
   valid: { value: number };
   ringColor: string;
   blockedColor: string;
+  images: SceneImages;
 };
 
 /** 끌리는 동안의 오브젝트. 위치는 셰어드 값에서 매 프레임 읽고, 놓일 칸을 그 면의 격자 모양 그대로 깔아 보여준다. */
-function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blockedColor }: DraggingSpriteProps) {
-  const image = useImage(placed.item.sprite);
+function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blockedColor, images }: DraggingSpriteProps) {
+  const image = images.get(placed.item.sprite);
   const { item } = placed;
   const rect = useDerivedValue(() =>
     sceneRectToCanvas(getSpriteRect({ x: anchorX.value, y: anchorY.value }, item.size, item.anchor), scale)
@@ -415,15 +476,14 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
   );
 }
 
-type CharacterSpriteProps = { walker: CharacterWalker; scale: number };
+type CharacterSpriteProps = { walker: CharacterWalker; scale: number; image: SkImage | undefined };
 
 /**
  * 정지 이미지 한 장으로 움직이는 느낌을 낸다.
  * - 이동 중: 잔걸음 바운스(발끝 y 를 살짝 들었다 놓음), 진행 방향으로 미러링
  * - 정지 중: 호흡(발끝을 고정한 채 세로로 아주 조금 늘었다 줄어듦)
  */
-function CharacterSprite({ walker, scale }: CharacterSpriteProps) {
-  const image = useImage(CHARACTER_IDLE);
+function CharacterSprite({ walker, scale, image }: CharacterSpriteProps) {
   const { x, y, facing, moving, bobPhase, breathPhase } = walker;
 
   const rect = useDerivedValue(() => {

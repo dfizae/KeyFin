@@ -11,8 +11,8 @@ describe("벽 오브젝트 기본 배치", () => {
   it("보드·캘린더는 오른쪽 벽에 있고 가구 배치와 섞여 한 배열에 들어간다", () => {
     const wall = DEFAULT_LAYOUT.filter((p) => !isFloorPlacement(p));
     expect(wall.map((p) => [p.itemId, p.surface])).toEqual([
-      ["board", "WALL_RIGHT"],
       ["calendar", "WALL_RIGHT"],
+      ["board", "WALL_RIGHT"],
     ]);
     expect(DEFAULT_LAYOUT.filter(isFloorPlacement).every((p) => !isWallItemId(p.itemId))).toBe(true);
   });
@@ -31,9 +31,9 @@ describe("벽 오브젝트 기본 배치", () => {
 
     expect(insideScene(board)).toBe(true);
     expect(insideScene(calendar)).toBe(true);
-    // 보드가 코너(x 164) 쪽, 캘린더가 그 오른쪽. 둘 다 오른쪽 벽 걸레받이선(y 286~371) 위.
-    expect(board.x).toBeGreaterThanOrEqual(164);
-    expect(board.x + board.width).toBeLessThanOrEqual(calendar.x);
+    // 캘린더가 코너(x 164) 쪽, 보드가 그 오른쪽 (2026-09-20: 끝 칸은 홈에서 오른쪽이 잘려 캘린더를 안쪽으로 옮겼다).
+    expect(calendar.x).toBeGreaterThanOrEqual(164);
+    expect(calendar.x + calendar.width).toBeLessThanOrEqual(board.x);
     expect(board.y + board.height).toBeLessThan(371);
     expect(calendar.y + calendar.height).toBeLessThan(371);
   });
@@ -68,7 +68,7 @@ describe("isPlaceableOnWall", () => {
   it("스냅한 칸을 다시 기준점으로 되돌리면 같은 칸이다(드래그 왕복)", () => {
     const calendar = WALL_ITEMS.calendar;
     const placed = DEFAULT_LAYOUT.find((p) => p.itemId === "calendar")!;
-    expect(anchorToCell(SURFACES.WALL_RIGHT, placed.anchor, calendar.grid)).toEqual({ col: 4, row: 4 });
+    expect(anchorToCell(SURFACES.WALL_RIGHT, placed.anchor, calendar.grid)).toEqual({ col: 0, row: 4 });
   });
 
   it("같은 벽에서 칸을 나눠 가지면 겹친다", () => {
