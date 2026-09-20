@@ -16,13 +16,15 @@ type HomeCalendarProps = {
   /** "YYYYMM" */
   month: string;
   onOpen: () => void;
+  /** 첫 진입 안내가 캘린더를 가리키는 중 */
+  highlighted?: boolean;
 };
 
 /**
  * 방 벽의 캘린더 에셋 (FR-PAY-01·02). 방 안의 오브젝트라 카메라를 따라 함께 확대·이동하고, 자리는 방 배치(스토어)를 따른다.
  * 조회 실패는 에셋의 숫자만 감춘다 — 방과 다른 영역을 막지 않는다. (TBD: 실패 문구)
  */
-function HomeCalendar({ width, month, onOpen }: HomeCalendarProps) {
+function HomeCalendar({ width, month, onOpen, highlighted }: HomeCalendarProps) {
   const calendar = usePaymentCalendar(month);
   // 배치 배열은 참조가 안정적이라 그대로 고르고, 사각형은 렌더에서 계산한다(셀렉터가 새 객체를 돌려주면 재렌더가 돈다).
   const placements = useRoomStore(selectPlacements);
@@ -38,6 +40,7 @@ function HomeCalendar({ width, month, onOpen }: HomeCalendarProps) {
       monthLabel={formatMonthKeyLabel(month)}
       upcoming={upcoming ? { day: upcoming.day, name: upcoming.name, hasShortage: upcoming.preparation?.status === "SHORTAGE" } : null}
       onPress={onOpen}
+      highlighted={highlighted}
     />
   );
 }

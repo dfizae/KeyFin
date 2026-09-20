@@ -1,5 +1,6 @@
 import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import * as SecureStore from "expo-secure-store";
 import * as React from "react";
 
 import { authUserMock } from "@/api/mocks/auth";
@@ -11,10 +12,12 @@ import { useAuthStore } from "@/features/auth/store";
 import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
+import { ROOM_LABEL } from "@/features/home/components/CharacterRoom";
 import { COACH_PLACEHOLDER, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
 import { HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
+import { ROOM_GUIDE_STEPS } from "@/features/home/useRoomGuide";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom } from "@/features/room/model";
@@ -73,6 +76,8 @@ async function layoutRoom() {
   await waitForQueriesToSettle();
 }
 
+const ROOM_GUIDE_KEY = `keyfin.roomGuide.${authUserMock.id}`;
+
 let client: QueryClient;
 
 /** 확정 뒤 무효화로 도는 재조회가 테스트 밖에서 끝나 act 경고를 내지 않도록 기다린다 */
@@ -96,7 +101,9 @@ function renderHome() {
 }
 
 describe("HomeScreen", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // 대부분의 테스트는 첫 진입 안내를 이미 본 사용자 기준이다. 안내 자체는 아래 전용 테스트가 기록을 지우고 본다.
+    await SecureStore.setItemAsync(ROOM_GUIDE_KEY, "1");
     // 로그인 화면(PAGE-01)이 생기면서 스토어 기본값이 비로그인이 됐다. 홈은 로그인 이후 화면이라 사용자를 넣고 시작한다.
     useAuthStore.setState({ user: authUserMock, status: "authenticated" });
     mockedGetRoom.mockReset();
@@ -115,12 +122,48 @@ describe("HomeScreen", () => {
     mockRedirect.mockReset();
   });
 
+  it("처음 들어오면 코치가 리스트·캘린더를 차례로 안내하고, 다 보면 다시 나오지 않는다", async () => {
+    await SecureStore.deleteItemAsync(ROOM_GUIDE_KEY);
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    const first = await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+
+    expect(await screen.findByText(ROOM_GUIDE_STEPS[0].message)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "다음" }));
+    expect(screen.getByText(ROOM_GUIDE_STEPS[1].message)).toBeTruthy();
+    await fireEvent.press(screen.getByRole("button", { name: "알겠어요" }));
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[1].message)).toBeNull();
+    await waitFor(async () => expect(await SecureStore.getItemAsync(ROOM_GUIDE_KEY)).toBe("1"));
+    await first.unmount();
+
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
+  });
+
+  it("안내 중에 리스트를 직접 누르면 안내를 끝내고 예산 시트를 연다", async () => {
+    await SecureStore.deleteItemAsync(ROOM_GUIDE_KEY);
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+    await screen.findByText(ROOM_GUIDE_STEPS[0].message);
+
+    await fireEvent.press(screen.getByRole("button", { name: /예산 보드/ }));
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
+    await waitFor(async () => expect(await SecureStore.getItemAsync(ROOM_GUIDE_KEY)).toBe("1"));
+  });
+
   it("코치를 탭하면 임시 말풍선이 열리고, 미확정 결제가 있으면 정리 화면 링크를 보여준다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetPending.mockResolvedValue(toPendingTransactions(pendingTransactionsMock()));
     await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
+    await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "코치" }));
@@ -129,7 +172,7 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/transaction/pending");
   });
 
-  it("불러오는 동안 스켈레톤을 보여주고, 인사말·코인·방을 표시하며 예산 카드는 리스트를 탭한 시트에 있다", async () => {
+  it("불러오는 동안 스켈레톤을 보여주고, 코인·알림·방을 표시하며 예산 카드는 리스트를 탭한 시트에 있다", async () => {
     let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
     mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
@@ -137,8 +180,7 @@ describe("HomeScreen", () => {
     expect(screen.getByLabelText("불러오는 중")).toBeTruthy();
 
     await act(async () => resolveRoom(toRoom({ ...roomMock, attendance: { checkedToday: true } })));
-    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
-    expect(screen.getByText("환영합니다")).toBeTruthy();
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
     expect(screen.getByLabelText("코인 1,250개")).toBeTruthy();
     expect(screen.getByRole("button", { name: "알림" })).toBeTruthy();
     expect(screen.getByLabelText("캐릭터가 방에 있어요")).toBeTruthy();
@@ -176,7 +218,7 @@ describe("HomeScreen", () => {
     await renderHome();
 
     expect(await screen.findByLabelText("코인 1,250개")).toBeTruthy();
-    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
     expect(mockedCheckAttendance).not.toHaveBeenCalled();
   });
 
@@ -188,7 +230,7 @@ describe("HomeScreen", () => {
 
     expect(await screen.findByLabelText("코인 1,250개")).toBeTruthy();
     await waitFor(() => expect(mockedCheckAttendance).toHaveBeenCalledTimes(1));
-    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
     expect(screen.queryByLabelText(/출석 \+/)).toBeNull();
   });
 
@@ -209,7 +251,7 @@ describe("HomeScreen", () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
+    await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
 
     const board = await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" });
@@ -243,59 +285,50 @@ describe("HomeScreen", () => {
     await waitForQueriesToSettle();
   });
 
-  it("캘린더 에셋은 다음 출금을 보여주고, 탭하면 날짜별 출금 일정과 준비 상태가 열린다", async () => {
+  it("캘린더 에셋은 다음 출금을 보여주고, 탭하면 결제 캘린더 화면으로 바로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
+    await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
 
     const calendar = await screen.findByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" });
-    expect(screen.queryByText("9월 출금 일정")).toBeNull();
-
-    await fireEvent.press(calendar);
-    expect(await screen.findByText("9월 출금 일정")).toBeTruthy();
-    expect(screen.getByText("3건 · 부족 1건")).toBeTruthy();
-    expect(screen.getByLabelText("15일 월세 550,000원, 부족 230,000원")).toBeTruthy();
-    expect(screen.getByLabelText("20일 넷플릭스 17,000원, 준비됨")).toBeTruthy();
-    expect(screen.getByLabelText("25일 통신비 (예상) 55,000원, 준비됨")).toBeTruthy();
     expect(mockedGetCalendar).toHaveBeenCalledWith(MONTH, expect.anything());
 
-    await fireEvent.press(screen.getByRole("button", { name: "캘린더 열기" }));
+    await fireEvent.press(calendar);
     expect(mockPush).toHaveBeenCalledWith("/payment/calendar");
-
-    await fireEvent.press(screen.getByRole("button", { name: "출금 일정 닫기" }));
+    // 중간 팝오버를 거치지 않는다 (사용자 결정 2026-09-18)
     expect(screen.queryByText("9월 출금 일정")).toBeNull();
     await waitForQueriesToSettle();
   });
 
-  it("이번 달 출금 예정이 없으면 캘린더는 예정 없음으로 보이고 팝오버는 빈 상태를 알린다", async () => {
+  it("이번 달 출금 예정이 없어도 캘린더 에셋은 보이고, 탭하면 그대로 결제 캘린더로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetCalendar.mockResolvedValue(toPaymentCalendar(paymentCalendarEmptyMock));
     await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
+    await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "출금 캘린더, 9월 출금 예정 없음" }));
-    expect(await screen.findByText("이번 달 출금 예정이 없어요.")).toBeTruthy();
-    expect(screen.getByText("0건")).toBeTruthy();
+    expect(mockPush).toHaveBeenCalledWith("/payment/calendar");
+    expect(screen.queryByText("이번 달 출금 예정이 없어요.")).toBeNull();
     await waitForQueriesToSettle();
   });
 
-  it("벽 오브젝트 팝오버는 한 번에 하나만 열린다", async () => {
+  it("예산 보드는 시트로 열리고, 캘린더는 시트 대신 결제 캘린더 화면으로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
+    await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
     expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" }));
-    expect(await screen.findByText("9월 출금 일정")).toBeTruthy();
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(mockPush).toHaveBeenCalledWith("/payment/calendar");
+    expect(screen.queryByText("9월 출금 일정")).toBeNull();
     await waitForQueriesToSettle();
   });
 
@@ -304,7 +337,7 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetCalendar.mockRejectedValue(new Error("network"));
     await renderHome();
-    await screen.findByText("김재영님, 안녕하세요!");
+    await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
 
     expect(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" })).toBeTruthy();
@@ -328,7 +361,7 @@ describe("HomeScreen", () => {
     expect(await screen.findByText("방 정보를 불러오지 못했어요")).toBeTruthy();
     await fireEvent.press(screen.getByRole("button", { name: "다시 시도" }));
 
-    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
     expect(mockedGetRoom).toHaveBeenCalledTimes(2);
   });
 
@@ -337,7 +370,7 @@ describe("HomeScreen", () => {
     mockedGetBudget.mockRejectedValueOnce(new Error("network")).mockResolvedValueOnce(toBudget(budgetConfirmedMock(TODAY_KEY)));
     await renderHome();
 
-    expect(await screen.findByText("김재영님, 안녕하세요!")).toBeTruthy();
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
     expect(screen.getByLabelText("캐릭터가 방에 있어요")).toBeTruthy();
     await layoutRoom();
     await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 불러오지 못했어요" }));
