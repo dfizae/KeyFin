@@ -1,7 +1,8 @@
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
-import { Bell, Coins, WifiOff } from "lucide-react-native";
+import { Bell, Coins, Shirt, Store, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
+import type { LucideIcon } from "lucide-react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
@@ -15,13 +16,18 @@ import { CharacterRoom } from "@/features/home/components/CharacterRoom";
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
 import { HomeCoach } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
-import { ROOM_GUIDE_STEPS, useRoomGuide } from "@/features/home/useRoomGuide";
+import { AVATAR_SCENE } from "@/features/home/components/CoachBubble";
+import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
+import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
-import { coverSceneWidth } from "@/features/room/model";
+import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
+import { getWallItemRect } from "@/features/room/scene";
+import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
+import { cn } from "@/lib/utils";
 
 /** 벽 오브젝트가 여는 패널. 지금은 예산 보드 시트 하나뿐이다 — 캘린더는 팝오버를 거치지 않고 결제 캘린더 화면으로 간다(2026-09-18). */
 type RoomPanel = "board" | null;
@@ -30,6 +36,9 @@ type RoomPanel = "board" | null;
 const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
 
 /** 상태바 아래로 사이드 버튼을 내리는 간격 */
+/** 방이 들어가는 영역. 테스트가 이 영역의 크기를 알려 줄 때 쓴다 */
+export const HOME_ROOM_BOX_TEST_ID = "home-room-box";
+
 const SIDE_ACTION_GAP = 8;
 /** 오류 화면은 헤더가 없으니 상태바만큼 내려 준다 */
 const ERROR_TOP_GAP = 24;
@@ -45,6 +54,12 @@ function HomeScreen() {
   const [panel, setPanel] = React.useState<RoomPanel>(null);
   const [box, setBox] = React.useState({ width: 0, height: 0 });
   const guide = useRoomGuide(room.isSuccess);
+  const placements = useRoomStore(selectPlacements);
+  // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
+  const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
+  const measureButton = React.useCallback((id: GuideTargetId, rect: SceneRect) => {
+    setButtonRects((current) => (sameRect(current[id], rect) ? current : { ...current, [id]: rect }));
+  }, []);
 
   const handleLayout = React.useCallback((event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
@@ -61,6 +76,32 @@ function HomeScreen() {
   // 방이 화면보다 넓으면 씬 x 0 이 화면 밖이다. 코치는 카메라를 따라가지 않는 패널이라 넘친 절반만큼 밀어 화면 안에 둔다.
   const coachOffsetX = Math.max(0, (roomWidth - box.width) / 2);
 
+  // 방 레이어는 화면 가운데에 놓이고 넘치는 만큼 잘리므로, 씬 좌표를 화면 좌표로 옮길 때 그 절반을 빼 준다.
+  const roomScale = roomWidth > 0 ? getSceneScale(roomWidth) : 0;
+  const offsetY = roomWidth > 0 ? Math.max(0, (getCanvasSize(roomWidth).height - box.height) / 2) : 0;
+  const sceneToScreen = (rect: SceneRect): SceneRect => ({
+    x: rect.x * roomScale - coachOffsetX,
+    y: rect.y * roomScale - offsetY,
+    width: rect.width * roomScale,
+    height: rect.height * roomScale,
+  });
+  // 코치는 패널 레이어에서 이미 coachOffsetX 만큼 밀어 두므로 화면 x 가 그대로 씬 x 다
+  const coachScreenRect = (): SceneRect => ({
+    x: AVATAR_SCENE.x * roomScale,
+    y: AVATAR_SCENE.y * roomScale - offsetY,
+    width: AVATAR_SCENE.size * roomScale,
+    height: AVATAR_SCENE.size * roomScale,
+  });
+  const guideRect = (target: GuideTargetId): SceneRect | null => {
+    if (roomScale === 0) return null;
+    if (target === "coach") return coachScreenRect();
+    if (target === "board" || target === "calendar") {
+      const rect = getWallItemRect(placements, target);
+      return rect === null ? null : sceneToScreen(rect);
+    }
+    return buttonRects[target] ?? null;
+  };
+
   // 안내 중에 에셋을 직접 누르면 목적을 이룬 것이라 안내를 끝낸다
   const openBoard = () => {
     guide.finish();
@@ -70,19 +111,10 @@ function HomeScreen() {
     guide.finish();
     router.push(PAYMENT_CALENDAR_ROUTE);
   };
-  const coachGuide = guide.step
-    ? {
-        message: guide.step.message,
-        progress: `${guide.step.index + 1}/${ROOM_GUIDE_STEPS.length}`,
-        isLast: guide.step.isLast,
-        onNext: guide.next,
-        onSkip: guide.finish,
-      }
-    : null;
 
   return (
     <Screen>
-      <View className="flex-1 items-center justify-center overflow-hidden" onLayout={handleLayout}>
+      <View className="flex-1 items-center justify-center overflow-hidden" onLayout={handleLayout} testID={HOME_ROOM_BOX_TEST_ID}>
         {room.isPending ? <Skeleton className="h-full w-full" accessibilityLabel="불러오는 중" /> : null}
         {room.isError ? (
           <View className="w-full flex-1 px-6" style={{ paddingTop: topInset + ERROR_TOP_GAP }}>
@@ -101,13 +133,13 @@ function HomeScreen() {
             locked={panel !== null}
             sceneObjects={(width) => (
               <>
-                <HomeWallBoard width={width} budget={budget} onOpen={openBoard} highlighted={guide.step?.target === "board"} />
-                <HomeCalendar width={width} month={month} onOpen={openCalendar} highlighted={guide.step?.target === "calendar"} />
+                <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
+                <HomeCalendar width={width} month={month} onOpen={openCalendar} />
               </>
             )}
             panels={(width) => (
               <>
-                <HomeCoach width={width} offsetX={coachOffsetX} guide={coachGuide} />
+                <HomeCoach width={width} offsetX={coachOffsetX} />
               </>
             )}
           />
@@ -117,7 +149,20 @@ function HomeScreen() {
         ) : null}
       </View>
       <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
-      {room.isSuccess ? <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null} /> : null}
+      {room.isSuccess ? (
+        <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null} onMeasure={measureButton} />
+      ) : null}
+      {/* 안내 덮개는 방과 사이드 버튼을 모두 덮어야 해서 맨 위에 둔다 */}
+      {guide.step ? (
+        <RoomGuideOverlay
+          rect={guideRect(guide.step.target)}
+          message={guide.step.message}
+          progress={`${guide.step.index + 1}/${ROOM_GUIDE_STEPS.length}`}
+          isLast={guide.step.isLast}
+          onNext={guide.next}
+          onSkip={guide.finish}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -143,10 +188,19 @@ function useHomeAttendance(shouldCheckIn: boolean) {
 }
 
 /**
- * 방 위에 떠 있는 사이드 버튼 줄. 왼쪽에 코인·알림을 세로로, 오른쪽에 꾸미기 버튼을 둔다 (2026-09-18 코치 피드백).
+ * 방 위에 떠 있는 사이드 버튼 줄. 왼쪽에 코인·알림·상점·옷장을 세로로, 오른쪽에 꾸미기 버튼을 둔다 (2026-09-18 코치 피드백, 상점·옷장은 2026-09-20 사용자 요청).
+ * 첫 진입 안내 중에는 방과 같이 물러나도록 흐려 둔다 — 방만 어둑해지고 버튼만 밝으면 덮개가 따로 놀아 보인다 (2026-09-20).
  * 방은 화면보다 넓을 수 있어(cover 맞춤) 방 기준이 아니라 **화면 기준**으로 놓는다 — 방 레이어에 두면 오른쪽 버튼이 화면 밖으로 나간다.
  */
-function HomeSideActions({ coinBalance, showEdit }: { coinBalance: number; showEdit: boolean }) {
+function HomeSideActions({
+  coinBalance,
+  showEdit,
+  onMeasure,
+}: {
+  coinBalance: number;
+  showEdit: boolean;
+  onMeasure: (id: GuideTargetId, rect: SceneRect) => void;
+}) {
   const topInset = useTopInset();
 
   return (
@@ -157,7 +211,25 @@ function HomeSideActions({ coinBalance, showEdit }: { coinBalance: number; showE
     >
       <View className="items-start gap-2" pointerEvents="box-none">
         <CoinBadge balance={coinBalance} />
-        <NotificationButton />
+        <NotificationButton onMeasure={onMeasure} />
+        <RoomActionButton
+          icon={Store}
+          label="상점"
+          hint="상점을 엽니다"
+          iconClassName="text-primary"
+          route={SHOP_ROUTE}
+          guideId="shop"
+          onMeasure={onMeasure}
+        />
+        <RoomActionButton
+          icon={Shirt}
+          label="옷장"
+          hint="캐릭터 옷을 갈아입습니다"
+          iconClassName="text-positive"
+          route={WARDROBE_ROUTE}
+          guideId="wardrobe"
+          onMeasure={onMeasure}
+        />
       </View>
       {showEdit ? <RoomEditorOverlay /> : null}
     </View>
@@ -190,23 +262,65 @@ function CoinBadge({ balance }: { balance: number }) {
 }
 
 const NOTIFICATION_ROUTE = "/notification";
+const SHOP_ROUTE = "/shop";
+const WARDROBE_ROUTE = "/character/wardrobe";
 
-// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide bell. 누르면 알림함(PAGE-28)으로 간다.
-function NotificationButton() {
+type RoomActionButtonProps = {
+  icon: LucideIcon;
+  /** 스크린리더가 읽는 이름 */
+  label: string;
+  hint: string;
+  /** 아이콘 색. 봉투처럼 버튼마다 다른 색을 줘 한눈에 갈린다 (사용자 요청 2026-09-20) */
+  iconClassName: string;
+  route: string;
+  /** 첫 진입 안내가 가리킬 대상 id */
+  guideId: GuideTargetId;
+  onMeasure: (id: GuideTargetId, rect: SceneRect) => void;
+};
+
+// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide 아이콘. 알림·상점·옷장이 같은 모양이라 함께 쓴다.
+// 첫 진입 안내가 이 버튼들도 가리키므로 그려진 자리를 창 기준으로 재서 올려 보낸다 — 씬 좌표가 없는 화면 레이어라 계산으로는 못 구한다.
+function RoomActionButton({ icon, label, hint, iconClassName, route, guideId, onMeasure }: RoomActionButtonProps) {
   const router = useRouter();
+  const ref = React.useRef<View>(null);
+  const measure = React.useCallback(() => {
+    ref.current?.measureInWindow((x, y, width, height) => onMeasure(guideId, { x, y, width, height }));
+  }, [guideId, onMeasure]);
 
   return (
     <Pressable
+      ref={ref}
+      onLayout={measure}
       accessibilityRole="button"
-      accessibilityLabel="알림"
-      accessibilityHint="알림함을 엽니다"
+      accessibilityLabel={label}
+      accessibilityHint={hint}
       hitSlop={8}
       className="h-10 w-10 items-center justify-center rounded-full bg-accent shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
-      onPress={() => router.push(NOTIFICATION_ROUTE)}
+      onPress={() => router.push(route)}
     >
-      <Icon as={Bell} size={20} className="text-foreground" />
+      <Icon as={icon} size={20} className={iconClassName} />
     </Pressable>
   );
+}
+
+// 누르면 알림함(PAGE-28)으로 간다.
+function NotificationButton({ onMeasure }: { onMeasure: (id: GuideTargetId, rect: SceneRect) => void }) {
+  return (
+    <RoomActionButton
+      icon={Bell}
+      label="알림"
+      hint="알림함을 엽니다"
+      iconClassName="text-info"
+      route={NOTIFICATION_ROUTE}
+      guideId="notification"
+      onMeasure={onMeasure}
+    />
+  );
+}
+
+/** 잰 자리가 그대로면 상태를 두어 무한 갱신을 막는다 */
+function sameRect(left: SceneRect | undefined, right: SceneRect): boolean {
+  return left !== undefined && left.x === right.x && left.y === right.y && left.width === right.width && left.height === right.height;
 }
 
 export { HomeScreen };

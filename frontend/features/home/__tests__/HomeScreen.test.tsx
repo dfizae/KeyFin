@@ -14,9 +14,10 @@ import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProp
 import { toBudget } from "@/features/budget/model";
 import { ROOM_LABEL } from "@/features/home/components/CharacterRoom";
 import { COACH_PLACEHOLDER, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
-import { HomeScreen } from "@/features/home/components/HomeScreen";
+import { HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
+import { SPOTLIGHT_LABEL } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS } from "@/features/home/useRoomGuide";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
@@ -72,6 +73,7 @@ const mockedClassify = jest.mocked(classifyTransaction);
 
 /** 방 폭을 재고, 그 뒤 붙는 오버레이(보드·캘린더·코치)의 조회가 끝날 때까지 기다린다 */
 async function layoutRoom() {
+  await fireEvent(screen.getByTestId(HOME_ROOM_BOX_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 586 } } });
   await fireEvent(screen.getByTestId(ROOM_VIEW_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 404 } } });
   await waitForQueriesToSettle();
 }
@@ -131,10 +133,17 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     expect(await screen.findByText(ROOM_GUIDE_STEPS[0].message)).toBeTruthy();
-    await fireEvent.press(screen.getByRole("button", { name: "다음" }));
-    expect(screen.getByText(ROOM_GUIDE_STEPS[1].message)).toBeTruthy();
+    // 안내 중에는 가리키는 곳만 남기고 화면을 덮는다 — 덮개는 위·아래·좌·우 네 장이다
+    expect(screen.getAllByRole("button", { name: SPOTLIGHT_LABEL })).toHaveLength(4);
+
+    // 마지막 단계까지 차례로 넘긴다
+    for (let step = 1; step < ROOM_GUIDE_STEPS.length; step++) {
+      await fireEvent.press(screen.getByRole("button", { name: "다음" }));
+      expect(screen.getByText(ROOM_GUIDE_STEPS[step].message)).toBeTruthy();
+    }
     await fireEvent.press(screen.getByRole("button", { name: "알겠어요" }));
-    expect(screen.queryByText(ROOM_GUIDE_STEPS[1].message)).toBeNull();
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[ROOM_GUIDE_STEPS.length - 1].message)).toBeNull();
+    expect(screen.queryByRole("button", { name: SPOTLIGHT_LABEL })).toBeNull();
     await waitFor(async () => expect(await SecureStore.getItemAsync(ROOM_GUIDE_KEY)).toBe("1"));
     await first.unmount();
 

@@ -11,7 +11,8 @@ import { getSceneScale } from "@/features/room/model";
 // 미확정 거래 분류 질문은 서버가 제안 세분류를 주지 않아 말풍선에서 뺐고, 미확정 정리(PAGE-22) 링크만 남긴다.
 export const COACH_LABEL = "코치";
 export const COACH_PLACEHOLDER = "?";
-const AVATAR_SCENE = { x: 0, y: 254, size: 32 } as const;
+/** 코치 아바타의 씬 자리. 첫 진입 안내가 코치를 가리킬 때 이 값으로 화면 사각형을 구한다 */
+export const AVATAR_SCENE = { x: 0, y: 254, size: 32 } as const;
 const BUBBLE_SCENE = { x: 40, y: 262, width: 236 } as const;
 
 type CoachBubbleProps = {
@@ -27,28 +28,13 @@ type CoachBubbleProps = {
    * 넘친 절반만큼 밀어 화면 왼쪽 끝에 맞춘다. 패널 레이어는 카메라를 따라가지 않아 고정값이면 된다.
    */
   offsetX?: number;
-  /** 첫 진입 안내(useRoomGuide). 있으면 말풍선이 열린 채 안내를 보여 주고, 끝나면 평소 말풍선으로 돌아간다 */
-  guide?: CoachGuide | null;
 };
-
-export type CoachGuide = {
-  message: string;
-  /** "1/2" */
-  progress: string;
-  isLast: boolean;
-  onNext: () => void;
-  onSkip: () => void;
-};
-
-export const GUIDE_NEXT_LABEL = "다음";
-export const GUIDE_DONE_LABEL = "알겠어요";
-export const GUIDE_SKIP_LABEL = "그만 보기";
 
 export function cleanupLinkLabel(pendingCount: number, pendingMore = false): string {
   return `미확정 결제 ${pendingCount}건${pendingMore ? "+" : ""} 정리`;
 }
 
-function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup, offsetX = 0, guide = null }: CoachBubbleProps) {
+function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup, offsetX = 0 }: CoachBubbleProps) {
   const scale = getSceneScale(width);
   const [open, setOpen] = React.useState(false);
 
@@ -71,29 +57,7 @@ function CoachBubble({ width, pendingCount = 0, pendingMore = false, onCleanup, 
         <Icon as={Cat} size={18} className="text-foreground" />
         {pendingCount > 0 ? <View className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-destructive" accessible={false} /> : null}
       </Pressable>
-      {guide ? (
-        <View
-          className="absolute gap-2 rounded-lg border border-border bg-card p-3"
-          style={{ left: BUBBLE_SCENE.x * scale + offsetX, top: BUBBLE_SCENE.y * scale, width: BUBBLE_SCENE.width * scale }}
-          accessibilityLiveRegion="polite"
-        >
-          <Text className="text-body-sm text-foreground">{guide.message}</Text>
-          <View className="flex-row items-center justify-between">
-            <Text className="text-caption tabular-nums text-muted-foreground">{guide.progress}</Text>
-            <View className="flex-row items-center gap-4">
-              {guide.isLast ? null : (
-                <Pressable accessibilityRole="button" hitSlop={12} onPress={guide.onSkip} className="active:opacity-70">
-                  <Text className="text-caption text-muted-foreground">{GUIDE_SKIP_LABEL}</Text>
-                </Pressable>
-              )}
-              <Pressable accessibilityRole="button" hitSlop={12} onPress={guide.onNext} className="active:opacity-70">
-                <Text className="text-label text-primary">{guide.isLast ? GUIDE_DONE_LABEL : GUIDE_NEXT_LABEL}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      ) : null}
-      {open && !guide ? (
+      {open ? (
         <View
           className="absolute gap-2 rounded-lg border border-border bg-card p-3"
           style={{ left: BUBBLE_SCENE.x * scale + offsetX, top: BUBBLE_SCENE.y * scale, width: BUBBLE_SCENE.width * scale }}
