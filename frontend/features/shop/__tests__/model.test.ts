@@ -1,13 +1,22 @@
-import { coinBalanceMock, coinHistoryMock } from "@/api/mocks/shop";
+import { ApiError } from "@/api/error";
+import { coinBalanceMock, coinHistoryMock, purchaseShopItemMock, resetShopMocks, shopItemsMock } from "@/api/mocks/shop";
 import {
   coinCountLabel,
   coinDeltaLabel,
   coinDeltaSpoken,
   groupCoinHistoryByDate,
+  canBuyShopItem,
+  shopItemsInSlot,
+  shopPriceLabel,
+  shopSlotTabs,
   toCoinBalance,
   toCoinHistoryItem,
   toCoinHistoryPage,
+  toShopItem,
+  toShopItems,
+  toShopPurchase,
   type CoinHistoryItemDto,
+  type ShopItemDto,
 } from "@/features/shop/model";
 import { ContractMismatchError } from "@/lib/contract";
 
@@ -95,5 +104,112 @@ describe("코인 목 — 서버처럼 쪽을 나누고 잔액과 맞는다", () 
       expect(all[index].balanceAfter).toBe(all[index + 1].balanceAfter + all[index].delta);
     }
     expect(all.every((item) => item.balanceAfter >= 0)).toBe(true);
+  });
+});
+
+/** 계약 예시(Swagger ShopItemResponse)의 파란 모자 */
+function shopDto(overrides: Partial<ShopItemDto> = {}): ShopItemDto {
+  return {
+    itemId: 123,
+    itemCategory: "AVATAR",
+    slotType: "HEAD",
+    name: "파란 모자",
+    price: 100,
+    assetKey: "hat_blue",
+    themeCode: null,
+    owned: false,
+    ...overrides,
+  };
+}
+
+describe("상점 상품 (GET /shop)", () => {
+  it("계약 예시를 화면 모델로 바꾸고, 모르는 카테고리·슬롯은 UNKNOWN 으로 흡수한다", () => {
+    expect(toShopItem(shopDto())).toEqual({
+      itemId: 123,
+      category: "AVATAR",
+      slot: "HEAD",
+      name: "파란 모자",
+      price: 100,
+      assetKey: "hat_blue",
+      themeCode: null,
+      owned: false,
+    });
+
+    const unknown = toShopItem(shopDto({ itemCategory: "PET", slotType: "TAIL" }));
+    expect(unknown.category).toBe("UNKNOWN");
+    expect(unknown.slot).toBe("UNKNOWN");
+  });
+
+  it("상품 id 와 가격이 계약과 다르면 계약 불일치로 막는다", () => {
+    expect(() => toShopItem(shopDto({ itemId: 0 }))).toThrow(ContractMismatchError);
+    expect(() => toShopItem(shopDto({ price: -1 }))).toThrow(ContractMismatchError);
+    expect(() => toShopItem(shopDto({ price: 1.5 }))).toThrow(ContractMismatchError);
+    expect(toShopItem(shopDto({ price: 0 })).price).toBe(0);
+  });
+
+  it("탭은 슬롯 8종을 그대로 두고, 모르는 슬롯 상품이 있을 때만 기타가 붙는다", () => {
+    const known = toShopItems([shopDto(), shopDto({ itemId: 124, slotType: "FLOOR", itemCategory: "FURNITURE" })]);
+    expect(shopSlotTabs(known)).toEqual(["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR", "WALL", "FLOOR"]);
+    expect(shopSlotTabs([...known, toShopItem(shopDto({ itemId: 125, slotType: "TAIL" }))])).toContain("UNKNOWN");
+  });
+
+  it("탭의 상품만 서버 순서 그대로 고른다", () => {
+    const items = toShopItems([shopDto(), shopDto({ itemId: 124 }), shopDto({ itemId: 125, slotType: "FACE" })]);
+    expect(shopItemsInSlot(items, "HEAD").map((item) => item.itemId)).toEqual([123, 124]);
+    expect(shopItemsInSlot(items, "WALL")).toEqual([]);
+  });
+
+  it("보유했거나 코인이 모자라면 못 사고, 무료 상품은 잔액과 무관하게 산다", () => {
+    const item = toShopItem(shopDto());
+    expect(canBuyShopItem(item, 100)).toBe(true);
+    expect(canBuyShopItem(item, 99)).toBe(false);
+    expect(canBuyShopItem(item, undefined)).toBe(false);
+    expect(canBuyShopItem(toShopItem(shopDto({ owned: true })), 1000)).toBe(false);
+    expect(canBuyShopItem(toShopItem(shopDto({ price: 0 })), 0)).toBe(true);
+  });
+
+  it("가격 문구는 자릿수를 나누고 0 은 무료다", () => {
+    expect(shopPriceLabel(0)).toBe("무료");
+    expect(shopPriceLabel(1200)).toBe("1,200");
+  });
+});
+
+describe("상점 구매 (POST /shop/purchase)", () => {
+  it("아바타는 userItemId, 가구는 userFurnitureId 만 온다", () => {
+    const avatar = toShopPurchase({ itemId: 123, itemCategory: "AVATAR", userItemId: 501, userFurnitureId: null, price: 100, balance: 900 });
+    expect(avatar).toMatchObject({ category: "AVATAR", userItemId: 501, userFurnitureId: null, balance: 900 });
+
+    const furniture = toShopPurchase({ itemId: 124, itemCategory: "FURNITURE", userItemId: null, userFurnitureId: 601, price: 500, balance: 400 });
+    expect(furniture).toMatchObject({ category: "FURNITURE", userItemId: null, userFurnitureId: 601 });
+  });
+
+  it("잔액이 계약과 다르면 계약 불일치로 막는다", () => {
+    const dtoOf = (balance: number) => ({ itemId: 123, itemCategory: "AVATAR", userItemId: 501, userFurnitureId: null, price: 100, balance });
+    expect(() => toShopPurchase(dtoOf(-1))).toThrow(ContractMismatchError);
+    expect(toShopPurchase(dtoOf(0)).balance).toBe(0);
+  });
+
+  it("목은 서버처럼 한 번만 팔고, 같은 상품을 다시 사면 409 SHOP_002 다", () => {
+    resetShopMocks();
+    const item = shopItemsMock().find((candidate) => !candidate.owned && candidate.price > 0);
+    if (item === undefined) throw new Error("살 수 있는 목 상품이 없다");
+
+    const before = coinBalanceMock().balance;
+    const result = purchaseShopItemMock({ itemId: item.itemId });
+    expect(result.balance).toBe(before - item.price);
+    expect(coinBalanceMock().balance).toBe(before - item.price);
+    expect(shopItemsMock().find((candidate) => candidate.itemId === item.itemId)?.owned).toBe(true);
+
+    const codeOf = (run: () => void) => {
+      try {
+        run();
+        return null;
+      } catch (error) {
+        return error instanceof ApiError ? error.code : "NOT_API_ERROR";
+      }
+    };
+    expect(codeOf(() => purchaseShopItemMock({ itemId: item.itemId }))).toBe("SHOP_002");
+    expect(codeOf(() => purchaseShopItemMock({ itemId: 9999 }))).toBe("COMMON_001");
+    resetShopMocks();
   });
 });
