@@ -1,7 +1,6 @@
 import { Pressable } from "react-native";
 
 import { getSceneScale, type SceneRect } from "@/features/room/model";
-import { cn } from "@/lib/utils";
 
 // Pencil home/p0 WallBoard Asset (K5Ndp). 그림(체크리스트)은 Skia 씬이 스프라이트(WALL_ITEMS.board)로 그리고,
 // 이 컴포넌트는 그 위에 얹는 탭 영역뿐이다 — 벽걸이가 1×1 칸이라 글자를 얹지 않고 기간·잔여율·봉투 상태는 예산 시트(BudgetSheet)가 보여준다
@@ -15,14 +14,9 @@ type WallBoardProps = {
   /** 스크린리더가 읽는 설명 "예산 보드, 9월 1일~30일 36% 남음" */
   label: string;
   onPress: () => void;
-  /** 첫 진입 안내가 이 보드를 가리키는 중 */
-  highlighted?: boolean;
 };
 
-/** 첫 진입 안내가 가리키는 동안 두르는 테두리. 스프라이트를 가리지 않게 면은 채우지 않는다 */
-const HIGHLIGHT_CLASS = "rounded-md border-2 border-primary";
-
-function WallBoard({ width, rect, label, onPress, highlighted = false }: WallBoardProps) {
+function WallBoard({ width, rect, label, onPress }: WallBoardProps) {
   const scale = getSceneScale(width);
 
   return (
@@ -32,7 +26,7 @@ function WallBoard({ width, rect, label, onPress, highlighted = false }: WallBoa
       accessibilityHint="예산 보드를 엽니다"
       onPress={onPress}
       hitSlop={8}
-      className={cn("absolute active:opacity-80", highlighted && HIGHLIGHT_CLASS)}
+      className="absolute active:opacity-80"
       style={{ left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale }}
     />
   );

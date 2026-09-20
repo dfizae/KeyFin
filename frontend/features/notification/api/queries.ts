@@ -1,6 +1,8 @@
-import { infiniteQueryOptions, useInfiniteQuery, useMutation, useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { infiniteQueryOptions, useInfiniteQuery, useMutation, useQueryClient, type InfiniteData, type QueryKey } from "@tanstack/react-query";
 import { useEffect } from "react";
 
+import { budgetKeys } from "@/features/budget/api/queries";
+import { linkKeys } from "@/features/link/api/queries";
 import {
   getNotifications,
   markNotificationRead,
@@ -10,9 +12,11 @@ import {
 import { isRetryablePushError } from "@/features/notification/errors";
 import {
   markNotificationReadInPage,
+  toPushDataType,
   toPushDeviceRequest,
   type InboxNotification,
   type NotificationPage,
+  type PushDataType,
   type PushDeviceRequest,
 } from "@/features/notification/model";
 import {
@@ -22,8 +26,13 @@ import {
   getOrCreateInstallationId,
   reportPushSkip,
   requestPushPermissionOnce,
+  setForegroundPushHandler,
   subscribeFcmTokenRefresh,
+  subscribePushReceived,
 } from "@/features/notification/push";
+import { paymentKeys } from "@/features/payment/api/queries";
+import { shopKeys } from "@/features/shop/api/queries";
+import { transactionKeys } from "@/features/transaction/api/queries";
 import { loadPushPermissionAsked, savePushPermissionAsked } from "@/lib/session-storage";
 
 export const notificationKeys = {
@@ -128,6 +137,66 @@ export function usePushDeviceRegistration(enabled: boolean) {
       unsubscribe?.();
     };
   }, [enabled, mutate]);
+}
+
+/**
+ * 푸시 종류별로 함께 새로 받을 화면 데이터 (data 규약은 docs/api-contract.md NOTIFICATION).
+ * 알림함은 종류와 무관하게 갱신하므로 여기 넣지 않는다. 코칭·연출은 서버에서 다시 받을 데이터가 없다.
+ */
+function affectedQueryKeys(type: PushDataType): QueryKey[] {
+  switch (type) {
+    case "CLASSIFY_QUESTION":
+    case "CLEANUP":
+      return [transactionKeys.pending()];
+    case "BUDGET_ALERT":
+      return [budgetKeys.current()];
+    case "TRANSFER_REQUEST":
+      return [paymentKeys.transfers()];
+    case "PAYMENT_RISK":
+      return [paymentKeys.calendar()];
+    case "COIN_GRANTED":
+      return [shopKeys.coins()];
+    case "NEW_LINK_FOUND":
+      return [linkKeys.candidates()];
+    case "COACHING":
+    case "REACTION":
+    case "UNKNOWN":
+      return [];
+  }
+}
+
+/**
+ * 앱을 보고 있는 동안 온 푸시를 OS 배너로 띄우고 관련 화면 데이터를 새로 받는다 (FR-NTF-01, 2026-09-20 결정).
+ * handler 가 없으면 포그라운드 푸시는 아무 데도 보이지 않아 (app) 레이아웃이 로그인 동안 한 번 켠다.
+ * FCM 이라는 외부 시스템에 붙는 일이라 effect 로 둔다 (규칙 10). 웹·Expo Go 는 푸시가 오지 않아 아무것도 하지 않는다.
+ */
+export function usePushForegroundDisplay(enabled: boolean) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled || !canUsePush()) return;
+    let active = true;
+    let unsubscribe: (() => void) | null = null;
+
+    const start = async () => {
+      await setForegroundPushHandler();
+      const stop = await subscribePushReceived((data) => {
+        const keys: QueryKey[] = [notificationKeys.all, ...affectedQueryKeys(toPushDataType(data))];
+        for (const queryKey of keys) queryClient.invalidateQueries({ queryKey });
+      });
+      if (!active) {
+        stop();
+        return;
+      }
+      unsubscribe = stop;
+    };
+    start().catch((error: unknown) => reportPushSkip("포그라운드 표시", error));
+
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [enabled, queryClient]);
 }
 
 /**

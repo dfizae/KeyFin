@@ -156,13 +156,14 @@ export function isPlaceableOnWall(surface: WallSurface, cell: GridCell, footprin
 }
 
 /**
- * 벽 오브젝트 기본 자리(반 칸 단위). 둘 다 오른쪽 벽 가운데 줄에 나란히 — 보드는 코너 쪽 둘째 칸, 캘린더는 그 옆.
- * 오른쪽 끝 칸은 기본 배치의 냉장고에 아랫부분이 가려져 비워 둔다(웹 확인 2026-09-15).
+ * 벽 오브젝트 기본 자리(반 칸 단위). 둘 다 오른쪽 벽 가운데 줄에 나란히 — 캘린더가 코너 쪽, 보드가 그 옆이다.
+ * 2026-09-20: 캘린더를 끝 칸(col 4)에서 코너 쪽(col 0)으로 옮겼다. 홈이 방을 화면보다 넓게 그려(cover 맞춤)
+ * 끝 칸은 오른쪽이 화면 밖으로 잘려 나갔다(웹 확인: 79pt 중 26pt). 두 칸 왼쪽으로 오면 둘 다 온전히 보인다.
  * 오른쪽 벽 맨 윗줄은 코너 쪽 꼭짓점이 화면 위로 나가(y -63) 놓을 수 없다.
  */
 export const DEFAULT_WALL_CELLS: readonly { itemId: WallItemId; cell: GridCell }[] = [
+  { itemId: "calendar", cell: { col: 0, row: 4 } },
   { itemId: "board", cell: { col: 2, row: 4 } },
-  { itemId: "calendar", cell: { col: 4, row: 4 } },
 ];
 
 export const DEFAULT_LAYOUT: readonly Placement[] = [

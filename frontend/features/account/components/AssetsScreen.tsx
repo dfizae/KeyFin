@@ -56,16 +56,19 @@ function AssetsScreen() {
     <Screen>
       <ScreenScrollView className="flex-1" overlapHeader={false} contentContainerClassName="gap-10 pb-8" style={{ paddingTop: topInset }}>
       <View className="gap-4">
-      <View className="gap-1 px-6">
-        <Text className="text-caption text-card-foreground">내 총 자산</Text>
-        {accounts.isPending ? (
-          <Skeleton className="h-11 w-48 rounded-md" />
-        ) : (
-          <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
-            {accounts.data === undefined ? "—" : formatKRW(totalBalance(accounts.data))}
-          </Text>
-        )}
-        {asOf === null ? null : <Text className="text-caption tabular-nums text-card-foreground">{asOf}</Text>}
+      {/* 예산 탭 TotalCard 와 같은 카드로 감싼다 (사용자 요청 2026-09-20). 면 구분은 카드 규칙대로 테두리 대신 그림자(다크는 테두리) */}
+      <View className="px-6">
+        <View className="gap-1 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
+          <Text className="text-caption text-card-foreground">내 총 자산</Text>
+          {accounts.isPending ? (
+            <Skeleton className="h-11 w-48 rounded-md" />
+          ) : (
+            <Text className="text-amount-lg tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
+              {accounts.data === undefined ? "—" : formatKRW(totalBalance(accounts.data))}
+            </Text>
+          )}
+          {asOf === null ? null : <Text className="text-caption tabular-nums text-card-foreground">{asOf}</Text>}
+        </View>
       </View>
 
       <View className="flex-row gap-2 px-6" accessibilityRole="tablist">

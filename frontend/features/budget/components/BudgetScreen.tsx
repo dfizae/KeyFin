@@ -70,9 +70,12 @@ function BudgetContent({ budget }: BudgetContentProps) {
 
   return (
     <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6">
-      {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
-      {/* 회전판은 하단 탭 바로 위에 붙는다(사용자 결정 2026-09-18) — 남는 높이를 위로 몰아 아래로 내린다. */}
-      <View className="mt-auto gap-4">
+      {/* 남는 높이를 카드 위아래로 나눠 총액 카드가 위쪽 영역 가운데에 온다 — 화면이 길면 카드 밑이 휑해 보였다(사용자 결정 2026-09-20). */}
+      <View className="flex-grow justify-center">
+        {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
+      </View>
+      {/* 회전판은 하단 탭 바로 위에 붙는다(사용자 결정 2026-09-18) */}
+      <View className="gap-4">
         <SectionTitle heading="봉투별 잔액" count={envelopes.length} />
         {envelopes.length === 0 ? (
           <EmptyState icon={WalletMinimal} title="봉투가 아직 없어요" description="예산이 만들어지면 봉투 7종이 여기에 보여요." />

@@ -1,7 +1,6 @@
 import { Pressable, View } from "react-native";
 
 import { getSceneScale, type SceneRect } from "@/features/room/model";
-import { cn } from "@/lib/utils";
 
 // Pencil home/p0 Calendar Asset (lrclI). 그림(나무 레일 + 달력 종이)은 Skia 씬이 스프라이트(WALL_ITEMS.calendar)로 그리고,
 // 이 컴포넌트는 그 위에 얹는 탭 영역과 준비 부족 점(Calendar ShortageDot, Fycy2)뿐이다 — 벽걸이가 1×1 칸이라 글자를 얹지 않고
@@ -27,14 +26,9 @@ type CalendarAssetProps = {
   /** 이번 달 출금 예정이 없으면 null */
   upcoming: UpcomingPayment | null;
   onPress: () => void;
-  /** 첫 진입 안내가 이 캘린더를 가리키는 중 */
-  highlighted?: boolean;
 };
 
-/** 첫 진입 안내가 가리키는 동안 두르는 테두리. 스프라이트를 가리지 않게 면은 채우지 않는다 */
-const HIGHLIGHT_CLASS = "rounded-md border-2 border-primary";
-
-function CalendarAsset({ width, rect, monthLabel, upcoming, onPress, highlighted = false }: CalendarAssetProps) {
+function CalendarAsset({ width, rect, monthLabel, upcoming, onPress }: CalendarAssetProps) {
   const scale = getSceneScale(width);
   const status = upcoming
     ? `${upcoming.day}일 ${upcoming.name}${upcoming.hasShortage ? ", 준비 부족" : ""}`
@@ -49,7 +43,7 @@ function CalendarAsset({ width, rect, monthLabel, upcoming, onPress, highlighted
         accessibilityHint="이번 달 출금 일정을 엽니다"
         onPress={onPress}
         hitSlop={8}
-        className={cn("absolute active:opacity-80", highlighted && HIGHLIGHT_CLASS)}
+        className="absolute active:opacity-80"
         style={{ left: rect.x * scale, top: rect.y * scale, width: rect.width * scale, height: rect.height * scale }}
       />
       {upcoming?.hasShortage ? (

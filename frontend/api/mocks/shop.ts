@@ -1,4 +1,5 @@
-import type { CoinBalanceDto, CoinHistoryDto, CoinHistoryItemDto } from "@/features/shop/model";
+import { ApiError } from "@/api/error";
+import type { CoinBalanceDto, CoinHistoryDto, CoinHistoryItemDto, ShopItemDto, ShopPurchaseDto, ShopPurchaseRequest } from "@/features/shop/model";
 import { currentDateKey, parseKSTDateKey, toKSTDateKey } from "@/lib/date";
 
 /**
@@ -63,5 +64,57 @@ export function coinHistoryMock(page: { cursor: number | null; size: number }, t
 }
 
 export function coinBalanceMock(): CoinBalanceDto {
-  return { balance: BALANCE };
+  return { balance: BALANCE - spent };
+}
+
+/**
+ * GET /shop · POST /shop/purchase 목 (배포 서버 Swagger 2026-09-20).
+ * 가구는 방 카탈로그에 있는 assetKey 를 써서 화면에 그림이 나오고, 아바타는 에셋이 아직 없어 이름만 보인다.
+ * 구매는 서버처럼 한 번만 되고(두 번째는 409 SHOP_002), 코인이 모자라면 409 SHOP_003 이다.
+ */
+const SHOP_ITEMS: readonly ShopItemDto[] = [
+  { itemId: 1, itemCategory: "AVATAR", slotType: "HEAD", name: "노란 비니", price: 150, assetKey: "beanie_yellow", themeCode: null, owned: false },
+  { itemId: 2, itemCategory: "AVATAR", slotType: "HEAD", name: "가을 털모자", price: 300, assetKey: "hat_autumn", themeCode: "AUTUMN", owned: false },
+  { itemId: 3, itemCategory: "AVATAR", slotType: "FACE", name: "동그란 안경", price: 120, assetKey: "glasses_round", themeCode: null, owned: true },
+  { itemId: 4, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "기본 티셔츠", price: 0, assetKey: "tee_basic", themeCode: null, owned: false },
+  { itemId: 5, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "니트 가디건", price: 400, assetKey: "cardigan_knit", themeCode: "AUTUMN", owned: false },
+  { itemId: 6, itemCategory: "AVATAR", slotType: "LOWER_BODY", name: "청바지", price: 250, assetKey: "jeans_blue", themeCode: null, owned: false },
+  { itemId: 7, itemCategory: "AVATAR", slotType: "SOCKS", name: "줄무늬 양말", price: 80, assetKey: "socks_stripe", themeCode: null, owned: false },
+  { itemId: 8, itemCategory: "AVATAR", slotType: "FOOTWEAR", name: "운동화", price: 2000, assetKey: "sneakers_white", themeCode: null, owned: false },
+  { itemId: 9, itemCategory: "FURNITURE", slotType: "FLOOR", name: "책상", price: 500, assetKey: "desk_default", themeCode: null, owned: false },
+  { itemId: 10, itemCategory: "FURNITURE", slotType: "FLOOR", name: "화분", price: 200, assetKey: "plant_default", themeCode: null, owned: true },
+  { itemId: 11, itemCategory: "FURNITURE", slotType: "FLOOR", name: "냉장고", price: 900, assetKey: "fridge_default", themeCode: null, owned: false },
+  { itemId: 12, itemCategory: "FURNITURE", slotType: "WALL", name: "벽 캘린더", price: 300, assetKey: "calendar_default", themeCode: null, owned: true },
+];
+
+/** 이번 실행에서 산 상품과 그만큼 빠진 코인. 잔액 목이 함께 줄어든다 */
+const purchased = new Set<number>();
+let spent = 0;
+
+export function shopItemsMock(): ShopItemDto[] {
+  return SHOP_ITEMS.map((item) => ({ ...item, owned: item.owned || purchased.has(item.itemId) }));
+}
+
+export function purchaseShopItemMock(request: ShopPurchaseRequest): ShopPurchaseDto {
+  const item = shopItemsMock().find((candidate) => candidate.itemId === request.itemId);
+  if (item === undefined) throw new ApiError(400, "COMMON_001", "상품을 찾을 수 없습니다.");
+  if (item.owned) throw new ApiError(409, "SHOP_002", "이미 보유한 상품입니다.");
+  if (BALANCE - spent < item.price) throw new ApiError(409, "SHOP_003", "코인이 부족합니다.");
+
+  purchased.add(item.itemId);
+  spent += item.price;
+  const isAvatar = item.itemCategory === "AVATAR";
+  return {
+    itemId: item.itemId,
+    itemCategory: item.itemCategory,
+    userItemId: isAvatar ? 500 + item.itemId : null,
+    userFurnitureId: isAvatar ? null : 600 + item.itemId,
+    price: item.price,
+    balance: BALANCE - spent,
+  };
+}
+
+export function resetShopMocks(): void {
+  purchased.clear();
+  spent = 0;
 }

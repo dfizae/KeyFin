@@ -16,8 +16,11 @@ import {
   notificationDateLabel,
   notificationHref,
   notificationTimeLabel,
+  pushNotificationHref,
+  shouldShowPushBanner,
   toInboxNotification,
   toNotificationPage,
+  toPushDataType,
   toPushDeviceRequest,
   type NotificationItemDto,
 } from "@/features/notification/model";
@@ -213,3 +216,46 @@ describe("푸시 기기 등록 (PUT·DELETE /me/push-devices/{installationId})",
   });
 });
 
+describe("포그라운드 푸시 표시 (FCM data 규약)", () => {
+  it("data.type 9종을 그대로 읽고, 모르는 값·없는 값·잘못된 모양은 UNKNOWN 이다", () => {
+    expect(toPushDataType({ type: "TRANSFER_REQUEST", transferId: "501" })).toBe("TRANSFER_REQUEST");
+    expect(toPushDataType({ type: "PAYMENT_RISK", fixedExpenseId: "7" })).toBe("PAYMENT_RISK");
+    expect(toPushDataType({ type: "WARNING" })).toBe("UNKNOWN");
+    expect(toPushDataType({ type: 3 })).toBe("UNKNOWN");
+    expect(toPushDataType({})).toBe("UNKNOWN");
+    expect(toPushDataType(undefined)).toBe("UNKNOWN");
+    expect(toPushDataType(null)).toBe("UNKNOWN");
+    expect(toPushDataType("TRANSFER_REQUEST")).toBe("UNKNOWN");
+  });
+
+  it("방 연출·코인 지급만 배너 없이 지나가고 나머지는 모르는 종류까지 띄운다", () => {
+    expect(shouldShowPushBanner("REACTION")).toBe(false);
+    expect(shouldShowPushBanner("COIN_GRANTED")).toBe(false);
+    expect(shouldShowPushBanner("TRANSFER_REQUEST")).toBe(true);
+    expect(shouldShowPushBanner("CLASSIFY_QUESTION")).toBe(true);
+    expect(shouldShowPushBanner("UNKNOWN")).toBe(true);
+  });
+});
+
+describe("푸시 탭 딥링크 (frontend-spec §3 · 푸시 전용 4종은 2026-09-20 결정)", () => {
+  it("id 가 있는 종류는 상세로, 없거나 모양이 아니면 목록으로 보낸다", () => {
+    expect(pushNotificationHref({ type: "TRANSFER_REQUEST", transferId: "501" })).toBe("/payment/transfer/501");
+    expect(pushNotificationHref({ type: "TRANSFER_REQUEST" })).toBe("/payment/calendar");
+    expect(pushNotificationHref({ type: "TRANSFER_REQUEST", transferId: "0" })).toBe("/payment/calendar");
+    expect(pushNotificationHref({ type: "BUDGET_ALERT", envelopeId: "3", threshold: "30" })).toBe("/budget/3");
+    expect(pushNotificationHref({ type: "BUDGET_ALERT", envelopeId: "../my/settings" })).toBe("/budget");
+    expect(pushNotificationHref({ type: "CLASSIFY_QUESTION", transactionId: "77" })).toBe("/transaction/77");
+    expect(pushNotificationHref({ type: "CLASSIFY_QUESTION" })).toBe("/transaction/pending");
+  });
+
+  it("id 를 쓰지 않는 종류는 정해진 화면으로 가고, 모르는 종류는 갈 곳이 없다", () => {
+    expect(pushNotificationHref({ type: "CLEANUP", pendingCount: "4" })).toBe("/transaction/pending");
+    expect(pushNotificationHref({ type: "PAYMENT_RISK", fixedExpenseId: "7" })).toBe("/payment/calendar");
+    expect(pushNotificationHref({ type: "NEW_LINK_FOUND", kind: "CARD" })).toBe("/my/links");
+    expect(pushNotificationHref({ type: "COIN_GRANTED", reasonCode: "ATTEND" })).toBe("/coin");
+    expect(pushNotificationHref({ type: "COACHING", coachingLogId: "9" })).toBe("/");
+    expect(pushNotificationHref({ type: "REACTION", reactionType: "HAPPY" })).toBe("/");
+    expect(pushNotificationHref({ type: "WARNING" })).toBeNull();
+    expect(pushNotificationHref(null)).toBeNull();
+  });
+});

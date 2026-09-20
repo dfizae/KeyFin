@@ -166,8 +166,8 @@ describe("가구 목 — 서버처럼 상태를 지킨다", () => {
 
   it("보유 목록은 기본 배치를 그대로 주고 slotType 으로 거른다", () => {
     expect(furnitureListMock()).toHaveLength(6);
-    expect(furnitureListMock("WALL").map((item) => item.assetKey)).toEqual(["board_default", "calendar_default"]);
-    expect(toUserFurnitures(furnitureListMock("WALL"))[0]).toMatchObject({ itemId: "board", placed: true });
+    expect(furnitureListMock("WALL").map((item) => item.assetKey)).toEqual(["calendar_default", "board_default"]);
+    expect(toUserFurnitures(furnitureListMock("WALL"))[0]).toMatchObject({ itemId: "calendar", placed: true });
   });
 
   it("배치를 바꾸면 방 응답에도 반영되고, 해제하면 목록에서 빠진다", () => {
