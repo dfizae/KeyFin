@@ -36,3 +36,17 @@ export function isAlreadyConfirmedError(error: unknown): boolean {
 export function isBudgetExistsError(error: unknown): boolean {
   return isApiError(error) && error.code === "BUDGET_001";
 }
+
+const EMERGENCY_UNKNOWN_MESSAGE = "비상금을 저장하지 못했어요. 잠시 뒤 다시 시도해 주세요.";
+
+/** 비상금 설정(PUT /budgets/{budgetId}/emergency) 실패 문구 (배포 서버 Swagger 2026-09-20) */
+const EMERGENCY_MESSAGES: Record<string, string> = {
+  BUDGET_002: "예산을 찾을 수 없어요. 화면을 새로 불러온 뒤 다시 시도해 주세요.",
+  BUDGET_005: "비상금은 1,000원 단위로 정해 주세요.",
+  COMMON_001: "입력한 금액을 다시 확인해 주세요.",
+};
+
+export function emergencyFundErrorMessage(error: unknown): string {
+  if (!isApiError(error)) return EMERGENCY_UNKNOWN_MESSAGE;
+  return EMERGENCY_MESSAGES[error.code] ?? (error.message !== "" ? error.message : EMERGENCY_UNKNOWN_MESSAGE);
+}

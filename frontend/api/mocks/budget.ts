@@ -1,7 +1,10 @@
 import { ApiError } from "@/api/error";
 import type {
   BudgetDto,
+  BudgetEmergencyDto,
   BudgetEnvelopeDto,
+  EmergencyFundRequest,
+  EmergencyFundResponseDto,
   BudgetProposalDto,
   ConfirmBudgetRequest,
   ConfirmBudgetResponseDto,
@@ -44,8 +47,16 @@ function rateOf(remaining: number, confirmed: number): number | null {
   return confirmed === 0 ? null : Math.floor((remaining * 100) / confirmed);
 }
 
-/** 비상금은 아직 설정 화면(P1)이 없어 미설정으로 둔다 — amount 0 이면 서버도 미설정으로 본다 */
-const EMERGENCY_UNSET = { amount: 0, spent: 0, remaining: 0 };
+/**
+ * 비상금 가상 풀. 처음은 미설정(0)이고 설정 화면에서 바꾸면 그 값이 남는다.
+ * 사용액은 목에 EMERGENCY 태그 거래가 없어 0 이며, 잔액은 서버처럼 설정액 − 사용액이다.
+ */
+const EMERGENCY_SPENT = 0;
+let emergencyAmount = 0;
+
+function emergencyState(): BudgetEmergencyDto {
+  return { amount: emergencyAmount, spent: EMERGENCY_SPENT, remaining: emergencyAmount - EMERGENCY_SPENT };
+}
 
 /** 확정 예산 응답 예시(노션 예산·잔액 조회 CONFIRMED). amounts 가 없으면 제안액을 그대로 확정한 것으로 본다 */
 export function budgetConfirmedMock(todayKey: string, amounts?: Record<number, number>): BudgetDto {
@@ -62,7 +73,7 @@ export function budgetConfirmedMock(todayKey: string, amounts?: Record<number, n
     status: "CONFIRMED",
     total: { confirmed, spent, remaining: confirmed - spent, remainingRate: rateOf(confirmed - spent, confirmed) },
     envelopes,
-    emergency: EMERGENCY_UNSET,
+    emergency: emergencyState(),
   };
 }
 
@@ -82,7 +93,7 @@ export function budgetProposedMock(todayKey: string): BudgetDto {
       remaining: null,
       remainingRate: null,
     })),
-    emergency: EMERGENCY_UNSET,
+    emergency: emergencyState(),
   };
 }
 
@@ -132,6 +143,20 @@ export function seedConfirmedBudgetMock(): void {
 }
 
 /** 테스트·개발 재시작용 */
+/**
+ * PUT /budgets/{budgetId}/emergency 목. 서버처럼 0 이상 1,000원 단위만 받고 다른 예산 id 는 404 다.
+ * 0 을 보내면 해제(미설정)이며, 바뀐 값은 GET /budgets/current 의 emergency 로도 그대로 나온다.
+ */
+export function updateEmergencyFundMock(budgetId: number, request: EmergencyFundRequest): EmergencyFundResponseDto {
+  if (budgetId !== MOCK_BUDGET_ID) throw new ApiError(404, "BUDGET_002", "예산을 찾을 수 없습니다.");
+  if (!Number.isSafeInteger(request.amount) || request.amount < 0) throw new ApiError(400, "COMMON_001", "금액이 올바르지 않습니다.");
+  if (request.amount % 1000 !== 0) throw new ApiError(400, "BUDGET_005", "1,000원 단위로 입력해 주세요.");
+
+  emergencyAmount = request.amount;
+  return { budgetId, emergency: emergencyState() };
+}
+
 export function resetBudgetMocks(): void {
+  emergencyAmount = 0;
   currentBudget = null;
 }

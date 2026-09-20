@@ -364,3 +364,52 @@ export function toConfirmRequest(entries: { envelopeId: number; amount: KRW }[])
 export function sumAmounts(amounts: KRW[]): KRW {
   return amounts.length === 0 ? "0" : addKRW(...amounts);
 }
+
+/* ───────────── 비상금: PUT /budgets/{budgetId}/emergency (배포 서버 Swagger 2026-09-20 대조, FR-BGT-09) ───────────── */
+
+/**
+ * 비상금은 실제 계좌가 아니라 가상 풀이다. 사용액은 주기 안 EMERGENCY 태그 거래의 합이고 잔액은 설정액 − 사용액이라 음수가 될 수 있다.
+ * 금액은 0 이상 1,000원 단위이며 0 이면 해제(미설정과 같다). 예산 확정 여부와 무관하게 주기 중 언제든 바꿀 수 있고
+ * 이체·예산 제안·봉투 잔액에는 영향을 주지 않는다. 같은 값이 GET /budgets/current 의 emergency 로도 온다.
+ */
+export const EMERGENCY_AMOUNT_UNIT = 1000n;
+
+export type EmergencyFundRequest = { amount: number };
+
+export type EmergencyFundResponseDto = { budgetId: number; emergency: BudgetEmergencyDto };
+
+export type EmergencyFund = { budgetId: number; emergency: BudgetEmergency };
+
+export function toEmergencyFund(dto: EmergencyFundResponseDto): EmergencyFund {
+  if (!Number.isSafeInteger(dto.budgetId) || dto.budgetId <= 0) throw new ContractMismatchError("budgetId");
+  return { budgetId: dto.budgetId, emergency: toEmergency(dto.emergency) };
+}
+
+/** 입력 칸은 빈 값을 미설정(0)으로 본다 */
+function emergencyWon(digits: string): bigint {
+  return digits === "" ? 0n : toWon(digits);
+}
+
+/** 저장할 수 없는 이유. 없으면 null. 서버도 같은 기준으로 막는다(400 COMMON_001 · BUDGET_005) */
+export function emergencyAmountError(digits: string): string | null {
+  const amount = emergencyWon(digits);
+  if (amount < 0n) return "0원 이상으로 정해 주세요.";
+  if (amount % EMERGENCY_AMOUNT_UNIT !== 0n) return "1,000원 단위로 정해 주세요.";
+  return null;
+}
+
+export function toEmergencyFundRequest(digits: string): EmergencyFundRequest {
+  const error = emergencyAmountError(digits);
+  if (error !== null) throw new Error(error);
+  return { amount: Number(emergencyWon(digits)) };
+}
+
+/** 지금 설정액과 같으면 저장 버튼을 켜지 않는다. 미설정("0")은 빈 칸과 같은 값으로 본다 */
+export function isEmergencyDirty(digits: string, emergency: BudgetEmergency): boolean {
+  return emergencyWon(digits) !== toWon(emergency.amount);
+}
+
+/** 설정 칸의 처음 값. 미설정이면 빈 칸으로 둔다 */
+export function toEmergencyInput(emergency: BudgetEmergency): string {
+  return toWon(emergency.amount) === 0n ? "" : emergency.amount;
+}

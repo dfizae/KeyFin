@@ -1,15 +1,19 @@
 import { api, isMocked } from "@/api/client";
-import { confirmBudgetMock, createProposalMock, currentBudgetMock } from "@/api/mocks/budget";
+import { confirmBudgetMock, createProposalMock, currentBudgetMock, updateEmergencyFundMock } from "@/api/mocks/budget";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
   toBudget,
   toBudgetProposal,
   toConfirmRequest,
+  toEmergencyFund,
   type Budget,
   type BudgetDto,
   type BudgetProposal,
   type BudgetProposalDto,
   type ConfirmBudgetResponseDto,
+  type EmergencyFund,
+  type EmergencyFundRequest,
+  type EmergencyFundResponseDto,
 } from "@/features/budget/model";
 import type { KRW } from "@/lib/money";
 
@@ -45,4 +49,14 @@ export async function confirmBudget(budgetId: number, entries: { envelopeId: num
     return;
   }
   await api.put<ConfirmBudgetResponseDto>(`/budgets/${budgetId}/confirm`, request);
+}
+
+/**
+ * PUT /budgets/{budgetId}/emergency — 비상금(가상 풀) 월 금액 (FR-BGT-09, P1). 0 이상 1,000원 단위이고 0 이면 해제다.
+ * 예산 확정 여부와 무관하게 주기 중 언제든 바꿀 수 있다. 오류: 400 COMMON_001·BUDGET_005 · 404 BUDGET_002.
+ */
+export async function updateEmergencyFund(budgetId: number, request: EmergencyFundRequest): Promise<EmergencyFund> {
+  if (isMocked("budget")) return toEmergencyFund(await withMockLatency(updateEmergencyFundMock(budgetId, request)));
+  const { data } = await api.put<EmergencyFundResponseDto>(`/budgets/${budgetId}/emergency`, request);
+  return toEmergencyFund(data);
 }
