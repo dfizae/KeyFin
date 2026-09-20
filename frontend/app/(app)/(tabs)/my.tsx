@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/icon";
 import { useHeaderlessTop } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { LogoutButton } from "@/features/auth/components/LogoutButton";
+import { WithdrawAccountButton } from "@/features/auth/components/WithdrawAccountButton";
 import { selectUserName, useAuthStore } from "@/features/auth/store";
 
 const MENU = [
@@ -41,8 +42,9 @@ export default function MyRoute() {
       </View>
 
       <EmptyState icon={User} title="준비 중인 화면이에요" description="프로필은 아직 준비 중이에요." />
-      <View className="pb-6">
+      <View className="gap-1 pb-6">
         <LogoutButton />
+        <WithdrawAccountButton />
       </View>
       </View>
     </View>

@@ -101,3 +101,14 @@ export function parseReturnTo(value: string | string[] | undefined): string {
   }
   return isInternalPath(decoded) ? decoded : HOME_ROUTE;
 }
+
+/**
+ * DELETE /users/me 요청 (배포 서버 Swagger 2026-09-20 대조). 현재 비밀번호를 확인한 뒤 계정을 소프트 삭제하고
+ * 서버의 Refresh Token 을 지운다. 탈퇴한 이메일로는 다시 가입할 수 없다. 성공 응답은 본문이 없다(204).
+ */
+export type AccountDeletionRequest = { password: string };
+
+/** 비밀번호를 넣어야 보낼 수 있다. 서버도 빈 값이면 400 COMMON_001 이다 */
+export function canSubmitAccountDeletion(password: string): boolean {
+  return password.length > 0;
+}

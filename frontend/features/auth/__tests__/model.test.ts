@@ -1,8 +1,9 @@
 import { ApiError } from "@/api/error";
-import { loginMock, MOCK_PASSWORD, MOCK_TAKEN_EMAIL, resetAuthMocks, signupMock } from "@/api/mocks/auth";
-import { authErrorMessage } from "@/features/auth/errors";
+import { deleteAccountMock, loginMock, MOCK_PASSWORD, MOCK_TAKEN_EMAIL, resetAuthMocks, signupMock } from "@/api/mocks/auth";
+import { accountDeletionErrorMessage, authErrorMessage } from "@/features/auth/errors";
 import {
   canAgreeToTerms,
+  canSubmitAccountDeletion,
   canSubmitLogin,
   canSubmitSignup,
   isValidEmail,
@@ -142,5 +143,35 @@ describe("loginHref · parseReturnTo (로그인 후 복귀)", () => {
     expect(parseReturnTo("https://evil.example.com")).toBe("/");
     expect(parseReturnTo("%E0%A4%A")).toBe("/");
     expect(parseReturnTo(undefined)).toBe("/");
+  });
+});
+
+describe("회원 탈퇴 (DELETE /users/me)", () => {
+  it("비밀번호를 넣어야 보낼 수 있다", () => {
+    expect(canSubmitAccountDeletion("")).toBe(false);
+    expect(canSubmitAccountDeletion(MOCK_PASSWORD)).toBe(true);
+  });
+
+  it("목은 현재 비밀번호를 확인하고 틀리면 401 USER_007 이다", () => {
+    resetAuthMocks();
+    expect(() => deleteAccountMock({ password: MOCK_PASSWORD })).not.toThrow();
+
+    const codeOf = (run: () => void) => {
+      try {
+        run();
+        return null;
+      } catch (error) {
+        return error instanceof ApiError ? error.code : "NOT_API_ERROR";
+      }
+    };
+    expect(codeOf(() => deleteAccountMock({ password: "wrong-password" }))).toBe("USER_007");
+    expect(codeOf(() => deleteAccountMock({ password: "" }))).toBe("COMMON_001");
+    resetAuthMocks();
+  });
+
+  it("실패 문구는 비밀번호 불일치와 그 밖을 구분한다", () => {
+    expect(accountDeletionErrorMessage(new ApiError(401, "USER_007", ""))).toContain("비밀번호");
+    expect(accountDeletionErrorMessage(new ApiError(500, "UNKNOWN_CODE", "서버 문구"))).toBe("서버 문구");
+    expect(accountDeletionErrorMessage(new Error("x"))).toContain("탈퇴하지 못했어요");
   });
 });
