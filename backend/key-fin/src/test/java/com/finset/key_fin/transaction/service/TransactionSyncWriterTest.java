@@ -6,6 +6,7 @@ import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.ConfirmStatus;
 import com.finset.key_fin.transaction.entity.TransactionStatus;
 import com.finset.key_fin.transaction.entity.TransactionType;
+import com.finset.key_fin.transaction.event.AccountWithdrawn;
 import com.finset.key_fin.transaction.event.PendingTransactionSaved;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
@@ -24,6 +25,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionSyncWriterTest {
@@ -101,5 +103,42 @@ class TransactionSyncWriterTest {
 		syncWriter.save(List.of(), List.of(transaction), Map.of());
 
 		verify(events, never()).publishEvent(any());
+	}
+
+	@Test
+	void 계좌_출금_거래는_계좌마다_한_번씩_AccountWithdrawn을_발행한다() {
+		User user = mock(User.class);
+		given(user.getId()).willReturn(1L);
+		Transaction first = accountTransaction(20L, TransactionType.WITHDRAW);
+		Transaction second = accountTransaction(20L, TransactionType.TRANSFER);
+		Transaction third = accountTransaction(21L, TransactionType.WITHDRAW);
+		given(first.getUser()).willReturn(user);
+		given(third.getUser()).willReturn(user);
+
+		syncWriter.save(List.of(), List.of(first, second, third), Map.of());
+
+		verify(events, times(1)).publishEvent(new AccountWithdrawn(1L, 20L));
+		verify(events, times(1)).publishEvent(new AccountWithdrawn(1L, 21L));
+	}
+
+	@Test
+	void 카드_결제와_입금에는_AccountWithdrawn을_발행하지_않는다() {
+		Transaction card = mock(Transaction.class);
+		Transaction deposit = mock(Transaction.class);
+		given(deposit.getAccountId()).willReturn(20L);
+		given(deposit.getStatus()).willReturn(TransactionStatus.NORMAL);
+		given(deposit.getTransactionType()).willReturn(TransactionType.DEPOSIT);
+
+		syncWriter.save(List.of(), List.of(card, deposit), Map.of());
+
+		verify(events, never()).publishEvent(any(AccountWithdrawn.class));
+	}
+
+	private Transaction accountTransaction(long accountId, TransactionType type) {
+		Transaction transaction = mock(Transaction.class);
+		given(transaction.getAccountId()).willReturn(accountId);
+		given(transaction.getStatus()).willReturn(TransactionStatus.NORMAL);
+		given(transaction.getTransactionType()).willReturn(type);
+		return transaction;
 	}
 }
