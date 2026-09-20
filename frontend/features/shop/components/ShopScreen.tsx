@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Coins, Store, WifiOff } from "lucide-react-native";
 import * as React from "react";
-import { Image, Pressable, ScrollView, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,28 +13,49 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { roomKeys } from "@/features/room/api/queries";
+import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
 import { useCoinBalance, usePurchaseShopItem, useShopItems } from "@/features/shop/api/queries";
 import { shopCategoryIcon, shopItemSprite, shopSlotLabel } from "@/features/shop/catalog";
 import { shopPurchaseErrorMessage } from "@/features/shop/errors";
 import {
   canBuyShopItem,
   coinCountLabel,
-  shopItemsInSlot,
+  hasUnknownSlotItem,
+  SHOP_AVATAR_SLOTS,
+  SHOP_DEFAULT_FILTER,
+  SHOP_FURNITURE_SLOTS,
+  shopCategoryFilterKey,
+  shopItemsForFilter,
   shopPriceLabel,
-  shopSlotTabs,
+  shopSlotFilterKey,
+  type ShopFilterKey,
   type ShopItem,
-  type ShopSlot,
 } from "@/features/shop/model";
 import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
-const FIRST_SLOT: ShopSlot = "HEAD";
 /** 그림은 4px 스케일 밖 크기라 style 로 준다 (BankLogoTile 과 같은 방식) */
 const SPRITE_STYLE = { width: 72, height: 72 } as const;
+const FILTER_TITLE = "종류";
+
+/**
+ * 선택창 목록 — 옷과 가구를 구역으로 나누고 각 구역 맨 위에 '전체'를 둔다 (사용자 결정 2026-09-20).
+ * 모르는 부위 상품이 오면 '기타'를 덧붙여 그 상품도 볼 수 있게 한다.
+ */
+function filterOptions(items: readonly ShopItem[]): SelectOption[] {
+  const options: SelectOption[] = [
+    { key: shopCategoryFilterKey("AVATAR"), label: "옷 전체", section: "옷" },
+    ...SHOP_AVATAR_SLOTS.map((slot) => ({ key: shopSlotFilterKey(slot), label: shopSlotLabel(slot), section: "옷" })),
+    { key: shopCategoryFilterKey("FURNITURE"), label: "가구 전체", section: "가구" },
+    ...SHOP_FURNITURE_SLOTS.map((slot) => ({ key: shopSlotFilterKey(slot), label: shopSlotLabel(slot), section: "가구" })),
+  ];
+  if (hasUnknownSlotItem(items)) options.push({ key: shopSlotFilterKey("UNKNOWN"), label: shopSlotLabel("UNKNOWN"), section: "기타" });
+  return options;
+}
 
 /**
  * PAGE-29 상점 (FR-GAM-05, P1). 홈 상점 버튼에서 들어온다.
- * `GET /shop` 은 판매 중인 상품을 한 번에 주므로(페이지 없음) 한 번 받아 슬롯 탭으로 나눠 보여 준다 — 탭을 옮겨도 다시 부르지 않는다.
+ * `GET /shop` 은 판매 중인 상품을 한 번에 주므로(페이지 없음) 한 번 받아 선택창으로 걸러 보여 준다 — 값을 바꿔도 다시 부르지 않는다.
  * 구매는 코인이 빠지는 일이라 확인 창을 거치고, 요청 중에는 창을 닫지도 다시 누르지도 못한다 (규칙 80).
  * 보유한 상품은 누를 수 없고(서버도 409 SHOP_002 로 막는다), 코인이 모자라면 가격 옆에 이유를 적는다.
  * Pencil 시안 없음 — design/DESIGN.md 의 카드·칩 규칙을 따랐다.
@@ -45,11 +66,11 @@ function ShopScreen() {
   const items = useShopItems();
   const balance = useCoinBalance();
   const purchase = usePurchaseShopItem();
-  const [slot, setSlot] = React.useState<ShopSlot>(FIRST_SLOT);
+  const [filterKey, setFilterKey] = React.useState<ShopFilterKey>(SHOP_DEFAULT_FILTER);
   const [target, setTarget] = React.useState<ShopItem | null>(null);
 
   const all = items.data ?? [];
-  const shown = shopItemsInSlot(all, slot);
+  const shown = shopItemsForFilter(all, filterKey);
 
   const openPurchase = (item: ShopItem) => {
     purchase.reset();
@@ -84,7 +105,14 @@ function ShopScreen() {
         right={<CoinBadge balance={balance.data} pending={balance.isPending} />}
       />
 
-      <SlotTabs tabs={shopSlotTabs(all)} value={slot} onChange={setSlot} />
+      <View className="flex-row px-6 pb-4">
+        <FilterSelect
+          title={FILTER_TITLE}
+          options={filterOptions(all)}
+          selectedKey={filterKey}
+          onSelect={(key) => setFilterKey(key as ShopFilterKey)}
+        />
+      </View>
 
       {items.isPending ? (
         <ShopSkeleton />
@@ -107,7 +135,7 @@ function ShopScreen() {
           refreshing={items.isRefetching}
           onRefresh={() => items.refetch()}
           ListEmptyComponent={
-            <EmptyState icon={Store} title="이 자리에 파는 상품이 없어요" description="다른 탭을 골라 보세요." />
+            <EmptyState icon={Store} title="이 종류에 파는 상품이 없어요" description="다른 종류를 골라 보세요." />
           }
         />
       )}
@@ -140,34 +168,6 @@ function CoinBadge({ balance, pending }: { balance: number | undefined; pending:
       </View>
       {pending ? <Skeleton className="h-4 w-10 rounded-sm" /> : <Text className="text-label tabular-nums text-foreground">{count ?? "—"}</Text>}
     </View>
-  );
-}
-
-type SlotTabsProps = {
-  tabs: readonly ShopSlot[];
-  value: ShopSlot;
-  onChange: (slot: ShopSlot) => void;
-};
-
-function SlotTabs({ tabs, value, onChange }: SlotTabsProps) {
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerClassName="gap-2 px-6 pb-4">
-      {tabs.map((tab) => {
-        const selected = tab === value;
-        return (
-          <Pressable
-            key={tab}
-            accessibilityRole="tab"
-            accessibilityState={{ selected }}
-            hitSlop={4}
-            onPress={() => onChange(tab)}
-            className={cn("h-touch justify-center rounded-full px-4 active:opacity-80", selected ? "bg-primary" : "bg-muted")}
-          >
-            <Text className={cn("text-label", selected ? "text-primary-foreground" : "text-card-foreground")}>{shopSlotLabel(tab)}</Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
   );
 }
 

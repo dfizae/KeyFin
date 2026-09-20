@@ -108,8 +108,12 @@ export function groupCoinHistoryByDate(items: CoinHistoryItem[]): CoinDateGroup[
 export const SHOP_CATEGORIES = ["AVATAR", "FURNITURE"] as const;
 export type ShopCategory = (typeof SHOP_CATEGORIES)[number] | "UNKNOWN";
 
-/** 캐릭터 6부위 + 방 2자리. 상점 탭 순서이기도 하다 */
-export const SHOP_SLOTS = ["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR", "WALL", "FLOOR"] as const;
+/** 옷(아바타)이 걸리는 6부위 */
+export const SHOP_AVATAR_SLOTS = ["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR"] as const;
+/** 가구가 놓이는 2자리 */
+export const SHOP_FURNITURE_SLOTS = ["WALL", "FLOOR"] as const;
+/** 서버 enum 순서 그대로. 선택창도 이 순서로 옷 → 가구를 보여 준다 */
+export const SHOP_SLOTS = [...SHOP_AVATAR_SLOTS, ...SHOP_FURNITURE_SLOTS] as const;
 export type ShopSlot = (typeof SHOP_SLOTS)[number] | "UNKNOWN";
 
 export type ShopItemDto = {
@@ -204,16 +208,32 @@ export function toShopPurchase(dto: ShopPurchaseDto): ShopPurchase {
   };
 }
 
-/** 상점 탭. 비어 있는 슬롯도 자리를 지켜 탭이 들쭉날쭉하지 않게 두고, 모르는 슬롯 상품이 있을 때만 '기타'를 붙인다 */
-export function shopSlotTabs(items: readonly ShopItem[]): ShopSlot[] {
-  const tabs: ShopSlot[] = [...SHOP_SLOTS];
-  if (items.some((item) => item.slot === "UNKNOWN")) tabs.push("UNKNOWN");
-  return tabs;
+/**
+ * 선택창 값 (사용자 결정 2026-09-20: 부위 칩 8개 대신 옷·가구로 묶은 선택창).
+ * `category:` 는 그 종류 전체이고 `slot:` 은 부위 하나다 — 두 유니온 모두 UNKNOWN 을 가져서 접두사로 구분한다.
+ */
+export type ShopFilterKey = `category:${ShopCategory}` | `slot:${ShopSlot}`;
+
+export function shopCategoryFilterKey(category: ShopCategory): ShopFilterKey {
+  return `category:${category}`;
 }
 
-/** 고른 탭의 상품만. 서버가 id 오름차순으로 주므로 순서를 바꾸지 않는다 */
-export function shopItemsInSlot(items: readonly ShopItem[], slot: ShopSlot): ShopItem[] {
-  return items.filter((item) => item.slot === slot);
+export function shopSlotFilterKey(slot: ShopSlot): ShopFilterKey {
+  return `slot:${slot}`;
+}
+
+/** 처음 보여 줄 값은 옷 전체다 */
+export const SHOP_DEFAULT_FILTER: ShopFilterKey = shopCategoryFilterKey("AVATAR");
+
+/** 고른 값에 해당하는 상품만. 서버가 id 오름차순으로 주므로 순서를 바꾸지 않는다 */
+export function shopItemsForFilter(items: readonly ShopItem[], filterKey: ShopFilterKey): ShopItem[] {
+  const [kind, value] = filterKey.split(":");
+  return items.filter((item) => (kind === "category" ? item.category === value : item.slot === value));
+}
+
+/** 모르는 부위 상품이 있는지. 있으면 선택창에 '기타'를 덧붙여 그 상품도 볼 수 있게 한다 (규칙 90) */
+export function hasUnknownSlotItem(items: readonly ShopItem[]): boolean {
+  return items.some((item) => item.slot === "UNKNOWN");
 }
 
 /** 살 수 있는지. 이미 가졌거나 코인이 모자라면 못 산다(무료 상품은 잔액과 무관하게 살 수 있다) */

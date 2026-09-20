@@ -6,9 +6,14 @@ import {
   coinDeltaSpoken,
   groupCoinHistoryByDate,
   canBuyShopItem,
-  shopItemsInSlot,
+  hasUnknownSlotItem,
+  SHOP_AVATAR_SLOTS,
+  SHOP_FURNITURE_SLOTS,
+  SHOP_SLOTS,
+  shopCategoryFilterKey,
+  shopItemsForFilter,
   shopPriceLabel,
-  shopSlotTabs,
+  shopSlotFilterKey,
   toCoinBalance,
   toCoinHistoryItem,
   toCoinHistoryPage,
@@ -147,16 +152,33 @@ describe("상점 상품 (GET /shop)", () => {
     expect(toShopItem(shopDto({ price: 0 })).price).toBe(0);
   });
 
-  it("탭은 슬롯 8종을 그대로 두고, 모르는 슬롯 상품이 있을 때만 기타가 붙는다", () => {
-    const known = toShopItems([shopDto(), shopDto({ itemId: 124, slotType: "FLOOR", itemCategory: "FURNITURE" })]);
-    expect(shopSlotTabs(known)).toEqual(["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR", "WALL", "FLOOR"]);
-    expect(shopSlotTabs([...known, toShopItem(shopDto({ itemId: 125, slotType: "TAIL" }))])).toContain("UNKNOWN");
+  it("부위 목록은 옷 6종 + 가구 2종이고 서버 enum 순서를 지킨다", () => {
+    expect(SHOP_AVATAR_SLOTS).toEqual(["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR"]);
+    expect(SHOP_FURNITURE_SLOTS).toEqual(["WALL", "FLOOR"]);
+    expect(SHOP_SLOTS).toEqual([...SHOP_AVATAR_SLOTS, ...SHOP_FURNITURE_SLOTS]);
   });
 
-  it("탭의 상품만 서버 순서 그대로 고른다", () => {
-    const items = toShopItems([shopDto(), shopDto({ itemId: 124 }), shopDto({ itemId: 125, slotType: "FACE" })]);
-    expect(shopItemsInSlot(items, "HEAD").map((item) => item.itemId)).toEqual([123, 124]);
-    expect(shopItemsInSlot(items, "WALL")).toEqual([]);
+  it("선택창 값이 종류 전체면 그 종류를, 부위면 그 부위만 서버 순서 그대로 고른다", () => {
+    const items = toShopItems([
+      shopDto(),
+      shopDto({ itemId: 124 }),
+      shopDto({ itemId: 125, slotType: "FACE" }),
+      shopDto({ itemId: 126, slotType: "FLOOR", itemCategory: "FURNITURE" }),
+    ]);
+
+    expect(shopItemsForFilter(items, shopCategoryFilterKey("AVATAR")).map((item) => item.itemId)).toEqual([123, 124, 125]);
+    expect(shopItemsForFilter(items, shopCategoryFilterKey("FURNITURE")).map((item) => item.itemId)).toEqual([126]);
+    expect(shopItemsForFilter(items, shopSlotFilterKey("HEAD")).map((item) => item.itemId)).toEqual([123, 124]);
+    expect(shopItemsForFilter(items, shopSlotFilterKey("WALL"))).toEqual([]);
+  });
+
+  it("모르는 부위 상품이 있을 때만 '기타' 를 붙인다", () => {
+    const known = toShopItems([shopDto(), shopDto({ itemId: 126, slotType: "FLOOR", itemCategory: "FURNITURE" })]);
+    expect(hasUnknownSlotItem(known)).toBe(false);
+
+    const withUnknown = [...known, toShopItem(shopDto({ itemId: 127, slotType: "TAIL" }))];
+    expect(hasUnknownSlotItem(withUnknown)).toBe(true);
+    expect(shopItemsForFilter(withUnknown, shopSlotFilterKey("UNKNOWN")).map((item) => item.itemId)).toEqual([127]);
   });
 
   it("보유했거나 코인이 모자라면 못 사고, 무료 상품은 잔액과 무관하게 산다", () => {
