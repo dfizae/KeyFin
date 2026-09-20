@@ -3,7 +3,7 @@ import * as Crypto from "expo-crypto";
 import { Platform } from "react-native";
 
 import { unregisterPushDevice } from "@/features/notification/api/notification.api";
-import { isInstallationId } from "@/features/notification/model";
+import { isInstallationId, shouldShowPushBanner, toPushDataType } from "@/features/notification/model";
 import { loadInstallationId, saveInstallationId } from "@/lib/session-storage";
 
 /**
@@ -49,6 +49,45 @@ export async function subscribeFcmTokenRefresh(onToken: (token: string) => void)
   const Notifications = await import("expo-notifications");
   const subscription = Notifications.addPushTokenListener((token) => onToken(String(token.data)));
   return () => subscription.remove();
+}
+
+/**
+ * 앱을 보고 있는 동안 온 푸시를 어떻게 다룰지 정한다 (FR-NTF-01, 2026-09-20 결정). 이 handler 가 없으면 포그라운드 푸시는 아무 데도 보이지 않는다.
+ * 백그라운드와 같은 OS 알림으로 띄워서 탭 처리 경로를 하나로 둔다. 종류별 표시 여부는 model 의 규약을 따른다.
+ */
+export async function setForegroundPushHandler(): Promise<void> {
+  const Notifications = await import("expo-notifications");
+  Notifications.setNotificationHandler({
+    handleNotification: async (notification) => {
+      const show = shouldShowPushBanner(toPushDataType(notification.request.content.data));
+      // Android 는 shouldPlaySound 가 false 면 배너도 띄우지 않는다(expo-notifications). shouldSetBadge 는 iOS 전용이라 끈다
+      return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: false };
+    },
+  });
+}
+
+/** 앱을 보고 있는 동안 푸시를 받을 때마다 data 를 넘긴다. 반환값으로 구독을 끊는다 */
+export async function subscribePushReceived(onReceived: (data: unknown) => void): Promise<() => void> {
+  const Notifications = await import("expo-notifications");
+  const subscription = Notifications.addNotificationReceivedListener((notification) => onReceived(notification.request.content.data));
+  return () => subscription.remove();
+}
+
+/** 앱이 떠 있는 동안 푸시를 탭할 때마다 data 를 넘긴다. 반환값으로 구독을 끊는다 */
+export async function subscribePushResponse(onResponse: (data: unknown) => void): Promise<() => void> {
+  const Notifications = await import("expo-notifications");
+  const subscription = Notifications.addNotificationResponseReceivedListener((response) => onResponse(response.notification.request.content.data));
+  return () => subscription.remove();
+}
+
+/**
+ * 앱을 켠 푸시의 data. 앱이 꺼져 있거나 백그라운드에 있다가 푸시 탭으로 올라온 경우를 위해 마지막 응답을 읽는다.
+ * 같은 실행 동안 계속 같은 값을 돌려주므로 호출부가 실행당 한 번만 쓴다. 탭으로 들어온 게 아니면 null.
+ */
+export async function getLaunchPushData(): Promise<unknown> {
+  const Notifications = await import("expo-notifications");
+  const response = await Notifications.getLastNotificationResponseAsync();
+  return response?.notification.request.content.data ?? null;
 }
 
 /**

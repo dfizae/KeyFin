@@ -82,6 +82,10 @@ const BUDGET_ROUTE = "/budget";
 const TRANSFER_ROUTE = "/payment/transfer";
 const PAYMENT_CALENDAR_ROUTE = "/payment/calendar";
 const PENDING_CLEANUP_ROUTE = "/transaction/pending";
+/** 뒤에 거래 id 를 붙이면 거래 상세(PAGE-21, 분류·태그 수정 진입점) */
+const TRANSACTION_ROUTE = "/transaction";
+const LINKS_ROUTE = "/my/links";
+const COIN_ROUTE = "/coin";
 
 const POSITIVE_ID = /^[1-9]\d*$/;
 
@@ -155,4 +159,83 @@ const FCM_TOKEN = /^[!-~]{1,2048}$/;
 /** FCM 토큰을 등록 요청으로. 서버가 400 으로 거절할 모양이면 보내지 않도록 null 이다 */
 export function toPushDeviceRequest(token: unknown): PushDeviceRequest | null {
   return typeof token === "string" && FCM_TOKEN.test(token) ? { token, platform: PUSH_PLATFORM } : null;
+}
+
+/* ───────────── FCM data 메시지 규약 (Notion 「FCM data 메시지 규약」 — 발송 코드가 없어 코드 대조는 못 했다, api-contract NOTIFICATION) ───────────── */
+
+/**
+ * 푸시 data.type 9종. 알림함 type(5종)과 이름이 다르다 — 미납 경고가 알림함은 WARNING, 푸시는 PAYMENT_RISK 이고
+ * CLASSIFY_QUESTION·REACTION·NEW_LINK_FOUND·COIN_GRANTED 는 푸시에만 있다.
+ */
+export const PUSH_DATA_TYPES = [
+  "CLASSIFY_QUESTION",
+  "BUDGET_ALERT",
+  "TRANSFER_REQUEST",
+  "COACHING",
+  "REACTION",
+  "CLEANUP",
+  "NEW_LINK_FOUND",
+  "PAYMENT_RISK",
+  "COIN_GRANTED",
+] as const;
+
+export type PushDataType = (typeof PUSH_DATA_TYPES)[number] | "UNKNOWN";
+
+/** 푸시 data 는 서버가 Map<string,string> 으로 보내지만 밖에서 온 값이라 모양을 확인하고 쓴다 (규칙 50). 모르는 종류는 UNKNOWN 으로 흡수한다 (규칙 90) */
+export function toPushDataType(data: unknown): PushDataType {
+  if (typeof data !== "object" || data === null) return "UNKNOWN";
+  const raw = (data as Record<string, unknown>).type;
+  return typeof raw === "string" && (PUSH_DATA_TYPES as readonly string[]).includes(raw) ? (raw as PushDataType) : "UNKNOWN";
+}
+
+/**
+ * 앱을 보고 있는 동안 OS 배너로 띄울 종류 (FR-NTF-01, 2026-09-20 사용자 결정).
+ * 방 캐릭터 연출(REACTION)과 코인 지급(COIN_GRANTED)은 방에서 바로 보이므로 배너 없이 데이터만 새로 받는다.
+ * 모르는 종류는 띄운다 — 서버가 종류를 늘렸을 때 사용자가 알림을 놓치지 않는 쪽이 안전하다.
+ */
+export function shouldShowPushBanner(type: PushDataType): boolean {
+  return type !== "REACTION" && type !== "COIN_GRANTED";
+}
+
+/** 푸시 data 의 id 값. 서버가 Map<string,string> 으로 보내므로 문자열 양수 id 일 때만 쓴다 (규칙 50: 딥링크 값은 믿지 않는다) */
+function pushIdOf(data: unknown, field: string): string | null {
+  if (typeof data !== "object" || data === null) return null;
+  const raw = (data as Record<string, unknown>)[field];
+  return typeof raw === "string" && POSITIVE_ID.test(raw) ? raw : null;
+}
+
+/**
+ * 푸시를 탭했을 때 갈 화면 (FR-NTF-01, docs/frontend-spec.md §3). 알림함의 notificationHref 와 종류 이름·id 필드가 달라 따로 둔다 —
+ * 미납 경고가 푸시는 PAYMENT_RISK 이고, 푸시에만 있는 4종(CLASSIFY_QUESTION·REACTION·NEW_LINK_FOUND·COIN_GRANTED)의 진입 화면은 2026-09-20 사용자 결정이다.
+ * id 가 없거나 모양이 아니면 그 종류의 목록 화면으로 보내고, 모르는 종류는 갈 곳이 없어 앱만 열린다(null).
+ * PAYMENT_RISK 는 fixedExpenseId 가 와도 알림함 WARNING 과 같은 캘린더로 보내 도착지를 하나로 둔다.
+ */
+export function pushNotificationHref(data: unknown): string | null {
+  switch (toPushDataType(data)) {
+    case "TRANSFER_REQUEST": {
+      const id = pushIdOf(data, "transferId");
+      return id === null ? PAYMENT_CALENDAR_ROUTE : `${TRANSFER_ROUTE}/${id}`;
+    }
+    case "BUDGET_ALERT": {
+      const id = pushIdOf(data, "envelopeId");
+      return id === null ? BUDGET_ROUTE : `${BUDGET_ROUTE}/${id}`;
+    }
+    case "CLASSIFY_QUESTION": {
+      const id = pushIdOf(data, "transactionId");
+      return id === null ? PENDING_CLEANUP_ROUTE : `${TRANSACTION_ROUTE}/${id}`;
+    }
+    case "CLEANUP":
+      return PENDING_CLEANUP_ROUTE;
+    case "PAYMENT_RISK":
+      return PAYMENT_CALENDAR_ROUTE;
+    case "NEW_LINK_FOUND":
+      return LINKS_ROUTE;
+    case "COIN_GRANTED":
+      return COIN_ROUTE;
+    case "COACHING":
+    case "REACTION":
+      return HOME_ROUTE;
+    case "UNKNOWN":
+      return null;
+  }
 }
