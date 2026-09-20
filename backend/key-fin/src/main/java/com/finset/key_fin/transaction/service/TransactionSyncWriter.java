@@ -6,6 +6,7 @@ import com.finset.key_fin.transaction.entity.ConfirmStatus;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.TransactionStatus;
 import com.finset.key_fin.transaction.entity.TransactionType;
+import com.finset.key_fin.transaction.event.AccountWithdrawn;
 import com.finset.key_fin.transaction.event.PendingTransactionSaved;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,8 +15,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 @RequiredArgsConstructor
@@ -34,6 +37,7 @@ public class TransactionSyncWriter {
 	) {
 		persist(balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 		publishPendingTransactionEvents(newTransactions);
+		publishAccountWithdrawnEvents(newTransactions);
 	}
 
 	@Transactional
@@ -58,6 +62,18 @@ public class TransactionSyncWriter {
 		}
 		if (!balanceUpdatedAccounts.isEmpty()) {
 			accountRepository.saveAll(balanceUpdatedAccounts);
+		}
+	}
+
+	private void publishAccountWithdrawnEvents(List<Transaction> newTransactions) {
+		Set<Long> accountIds = new LinkedHashSet<>();
+		for (Transaction transaction : newTransactions) {
+			if (transaction.getAccountId() != null
+					&& transaction.getStatus() == TransactionStatus.NORMAL
+					&& transaction.getTransactionType() != TransactionType.DEPOSIT
+					&& accountIds.add(transaction.getAccountId())) {
+				events.publishEvent(new AccountWithdrawn(transaction.getUser().getId(), transaction.getAccountId()));
+			}
 		}
 	}
 
