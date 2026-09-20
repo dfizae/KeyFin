@@ -1,10 +1,25 @@
-import { resetSettingsMocks, transferSettingsMock, updateTransferSettingsMock } from "@/api/mocks/settings";
+import {
+  notificationSettingsMock,
+  resetSettingsMocks,
+  transferSettingsMock,
+  updateNotificationSettingsMock,
+  updateTransferSettingsMock,
+} from "@/api/mocks/settings";
 import {
   isSettingsDirty,
+  quietHoursError,
+  quietHoursLabel,
+  toCoachPersona,
+  toCoachPersonaRequest,
+  toNotificationSettings,
+  toNotificationSettingsRequest,
+  withNotificationKind,
+  withQuietHours,
   settingsFormError,
   toSettingsForm,
   toTransferSettings,
   toTransferSettingsRequest,
+  type NotificationSettingsDto,
   type TransferSettingsForm,
 } from "@/features/settings/model";
 import { ContractMismatchError } from "@/lib/contract";
@@ -77,5 +92,85 @@ describe("설정 목 — 저장한 값이 다시 조회된다", () => {
   it("PUT 한 값이 GET 에 그대로 나온다", () => {
     updateTransferSettingsMock({ transferConsent: false, transferLimitOnce: 300000, transferLimitDaily: 700000 });
     expect(transferSettingsMock()).toEqual({ transferConsent: false, transferLimitOnce: 300000, transferLimitDaily: 700000 });
+  });
+});
+
+/** 계약 예시(Swagger NotificationSettingsResponse) */
+function notificationDto(overrides: Partial<NotificationSettingsDto> = {}): NotificationSettingsDto {
+  return {
+    notiCoaching: true,
+    notiBudgetAlert: true,
+    notiTransfer: true,
+    notiCleanup: false,
+    quietHoursStart: "23:00:00",
+    quietHoursEnd: "08:00:00",
+    ...overrides,
+  };
+}
+
+describe("알림 설정 (GET·PUT /settings/notifications)", () => {
+  it("계약 예시를 화면 모델로 바꾸고 시각은 분까지만 쓴다", () => {
+    expect(toNotificationSettings(notificationDto())).toEqual({
+      enabled: { coaching: true, budgetAlert: true, transfer: true, cleanup: false },
+      quietHours: { start: "23:00", end: "08:00" },
+    });
+    expect(toNotificationSettings(notificationDto({ quietHoursStart: "23:00", quietHoursEnd: "08:00" })).quietHours).toEqual({
+      start: "23:00",
+      end: "08:00",
+    });
+  });
+
+  it("방해 금지는 두 쪽이 다 있을 때만 범위이고, 한쪽만 오면 끈 것으로 본다", () => {
+    expect(toNotificationSettings(notificationDto({ quietHoursStart: null, quietHoursEnd: null })).quietHours).toBeNull();
+    expect(toNotificationSettings(notificationDto({ quietHoursEnd: null })).quietHours).toBeNull();
+  });
+
+  it("시각이 계약 형식이 아니면 계약 불일치로 막는다", () => {
+    expect(() => toNotificationSettings(notificationDto({ quietHoursStart: "24:00:00" }))).toThrow(ContractMismatchError);
+    expect(() => toNotificationSettings(notificationDto({ quietHoursEnd: "8시" }))).toThrow(ContractMismatchError);
+  });
+
+  it("요청은 초까지 붙이고, 방해 금지를 끄면 두 쪽 모두 null 이다", () => {
+    const current = toNotificationSettings(notificationDto());
+    expect(toNotificationSettingsRequest(current)).toEqual(notificationDto());
+    expect(toNotificationSettingsRequest(withQuietHours(current, null))).toEqual(
+      notificationDto({ quietHoursStart: null, quietHoursEnd: null })
+    );
+  });
+
+  it("토글 하나만 바꿔도 나머지는 그대로다", () => {
+    const current = toNotificationSettings(notificationDto());
+    const next = withNotificationKind(current, "cleanup", true);
+    expect(next.enabled).toEqual({ coaching: true, budgetAlert: true, transfer: true, cleanup: true });
+    expect(next.quietHours).toEqual(current.quietHours);
+  });
+
+  it("시작과 종료가 같으면 막고, 자정을 지나는 범위는 허용한다", () => {
+    expect(quietHoursError({ start: "23:00", end: "23:00" })).not.toBeNull();
+    expect(quietHoursError({ start: "23:00", end: "08:00" })).toBeNull();
+    expect(quietHoursError(null)).toBeNull();
+    expect(quietHoursLabel({ start: "23:00", end: "08:00" })).toBe("23:00 ~ 08:00");
+    expect(quietHoursLabel(null)).toBe("사용 안 함");
+  });
+
+  it("목은 저장한 값을 그대로 돌려준다", () => {
+    resetSettingsMocks();
+    const saved = updateNotificationSettingsMock(notificationDto({ notiCleanup: true, quietHoursStart: null, quietHoursEnd: null }));
+    expect(saved.notiCleanup).toBe(true);
+    expect(notificationSettingsMock()).toEqual(saved);
+    resetSettingsMocks();
+  });
+});
+
+describe("코치 말투 (GET·PUT /settings/coach)", () => {
+  it("계약의 4종만 받고 모르는 값은 UNKNOWN 으로 흡수한다", () => {
+    expect(toCoachPersona({ coachPersona: "DODO" })).toBe("DODO");
+    expect(toCoachPersona({ coachPersona: "PLAIN" })).toBe("PLAIN");
+    expect(toCoachPersona({ coachPersona: "CAT" })).toBe("UNKNOWN");
+  });
+
+  it("모르는 값은 서버로 되돌려 보내지 않는다", () => {
+    expect(toCoachPersonaRequest("JIBANG")).toEqual({ coachPersona: "JIBANG" });
+    expect(() => toCoachPersonaRequest("UNKNOWN")).toThrow();
   });
 });
