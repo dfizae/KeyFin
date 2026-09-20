@@ -49,7 +49,7 @@ function MovingInScreen() {
   return (
     <View className="flex-1 items-center justify-center gap-8 bg-background px-6" accessibilityLiveRegion="polite">
       <View className="items-center justify-center" style={SPARKLES_STYLE}>
-        <View className="absolute" pointerEvents="none">
+        <View className="pointer-events-none absolute">
           <LottieLoop source={SPARKLES} width={SPARKLES_STYLE.width} height={SPARKLES_STYLE.height} />
         </View>
         <View className="items-center justify-center overflow-hidden rounded-full bg-muted" style={CIRCLE_STYLE}>

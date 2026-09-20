@@ -31,11 +31,11 @@ describe("벽 오브젝트 기본 배치", () => {
 
     expect(insideScene(board)).toBe(true);
     expect(insideScene(calendar)).toBe(true);
-    // 보드가 코너(x 134) 쪽, 캘린더가 그 오른쪽. 둘 다 오른쪽 벽 걸레받이선(y 125~219) 위.
-    expect(board.x).toBeGreaterThanOrEqual(134);
+    // 보드가 코너(x 164) 쪽, 캘린더가 그 오른쪽. 둘 다 오른쪽 벽 걸레받이선(y 286~371) 위.
+    expect(board.x).toBeGreaterThanOrEqual(164);
     expect(board.x + board.width).toBeLessThanOrEqual(calendar.x);
-    expect(board.y + board.height).toBeLessThan(219);
-    expect(calendar.y + calendar.height).toBeLessThan(219);
+    expect(board.y + board.height).toBeLessThan(371);
+    expect(calendar.y + calendar.height).toBeLessThan(371);
   });
 
   it("배치에 없는 벽 오브젝트는 사각형이 없다", () => {
@@ -51,22 +51,24 @@ describe("isPlaceableOnWall", () => {
     expect(WALL_ITEMS.calendar.grid).toEqual({ w: 2, d: 2 });
   });
 
-  it("벽 격자의 위쪽은 화면 밖까지 뻗어 있어 맨 윗줄과 코너 쪽 위 칸에는 놓을 수 없다", () => {
-    expect(isPlaceableOnWall("WALL_RIGHT", { col: 0, row: 0 }, board.grid)).toBe(false);
-    expect(isPlaceableOnWall("WALL_RIGHT", { col: 0, row: 2 }, board.grid)).toBe(false);
-    expect(isPlaceableOnWall("WALL_RIGHT", { col: 2, row: 2 }, board.grid)).toBe(true);
-    expect(isPlaceableOnWall("WALL_LEFT", { col: 0, row: 2 }, board.grid)).toBe(true);
+  it("새 방은 벽 격자가 전부 화면 안이라 아홉 칸 모두 놓을 수 있다 (2026-09-18)", () => {
+    for (const col of [0, 2, 4]) {
+      for (const row of [0, 2, 4]) {
+        expect(isPlaceableOnWall("WALL_RIGHT", { col, row }, board.grid)).toBe(true);
+        expect(isPlaceableOnWall("WALL_LEFT", { col, row }, board.grid)).toBe(true);
+      }
+    }
   });
 
   it("벽 밖으로 나가는 칸은 놓을 수 없다", () => {
     expect(isPlaceableOnWall("WALL_RIGHT", { col: 8, row: 2 }, board.grid)).toBe(false);
-    expect(isPlaceableOnWall("WALL_RIGHT", { col: 0, row: 6 }, board.grid)).toBe(false);
+    expect(isPlaceableOnWall("WALL_RIGHT", { col: 0, row: 8 }, board.grid)).toBe(false);
   });
 
   it("스냅한 칸을 다시 기준점으로 되돌리면 같은 칸이다(드래그 왕복)", () => {
     const calendar = WALL_ITEMS.calendar;
     const placed = DEFAULT_LAYOUT.find((p) => p.itemId === "calendar")!;
-    expect(anchorToCell(SURFACES.WALL_RIGHT, placed.anchor, calendar.grid)).toEqual({ col: 4, row: 2 });
+    expect(anchorToCell(SURFACES.WALL_RIGHT, placed.anchor, calendar.grid)).toEqual({ col: 4, row: 4 });
   });
 
   it("같은 벽에서 칸을 나눠 가지면 겹친다", () => {

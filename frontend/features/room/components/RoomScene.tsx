@@ -1,4 +1,14 @@
-import { Canvas, Group, Image as SkiaImage, Path, Skia, useImage } from "@shopify/react-native-skia";
+import {
+  Canvas,
+  CatmullRomCubicSampling,
+  FilterMode,
+  Group,
+  Image as SkiaImage,
+  MipmapMode,
+  Path,
+  Skia,
+  useImage,
+} from "@shopify/react-native-skia";
 import { useColorScheme } from "nativewind";
 import * as React from "react";
 import { View } from "react-native";
@@ -61,6 +71,11 @@ import { getColors } from "@/lib/theme";
 // 끌리는 것은 맨 앞에 그리고 위치는 셰어드 값으로 따라가며, 손을 떼면 스토어(draft)에 반영되고 정렬이 다시 계산된다.
 
 const FLOOR_SURFACE = SURFACES.FLOOR;
+
+// Skia 기본 샘플링은 밉맵 없는 linear 라 크기 차이가 큰 그림이 뭉개진다.
+// 스프라이트 원본은 그려지는 크기의 3~5배라 밉맵으로 줄이고, 바닥(768px)은 화면 픽셀보다 작아 늘어나므로 cubic 으로 윤곽을 지킨다.
+const SPRITE_SAMPLING = { filter: FilterMode.Linear, mipmap: MipmapMode.Linear } as const;
+const FLOOR_SAMPLING = CatmullRomCubicSampling;
 
 /** 스프라이트로 그려지는 것들의 공통 모양. 가구(catalog FURNITURE)와 벽 오브젝트(WALL_ITEMS)가 같이 쓴다 */
 type SpriteItem = { sprite: number; size: SceneSize; anchor: AnchorRatio; grid: GridFootprint };
@@ -219,7 +234,7 @@ function RoomScene({ width }: RoomSceneProps) {
       <View style={{ width, height }} collapsable={false}>
         <Canvas style={{ width, height }}>
           <Group transform={cameraTransform}>
-            {floor ? <SkiaImage image={floor} x={0} y={0} width={width} height={height} fit="cover" /> : null}
+            {floor ? <SkiaImage image={floor} x={0} y={0} width={width} height={height} fit="cover" sampling={FLOOR_SAMPLING} /> : null}
             {stationaryWall.map((p) => (
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}
@@ -253,7 +268,7 @@ type GridOverlayProps = { scale: number; color: string };
 /** 한 면의 칸 선. 배치 단위는 반 칸이지만 선은 칸 단위로만 그린다 — 반 칸까지 그리면 선이 두 배가 되어 면이 읽히지 않는다. */
 function gridLines(surface: SurfaceDef, scale: number) {
   const { cols, rows } = halfSpan(surface);
-  const grid = Skia.Path.Make();
+  const grid = Skia.PathBuilder.Make();
   const addLine = (from: ScenePoint, to: ScenePoint) => {
     grid.moveTo(from.x * scale, from.y * scale);
     grid.lineTo(to.x * scale, to.y * scale);
@@ -264,11 +279,11 @@ function gridLines(surface: SurfaceDef, scale: number) {
   for (let row = 0; row <= rows; row += HALF_PER_CELL) {
     addLine(cellToScene(surface, { col: 0, row }), cellToScene(surface, { col: cols, row }));
   }
-  return grid;
+  return grid.detach();
 }
 
 function polygonPath(points: readonly ScenePoint[], scale: number) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   points.forEach((point, index) => {
     const x = point.x * scale;
     const y = point.y * scale;
@@ -276,7 +291,7 @@ function polygonPath(points: readonly ScenePoint[], scale: number) {
     else path.lineTo(x, y);
   });
   path.close();
-  return path;
+  return path.detach();
 }
 
 const WALL_SURFACES = [SURFACES.WALL_LEFT, SURFACES.WALL_RIGHT] as const;
@@ -313,7 +328,7 @@ function GridOverlay({ scale, color }: GridOverlayProps) {
 
 /** 놓이는 칸을 그 면의 격자 모양(평행사변형) 그대로 그린다. origin 을 주면 그 기준점 위치로 옮겨 만든다. */
 function outlinePath(surface: SurfaceDef, footprint: GridFootprint, scale: number, origin: ScenePoint = { x: 0, y: 0 }) {
-  const path = Skia.Path.Make();
+  const path = Skia.PathBuilder.Make();
   footprintOutline(surface, footprint).forEach((point, index) => {
     const x = (origin.x + point.x) * scale;
     const y = (origin.y + point.y) * scale;
@@ -321,7 +336,7 @@ function outlinePath(surface: SurfaceDef, footprint: GridFootprint, scale: numbe
     else path.lineTo(x, y);
   });
   path.close();
-  return path;
+  return path.detach();
 }
 
 type ItemSpriteProps = { placed: PlacedItem; scale: number; highlighted?: boolean; ringColor: string };
@@ -342,7 +357,7 @@ function ItemSprite({ placed, scale, highlighted = false, ringColor }: ItemSprit
           <Path path={ring} style="stroke" strokeWidth={2} color={ringColor} opacity={0.9} />
         </Group>
       ) : null}
-      <SkiaImage image={image} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fit="contain" />
+      <SkiaImage image={image} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />
     </>
   );
 }
@@ -393,6 +408,7 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
         width={item.size.width * scale}
         height={item.size.height * scale}
         fit="contain"
+        sampling={SPRITE_SAMPLING}
         opacity={spriteOpacity}
       />
     </>
@@ -426,7 +442,7 @@ function CharacterSprite({ walker, scale }: CharacterSpriteProps) {
   if (!image) return null;
   return (
     <Group transform={flip} origin={origin}>
-      <SkiaImage image={image} x={left} y={top} width={spriteWidth} height={spriteHeight} fit="contain" />
+      <SkiaImage image={image} x={left} y={top} width={spriteWidth} height={spriteHeight} fit="contain" sampling={SPRITE_SAMPLING} />
     </Group>
   );
 }

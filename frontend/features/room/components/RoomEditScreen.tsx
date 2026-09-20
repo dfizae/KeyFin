@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { View } from "react-native";
+import { View, type LayoutChangeEvent } from "react-native";
 
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
@@ -10,6 +10,7 @@ import { Text } from "@/components/ui/text";
 import { useRoom, useSavePlacements } from "@/features/room/api/queries";
 import { RoomView } from "@/features/room/components/RoomView";
 import { changedPlacements } from "@/features/room/furniture";
+import { containSceneWidth } from "@/features/room/model";
 import { useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 
@@ -33,6 +34,14 @@ function RoomEditScreen() {
   const cancelEdit = useRoomStore((s) => s.cancelEdit);
   const commitEdit = useRoomStore((s) => s.commitEdit);
   const save = useSavePlacements();
+  const [roomArea, setRoomArea] = React.useState({ width: 0, height: 0 });
+
+  const handleRoomAreaLayout = React.useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout;
+    setRoomArea({ width: Math.round(width), height: Math.round(height) });
+  }, []);
+
+  const roomWidth = roomArea.width > 0 && roomArea.height > 0 ? containSceneWidth(roomArea.width, roomArea.height) : 0;
 
   // 서버 배치를 받은 뒤에 사본을 뜬다 — 먼저 뜨면 기본 배치를 편집하게 되어 저장할 대상이 없다.
   // 화면을 어떤 경로로 떠나든(뒤로 제스처·탭 이동) 남은 사본은 버린다. 완료 뒤에는 사본이 이미 없어 아무 일도 없다.
@@ -71,10 +80,11 @@ function RoomEditScreen() {
   return (
     <View className="flex-1 bg-background">
       <ScreenHeader title={EDIT_TITLE} onBack={cancel} />
-      <View className="flex-1 justify-center gap-4">
-        <RoomView accessibilityLabel={EDIT_ROOM_LABEL} locked />
-        <Text className="text-center text-body-sm text-card-foreground">{EDIT_HINT}</Text>
+      {/* 방이 세로로 길어져(327:586) 폭을 꽉 채우면 화면을 넘겨 버튼이 밀린다 — 남은 영역 안에 방 전체가 들어가게 줄인다 (2026-09-18) */}
+      <View className="flex-1 items-center justify-center" onLayout={handleRoomAreaLayout}>
+        <RoomView accessibilityLabel={EDIT_ROOM_LABEL} locked width={roomWidth > 0 ? roomWidth : undefined} />
       </View>
+      <Text className="px-6 pb-2 pt-3 text-center text-body-sm text-card-foreground">{EDIT_HINT}</Text>
       {save.isError ? (
         <View className="flex-row items-center gap-1.5 px-6" accessibilityLiveRegion="polite">
           <Icon as={CircleAlert} size={16} className="text-destructive" />

@@ -1,6 +1,6 @@
 import { isWallItemId, roomItem, roomItemIdByAssetKey, type RoomItemId } from "@/features/room/catalog";
 import { SCENE_HEIGHT, SCENE_WIDTH, type PlacedFurnitureDto, type Surface } from "@/features/room/model";
-import type { Placement } from "@/features/room/scene";
+import { settlePlacements, type Placement } from "@/features/room/scene";
 
 /**
  * 가구 배치의 서버 계약 ↔ 씬 배치 변환 (docs/api-contract.md GAME, 방 3단계).
@@ -93,9 +93,12 @@ export function toPlacement(dto: PlacedFurnitureDto): Placement | null {
   };
 }
 
-/** 설치된 가구를 그릴 수 있는 것만 씬 배치로. 빈 배열이면 화면이 기본 배치로 되돌아간다 */
+/**
+ * 설치된 가구를 그릴 수 있는 것만 씬 배치로. 빈 배열이면 화면이 기본 배치로 되돌아간다.
+ * 놓을 수 없는 자리(옛 방 기준 좌표 등)에 저장된 것은 가장 가까운 빈 칸에 앉힌다 — 서버 값은 사용자가 방 꾸미기에서 옮겨 저장할 때 바뀐다.
+ */
 export function toPlacements(dtos: readonly PlacedFurnitureDto[]): Placement[] {
-  return dtos.map(toPlacement).filter((placement): placement is Placement => placement !== null);
+  return settlePlacements(dtos.map(toPlacement).filter((placement): placement is Placement => placement !== null));
 }
 
 export function toUserFurniture(dto: UserFurnitureDto): UserFurniture {

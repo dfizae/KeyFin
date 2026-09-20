@@ -7,7 +7,7 @@ import { RoomView, type RoomViewProps } from "@/features/room/components/RoomVie
 // 2026-09-15 사용자 결정: 방을 편집 화면처럼 화면 폭 가득 키운다(좌우 여백 없음). 예산 카드는 홈에서 빠지고 리스트 탭 → 예산 시트.
 export const ROOM_LABEL = "캐릭터가 방에 있어요";
 
-type CharacterRoomProps = Pick<RoomViewProps, "sceneObjects" | "panels" | "locked" | "onZoomedChange">;
+type CharacterRoomProps = Pick<RoomViewProps, "sceneObjects" | "panels" | "locked" | "onZoomedChange" | "width" | "viewport">;
 
 function CharacterRoom(props: CharacterRoomProps) {
   return (

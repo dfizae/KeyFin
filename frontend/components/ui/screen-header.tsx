@@ -87,8 +87,8 @@ function ScreenHeader({ title, onBack, right, children, flat = false, className 
       <View style={{ height: headerHeight + HEADER_CONTENT_GAP }} accessible={false} />
       <Animated.View
         style={[OVERLAY, fadeStyle]}
-        className={className}
         pointerEvents={hidden ? "none" : "box-none"}
+        className={className}
         accessibilityElementsHidden={hidden}
         importantForAccessibility={hidden ? "no-hide-descendants" : "auto"}
       >
