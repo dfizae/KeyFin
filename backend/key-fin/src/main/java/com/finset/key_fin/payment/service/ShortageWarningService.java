@@ -60,9 +60,11 @@ public class ShortageWarningService {
 		if (!next.equals(YearMonth.from(today))) {
 			entries.addAll(paymentCalendarService.judgedEntries(userId, next));
 		}
+		LocalDate tomorrow = today.plusDays(1);
 		return entries.stream()
 				.filter(entry -> Long.valueOf(accountId).equals(entry.item().withdrawalAccountId())
-						&& entry.item().shortage() != null)
+						&& entry.item().shortage() != null
+						&& !entry.date().isBefore(today) && !entry.date().isAfter(tomorrow))
 				.toList();
 	}
 
