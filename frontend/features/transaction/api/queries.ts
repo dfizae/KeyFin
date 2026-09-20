@@ -15,6 +15,7 @@ import { isWithinPeriod, type Budget } from "@/features/budget/model";
 import { roomKeys } from "@/features/room/api/queries";
 import {
   classifyTransaction,
+  classifyTransactionsBulk,
   getPendingTransactions,
   getSubcategories,
   getTransactions,
@@ -164,6 +165,24 @@ export function useClassifyTransaction() {
       void queryClient.invalidateQueries({ queryKey: transactionKeys.all });
       const budget = queryClient.getQueryData<Budget>(budgetKeys.current());
       if (!budget || isWithinPeriod(budget, txDate)) void queryClient.invalidateQueries({ queryKey: budgetKeys.current() });
+      void queryClient.invalidateQueries({ queryKey: roomKeys.all });
+    },
+  });
+}
+
+/**
+ * 제안대로 여러 건을 한 번에 확정한다 (FR-TXN-03, P1). 서버가 한 건이라도 실패하면 전체를 되돌리므로
+ * 캐시를 미리 건드리지 않고, 성공한 뒤에 미확정·거래·예산·방을 다시 받는다.
+ * 여러 달 거래가 섞일 수 있어 단건 확정과 달리 주기를 따지지 않고 현재 주기 예산을 무효화한다.
+ */
+export function useBulkClassifyTransactions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: classifyTransactionsBulk,
+    retry: false,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: transactionKeys.all });
+      void queryClient.invalidateQueries({ queryKey: budgetKeys.current() });
       void queryClient.invalidateQueries({ queryKey: roomKeys.all });
     },
   });

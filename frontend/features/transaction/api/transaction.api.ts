@@ -1,11 +1,21 @@
 import { api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
-import { classifyTransactionMock, pendingTransactionsMock, subcategoriesMock, transactionListMock } from "@/api/mocks/transaction";
 import {
+  classifyTransactionMock,
+  classifyTransactionsBulkMock,
+  pendingTransactionsMock,
+  subcategoriesMock,
+  transactionListMock,
+} from "@/api/mocks/transaction";
+import {
+  toBulkClassifyResult,
   toClassifyResult,
   toPendingTransactions,
   toSubcategories,
   toTransactionPage,
+  type BulkClassifyRequest,
+  type BulkClassifyResult,
+  type BulkClassifyResultDto,
   type ClassifyRequest,
   type ClassifyResponseDto,
   type ClassifyResult,
@@ -60,4 +70,14 @@ export async function classifyTransaction({ transactionId, request }: ClassifyIn
   if (isMocked("transaction")) return toClassifyResult(await withMockLatency(classifyTransactionMock(transactionId, request)));
   const { data } = await api.put<ClassifyResponseDto>(`/transactions/${transactionId}/classification`, request);
   return toClassifyResult(data);
+}
+
+/**
+ * PUT /transactions/classifications — 여러 건을 한 번에 확정한다 (FR-TXN-03, P1).
+ * 한 건이라도 실패하면 서버가 전체를 되돌린다. 오류: 400 COMMON_001·TRANSACTION_006·008 · 404 TRANSACTION_004~005 · 409 TRANSACTION_007.
+ */
+export async function classifyTransactionsBulk(request: BulkClassifyRequest): Promise<BulkClassifyResult> {
+  if (isMocked("transaction")) return toBulkClassifyResult(await withMockLatency(classifyTransactionsBulkMock(request)));
+  const { data } = await api.put<BulkClassifyResultDto>("/transactions/classifications", request);
+  return toBulkClassifyResult(data);
 }

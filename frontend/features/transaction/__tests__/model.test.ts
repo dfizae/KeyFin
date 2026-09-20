@@ -1,5 +1,14 @@
-import { classifyTransactionMock, pendingTransactionsMock, resetTransactionMocks, subcategoriesMock, transactionListMock } from "@/api/mocks/transaction";
+import { ApiError } from "@/api/error";
 import {
+  classifyTransactionMock,
+  classifyTransactionsBulkMock,
+  pendingTransactionsMock,
+  resetTransactionMocks,
+  subcategoriesMock,
+  transactionListMock,
+} from "@/api/mocks/transaction";
+import {
+  BULK_CLASSIFY_MAX,
   confirmStatusLabel,
   dutchAmountError,
   isIncoming,
@@ -8,8 +17,11 @@ import {
   parseTransactionFilter,
   parseTransactionId,
   reclassifyBlockedReason,
+  suggestedForBulk,
+  toBulkClassifyResult,
   toClassifyResult,
   toDutchRequest,
+  toSuggestedBulkRequest,
   toPendingTransactions,
   toSubcategories,
   toTransaction,
@@ -251,6 +263,68 @@ describe("목 확정과 거래 목록", () => {
 
     const after = transactionListMock({ month: "202609", size: 100 }, TODAY).items.find((item) => item.id === target.id);
     expect(after).toMatchObject({ envelopeId: 2, subcategoryId: 201, subcategoryName: "대중교통", confirmStatus: "CONFIRMED" });
+    resetTransactionMocks();
+  });
+});
+
+describe("일괄 확정 (PUT /transactions/classifications)", () => {
+  it("응답의 건수는 0 이상 정수여야 한다", () => {
+    expect(toBulkClassifyResult({ confirmed: 2, pendingRemain: 0 })).toEqual({ confirmed: 2, pendingRemain: 0 });
+    expect(() => toBulkClassifyResult({ confirmed: -1, pendingRemain: 0 })).toThrow(ContractMismatchError);
+    expect(() => toBulkClassifyResult({ confirmed: 1, pendingRemain: 1.5 })).toThrow(ContractMismatchError);
+  });
+
+  it("제안 세분류가 없는 거래는 한 번에 확정할 수 없어 빠진다", () => {
+    resetTransactionMocks();
+    const pending = toPendingTransactions(pendingTransactionsMock()).items;
+    const withoutSuggestion = pending.map((transaction) => ({ ...transaction, subcategoryId: null }));
+
+    expect(suggestedForBulk(pending).length).toBe(pending.filter((item) => item.subcategoryId !== null).length);
+    expect(suggestedForBulk(withoutSuggestion)).toEqual([]);
+    expect(toSuggestedBulkRequest(withoutSuggestion)).toEqual({ items: [] });
+    resetTransactionMocks();
+  });
+
+  it("요청은 거래 id 와 제안 세분류만 담고 100건에서 자른다", () => {
+    const many = Array.from({ length: BULK_CLASSIFY_MAX + 5 }, (_, index) => ({
+      ...toPendingTransactions(pendingTransactionsMock()).items[0],
+      id: index + 1,
+      subcategoryId: 102,
+    }));
+
+    const request = toSuggestedBulkRequest(many);
+    expect(request.items.length).toBe(BULK_CLASSIFY_MAX);
+    expect(request.items[0]).toEqual({ transactionId: 1, subcategoryId: 102 });
+    resetTransactionMocks();
+  });
+
+  it("목은 확정한 만큼 미확정에서 빼고 남은 건수를 알려 준다", () => {
+    resetTransactionMocks();
+    const before = toPendingTransactions(pendingTransactionsMock()).items;
+    const request = toSuggestedBulkRequest(before);
+
+    const result = classifyTransactionsBulkMock(request);
+    expect(result.confirmed).toBe(request.items.length);
+    expect(result.pendingRemain).toBe(before.length - request.items.length);
+    expect(pendingTransactionsMock().items.map((item) => item.id)).not.toContain(request.items[0].transactionId);
+    resetTransactionMocks();
+  });
+
+  it("한 건이라도 확정할 수 없으면 아무것도 저장하지 않는다(서버와 같은 전체 되돌림)", () => {
+    resetTransactionMocks();
+    const before = toPendingTransactions(pendingTransactionsMock()).items;
+    const request = toSuggestedBulkRequest(before);
+    const withMissing = { items: [...request.items, { transactionId: 999999, subcategoryId: 102 }] };
+
+    let code: string | null = null;
+    try {
+      classifyTransactionsBulkMock(withMissing);
+    } catch (error) {
+      code = error instanceof ApiError ? error.code : "NOT_API_ERROR";
+    }
+
+    expect(code).toBe("TRANSACTION_007");
+    expect(pendingTransactionsMock().items.length).toBe(before.length);
     resetTransactionMocks();
   });
 });

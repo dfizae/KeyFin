@@ -1,4 +1,8 @@
+import { ApiError } from "@/api/error";
+import { BULK_CLASSIFY_MAX } from "@/features/transaction/model";
 import type {
+  BulkClassifyRequest,
+  BulkClassifyResultDto,
   ClassifyRequest,
   ClassifyResponseDto,
   PendingTransactionsDto,
@@ -244,4 +248,24 @@ export function transactionListMock(query: TransactionListMockQuery, todayKey: s
   const page = matched.slice(start, start + (query.size ?? MOCK_PAGE_SIZE));
   const hasMore = start + page.length < matched.length;
   return { items: page, nextCursor: hasMore ? page[page.length - 1].id : null };
+}
+
+/**
+ * PUT /transactions/classifications 목. 서버처럼 한 건이라도 못 쓰면 전체를 되돌린다(아무것도 저장하지 않는다).
+ * 확정한 건은 PENDING 목록에서 빠지고 pendingRemain 은 남은 전체 건수다.
+ */
+export function classifyTransactionsBulkMock(request: BulkClassifyRequest): BulkClassifyResultDto {
+  if (request.items.length > BULK_CLASSIFY_MAX) throw new ApiError(400, "COMMON_001", "한 번에 보낼 수 있는 건수를 넘었습니다.");
+
+  const targets = request.items.map((item) => {
+    const pending = PENDING.find((candidate) => candidate.id === item.transactionId);
+    if (pending === undefined || classifications.has(item.transactionId)) {
+      throw new ApiError(409, "TRANSACTION_007", "확정할 수 없는 거래가 섞여 있습니다.");
+    }
+    if (typeof item.subcategoryId !== "number") throw new ApiError(400, "TRANSACTION_006", "쓸 수 없는 분류입니다.");
+    return { id: item.transactionId, subcategoryId: item.subcategoryId };
+  });
+
+  for (const target of targets) classifications.set(target.id, { subcategoryId: target.subcategoryId });
+  return { confirmed: targets.length, pendingRemain: PENDING.filter((item) => !classifications.has(item.id)).length };
 }
