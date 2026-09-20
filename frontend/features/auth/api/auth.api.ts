@@ -1,8 +1,9 @@
 import { api, isMocked } from "@/api/client";
-import { loginMock, signupMock } from "@/api/mocks/auth";
+import { deleteAccountMock, loginMock, signupMock } from "@/api/mocks/auth";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
   toAuthSession,
+  type AccountDeletionRequest,
   type AuthSession,
   type LoginRequest,
   type LoginResponseDto,
@@ -46,4 +47,17 @@ export async function logout(): Promise<void> {
   } catch {
     // 서버 상태와 무관하게 로컬 로그아웃은 진행한다
   }
+}
+
+/**
+ * DELETE /users/me — 회원 탈퇴 (USER 도메인이지만 세션을 끝내는 일이라 auth 에 둔다).
+ * 본문에 현재 비밀번호를 담고 성공하면 204(본문 없음)다. 오류: 400 COMMON_001 · 401 USER_007(비밀번호 불일치) · 404 USER_001.
+ * 비밀번호는 로그·오류 문맥에 남기지 않는다 (규칙 80).
+ */
+export async function deleteAccount(request: AccountDeletionRequest): Promise<void> {
+  if (isMocked("auth")) {
+    await withMockLatency(deleteAccountMock(request));
+    return;
+  }
+  await api.delete("/users/me", { data: request });
 }

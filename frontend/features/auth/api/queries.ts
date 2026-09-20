@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { seedOnboardedMocks } from "@/api/mocks/onboarding";
 
-import { login, logout, signup } from "@/features/auth/api/auth.api";
+import { deleteAccount, login, logout, signup } from "@/features/auth/api/auth.api";
 import { useAuthStore } from "@/features/auth/store";
-import type { LoginRequest, SignupRequest } from "@/features/auth/model";
+import type { AccountDeletionRequest, LoginRequest, SignupRequest } from "@/features/auth/model";
 import { unregisterThisDevice } from "@/features/notification/push";
 import { clearTokens, loadOnboardingDone, loadTermsAgreed, saveSessionUser, saveTokens } from "@/lib/session-storage";
 
@@ -44,6 +44,28 @@ export function useLogout() {
       await logout();
     },
     onSettled: async () => {
+      await clearTokens();
+      signOut();
+      queryClient.clear();
+    },
+  });
+}
+
+/**
+ * 회원 탈퇴. 로그아웃과 달리 **서버 처리가 성공했을 때만** 로컬 세션을 끝낸다 —
+ * 비밀번호가 틀리면(401 USER_007) 계정이 그대로 남으므로 화면도 그대로 두고 이유만 보여 준다.
+ * 푸시 기기 해제는 탈퇴가 된 뒤에 한 번 시도하고(토큰이 아직 살아 있다), 실패해도 탈퇴를 막지 않는다.
+ * 화면 이동은 (tabs) 레이아웃이 비로그인 상태를 보고 알아서 로그인으로 보낸다.
+ */
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  const signOut = useAuthStore((state) => state.signOut);
+
+  return useMutation({
+    mutationFn: (request: AccountDeletionRequest) => deleteAccount(request),
+    retry: false,
+    onSuccess: async () => {
+      await unregisterThisDevice();
       await clearTokens();
       signOut();
       queryClient.clear();

@@ -1,5 +1,6 @@
 import { ApiError } from "@/api/error";
 import type {
+  AccountDeletionRequest,
   AuthUser,
   LoginRequest,
   LoginResponseDto,
@@ -60,4 +61,15 @@ export function signupMock({ email, password, name }: SignupRequest): SignupResp
   const userId = accounts.size + 2;
   accounts.set(key, { email: key, password, user: { id: userId, name } });
   return { userId };
+}
+
+/**
+ * DELETE /users/me 목. 서버처럼 현재 비밀번호를 확인하고 틀리면 401 USER_007 이다.
+ * 목은 어떤 이메일이든 MOCK_PASSWORD 로 로그인되므로 가입해 둔 계정의 비밀번호도 함께 받는다.
+ * 탈퇴 이메일 재가입 차단은 서버 몫이라 목에서는 흉내 내지 않는다.
+ */
+export function deleteAccountMock({ password }: AccountDeletionRequest): void {
+  if (password === "") throw new ApiError(400, "COMMON_001", "비밀번호를 입력해 주세요.");
+  const known = password === MOCK_PASSWORD || [...accounts.values()].some((account) => account.password === password);
+  if (!known) throw new ApiError(401, "USER_007", "현재 비밀번호가 올바르지 않습니다.");
 }
