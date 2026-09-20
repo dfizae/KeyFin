@@ -17,6 +17,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
@@ -35,6 +37,7 @@ import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
 import com.finset.key_fin.payment.entity.PrepareTransfer;
 import com.finset.key_fin.payment.entity.TransferStatus;
+import com.finset.key_fin.payment.event.TransferCompleted;
 import com.finset.key_fin.payment.exception.PaymentErrorCode;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
@@ -42,6 +45,7 @@ import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
+@RecordApplicationEvents
 @Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/transfer-approve-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class TransferServiceTest extends SpringIntegrationTestSupport {
@@ -59,6 +63,8 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 	private AuditLogRepository auditLogRepository;
 	@Autowired
 	private TransferWriter transferWriter;
+	@Autowired
+	private ApplicationEvents events;
 	@MockitoBean
 	private FinanceTransferClient financeTransferClient;
 
@@ -233,7 +239,7 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 	@DisplayName("이미 종결된 건에 complete가 다시 오면 아무것도 쓰지 않고 현재 상태를 돌려준다(중복 감사 없음)")
 	void completeIsIdempotentOnFinalState() {
 		TransferApproveResponse response = transferWriter.complete(
-				USER, 9904L, FinanceTransferResult.EXECUTED, java.time.LocalDateTime.now());
+				USER, 9904L, FinanceTransferResult.EXECUTED, java.time.LocalDateTime.now(), true);
 
 		assertThat(response.status()).isEqualTo(TransferStatus.EXECUTED);
 		assertThat(auditOf(9904L)).isEmpty();
@@ -277,6 +283,35 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 		assertThat(pending.isApproved()).isTrue();
 		assertThat(pending.getInstitutionTxNo()).isEqualTo("20260910083000000077");
 		assertThat(auditOf(stuckId)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("알림 이벤트: 사용자 승인으로 EXECUTED·FAILED가 되면 그 상태를 담은 TransferCompleted를 한 번 발행한다")
+	void publishesCompletedOnUserApproval() {
+		when(financeTransferClient.transfer(eq(USER_KEY), anyString(), eq(INCOME_NO), eq(LIVING_NO), eq(230000L), any()))
+				.thenReturn(FinanceTransferResult.EXECUTED);
+		when(financeTransferClient.transfer(eq(USER_KEY), eq("20260901083000000009"), eq(INCOME_NO), eq(LIVING_NO), eq(120000L), any()))
+				.thenReturn(new FinanceTransferResult(Status.INSUFFICIENT_BALANCE, "A1014"));
+
+		transferService.approve(USER, 9901L);
+		assertThatThrownBy(() -> transferService.approve(USER, 9905L)).isInstanceOf(BusinessException.class);
+
+		assertThat(events.stream(TransferCompleted.class)).containsExactly(
+				new TransferCompleted(USER, 9901L, TransferStatus.EXECUTED),
+				new TransferCompleted(USER, 9905L, TransferStatus.FAILED));
+	}
+
+	@Test
+	@DisplayName("알림 이벤트: 종결된 건의 재-complete와 복구 배치는 발행하지 않는다")
+	void doesNotPublishOnIdempotentCompleteOrRecovery() {
+		when(financeTransferClient.transfer(eq(USER_KEY), eq("20260901083000000009"), eq(INCOME_NO), eq(LIVING_NO), eq(120000L), any()))
+				.thenReturn(FinanceTransferResult.ALREADY_PROCESSED);
+
+		transferWriter.complete(USER, 9904L, FinanceTransferResult.EXECUTED, java.time.LocalDateTime.now(), true);
+		transferService.recoverApproved();
+
+		assertThat(prepareTransferRepository.findById(9905L).orElseThrow().getStatus()).isEqualTo(TransferStatus.EXECUTED);
+		assertThat(events.stream(TransferCompleted.class)).isEmpty();
 	}
 
 	private List<AuditLog> auditOf(long transferId) {

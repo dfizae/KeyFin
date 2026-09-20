@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +18,7 @@ import com.finset.key_fin.payment.entity.AuditLog;
 import com.finset.key_fin.payment.entity.AuditLog.AuditAction;
 import com.finset.key_fin.payment.entity.PrepareTransfer;
 import com.finset.key_fin.payment.entity.TransferStatus;
+import com.finset.key_fin.payment.event.TransferProposed;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
 import com.finset.key_fin.payment.service.TransferProposalService.ProposalResult;
@@ -23,6 +26,7 @@ import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
+@RecordApplicationEvents
 @Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/transfer-proposal-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class TransferProposalServiceTest extends SpringIntegrationTestSupport {
@@ -37,6 +41,8 @@ class TransferProposalServiceTest extends SpringIntegrationTestSupport {
 	private AuditLogRepository auditLogRepository;
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
+	@Autowired
+	private ApplicationEvents events;
 
 	@Test
 	@DisplayName("오늘·내일 출금 중 부족한 건만 제안: 기존 제안은 금액 갱신, 취소됐던 카드 청구는 다시 제안하지 않음, 준비된 건·만료 건은 취소, 실행된 건은 불변")
@@ -123,6 +129,26 @@ class TransferProposalServiceTest extends SpringIntegrationTestSupport {
 		assertThat(prepareTransferRepository.findById(9905L).orElseThrow().getStatus()).isEqualTo(TransferStatus.EXECUTED);
 		assertThat(prepareTransferRepository.findAllByUserIdOrderByIdDesc(USER)).hasSize(5);
 		assertThat(auditLogRepository.findAll()).extracting(AuditLog::getTargetId).containsExactly("9903");
+	}
+
+	@Test
+	@DisplayName("알림 이벤트: 금액 갱신·취소만 있으면 발행하지 않는다")
+	void doesNotPublishWithoutNewProposal() {
+		transferProposalService.propose(USER);
+
+		assertThat(events.stream(TransferProposed.class)).isEmpty();
+	}
+
+	@Test
+	@DisplayName("알림 이벤트: 새 제안과 재개 건이 같은 출금 계좌면 TransferProposed를 한 번만 발행한다")
+	void publishesOncePerWithdrawalAccount() {
+		jdbcTemplate.update("DELETE FROM prepare_transfers WHERE id = 9901");
+		markFailed(9905L);
+
+		ProposalResult result = transferProposalService.propose(USER);
+
+		assertThat(result.created()).isEqualTo(2);
+		assertThat(events.stream(TransferProposed.class)).containsExactly(new TransferProposed(USER, 9504L));
 	}
 
 	private void markFailed(long id) {
