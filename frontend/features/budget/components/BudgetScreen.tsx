@@ -1,29 +1,39 @@
 import type { UseQueryResult } from "@tanstack/react-query";
 import { Redirect, useRouter } from "expo-router";
-import { WalletMinimal, WifiOff } from "lucide-react-native";
+import { CircleAlert, WalletMinimal, WifiOff } from "lucide-react-native";
+import { useState } from "react";
 import { View } from "react-native";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { FillBar } from "@/components/ui/fill-bar";
+import { Icon } from "@/components/ui/icon";
 import { Screen, ScreenScrollView, useHeaderlessTop } from "@/components/ui/screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
+import { needsConfirmation, useCurrentBudget, useUpdateEmergencyFund } from "@/features/budget/api/queries";
 import { EnvelopeCarousel } from "@/features/budget/components/EnvelopeCarousel";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
+import { emergencyFundErrorMessage } from "@/features/budget/errors";
 import {
   budgetHealth,
   budgetPeriodLabel,
+  emergencyAmountError,
   envelopeHealth,
+  isEmergencyDirty,
+  toEmergencyFundRequest,
+  toEmergencyInput,
   usedBarPercent,
   type Budget,
+  type BudgetEmergency,
   type BudgetEnvelope,
   type BudgetHealth,
   type BudgetTotal,
   type EnvelopeHealth,
 } from "@/features/budget/model";
-import { formatKRW } from "@/lib/money";
+import { compareKRW, formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 /** 봉투 행 탭 → 봉투 상세(PAGE-23) */
@@ -71,8 +81,10 @@ function BudgetContent({ budget }: BudgetContentProps) {
   return (
     <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6">
       {/* 남는 높이를 카드 위아래로 나눠 총액 카드가 위쪽 영역 가운데에 온다 — 화면이 길면 카드 밑이 휑해 보였다(사용자 결정 2026-09-20). */}
-      <View className="flex-grow justify-center">
+      <View className="flex-grow justify-center gap-4">
         {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
+        {/* 비상금은 봉투 밖에서 쓰는 돈이라 총액 카드 아래에 둔다 — 회전판은 하단에 그대로 붙어 있어야 한다 */}
+        <EmergencySection budgetId={budget.data.budgetId} emergency={budget.data.emergency} />
       </View>
       {/* 회전판은 하단 탭 바로 위에 붙는다(사용자 결정 2026-09-18) */}
       <View className="gap-4">
@@ -95,6 +107,88 @@ function BudgetContent({ budget }: BudgetContentProps) {
 }
 
 // Pencil TotalCard (aAfOZ) 의 Used 막대는 $primary 한 가지뿐이라 경고·초과 색은 홈 BudgetCard 와 같은 기준으로 맞췄다.
+type EmergencySectionProps = {
+  budgetId: number;
+  emergency: BudgetEmergency;
+};
+
+/**
+ * 비상금 가상 풀 (FR-BGT-09, P1). 봉투 밖에서 따로 쓰는 돈이라 총액 카드 아래에 둔다.
+ * 실제 계좌가 아니고 봉투 잔액·이체에 영향을 주지 않아 확인 창 없이 저장 버튼만 둔다.
+ * 사용액은 주기 안 EMERGENCY 태그 거래 합(서버 값)이고, 넘겨 쓰면 남은 금액이 음수가 된다.
+ */
+function EmergencySection({ budgetId, emergency }: EmergencySectionProps) {
+  const update = useUpdateEmergencyFund();
+  const [amount, setAmount] = useState(() => toEmergencyInput(emergency));
+
+  const invalidReason = emergencyAmountError(amount);
+  const dirty = isEmergencyDirty(amount, emergency);
+  const canSave = dirty && invalidReason === null && !update.isPending;
+  const isSet = compareKRW(emergency.amount, "0") > 0;
+  const overspent = compareKRW(emergency.remaining, "0") < 0;
+
+  const save = () => {
+    if (!canSave) return;
+    update.mutate(
+      { budgetId, request: toEmergencyFundRequest(amount) },
+      { onSuccess: (fund) => setAmount(toEmergencyInput(fund.emergency)) }
+    );
+  };
+
+  return (
+    <View className="gap-4 rounded-2xl bg-card p-5 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none">
+      <View className="gap-1">
+        <Text className="text-label text-card-foreground">비상금</Text>
+        {isSet ? (
+          <>
+            <Text
+              className={cn("text-amount-sm tabular-nums", overspent ? "text-destructive" : "text-foreground")}
+              maxFontSizeMultiplier={1.3}
+            >
+              {formatKRW(emergency.remaining)}
+            </Text>
+            <Text className="text-caption tabular-nums text-card-foreground">
+              설정 {formatKRW(emergency.amount)} · 사용 {formatKRW(emergency.spent)}
+            </Text>
+          </>
+        ) : (
+          <Text className="text-body-sm text-card-foreground">
+            정해 두면 갑작스러운 지출을 봉투와 따로 관리할 수 있어요. 거래를 정리할 때 비상금으로 표시한 금액이 여기서 빠져요.
+          </Text>
+        )}
+      </View>
+
+      <AmountInput
+        variant="field"
+        className="h-input rounded-lg"
+        value={amount}
+        onChangeValue={setAmount}
+        editable={!update.isPending}
+        accessibilityLabel="비상금 금액"
+      />
+      <Text className="text-caption text-card-foreground">1,000원 단위로 정하고, 0원으로 두면 비상금을 쓰지 않아요.</Text>
+
+      {update.isError ? (
+        <View className="flex-row items-center gap-1.5" accessibilityLiveRegion="polite">
+          <Icon as={CircleAlert} size={16} className="text-destructive" />
+          <Text className="shrink text-caption text-destructive">{emergencyFundErrorMessage(update.error)}</Text>
+        </View>
+      ) : null}
+      {invalidReason === null ? null : <Text className="text-caption text-card-foreground">{invalidReason}</Text>}
+
+      <Button
+        className="h-button-md rounded-lg"
+        disabled={!canSave}
+        accessibilityState={{ disabled: !canSave }}
+        accessibilityLabel="비상금 저장"
+        onPress={save}
+      >
+        <Text>{update.isPending ? "저장하는 중" : "비상금 저장"}</Text>
+      </Button>
+    </View>
+  );
+}
+
 const TOTAL_BAR_CLASS: Record<BudgetHealth, string> = {
   good: "bg-primary",
   warning: "bg-warning",

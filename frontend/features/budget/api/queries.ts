@@ -1,7 +1,8 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { confirmBudget, createBudgetProposal, getCurrentBudget } from "@/features/budget/api/budget.api";
+import { confirmBudget, createBudgetProposal, getCurrentBudget, updateEmergencyFund } from "@/features/budget/api/budget.api";
 import { isAlreadyConfirmedError } from "@/features/budget/errors";
+import type { Budget, EmergencyFundRequest } from "@/features/budget/model";
 import { roomKeys } from "@/features/room/api/queries";
 import type { KRW } from "@/lib/money";
 
@@ -84,6 +85,25 @@ export function useConfirmBudget() {
     },
     onError: (error) => {
       if (isAlreadyConfirmedError(error)) void refresh();
+    },
+  });
+}
+
+type EmergencyFundVariables = { budgetId: number; request: EmergencyFundRequest };
+
+/**
+ * 비상금 설정 (FR-BGT-09). 응답이 곧 새 비상금 값이라 현재 주기 예산 캐시에 바로 넣는다 (docs/api-guide.md §5).
+ * 가상 풀이라 봉투 잔액·이체에는 영향이 없어 다른 조회는 건드리지 않는다.
+ */
+export function useUpdateEmergencyFund() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ budgetId, request }: EmergencyFundVariables) => updateEmergencyFund(budgetId, request),
+    retry: false,
+    onSuccess: (fund) => {
+      queryClient.setQueryData<Budget>(budgetKeys.current(), (old) =>
+        old && old.budgetId === fund.budgetId ? { ...old, emergency: fund.emergency } : old
+      );
     },
   });
 }

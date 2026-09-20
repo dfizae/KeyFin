@@ -6,9 +6,16 @@ import {
   createProposalMock,
   currentBudgetMock,
   resetBudgetMocks,
+  updateEmergencyFundMock,
 } from "@/api/mocks/budget";
 import { envelopeShortName } from "@/features/budget/catalog";
+import { ApiError } from "@/api/error";
 import {
+  emergencyAmountError,
+  isEmergencyDirty,
+  toEmergencyFund,
+  toEmergencyFundRequest,
+  toEmergencyInput,
   WARNING_REMAINING_RATE,
   budgetHealth,
   budgetPeriodLabel,
@@ -258,5 +265,66 @@ describe("parseEnvelopeId", () => {
     expect(parseEnvelopeId("2.5")).toBeNull();
     expect(parseEnvelopeId("외식")).toBeNull();
     expect(parseEnvelopeId(undefined)).toBeNull();
+  });
+});
+
+describe("비상금 (PUT /budgets/{budgetId}/emergency)", () => {
+  const emergency = { amount: 200000, spent: 45000, remaining: 155000 };
+
+  it("계약 예시를 화면 모델로 바꾸고 예산 id 를 검증한다", () => {
+    expect(toEmergencyFund({ budgetId: 11, emergency })).toEqual({
+      budgetId: 11,
+      emergency: { amount: "200000", spent: "45000", remaining: "155000" },
+    });
+    expect(() => toEmergencyFund({ budgetId: 0, emergency })).toThrow(ContractMismatchError);
+  });
+
+  it("남은 금액은 음수로도 온다(비상금을 넘겨 썼을 때)", () => {
+    const over = toEmergencyFund({ budgetId: 11, emergency: { amount: 100000, spent: 130000, remaining: -30000 } });
+    expect(over.emergency.remaining).toBe("-30000");
+  });
+
+  it("0 이상 1,000원 단위만 보낼 수 있고 빈 칸은 해제(0)로 본다", () => {
+    expect(emergencyAmountError("")).toBeNull();
+    expect(emergencyAmountError("200000")).toBeNull();
+    expect(emergencyAmountError("200500")).not.toBeNull();
+
+    expect(toEmergencyFundRequest("")).toEqual({ amount: 0 });
+    expect(toEmergencyFundRequest("200000")).toEqual({ amount: 200000 });
+    expect(() => toEmergencyFundRequest("200500")).toThrow();
+  });
+
+  it("미설정은 빈 칸으로 두고, 같은 금액이면 저장하지 않는다", () => {
+    const unset = { amount: "0", spent: "0", remaining: "0" } as const;
+    const set = { amount: "200000", spent: "45000", remaining: "155000" } as const;
+
+    expect(toEmergencyInput(unset)).toBe("");
+    expect(toEmergencyInput(set)).toBe("200000");
+    expect(isEmergencyDirty("", unset)).toBe(false);
+    expect(isEmergencyDirty("200000", set)).toBe(false);
+    expect(isEmergencyDirty("300000", set)).toBe(true);
+    expect(isEmergencyDirty("", set)).toBe(true);
+  });
+
+  it("목에 저장한 비상금은 현재 주기 예산 조회에도 그대로 나온다", () => {
+    resetBudgetMocks();
+    expect(toBudget(currentBudgetMock()).emergency.amount).toBe("0");
+
+    const saved = updateEmergencyFundMock(toBudget(currentBudgetMock()).budgetId, { amount: 200000 });
+    expect(saved.emergency).toEqual({ amount: 200000, spent: 0, remaining: 200000 });
+    expect(toBudget(currentBudgetMock()).emergency.amount).toBe("200000");
+
+    const codeOf = (run: () => void) => {
+      try {
+        run();
+        return null;
+      } catch (error) {
+        return error instanceof ApiError ? error.code : "NOT_API_ERROR";
+      }
+    };
+    expect(codeOf(() => updateEmergencyFundMock(1, { amount: 200500 }))).toBe("BUDGET_005");
+    expect(codeOf(() => updateEmergencyFundMock(1, { amount: -1000 }))).toBe("COMMON_001");
+    expect(codeOf(() => updateEmergencyFundMock(999, { amount: 1000 }))).toBe("BUDGET_002");
+    resetBudgetMocks();
   });
 });
