@@ -23,6 +23,7 @@ public record PlacedFurnitureResponse(
 		@Schema(requiredMode = REQUIRED) BigDecimal positionY,
 		@Schema(requiredMode = REQUIRED) int layer,
 		@Schema(requiredMode = REQUIRED, nullable = true) DefaultFurnitureType defaultFurnitureType,
+		@Schema(requiredMode = REQUIRED) boolean stickerAttached,
 		@Schema(requiredMode = REQUIRED) boolean canUnplace
 ) {
 	public static PlacedFurnitureResponse from(UserFurniture furniture) {
@@ -30,6 +31,6 @@ public record PlacedFurnitureResponse(
 		return new PlacedFurnitureResponse(furniture.getId(), item.getId(), item.getSlotType(), item.getAssetKey(),
 				furniture.getPlacementStatus(), furniture.getPlacementDirection(),
 				furniture.getPositionX(), furniture.getPositionY(), furniture.getLayer(),
-				item.getDefaultFurnitureType(), furniture.canUnplace());
+				item.getDefaultFurnitureType(), furniture.isStickerAttached(), furniture.canUnplace());
 	}
 }

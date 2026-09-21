@@ -8,6 +8,8 @@ import com.finset.key_fin.furniture.dto.response.PlacedFurnitureResponse;
 import com.finset.key_fin.item.entity.ItemSlotType;
 import com.finset.key_fin.item.dto.response.EquippedItemResponse;
 import com.finset.key_fin.room.service.RoomService;
+import com.finset.key_fin.room.service.RoomStickerService;
+import com.finset.key_fin.room.dto.response.StickerStatusResponse;
 import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,7 +37,7 @@ class RoomControllerTest {
 	@BeforeEach
 	void setUp() {
 		roomService = mock(RoomService.class);
-		mockMvc = standaloneSetup(new RoomController(roomService))
+		mockMvc = standaloneSetup(new RoomController(roomService, mock(RoomStickerService.class)))
 				.setControllerAdvice(new GlobalExceptionHandler())
 				.setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
 				.build();
@@ -94,11 +96,12 @@ class RoomControllerTest {
 								FurniturePlacementDirection.FRONT_RIGHT,
 								new BigDecimal("165.000"),
 								new BigDecimal("280.000"),
-								0, DefaultFurnitureType.SOFA, false
+								0, DefaultFurnitureType.SOFA, false, false
 						)
 				),
 				new RoomResponse.CoinResponse(1250),
-				new RoomResponse.AttendanceResponse(false)
+				new RoomResponse.AttendanceResponse(false),
+				new StickerStatusResponse(0, 3, false)
 		);
 	}
 }

@@ -10,6 +10,7 @@ import com.finset.key_fin.item.service.ItemService;
 import com.finset.key_fin.fincoin.repository.FinCoinRepository;
 import com.finset.key_fin.fincoin.entity.FinCoin;
 import com.finset.key_fin.fincoin.entity.FinCoinReason;
+import com.finset.key_fin.room.dto.response.StickerStatusResponse;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -26,8 +27,9 @@ import static org.mockito.Mockito.*;
 class RoomServiceTest {
 	private final ItemService items = mock(ItemService.class);
 	private final FurnitureService furnitures = mock(FurnitureService.class);
+	private final RoomStickerService stickers = mock(RoomStickerService.class);
 	private final FinCoinRepository coins = mock(FinCoinRepository.class);
-	private final RoomService service = new RoomServiceImpl(items, furnitures, coins,
+	private final RoomService service = new RoomServiceImpl(items, furnitures, stickers, coins,
 			Clock.fixed(Instant.parse("2026-09-18T15:00:00Z"), ZoneOffset.UTC));
 
 	@Test
@@ -35,7 +37,7 @@ class RoomServiceTest {
 		when(items.getEquipment(1L)).thenReturn(new AvatarEquipmentResponse(List.of()));
 		var placed = new PlacedFurnitureResponse(201L, 4L, ItemSlotType.FLOOR, "sofa_blue",
 				FurniturePlacementStatus.FLOOR, FurniturePlacementDirection.FRONT_LEFT,
-				new BigDecimal("165.123"), new BigDecimal("280.456"), -2, null, true);
+				new BigDecimal("165.123"), new BigDecimal("280.456"), -2, null, false, true);
 		when(furnitures.getPlacedFurnitures(1L)).thenReturn(List.of(placed)).thenReturn(List.of());
 		assertThat(service.getRoom(1).furnitures()).containsExactly(placed);
 		assertThat(service.getRoom(1).furnitures()).isEmpty();
@@ -49,9 +51,11 @@ class RoomServiceTest {
 		when(coin.getBalanceAfter()).thenReturn(37);
 		when(coins.findFirstByUserIdOrderByIdDesc(1L)).thenReturn(Optional.of(coin));
 		when(coins.existsByUserIdAndGrantDateAndReasonCode(1L, LocalDate.of(2026, 9, 19), FinCoinReason.ATTEND)).thenReturn(true);
+		when(stickers.synchronize(1L)).thenReturn(new StickerStatusResponse(2, 3, false));
 		var result = service.getRoom(1L);
 		assertThat(result.coin().balance()).isEqualTo(37);
 		assertThat(result.attendance().checkedToday()).isTrue();
+		assertThat(result.stickers().count()).isEqualTo(2);
 		verify(coins, never()).save(any());
 		when(coins.findFirstByUserIdOrderByIdDesc(1L)).thenReturn(Optional.empty());
 		assertThat(service.getRoom(1L).coin().balance()).isZero();

@@ -62,6 +62,9 @@ public class UserFurniture {
 	@Column(nullable = false)
 	private int layer;
 
+	@Column(name = "sticker_attached", nullable = false)
+	private boolean stickerAttached;
+
 	@Generated(event = EventType.INSERT)
 	@Enumerated(EnumType.STRING)
 	@Column(name = "item_category", nullable = false, insertable = false, updatable = false, length = 20)
@@ -117,4 +120,14 @@ public class UserFurniture {
 		return item.getDefaultFurnitureType() == null;
 	}
 
+	public void attachSticker() {
+		if (canUnplace()) {
+			throw new IllegalStateException("Only default furniture can carry a sticker");
+		}
+		stickerAttached = true;
+	}
+
+	public void removeSticker() {
+		stickerAttached = false;
+	}
 }

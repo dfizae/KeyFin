@@ -34,11 +34,11 @@ class FurnitureDocumentationIntegrationTest extends SpringIntegrationTestSupport
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.layer.type").value("integer"))
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionX.maximum").value(327))
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionY.maximum").value(404))
-				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.properties", aMapWithSize(13)))
+				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.properties", aMapWithSize(14)))
 				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.required", containsInAnyOrder(
 						"userFurnitureId", "itemId", "name", "slotType", "assetKey", "placed", "placementStatus", "placementDirection", "positionX", "positionY", "layer",
-						"defaultFurnitureType", "canUnplace")))
-				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties", aMapWithSize(11)))
+						"defaultFurnitureType", "stickerAttached", "canUnplace")))
+				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties", aMapWithSize(12)))
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.furnitures.items['$ref']")
 						.value("#/components/schemas/PlacedFurnitureResponse"));
 	}
