@@ -5,7 +5,7 @@ import { compareKRW, formatKRW, fromServerWon, toWon, type KRW } from "@/lib/mon
 /**
  * TRANSACTION 계약 (docs/api-contract.md TRANSACTION). 열거형은 ERD 값이며 모르는 값은 UNKNOWN 으로 흡수한다.
  */
-export const TX_TYPES = ["CARD", "DEPOSIT", "WITHDRAW", "TRANSFER"] as const;
+export const TX_TYPES = ["CARD", "DEPOSIT", "WITHDRAW", "TRANSFER", "CARD_BILL"] as const;
 export const CONFIRM_STATUSES = ["AUTO", "PENDING", "CONFIRMED"] as const;
 /** RESTORE 는 환급 입금을 봉투로 되돌리는 태그(develop 2026-09-15, 입금 + subcategoryId 와 함께) — 화면 입력은 아직 없다 (TBD) */
 export const EXCLUDE_TAGS = ["NONE", "DUTCH", "SELF_TRANSFER", "EMERGENCY", "CARRYOVER", "RESTORE"] as const;
@@ -210,6 +210,7 @@ const TX_TYPE_LABELS: Record<TxType, string> = {
   DEPOSIT: "입금",
   WITHDRAW: "계좌 출금",
   TRANSFER: "이체",
+  CARD_BILL: "카드대금",
   UNKNOWN: "기타",
 };
 
