@@ -146,6 +146,21 @@ def _rows() -> list[dict[str, object]]:
             account_id=_ACCOUNT_ID,
             card_id="",
         ),
+        # BUDGET_EXCLUDED: a real third-party outflow the user keeps out of budget
+        # envelopes. Stays an expense (counted as spending), amount stored in full,
+        # budget_amount_krw forced to 0 -- NOT an internal_transfer, NOT savings_out.
+        _row(
+            transaction_id="tx-budget-excluded",
+            transaction_type="TRANSFER_OUT",
+            category="사회·경조",
+            subcategory="경조사",
+            merchant="",
+            merchant_id="",
+            amount_krw=70_000,
+            account_id=_ACCOUNT_ID,
+            card_id="",
+            exclude_tag="BUDGET_EXCLUDED",
+        ),
         # TRANSFER + exclude_tag SELF_TRANSFER routes to internal_transfer (not spend).
         _row(
             transaction_id="tx-self-transfer",
@@ -205,6 +220,7 @@ def test_ingest_and_twin_construction_succeed_without_fdt_error() -> None:
     assert twin.transactions
     assert {t.id for t in twin.transactions} == {
         "tx-card-cafe", "tx-mart", "tx-dutch", "tx-deposit", "tx-transfer-out",
+        "tx-budget-excluded",
         "tx-self-transfer", "tx-unmapped", "tx-pending", "tx-overseas",
     }
 
@@ -236,6 +252,18 @@ def test_dutch_expense_keeps_full_amount_but_zeroes_budget() -> None:
     assert tx.amount_krw == 40_000
     assert tx.budget_amount_krw == 0
     assert tx.exclude_tag == "DUTCH"
+
+
+def test_budget_excluded_stays_a_spending_expense_with_zero_budget() -> None:
+    # A budget-excluded third-party outflow is real spending kept out of the budget
+    # envelope: expense kind, full amount, budget 0, and never an internal_transfer.
+    twin = _build_twin()
+    tx = _by_id(twin, "tx-budget-excluded")
+    assert tx.kind == "expense"
+    assert tx.kind != "internal_transfer"
+    assert tx.amount_krw == 70_000
+    assert tx.budget_amount_krw == 0
+    assert tx.exclude_tag == "BUDGET_EXCLUDED"
 
 
 def test_deposit_with_none_exclude_tag_counts_as_income_not_expense() -> None:
