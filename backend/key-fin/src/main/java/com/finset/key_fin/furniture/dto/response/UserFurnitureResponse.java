@@ -4,6 +4,7 @@ import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.furniture.entity.UserFurniture;
 import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 import com.finset.key_fin.item.entity.ItemSlotType;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -24,15 +25,16 @@ public record UserFurnitureResponse(
 		@Schema(description = "X 좌표. 미설치 시 null", requiredMode = REQUIRED, nullable = true) BigDecimal positionX,
 		@Schema(description = "Y 좌표. 미설치 시 null", requiredMode = REQUIRED, nullable = true) BigDecimal positionY,
 		@Schema(description = "깊이 보정값. 미설치 시 0", requiredMode = REQUIRED) int layer,
-		@Schema(description = "기본 가구 식별값. 일반 가구는 null", requiredMode = REQUIRED, nullable = true) DefaultFurnitureType defaultFurnitureType,
+		@Schema(description = "기본 지급 상품 식별값. 그 외 상품은 null", requiredMode = REQUIRED, nullable = true) DefaultFurnitureType defaultFurnitureType,
+		@Schema(description = "색상과 무관한 필수 가구 종류. 그 외 가구는 null", requiredMode = REQUIRED, nullable = true) FurnitureType furnitureType,
 		@Schema(requiredMode = REQUIRED) boolean stickerAttached,
-		@Schema(description = "설치 해제 가능 여부. 기본 가구는 false", requiredMode = REQUIRED) boolean canUnplace
+		@Schema(description = "단독 해제 가능 여부. 설치된 필수 가구는 false이며 일괄 저장으로 같은 종류와 교체 가능", requiredMode = REQUIRED) boolean canUnplace
 ) {
 	public static UserFurnitureResponse from(UserFurniture furniture) {
 		var item = furniture.getItem();
 		return new UserFurnitureResponse(furniture.getId(), item.getId(), item.getName(), item.getSlotType(),
 				item.getAssetKey(), furniture.isPlaced(), furniture.getPlacementStatus(), furniture.getPlacementDirection(),
 				furniture.getPositionX(), furniture.getPositionY(), furniture.getLayer(),
-				item.getDefaultFurnitureType(), furniture.isStickerAttached(), furniture.canUnplace());
+				item.getDefaultFurnitureType(), item.getFurnitureType(), furniture.isStickerAttached(), furniture.canUnplace());
 	}
 }

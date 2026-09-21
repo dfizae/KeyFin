@@ -12,10 +12,11 @@ import { useAccounts } from "@/features/account/api/queries";
 import { linkedCards } from "@/features/account/model";
 import { ENVELOPE_CATALOG } from "@/features/budget/catalog";
 import { useLinkCandidates } from "@/features/link/api/queries";
-import { useTransactionList } from "@/features/transaction/api/queries";
+import { transactionKeys, useTransactionList } from "@/features/transaction/api/queries";
 import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
 import { TransactionRow } from "@/features/transaction/components/TransactionRow";
 import { monthFilterLabel, parseTransactionFilter, type TransactionFilter } from "@/features/transaction/model";
+import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
 import { currentMonthKey, shiftMonthKey } from "@/lib/date";
 
 const ASSETS_ROUTE = "/assets";
@@ -31,6 +32,7 @@ function TransactionListScreen() {
   const thisMonth = currentMonthKey();
   const filter = parseTransactionFilter(params, thisMonth);
   const list = useTransactionList(filter);
+  useRefetchStaleOnFocus(transactionKeys.all);
   const items = list.data?.pages.flatMap((page) => page.items) ?? [];
 
   const setFilter = (next: FilterParams) => router.setParams(next);

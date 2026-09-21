@@ -77,6 +77,8 @@ class FurnitureControllerTest {
 		return Stream.of(PLACEMENT_JSON, PLACEMENT_JSON.replace(",\"layer\":-2", ""),
 				PLACEMENT_JSON.replace("\"layer\":-2", "\"layer\":null"),
 				PLACEMENT_JSON.replace("165.123", "0").replace("280.456", "404.000"),
+				PLACEMENT_JSON.replace("280.456", "404.001"),
+				PLACEMENT_JSON.replace("280.456", "586.000"),
 				PLACEMENT_JSON.replace("165.123", "327.000").replace("280.456", "0"),
 				"{\"placed\":false}",
 				"{\"placed\":false,\"placementStatus\":null,\"placementDirection\":null,\"positionX\":null,\"positionY\":null,\"layer\":null}");
@@ -107,7 +109,7 @@ class FurnitureControllerTest {
 				PLACEMENT_JSON.replace("\"FLOOR\"", "null"), PLACEMENT_JSON.replace("\"FRONT_RIGHT\"", "null"),
 				PLACEMENT_JSON.replace("165.123", "null"), PLACEMENT_JSON.replace("280.456", "null"),
 				PLACEMENT_JSON.replace("165.123", "-0.001"), PLACEMENT_JSON.replace("165.123", "327.001"),
-				PLACEMENT_JSON.replace("280.456", "-0.001"), PLACEMENT_JSON.replace("280.456", "404.001"),
+				PLACEMENT_JSON.replace("280.456", "-0.001"), PLACEMENT_JSON.replace("280.456", "586.001"),
 				PLACEMENT_JSON.replace("165.123", "1.1234"), PLACEMENT_JSON.replace("280.456", "1.1234"),
 				"{\"placed\":false,\"placementStatus\":\"FLOOR\"}",
 				"{\"placed\":false,\"placementDirection\":\"FRONT_LEFT\"}",

@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { CheckCheck, CircleAlert, WifiOff } from "lucide-react-native";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { SubcategorySheet } from "@/features/transaction/components/SubcategoryS
 import { bulkClassifyErrorMessage, classifyErrorMessage } from "@/features/transaction/errors";
 import {
   merchantLabel,
+  resolvePendingFocus,
   suggestedForBulk,
   toSuggestedBulkRequest,
   transactionDateTimeLabel,
@@ -39,16 +40,41 @@ const OTHER_CATEGORY_LABEL = "다른 카테고리";
  * 아래 버튼은 제안 세분류가 있는 건을 한 번에 확정한다(PUT /transactions/classifications, P1) — 제안이 없는 건은 빠지고,
  * 서버가 한 건이라도 실패하면 전체를 되돌리므로 확인 창에서 그 사실을 먼저 알린다. 저녁 세션 코인은 아직이다.
  * 확정한 거래는 미확정 캐시에서 빠지므로 목록이 줄고, 다 비우면 빈 상태가 된다.
+ *
+ * 알림("새로 정리할 거래가 있어요")에서 오면 그 거래 id 가 focusId 로 온다(2026-09-21 사용자 요청). 목록에서 그 거래를 찾아
+ * 분류 창을 바로 열어 주고, 받은 쪽에 없으면 다음 쪽을 이어 받는다. 끝까지 없으면 이미 정리한 거래라 그렇다고만 알린다.
  */
-function PendingCleanupScreen() {
+type PendingCleanupScreenProps = {
+  /** 분류 창을 바로 열어 줄 거래. 알림에서 넘어왔을 때만 온다 */
+  focusId?: number | null;
+};
+
+function PendingCleanupScreen({ focusId = null }: PendingCleanupScreenProps) {
   const router = useRouter();
   const pending = usePendingTransactions();
   const classify = useClassifyTransaction();
   const bulk = useBulkClassifyTransactions();
-  const [sheetTransaction, setSheetTransaction] = useState<Transaction | null>(null);
+  const [pickedTransaction, setPickedTransaction] = useState<Transaction | null>(null);
+  // 알림에서 온 거래는 한 번만 열어 준다. 닫거나 확정한 뒤에도 계속 다시 열리면 화면을 쓸 수 없다.
+  const [focusDone, setFocusDone] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
-  const subcategories = useSubcategories(sheetTransaction !== null);
   const items = flattenPending(pending.data);
+  const focus = focusId === null || focusDone || pending.data === undefined ? null : resolvePendingFocus(items, focusId, pending.hasNextPage);
+  // 직접 고른 거래가 먼저다. 없으면 알림에서 온 거래를 연다 — 상태로 옮겨 담지 않고 그때그때 구한다.
+  const sheetTransaction = pickedTransaction ?? (focus?.state === "found" ? focus.transaction : null);
+  const subcategories = useSubcategories(sheetTransaction !== null);
+
+  // 받은 쪽에 그 거래가 없으면 다음 쪽을 이어 받는다(서버가 20건씩 준다). 더 받기에 실패하면 멈춰 되풀이하지 않는다.
+  const { hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage } = pending;
+  const searching = focus?.state === "searching";
+  useEffect(() => {
+    if (searching && hasNextPage && !isFetchingNextPage && !isFetchNextPageError) void fetchNextPage();
+  }, [searching, hasNextPage, isFetchingNextPage, isFetchNextPageError, fetchNextPage]);
+
+  const closeSheet = () => {
+    setPickedTransaction(null);
+    setFocusDone(true);
+  };
   // 서버가 20건씩 주므로 더 남아 있으면 건수 뒤에 + 를 붙인다 — 받은 만큼만 세고 모르는 건 모른다고 적는다
   const countLabel = `${items.length}건${pending.hasNextPage ? "+" : ""}`;
   const submittingId = classify.isPending ? classify.variables?.transactionId : undefined;
@@ -65,7 +91,7 @@ function PendingCleanupScreen() {
   const submit = (transaction: Transaction, request: ClassifyRequest) => {
     classify.mutate(
       { transactionId: transaction.id, request, txDate: transaction.txDate },
-      { onSuccess: () => setSheetTransaction(null) }
+      { onSuccess: closeSheet }
     );
   };
 
@@ -97,11 +123,19 @@ function PendingCleanupScreen() {
             if (pending.hasNextPage && !pending.isFetchingNextPage) void pending.fetchNextPage();
           }}
           ListHeaderComponent={
-            items.length === 0 ? null : (
-              <Text className="pb-1 text-body-sm text-card-foreground" accessibilityLiveRegion="polite">
-                확인이 필요한 결제 {countLabel}
-              </Text>
-            )
+            <View className="gap-2">
+              {focus?.state === "gone" ? (
+                <View className="flex-row items-center gap-1.5 rounded-lg bg-info-muted p-3.5" accessibilityLiveRegion="polite">
+                  <Icon as={CheckCheck} size={16} className="text-info" />
+                  <Text className="shrink text-caption text-foreground">알림의 결제는 이미 정리했어요.</Text>
+                </View>
+              ) : null}
+              {items.length === 0 ? null : (
+                <Text className="pb-1 text-body-sm text-card-foreground" accessibilityLiveRegion="polite">
+                  확인이 필요한 결제 {countLabel}
+                </Text>
+              )}
+            </View>
           }
           ListFooterComponent={
             pending.isFetchingNextPage ? (
@@ -121,7 +155,7 @@ function PendingCleanupScreen() {
               isPending={submittingId === item.id || bulk.isPending}
               errorMessage={classify.isError && classify.variables?.transactionId === item.id ? classifyErrorMessage(classify.error) : null}
               onConfirm={() => item.subcategoryId !== null && submit(item, { subcategoryId: item.subcategoryId })}
-              onOther={() => setSheetTransaction(item)}
+              onOther={() => setPickedTransaction(item)}
             />
           )}
         />
@@ -166,7 +200,7 @@ function PendingCleanupScreen() {
         amount={sheetTransaction?.amount ?? "0"}
         disabled={classify.isPending}
         onSelect={(request) => sheetTransaction && submit(sheetTransaction, request)}
-        onClose={() => setSheetTransaction(null)}
+        onClose={closeSheet}
       />
     </Screen>
   );

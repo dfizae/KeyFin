@@ -17,8 +17,9 @@ import { CandidatesErrorState } from "@/features/link/components/CandidatesError
 import { useCardBillings, usePaymentCalendar } from "@/features/payment/api/queries";
 import { calendarEntryIcon } from "@/features/payment/catalog";
 import { findCardBilling, upcomingEntries, type CalendarEntry, type CardBilling, type CardBillings } from "@/features/payment/model";
-import { RECENT_TRANSACTION_COUNT, useRecentTransactions } from "@/features/transaction/api/queries";
+import { RECENT_TRANSACTION_COUNT, transactionKeys, useRecentTransactions } from "@/features/transaction/api/queries";
 import { TransactionRow } from "@/features/transaction/components/TransactionRow";
+import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
 import { currentDateKey, currentMonthKey, formatMonthDay, parseKSTDateKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -54,7 +55,10 @@ function AssetsScreen() {
 
   return (
     <Screen>
-      <ScreenScrollView className="flex-1" overlapHeader={false} contentContainerClassName="gap-10 pb-8" style={{ paddingTop: topInset }}>
+      {/* 위 여백은 스크롤 뷰가 아니라 바깥 View 에 준다(예산 탭과 같은 방식). 스크롤 뷰 style 의 padding 은 Android 에서 내용을 밀기만 하고
+          스크롤 범위는 늘리지 않아 끝이 그만큼 잘렸다 (2026-09-22) */}
+      <View className="flex-1" style={{ paddingTop: topInset }}>
+      <ScreenScrollView className="flex-1" overlapHeader={false} contentContainerClassName="gap-10 pb-8">
       <View className="gap-4">
       {/* 예산 탭 TotalCard 와 같은 카드로 감싼다 (사용자 요청 2026-09-20). 면 구분은 카드 규칙대로 테두리 대신 그림자(다크는 테두리) */}
       <View className="px-6">
@@ -113,6 +117,7 @@ function AssetsScreen() {
       <UpcomingPayments />
       <RecentTransactions />
       </ScreenScrollView>
+      </View>
     </Screen>
   );
 }
@@ -320,6 +325,7 @@ function PaymentRow({ entry }: { entry: CalendarEntry }) {
 function RecentTransactions() {
   const router = useRouter();
   const recent = useRecentTransactions(currentMonthKey());
+  useRefetchStaleOnFocus(transactionKeys.all);
 
   return (
     <View className="gap-3 px-6">

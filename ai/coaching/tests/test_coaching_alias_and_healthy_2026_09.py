@@ -69,6 +69,64 @@ def test_alias_expansion_does_not_open_the_volatile_block(question: str) -> None
     assert model_selected_finance_evidence(evidence) is None
 
 
+# The seven conversational example phrasings that must all reach finance
+# selection (deterministic catalog template OR bounded model fact-selection),
+# never the review->template fallback. "지출 줄이는 법 알려줘" and "저축 늘리려면"
+# are the two the added "지출 줄이"/"저축 늘리" stem aliases rescue.
+_REACHES_FINANCE = [
+    "지출 줄이는 법 알려줘",
+    "소비 습관 어떻게 고쳐",
+    "예산 어떻게 세워",
+    "저축 늘리려면",
+    "빚 갚는 순서",
+    "비상금 모으기",
+    "목돈 모으기",
+]
+
+
+@pytest.mark.parametrize("question", _REACHES_FINANCE)
+def test_example_counseling_phrasing_reaches_finance(question: str) -> None:
+    evidence = finance_evidence(question)
+    # "reaches finance" = any of the three finance selection paths accepts it:
+    # a deterministic catalog answer, a deterministic data/source boundary, or
+    # the bounded model fact-selection input. None of these is the review route.
+    reaches = (
+        deterministic_finance_wording(evidence) is not None
+        or deterministic_finance_status(evidence) is not None
+        or model_selected_finance_evidence(evidence) is not None
+    )
+    assert reaches
+
+
+def test_stem_aliased_conjugations_reach_the_model_finance_path() -> None:
+    # The two previously-failing conjugations now retrieve budget via the stem
+    # aliases and, being neither an exact definition nor a live-rate/tax status,
+    # reach the bounded model fact-selection path (source=llm).
+    for question in ("저축 늘리려면", "저축 늘리는", "저축 늘리기"):
+        assert "budget" in {fact.id for fact in retrieve_facts(question)}
+    savings = finance_evidence("저축 늘리려면")
+    assert model_selected_finance_evidence(savings) is not None
+
+
+# Regression pin: genuine personal-ledger lookups must NOT be answered by the
+# general-concept finance shortcut. ``_PERSONAL_DATA_LOOKUP`` was deliberately
+# left UNCHANGED (not narrowed), so these still decline the finance shortcut and
+# fall to the personal/FDT route as before.
+@pytest.mark.parametrize(
+    "question",
+    [
+        "내 지출 얼마야",
+        "이번 달 지출 알려줘",
+        "계좌 잔액 알려줘",
+        "남은 예산 얼마야",
+    ],
+)
+def test_personal_ledger_lookups_still_decline_the_finance_shortcut(question: str) -> None:
+    evidence = finance_evidence(question)
+    assert model_selected_finance_evidence(evidence) is None
+    assert deterministic_finance_wording(evidence) is None
+
+
 # ---------------------------------------------------------------------------
 # #2 lowest-precedence healthy/surplus advice branch (fact-gated, digit-free)
 # ---------------------------------------------------------------------------
@@ -171,3 +229,103 @@ def test_healthy_branch_tone_variants_are_distinct_and_digit_free() -> None:
     for text in (encouraging, direct):
         assert "외식" in text
         assert not any(char.isdigit() for char in text)
+
+
+# ---------------------------------------------------------------------------
+# #2b advice on a requested_review receipt (no payment fact) via the review
+# engine's own observed-budget remaining, using the identical bands, digit-free.
+# ---------------------------------------------------------------------------
+
+_OBSERVED_BASIS = "approved_snapshot_budget_minus_observed_budgeted_spending"
+
+
+def _observed_row(envelope: str, budget: int, remaining: int) -> dict[str, object]:
+    return {
+        "envelope": envelope,
+        "budget_krw": budget,
+        "observed_used_krw": budget - remaining,
+        "observed_remaining_krw": remaining,
+        "as_of": "2026-09-21",
+        "basis": _OBSERVED_BASIS,
+    }
+
+
+def _review_receipt(
+    rows: list[dict[str, object]],
+    *,
+    warnings: list[dict[str, object]] | None = None,
+    status: str = "ready",
+) -> Receipt:
+    result: dict[str, object] = {"status": status, "observed_budgets": rows}
+    if warnings is not None:
+        result["warnings"] = warnings
+    return _base_receipt(result=result)
+
+
+def test_review_healthy_surplus_advice_fires_from_observed_budget_remaining() -> None:
+    advice = deterministic_advice(_review_receipt([_observed_row("외식", 100000, 90000)]))
+    assert advice is not None
+    assert "외식" in advice
+    assert not any(char.isdigit() for char in advice)
+
+
+def test_review_observed_bands_match_the_payment_thresholds() -> None:
+    # over-budget <= 0, near-limit 0 < x <= 10, healthy >= 80, moderate is silent.
+    assert "넘고" in deterministic_advice(_review_receipt([_observed_row("외식", 100000, 0)]))
+    assert "얼마 남지" in deterministic_advice(
+        _review_receipt([_observed_row("외식", 100000, 10000)]), tone="direct"
+    )
+    assert "여유" in deterministic_advice(_review_receipt([_observed_row("외식", 100000, 80000)]))
+    assert deterministic_advice(_review_receipt([_observed_row("외식", 100000, 79000)])) is None
+    assert deterministic_advice(_review_receipt([_observed_row("외식", 100000, 50000)])) is None
+
+
+def test_review_over_budget_outranks_a_healthy_envelope() -> None:
+    advice = deterministic_advice(
+        _review_receipt([_observed_row("외식", 100000, 90000), _observed_row("쇼핑", 100000, -1)])
+    )
+    assert advice is not None
+    assert "쇼핑" in advice
+    assert "외식" not in advice
+
+
+def test_review_advice_is_fact_gated_and_never_fabricated() -> None:
+    # No observed-budget fact at all -> no advice.
+    assert deterministic_advice(_base_receipt()) is None
+    # Engine flags its own budget input incomplete -> the remaining is untrusted.
+    assert (
+        deterministic_advice(
+            _review_receipt(
+                [_observed_row("외식", 100000, 90000)],
+                warnings=[{"code": "BUDGET_INPUT_INCOMPLETE", "severity": "user", "detail": "x"}],
+            )
+        )
+        is None
+    )
+    # A row with a foreign basis or a non-positive budget is ignored, not guessed.
+    assert (
+        deterministic_advice(
+            _review_receipt([{"envelope": "외식", "budget_krw": 100000, "observed_remaining_krw": 90000}])
+        )
+        is None
+    )
+    assert deterministic_advice(_review_receipt([_observed_row("외식", 0, 0)])) is None
+    # A review the engine still marks needs_data (stale/dirty snapshot) is not a
+    # trustworthy basis for a spending nudge even though it lists observed budgets.
+    assert (
+        deterministic_advice(
+            _review_receipt([_observed_row("외식", 100000, 90000)], status="needs_data")
+        )
+        is None
+    )
+
+
+def test_payment_receipt_advice_is_unchanged_by_the_review_path() -> None:
+    # A payment-event receipt keeps its single-envelope payment path even when a
+    # (production) review result with observed budgets is also present.
+    receipt = _payment_receipt("50").model_copy(
+        update={"result": _review_receipt([_observed_row("쇼핑", 100000, 90000)]).result}
+    )
+    # payment 50% is moderate -> no advice, and the observed healthy 쇼핑 envelope
+    # must NOT leak into a payment receipt's advice.
+    assert deterministic_advice(receipt) is None
