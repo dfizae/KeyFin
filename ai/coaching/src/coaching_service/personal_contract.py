@@ -12,7 +12,7 @@ from coaching_service.schemas import Frozen, Identifier, Money
 NonnegativeMoney = Annotated[int, Field(strict=True, ge=0, le=10**12)]
 Coverage = Literal["complete", "partial", "unknown"]
 PersonalTopic = Literal[
-    "accounts", "assets", "debts", "insurance", "income", "fixed_costs", "payments", "goals"
+    "accounts", "assets", "debts", "insurance", "income", "fixed_costs", "payments", "goals", "budget"
 ]
 
 

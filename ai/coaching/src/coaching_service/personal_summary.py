@@ -13,6 +13,7 @@ LABELS: Final = {
     "fixed_costs": "등록된 월 고정비",
     "payments": "기준일 이후 등록된 카드 청구액",
     "goals": "등록된 목표",
+    "budget": "봉투 예산 잔액",
 }
 
 
@@ -97,7 +98,7 @@ def context_summary(context: PersonalContext, topic: PersonalTopic) -> PersonalS
                     "달성 가능성 예측은 아닙니다."
                 ),
             )
-        case "accounts" | "assets" | "debts" | "payments":
+        case "accounts" | "assets" | "debts" | "payments" | "budget":
             return missing(topic)
         case unreachable:
             assert_never(unreachable)

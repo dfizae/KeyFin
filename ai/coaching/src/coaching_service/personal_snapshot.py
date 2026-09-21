@@ -161,7 +161,7 @@ def snapshot_summary(twin: JsonDocument, topic: PersonalTopic) -> PersonalSummar
             warnings.append(
                 "기준일 다음날부터의 등록 카드 청구서만 조회하며 미래 소비나 전체 자동이체 예측은 아닙니다."
             )
-        case "income" | "fixed_costs" | "insurance" | "goals":
+        case "income" | "fixed_costs" | "insurance" | "goals" | "budget":
             return missing(topic)
         case unreachable:
             assert_never(unreachable)

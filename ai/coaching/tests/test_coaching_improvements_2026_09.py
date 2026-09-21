@@ -10,13 +10,23 @@ A separate assertion below pins ``wording_problem`` behavior unchanged.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
+
+import pytest
 
 from coaching_service.finance_knowledge import deterministic_finance_wording, finance_evidence
 from coaching_service.knowledge_catalog import load_catalog
 from coaching_service.llm_prompt import _WRITE, wording_problem
+from coaching_service.payments import Ledger
 from coaching_service.personal_query import select_personal_topic, select_personal_topics
+from coaching_service.personal_service import personal_summary
 from coaching_service.rendering import deterministic_advice
+from coaching_service.repository import Repository
 from coaching_service.schemas import Envelope, Receipt
+from coaching_service.store import Store
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # HARD CONSTRAINT regression pin: wording_problem() must keep every guard.
@@ -158,7 +168,14 @@ def test_compound_question_resolves_both_recognized_topics() -> None:
 
 
 def test_compound_question_with_one_unsupported_fragment_still_resolves_known_topic() -> None:
+    # "남은 예산" is now a supported topic ("budget"), so this compound question
+    # resolves both fragments instead of dropping the budget half.
     topics = select_personal_topics("지금 계좌 잔액이랑 남은 예산 알려줘")
+    assert topics == ("accounts", "budget")
+
+
+def test_compound_question_with_a_genuinely_unsupported_fragment_still_drops_it() -> None:
+    topics = select_personal_topics("계좌 잔액이랑 국민은행 알려줘")
     assert topics == ("accounts",)
 
 
@@ -205,3 +222,108 @@ def test_other_volatile_or_decision_requests_are_still_blocked() -> None:
     assert deterministic_finance_wording(evidence) is None
     evidence = finance_evidence("대출을 받을까 말까?")
     assert deterministic_finance_wording(evidence) is None
+
+
+# ---------------------------------------------------------------------------
+# #6 "budget" (봉투 예산 잔액) topic added to the personal-query path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "이번 달 예산 얼마 남았어?",
+        "남은 예산 알려줘",
+        "봉투 예산 알려줘",
+        "봉투 잔액 알려줘",
+    ],
+)
+def test_budget_single_topic_question_is_recognized(question: str) -> None:
+    assert select_personal_topic(question) == "budget"
+
+
+def test_existing_single_topic_grammar_is_unaffected_by_the_budget_alias() -> None:
+    # Regression pin: unrelated single-topic questions still resolve exactly as before.
+    assert select_personal_topic("내 계좌 잔액 알려줘") == "accounts"
+    assert select_personal_topic("내 자산 알려줘") == "assets"
+    assert select_personal_topic("내 월 소득이 얼마야") == "income"
+    assert select_personal_topic("내 보험료는?") == "insurance"
+    assert select_personal_topic("예정 결제 알려주세요") == "payments"
+    assert select_personal_topic("내 자산과 부채 비교해줘") is None
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
+
+
+def _ledger_json() -> str:
+    return Ledger(
+        envelopes=(Envelope(envelope="식비", balance_krw=15000), Envelope(envelope="교통", balance_krw=5000))
+    ).model_dump_json()
+
+
+def _twin_json() -> str:
+    return (
+        '{"as_of": "2026-09-03", "snapshot": {"as_of": "2026-09-03", "source": "USER_ASSUMPTION", '
+        '"accounts": [{"account_id": "cash", "balance_krw": 1000000}], "cards": []}}'
+    )
+
+
+def _seeded_repository(tmp_path: Path, *, ledger: str | None, twin: str | None) -> Repository:
+    store = Store(tmp_path / "personal.sqlite3")
+    with store.connection() as connection:
+        if ledger is not None:
+            _ = connection.execute(
+                "INSERT INTO items VALUES(?,?,?)", ("owner", "ledger", ledger)
+            )
+        if twin is not None:
+            _ = connection.execute("INSERT INTO items VALUES(?,?,?)", ("owner", "twin", twin))
+    return Repository(store)
+
+
+@pytest.mark.anyio
+async def test_budget_single_topic_answers_with_envelope_rows_and_total(tmp_path: Path) -> None:
+    repository = _seeded_repository(tmp_path, ledger=_ledger_json(), twin=None)
+    summary = await personal_summary(repository, "owner", "남은 예산 알려줘")
+    assert summary.status == "answered"
+    assert summary.total_krw == 20000
+    assert {row.label: row.amount_krw for row in summary.rows} == {"식비": 15000, "교통": 5000}
+    # No fabricated digits: every number in the text traces back to the ledger rows.
+    assert "20,000" in summary.text
+    assert "15,000" in summary.text
+    assert "5,000" in summary.text
+
+
+@pytest.mark.anyio
+async def test_budget_topic_missing_ledger_is_graceful(tmp_path: Path) -> None:
+    repository = _seeded_repository(tmp_path, ledger=None, twin=None)
+    summary = await personal_summary(repository, "owner", "남은 예산 알려줘")
+    assert summary.status == "needs_data"
+    assert summary.rows == ()
+
+
+@pytest.mark.anyio
+async def test_compound_accounts_and_budget_question_answers_both(tmp_path: Path) -> None:
+    repository = _seeded_repository(tmp_path, ledger=_ledger_json(), twin=_twin_json())
+    summary = await personal_summary(repository, "owner", "계좌 잔액이랑 남은 예산 알려줘")
+    assert summary.status == "answered"
+    # Accounts half: the FDT-reported cash balance shows up.
+    assert "1,000,000" in summary.text
+    # Budget half: the envelope balances and total show up.
+    assert "식비" in summary.text
+    assert "20,000" in summary.text
+    # The old "미지원/코칭 리뷰에서 확인" redirect must not fire now that budget is supported.
+    assert "코칭 리뷰" not in summary.text
+    assert "지원" not in summary.text
+
+
+@pytest.mark.anyio
+async def test_compound_question_with_a_genuinely_unknown_fragment_still_gets_the_note(
+    tmp_path: Path,
+) -> None:
+    repository = _seeded_repository(tmp_path, ledger=_ledger_json(), twin=_twin_json())
+    summary = await personal_summary(repository, "owner", "계좌 잔액이랑 국민은행 알려줘")
+    assert summary.status == "answered"
+    assert "1,000,000" in summary.text
+    assert "이 조회로는 답하지 않습니다" in summary.text
