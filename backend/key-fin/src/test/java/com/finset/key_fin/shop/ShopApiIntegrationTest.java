@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
@@ -80,7 +81,10 @@ class ShopApiIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
+	@Transactional
 	void listsActiveCatalogInOrderWithOwnedFlagsAndFilters() throws Exception {
+		// Isolate this test's catalog; rollback restores the sale-enabled seed items.
+		jdbc.sql("UPDATE items SET is_active = FALSE WHERE is_active = TRUE").update();
 		long avatar = createItem("AVATAR", "HEAD", 0, true);
 		long furniture = createItem("FURNITURE", "FLOOR", 0, true);
 		long unowned = createItem("AVATAR", "FACE", 10, true);
