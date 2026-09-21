@@ -345,6 +345,29 @@ export function toBulkClassifyResult(dto: BulkClassifyResultDto): BulkClassifyRe
 }
 
 /** 제안 세분류가 있어 한 번에 확정할 수 있는 거래. 제안이 없는 건은 고를 것이 없어 빠진다 */
+/**
+ * 알림에서 넘어온 거래를 미확정 목록에서 찾은 결과 (알림함·푸시 → PAGE-22, 2026-09-21).
+ * 거래 단건 조회 API 가 없어서(GET /transactions/{id} 없음) 거래 상세로 바로 보내면 캐시에 없을 때 "찾을 수 없어요"가 된다.
+ * 미확정 목록은 이 화면이 직접 받으므로 여기서 찾는다.
+ * - found: 찾았다. 그 거래의 분류 창을 연다
+ * - searching: 받은 쪽에는 없고 더 받을 쪽이 남았다. 다음 쪽을 받아 다시 찾는다
+ * - gone: 끝까지 받았는데 없다 = 이미 정리한 거래다(다른 기기·자동 분류 포함). 목록만 보여 주고 그렇다고 알린다
+ */
+export type PendingFocus = { state: "found"; transaction: Transaction } | { state: "searching" } | { state: "gone" };
+
+export function resolvePendingFocus(transactions: readonly Transaction[], focusId: number, hasNextPage: boolean): PendingFocus {
+  const transaction = transactions.find((candidate) => candidate.id === focusId);
+  if (transaction !== undefined) return { state: "found", transaction };
+  return hasNextPage ? { state: "searching" } : { state: "gone" };
+}
+
+/** 라우트 파라미터(문자열)를 거래 id 로. 양의 정수 모양이 아니면 null 이라 평소 진입과 같아진다 (규칙 50: 딥링크 값은 믿지 않는다) */
+export function toFocusTransactionId(raw: unknown): number | null {
+  if (typeof raw !== "string" || !/^[1-9]\d*$/.test(raw)) return null;
+  const id = Number(raw);
+  return Number.isSafeInteger(id) ? id : null;
+}
+
 export function suggestedForBulk(transactions: readonly Transaction[]): Transaction[] {
   return transactions.filter((transaction) => transaction.subcategoryId !== null).slice(0, BULK_CLASSIFY_MAX);
 }
