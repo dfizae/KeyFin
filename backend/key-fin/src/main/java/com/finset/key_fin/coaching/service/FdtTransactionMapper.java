@@ -50,7 +50,7 @@ public class FdtTransactionMapper {
 				merchantId(transaction),
 				transaction.getAmount(),
 				idToString(transaction.getAccountId()),
-				idToString(transaction.getCardId()),
+				cardId(transaction),
 				transaction.getConfirmStatus().name(),
 				transaction.getStatus().name(),
 				excludeTag(transaction)
@@ -60,10 +60,14 @@ public class FdtTransactionMapper {
 	/**
 	 * RESTORE 는 봉투를 되돌리는 입금이라 FDT enum 에 없다. DEPOSIT 으로 보낸다.
 	 * 본인 계좌 이동은 전송에서 빠지므로 남는 TRANSFER 는 전부 남에게 나가는 송금(TRANSFER_OUT)이다.
+	 * 카드대금 출금은 CARD_SETTLEMENT 로, 계좌 현금만 줄이고 지출 분포에는 넣지 않는다.
 	 */
 	private String transactionType(Transaction transaction) {
 		if (transaction.getExcludeTag() == ExcludeTag.RESTORE) {
 			return TransactionType.DEPOSIT.name();
+		}
+		if (transaction.getTransactionType() == TransactionType.CARD_BILL) {
+			return "CARD_SETTLEMENT";
 		}
 		if (transaction.getTransactionType() != TransactionType.TRANSFER) {
 			return transaction.getTransactionType().name();
@@ -86,13 +90,18 @@ public class FdtTransactionMapper {
 	 * 서로 다른 가게가 한 덩어리로 묶여 없는 정기 결제가 잡히므로 가맹점명을 붙인다.
 	 */
 	private String merchantId(Transaction transaction) {
-		if (transaction.getCardId() == null) {
+		if (transaction.getCardId() == null || transaction.getTransactionType() == TransactionType.CARD_BILL) {
 			return "";
 		}
 		if (transaction.getMerchantId() != null) {
 			return String.valueOf(transaction.getMerchantId());
 		}
 		return UNMAPPED_MERCHANT_PREFIX + nullToEmpty(transaction.getMerchantNameRaw());
+	}
+
+	/** 엔진은 card_id 가 붙은 흐름을 지출로만 받는다. 정산 행은 계좌만 실어 현금 경로로 보낸다. */
+	private static String cardId(Transaction transaction) {
+		return transaction.getTransactionType() == TransactionType.CARD_BILL ? "" : idToString(transaction.getCardId());
 	}
 
 	private static String idToString(Long id) {

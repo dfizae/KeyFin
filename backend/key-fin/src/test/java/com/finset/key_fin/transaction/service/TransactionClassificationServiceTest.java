@@ -3,6 +3,9 @@ package com.finset.key_fin.transaction.service;
 import com.finset.key_fin.account.entity.Account;
 import com.finset.key_fin.account.repository.AccountRepository;
 import com.finset.key_fin.card.entity.Card;
+import com.finset.key_fin.card.repository.CardRepository;
+import com.finset.key_fin.payment.entity.CardBilling;
+import com.finset.key_fin.payment.repository.CardBillingRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.global.finance.exception.FinanceErrorCode;
 import com.finset.key_fin.transaction.dto.finance.response.FinanceAccountTransaction;
@@ -23,12 +26,18 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionClassificationServiceTest {
@@ -43,6 +52,12 @@ class TransactionClassificationServiceTest {
 	@Mock
 	private MerchantClassificationRepository merchantClassificationRepository;
 
+	@Mock
+	private CardRepository cardRepository;
+
+	@Mock
+	private CardBillingRepository cardBillingRepository;
+
 	private TransactionClassificationService transactionClassificationService;
 	private User user;
 	private Account account;
@@ -51,7 +66,7 @@ class TransactionClassificationServiceTest {
 	@BeforeEach
 	void setUp() {
 		transactionClassificationService = new TransactionClassificationService(
-				accountRepository, merchantClassificationRepository);
+				accountRepository, merchantClassificationRepository, cardRepository, cardBillingRepository);
 		user = User.create("qwer@qwer.com", "password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
 		account = Account.sync(user, "0016174648358792", "001", "한국은행", 1_000_000L,
@@ -82,6 +97,105 @@ class TransactionClassificationServiceTest {
 		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.WITHDRAW);
 		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.PENDING);
 		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.NONE);
+	}
+
+	@Test
+	void 청구서와_계좌_금액_출금일이_맞는_출금은_CARD_BILL로_확정한다() {
+		card.updateWithdrawalWeekday(1);
+		CardBilling billing = CardBilling.sync(CARD_ID, LocalDate.of(2026, 9, 14), 10_000L, false, null);
+		given(cardRepository.findAllByUserIdAndManagedTrueAndWithdrawalAccountId(USER_ID, ACCOUNT_ID)).willReturn(List.of(card));
+		given(cardBillingRepository.findAllByCardIdInAndTotalAmount(any(), eq(10_000L))).willReturn(List.of(billing));
+
+		Transaction transaction = transactionClassificationService.fromAccount(
+				user, account, accountTransaction("2", "출금", null)
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.CARD_BILL);
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.NONE);
+		assertThat(transaction.getCardId()).isEqualTo(CARD_ID);
+		assertThat(transaction.getSubcategoryId()).isNull();
+		assertCommonAccountFields(transaction);
+		assertThat(billing.isPaid()).isTrue();
+		assertThat(billing.getPaidAt()).isEqualTo(LocalDateTime.of(2026, 9, 14, 10, 32, 29));
+		then(cardBillingRepository).should().save(billing);
+	}
+
+	@Test
+	void 이미_납부된_청구서도_매칭하되_다시_저장하지_않는다() {
+		card.updateWithdrawalWeekday(1);
+		CardBilling billing = CardBilling.sync(CARD_ID, LocalDate.of(2026, 9, 14), 10_000L, true,
+				LocalDateTime.of(2026, 9, 14, 16, 0));
+		given(cardRepository.findAllByUserIdAndManagedTrueAndWithdrawalAccountId(USER_ID, ACCOUNT_ID)).willReturn(List.of(card));
+		given(cardBillingRepository.findAllByCardIdInAndTotalAmount(any(), eq(10_000L))).willReturn(List.of(billing));
+
+		Transaction transaction = transactionClassificationService.fromAccount(
+				user, account, accountTransaction("2", "출금", null)
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.CARD_BILL);
+		assertThat(billing.getPaidAt()).isEqualTo(LocalDateTime.of(2026, 9, 14, 16, 0));
+		then(cardBillingRepository).should(never()).save(any());
+	}
+
+	@Test
+	void 출금일이_다른_청구서는_매칭하지_않는다() {
+		card.updateWithdrawalWeekday(1);
+		CardBilling billing = CardBilling.sync(CARD_ID, LocalDate.of(2026, 9, 7), 10_000L, false, null);
+		given(cardRepository.findAllByUserIdAndManagedTrueAndWithdrawalAccountId(USER_ID, ACCOUNT_ID)).willReturn(List.of(card));
+		given(cardBillingRepository.findAllByCardIdInAndTotalAmount(any(), eq(10_000L))).willReturn(List.of(billing));
+
+		Transaction transaction = transactionClassificationService.fromAccount(
+				user, account, accountTransaction("2", "출금", null)
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.WITHDRAW);
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.PENDING);
+		assertThat(billing.isPaid()).isFalse();
+		then(cardBillingRepository).should(never()).save(any());
+	}
+
+	@Test
+	void 후보_청구서가_둘이면_매칭하지_않고_사용자에게_묻는다() {
+		card.updateWithdrawalWeekday(1);
+		Card other = Card.sync(user, "1005518816096480", "726", "1005", "신한 Deep Dream", account);
+		ReflectionTestUtils.setField(other, "id", CARD_ID + 1);
+		other.updateWithdrawalWeekday(1);
+		given(cardRepository.findAllByUserIdAndManagedTrueAndWithdrawalAccountId(USER_ID, ACCOUNT_ID))
+				.willReturn(List.of(card, other));
+		given(cardBillingRepository.findAllByCardIdInAndTotalAmount(any(), eq(10_000L))).willReturn(List.of(
+				CardBilling.sync(CARD_ID, LocalDate.of(2026, 9, 14), 10_000L, false, null),
+				CardBilling.sync(CARD_ID + 1, LocalDate.of(2026, 9, 14), 10_000L, false, null)
+		));
+
+		Transaction transaction = transactionClassificationService.fromAccount(
+				user, account, accountTransaction("2", "출금", null)
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.WITHDRAW);
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.PENDING);
+		then(cardBillingRepository).should(never()).save(any());
+	}
+
+	@Test
+	void 출금_요일이_없는_카드는_청구서를_조회하지_않는다() {
+		given(cardRepository.findAllByUserIdAndManagedTrueAndWithdrawalAccountId(USER_ID, ACCOUNT_ID)).willReturn(List.of(card));
+
+		Transaction transaction = transactionClassificationService.fromAccount(
+				user, account, accountTransaction("2", "출금", null)
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.WITHDRAW);
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.PENDING);
+		then(cardBillingRepository).shouldHaveNoInteractions();
+	}
+
+	@Test
+	void 입금은_청구서를_찾지_않는다() {
+		transactionClassificationService.fromAccount(user, account, accountTransaction("1", "입금", null));
+
+		then(cardRepository).shouldHaveNoInteractions();
+		then(cardBillingRepository).shouldHaveNoInteractions();
 	}
 
 	@Test
