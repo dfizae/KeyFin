@@ -51,7 +51,7 @@ public class FdtSnapshotAssembler {
 						.map(account -> new FdtSnapshot.Account(id(account.getId()), account.getBalance()))
 						.toList(),
 				cards(cards, unpaidBillings),
-				knownBills(cards, unpaidBillings),
+				knownBills(cards, unpaidBillings, asOf),
 				schedules(fixedExpenses, asOf),
 				emergencyAmount,
 				budgets.isEmpty() ? null : budgets,
@@ -79,7 +79,8 @@ public class FdtSnapshotAssembler {
 				.toList();
 	}
 
-	private List<FdtSnapshot.KnownBill> knownBills(List<Card> cards, List<CardBilling> unpaidBillings) {
+	/** 엔진은 due_date <= as_of 인 청구서를 거부한다(PAST_BILL_DUE_DATE). 당일·미납분은 내일 출금으로 보내 금액을 남긴다. */
+	private List<FdtSnapshot.KnownBill> knownBills(List<Card> cards, List<CardBilling> unpaidBillings, LocalDate asOf) {
 		Map<Long, Integer> weekdayByCardId = new LinkedHashMap<>();
 		for (Card card : cards) {
 			if (card.getWithdrawalWeekday() != null) {
@@ -92,10 +93,11 @@ public class FdtSnapshotAssembler {
 			if (weekday == null) {
 				continue;
 			}
+			LocalDate dueDate = billing.withdrawalDate(weekday);
 			bills.add(new FdtSnapshot.KnownBill(
 					id(billing.getId()),
 					id(billing.getCardId()),
-					billing.withdrawalDate(weekday).toString(),
+					(dueDate.isAfter(asOf) ? dueDate : asOf.plusDays(1)).toString(),
 					billing.getTotalAmount()
 			));
 		}

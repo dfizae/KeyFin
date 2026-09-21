@@ -52,13 +52,30 @@ class FdtSnapshotAssemblerTest {
 	@Test
 	void 청구서_출금일은_발행일에_출금_요일만큼_더한다() {
 		Account settlement = account(1L, 0L);
-		Card wednesday = card(7L, settlement, 3);
+		Card friday = card(7L, settlement, 5);
 
-		FdtSnapshot snapshot = assemble(List.of(settlement), List.of(wednesday),
+		FdtSnapshot snapshot = assemble(List.of(settlement), List.of(friday),
 				List.of(billing(11L, 7L, 100_000L)), List.of(), 0L, Map.of());
 
-		assertThat(snapshot.cards().get(0).paymentDelayDays()).isEqualTo(2);
-		assertThat(snapshot.knownBills().get(0).dueDate()).isEqualTo("2026-09-09");
+		assertThat(snapshot.cards().get(0).paymentDelayDays()).isEqualTo(4);
+		assertThat(snapshot.knownBills().get(0).dueDate()).isEqualTo("2026-09-11");
+	}
+
+	@Test
+	void 출금일이_기준일_당일이거나_지난_미납_청구서는_내일_출금으로_보내고_금액은_그대로_둔다() {
+		Account settlement = account(1L, 0L);
+		Card thursday = card(7L, settlement, 4);
+		Card wednesday = card(8L, settlement, 3);
+
+		FdtSnapshot snapshot = assemble(List.of(settlement), List.of(thursday, wednesday),
+				List.of(billing(11L, 7L, 100_000L), billing(12L, 8L, 50_000L)), List.of(), 0L, Map.of());
+
+		assertThat(snapshot.knownBills()).extracting(FdtSnapshot.KnownBill::dueDate)
+				.containsExactly("2026-09-11", "2026-09-11");
+		assertThat(snapshot.knownBills()).extracting(FdtSnapshot.KnownBill::amountKrw)
+				.containsExactly(100_000L, 50_000L);
+		assertThat(snapshot.cards()).extracting(FdtSnapshot.Card::openingPayableKrw)
+				.containsExactly(100_000L, 50_000L);
 	}
 
 	@Test
