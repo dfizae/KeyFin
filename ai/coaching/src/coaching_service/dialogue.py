@@ -358,7 +358,9 @@ class Dialogue:
                 # current ledger. Do not serialize the original receipt into a model
                 # prompt merely to decide that no model call is necessary.
                 coaching = await self.core.compose(
-                    receipt, EvidenceInput(question=request.question, facts_json=LIMITED_CONTEXT)
+                    receipt,
+                    EvidenceInput(question=request.question, facts_json=LIMITED_CONTEXT),
+                    tone=request.tone,
                 )
                 return save_turn(session, request.question, coaching)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, twin)
@@ -429,7 +431,7 @@ class Dialogue:
                 route = Routing(mode="review", source="template", fallback_reason="context_limit")
             receipt = receipt.model_copy(update={"routing": document(route)})
             evidence = bounded_evidence(receipt, request.question, history)
-            coaching = await self.core.compose(receipt, evidence)
+            coaching = await self.core.compose(receipt, evidence, tone=request.tone)
             return save_turn(session, request.question, coaching)
 
         return await self.core.repository.mutate(op, action)

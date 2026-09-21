@@ -1,10 +1,11 @@
 """Render amounts and causal claims only from the immutable decision receipt."""
 
 from datetime import date
+from typing import Final
 
-from coaching_service.numeric_rendering import numeric_text
+from coaching_service.numeric_rendering import numeric_text, purchase_verdict_text
 from coaching_service.periods import period_text
-from coaching_service.schemas import JsonDocument, Receipt
+from coaching_service.schemas import JsonDocument, Receipt, Tone
 
 
 def authoritative_text(receipt: Receipt) -> str:
@@ -68,6 +69,56 @@ def historical_text(receipt: Receipt) -> list[str]:
         for envelope in receipt.current_envelopes
     )
     return pieces
+
+
+_OVER_BUDGET_ENCOURAGING: Final = (
+    "{env} 지출이 예산을 넘고 있어요. 이번 기간 {env} 소비를 조금 줄여보면 좋아요."
+)
+_OVER_BUDGET_DIRECT: Final = "{env} 예산을 초과했어요. {env} 소비를 줄이세요."
+_SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루는 편이 좋아요."
+_SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루세요."
+_SHORTFALL_MARKER: Final = "부족 예측 있음."
+
+
+def _over_budget_envelope(receipt: Receipt) -> str | None:
+    """Name one envelope already confirmed over budget by the engine's own facts.
+
+    ``remaining_percent`` is the service-computed payment ledger fact
+    (``PaymentFacts``); a value at or below zero means this payment already
+    consumed the envelope. ``current_envelopes`` is the separately maintained
+    ledger balance. Neither path invents a new threshold: both simply read an
+    existing signal that the engine already produced.
+    """
+    payment = receipt.payment
+    if payment is not None and payment.remaining_percent is not None:
+        try:
+            remaining = float(payment.remaining_percent)
+        except ValueError:
+            remaining = None
+        if remaining is not None and remaining <= 0:
+            return payment.envelope
+    for envelope in receipt.current_envelopes:
+        if envelope.balance_krw < 0:
+            return envelope.envelope
+    return None
+
+
+def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str | None:
+    """Return one server-templated advice sentence, or ``None`` when no engine concern fires.
+
+    This never calls the language model and contains no digits of its own; every
+    branch is gated on an existing, already-validated engine fact (an over-budget
+    envelope's name, or the same forecast-shortfall signal already rendered by
+    ``purchase_verdict_text``). A missing or healthy signal returns ``None``
+    instead of guessing a concern that the engine did not report.
+    """
+    envelope = _over_budget_envelope(receipt)
+    if envelope is not None:
+        template = _OVER_BUDGET_DIRECT if tone == "direct" else _OVER_BUDGET_ENCOURAGING
+        return template.format(env=envelope)
+    if _SHORTFALL_MARKER in purchase_verdict_text(receipt):
+        return _SHORTFALL_DIRECT if tone == "direct" else _SHORTFALL_ENCOURAGING
+    return None
 
 
 def user_warnings(result: JsonDocument) -> list[str]:

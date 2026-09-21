@@ -8,6 +8,7 @@ from coaching_service.periods import DateOnly, PeriodSpec, ResolvedPeriod
 
 Identifier = Annotated[str, Field(min_length=1, max_length=120, pattern=r"^[\w.-]+$")]
 Money = Annotated[int, Field(strict=True, ge=-(10**12), le=10**12)]
+Tone = Literal["direct", "encouraging"]
 
 
 class Frozen(BaseModel):
@@ -130,6 +131,9 @@ class TurnRequest(Frozen):
     question: str = Field(min_length=1, max_length=2000)
     analysis: JsonDocument | None = None
     period: PeriodSpec | None = None
+    # None keeps the existing encouraging-by-default deterministic advice wording.
+    # This never changes which engine facts trigger advice, only its register.
+    tone: Tone | None = None
 
 
 class AnswerReference(Frozen):
