@@ -70,7 +70,7 @@ public class TransactionSyncService {
 		syncCardTransactions(
 				user, userKey, cards, startDate, endDate,
 				transactionNumbers, newTransactions);
-		syncWriter.save(balanceUpdatedAccounts, newTransactions, Map.of());
+		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, Map.of());
 	}
 
 	public void syncAccountTransactions(
@@ -87,7 +87,7 @@ public class TransactionSyncService {
 		syncAccountTransactions(
 				user, userKey, List.of(account), startDate, endDate,
 				new HashSet<>(), newTransactions, balanceUpdatedAccounts);
-		syncWriter.save(balanceUpdatedAccounts, newTransactions, Map.of());
+		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, Map.of());
 	}
 
 	public void syncCardTransactions(
@@ -103,7 +103,7 @@ public class TransactionSyncService {
 		syncCardTransactions(
 				user, userKey, List.of(card), startDate, endDate,
 				new HashSet<>(), newTransactions);
-		syncWriter.save(List.of(), newTransactions, Map.of());
+		syncWriter.save(user.getId(), List.of(), newTransactions, Map.of());
 	}
 
 	public void syncNewlyManagedAccountHistory(
@@ -123,7 +123,7 @@ public class TransactionSyncService {
 		syncNewlyManagedAccountTransactions(
 				user, userKey, account, startDate, endDate,
 				new HashSet<>(), newTransactions, reclassifiedTransactions, balanceUpdatedAccounts);
-		syncWriter.saveHistory(balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
+		syncWriter.saveHistory(user.getId(), balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 	}
 
 	private void syncAccountTransactions(

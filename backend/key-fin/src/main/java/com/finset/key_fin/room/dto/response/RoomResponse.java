@@ -10,7 +10,8 @@ public record RoomResponse(
 		AvatarResponse avatar,
 		List<PlacedFurnitureResponse> furnitures,
 		CoinResponse coin,
-		AttendanceResponse attendance
+		AttendanceResponse attendance,
+		StickerStatusResponse stickers
 ) {
 
 	public record AvatarResponse(

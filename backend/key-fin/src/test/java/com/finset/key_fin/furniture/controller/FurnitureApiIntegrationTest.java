@@ -55,14 +55,14 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 		mvc.perform(auth(get("/api/v1/furnitures").param("slotType", "WALL"), 88001))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88202)));
 		mvc.perform(auth(get("/api/v1/furnitures"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
-		mvc.perform(auth(get("/api/v1/room"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data.furnitures").isEmpty());
+		mvc.perform(auth(get("/api/v1/room"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data.furnitures", hasSize(3)));
 	}
 
 	@Test
 	void placesMovesAndRemovesWithRoomReadbackAndPreservesOtherFurniture() throws Exception {
 		var acquired = furnitures.findById(88203L).orElseThrow().getAcquiredAt();
 		mvc.perform(auth(get("/api/v1/room"), 88001)).andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.furnitures[*].userFurnitureId", contains(88201, 88202)))
+				.andExpect(jsonPath("$.data.furnitures[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88202)))
 				.andExpect(jsonPath("$.data.avatar.equipped[0].userItemId").value(88301));
 		for (int i = 0; i < 2; i++) {
 			mvc.perform(auth(change(88203, PLACEMENT_JSON), 88001)).andExpect(status().isOk())
@@ -74,7 +74,7 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 				.replace("165.123", "327.000").replace("280.456", "0").replace(",\"layer\":-2", "");
 		mvc.perform(auth(change(88203, moved), 88001)).andExpect(status().isOk()).andExpect(jsonPath("$.data.layer").value(0));
 		mvc.perform(auth(get("/api/v1/room"), 88001)).andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.furnitures[*].userFurnitureId", contains(88201, 88202, 88203)))
+				.andExpect(jsonPath("$.data.furnitures[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88202, 88203)))
 				.andExpect(jsonPath("$.data.furnitures[2].placementDirection").value("FRONT_LEFT"))
 				.andExpect(jsonPath("$.data.furnitures[2].positionX").value(327))
 				.andExpect(jsonPath("$.data.furnitures[2].positionY").value(0));
@@ -86,10 +86,10 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 					.andExpect(jsonPath("$.data.layer").value(0));
 		}
 		mvc.perform(auth(get("/api/v1/room"), 88001)).andExpect(status().isOk())
-				.andExpect(jsonPath("$.data.furnitures[*].userFurnitureId", contains(88201, 88202)));
+				.andExpect(jsonPath("$.data.furnitures[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88202)));
 		assertThat(furnitures.findById(88203L).orElseThrow().getAcquiredAt()).isEqualTo(acquired);
 		assertThat(furnitures.findById(88201L).orElseThrow().getPositionX()).isEqualByComparingTo("165.123");
-		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_furnitures WHERE user_id = 88001").query(Long.class).single()).isEqualTo(3);
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_furnitures WHERE user_id = 88001").query(Long.class).single()).isEqualTo(6);
 	}
 
 	@ParameterizedTest

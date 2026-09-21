@@ -20,12 +20,15 @@ public class RoomServiceImpl implements RoomService {
 
 	private final ItemService itemService;
 	private final FurnitureService furnitureService;
+	private final RoomStickerService stickerService;
 	private final FinCoinRepository finCoins;
 	private final Clock clock;
 
-	@Transactional(readOnly = true)
+	@Transactional
 	@Override
 	public RoomResponse getRoom(long userId) {
+		// Lock before snapshot reads; never create a budget or grant attendance here.
+		var stickers = stickerService.synchronize(userId);
 		var equipped = itemService.getEquipment(userId).equipped();
 		var furnitures = furnitureService.getPlacedFurnitures(userId);
 
@@ -35,7 +38,8 @@ public class RoomServiceImpl implements RoomService {
 				new RoomResponse.CoinResponse(finCoins.findFirstByUserIdOrderByIdDesc(userId)
 						.map(FinCoin::getBalanceAfter).orElse(0)),
 				new RoomResponse.AttendanceResponse(finCoins.existsByUserIdAndGrantDateAndReasonCode(
-						userId, LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))), FinCoinReason.ATTEND))
+						userId, LocalDate.now(clock.withZone(ZoneId.of("Asia/Seoul"))), FinCoinReason.ATTEND)),
+				stickers
 		);
 	}
 }

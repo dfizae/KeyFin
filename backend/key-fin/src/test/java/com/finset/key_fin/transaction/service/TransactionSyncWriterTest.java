@@ -10,6 +10,9 @@ import com.finset.key_fin.transaction.event.AccountWithdrawn;
 import com.finset.key_fin.transaction.event.PendingTransactionSaved;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
+import com.finset.key_fin.room.service.RoomStickerService;
+import com.finset.key_fin.user.repository.UserRepository;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -19,6 +22,7 @@ import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -26,6 +30,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class TransactionSyncWriterTest {
@@ -35,12 +40,19 @@ class TransactionSyncWriterTest {
 
 	@Mock
 	private TransactionRepository transactionRepository;
+	@Mock private UserRepository users;
+	@Mock private RoomStickerService stickers;
 
 	@Mock
 	private ApplicationEventPublisher events;
 
 	@InjectMocks
 	private TransactionSyncWriter syncWriter;
+
+	@BeforeEach
+	void setUp() {
+		when(users.findActiveByIdForUpdate(1L)).thenReturn(Optional.of(mock(User.class)));
+	}
 
 	@Test
 	void 거래와_계좌_잔액을_함께_저장한다() {
@@ -49,6 +61,7 @@ class TransactionSyncWriterTest {
 		Transaction newTransaction = mock(Transaction.class);
 
 		syncWriter.save(
+				1L,
 				List.of(account),
 				List.of(newTransaction),
 				Map.of(10L, reclassifiedTransaction)
@@ -56,6 +69,7 @@ class TransactionSyncWriterTest {
 
 		verify(transactionRepository).saveAll(List.of(reclassifiedTransaction, newTransaction));
 		verify(accountRepository).saveAll(List.of(account));
+		verify(stickers).synchronize(1L);
 	}
 
 	@Test
@@ -65,7 +79,7 @@ class TransactionSyncWriterTest {
 		Transaction first = pendingCardTransaction(user, 10L, "메가커피 역삼점", 4_500L);
 		Transaction second = pendingCardTransaction(user, 11L, "김밥천국", 9_000L);
 
-		syncWriter.save(List.of(), List.of(first, second), Map.of());
+		syncWriter.save(1L, List.of(), List.of(first, second), Map.of());
 
 		verify(events).publishEvent(new PendingTransactionSaved(1L, 10L, "메가커피 역삼점", 4_500L));
 		verify(events).publishEvent(new PendingTransactionSaved(1L, 11L, "김밥천국", 9_000L));
@@ -75,7 +89,7 @@ class TransactionSyncWriterTest {
 	void 과거_이력_적재에는_즉시_알림_이벤트를_발행하지_않는다() {
 		Transaction transaction = mock(Transaction.class);
 
-		syncWriter.saveHistory(List.of(), List.of(transaction), Map.of());
+		syncWriter.saveHistory(1L, List.of(), List.of(transaction), Map.of());
 
 		verify(transactionRepository).saveAll(List.of(transaction));
 		verify(events, never()).publishEvent(any());
@@ -100,7 +114,7 @@ class TransactionSyncWriterTest {
 		given(transaction.getStatus()).willReturn(TransactionStatus.NORMAL);
 		given(transaction.getTransactionType()).willReturn(TransactionType.DEPOSIT);
 
-		syncWriter.save(List.of(), List.of(transaction), Map.of());
+		syncWriter.save(1L, List.of(), List.of(transaction), Map.of());
 
 		verify(events, never()).publishEvent(any());
 	}
@@ -115,7 +129,7 @@ class TransactionSyncWriterTest {
 		given(first.getUser()).willReturn(user);
 		given(third.getUser()).willReturn(user);
 
-		syncWriter.save(List.of(), List.of(first, second, third), Map.of());
+		syncWriter.save(1L, List.of(), List.of(first, second, third), Map.of());
 
 		verify(events, times(1)).publishEvent(new AccountWithdrawn(1L, 20L));
 		verify(events, times(1)).publishEvent(new AccountWithdrawn(1L, 21L));
@@ -129,7 +143,7 @@ class TransactionSyncWriterTest {
 		given(deposit.getStatus()).willReturn(TransactionStatus.NORMAL);
 		given(deposit.getTransactionType()).willReturn(TransactionType.DEPOSIT);
 
-		syncWriter.save(List.of(), List.of(card, deposit), Map.of());
+		syncWriter.save(1L, List.of(), List.of(card, deposit), Map.of());
 
 		verify(events, never()).publishEvent(any(AccountWithdrawn.class));
 	}

@@ -25,6 +25,7 @@ public record UserFurnitureResponse(
 		@Schema(description = "Y 좌표. 미설치 시 null", requiredMode = REQUIRED, nullable = true) BigDecimal positionY,
 		@Schema(description = "깊이 보정값. 미설치 시 0", requiredMode = REQUIRED) int layer,
 		@Schema(description = "기본 가구 식별값. 일반 가구는 null", requiredMode = REQUIRED, nullable = true) DefaultFurnitureType defaultFurnitureType,
+		@Schema(requiredMode = REQUIRED) boolean stickerAttached,
 		@Schema(description = "설치 해제 가능 여부. 기본 가구는 false", requiredMode = REQUIRED) boolean canUnplace
 ) {
 	public static UserFurnitureResponse from(UserFurniture furniture) {
@@ -32,6 +33,6 @@ public record UserFurnitureResponse(
 		return new UserFurnitureResponse(furniture.getId(), item.getId(), item.getName(), item.getSlotType(),
 				item.getAssetKey(), furniture.isPlaced(), furniture.getPlacementStatus(), furniture.getPlacementDirection(),
 				furniture.getPositionX(), furniture.getPositionY(), furniture.getLayer(),
-				item.getDefaultFurnitureType(), furniture.canUnplace());
+				item.getDefaultFurnitureType(), furniture.isStickerAttached(), furniture.canUnplace());
 	}
 }
