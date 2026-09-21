@@ -1,6 +1,7 @@
 package com.finset.key_fin.furniture.service;
 
 import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 import com.finset.key_fin.furniture.entity.UserFurniture;
 import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
 import com.finset.key_fin.global.exception.BusinessException;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,17 +35,26 @@ public class DefaultFurnitureService {
 			throw new IllegalStateException("Default furniture catalogue must contain FRIDGE, SOFA and TV");
 		}
 		Map<Long, UserFurniture> owned = new HashMap<>();
-		furnitures.findByUserIdOrderByIdAsc(userId).forEach(f -> owned.put(f.getItem().getId(), f));
+		var placed = new EnumMap<FurnitureType, UserFurniture>(FurnitureType.class);
+		furnitures.findByUserIdOrderByIdAsc(userId).forEach(f -> {
+			owned.put(f.getItem().getId(), f);
+			var type = f.getItem().getFurnitureType();
+			if (f.isPlaced() && type != null && placed.put(type, f) != null) {
+				throw new IllegalStateException("Multiple placed furniture items for " + type);
+			}
+		});
 		return defaults.stream().map(item -> {
 			var furniture = owned.get(item.getId());
 			if (furniture == null) {
 				furniture = UserFurniture.acquire(user, item);
-				item.getDefaultFurnitureType().placeInitially(furniture);
 				furnitures.save(furniture);
-			} else if (!furniture.isPlaced()) {
-				item.getDefaultFurnitureType().placeInitially(furniture);
 			}
-			return furniture;
+			var installed = placed.get(item.getFurnitureType());
+			if (installed == null) {
+				item.getDefaultFurnitureType().placeInitially(furniture);
+				installed = furniture;
+			}
+			return installed;
 		}).toList();
 	}
 }

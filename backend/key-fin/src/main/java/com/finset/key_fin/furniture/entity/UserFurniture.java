@@ -88,12 +88,7 @@ public class UserFurniture {
 
 	public void place(FurniturePlacementStatus status, FurniturePlacementDirection direction,
 			BigDecimal positionX, BigDecimal positionY, int layer) {
-		boolean allowed = (item.getSlotType() == ItemSlotType.FLOOR && status == FurniturePlacementStatus.FLOOR)
-				|| (item.getSlotType() == ItemSlotType.WALL
-				&& (status == FurniturePlacementStatus.LEFT_WALL || status == FurniturePlacementStatus.RIGHT_WALL));
-		if (!allowed) {
-			throw new BusinessException(FurnitureErrorCode.PLACEMENT_NOT_ALLOWED);
-		}
+		validatePlacementStatus(status);
 		this.placementStatus = status;
 		this.placementDirection = direction;
 		this.positionX = positionX;
@@ -101,15 +96,23 @@ public class UserFurniture {
 		this.layer = layer;
 	}
 
-	public void unplace() {
-		if (!canUnplace()) {
-			throw new BusinessException(FurnitureErrorCode.DEFAULT_FURNITURE_CANNOT_UNPLACE);
+	public void validatePlacementStatus(FurniturePlacementStatus status) {
+		boolean allowed = (item.getSlotType() == ItemSlotType.FLOOR && status == FurniturePlacementStatus.FLOOR)
+				|| (item.getSlotType() == ItemSlotType.WALL
+				&& (status == FurniturePlacementStatus.LEFT_WALL || status == FurniturePlacementStatus.RIGHT_WALL));
+		if (!allowed) {
+			throw new BusinessException(FurnitureErrorCode.PLACEMENT_NOT_ALLOWED);
 		}
+	}
+
+	/** 필수 가구 개수는 서비스에서 최종 배치 전체를 검증한 뒤 변경한다. */
+	public void unplace() {
 		this.placementStatus = null;
 		this.placementDirection = null;
 		this.positionX = null;
 		this.positionY = null;
 		this.layer = 0;
+		this.stickerAttached = false;
 	}
 
 	public boolean isPlaced() {
@@ -117,12 +120,12 @@ public class UserFurniture {
 	}
 
 	public boolean canUnplace() {
-		return item.getDefaultFurnitureType() == null;
+		return !isPlaced() || item.getFurnitureType() == null;
 	}
 
 	public void attachSticker() {
 		if (canUnplace()) {
-			throw new IllegalStateException("Only default furniture can carry a sticker");
+			throw new IllegalStateException("Only placed essential furniture can carry a sticker");
 		}
 		stickerAttached = true;
 	}

@@ -34,11 +34,17 @@ class FurnitureDocumentationIntegrationTest extends SpringIntegrationTestSupport
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.layer.type").value("integer"))
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionX.maximum").value(327))
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionY.maximum").value(586))
-				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.properties", aMapWithSize(14)))
+				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.properties", aMapWithSize(15)))
 				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.required", containsInAnyOrder(
 						"userFurnitureId", "itemId", "name", "slotType", "assetKey", "placed", "placementStatus", "placementDirection", "positionX", "positionY", "layer",
-						"defaultFurnitureType", "stickerAttached", "canUnplace")))
-				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties", aMapWithSize(12)))
+						"defaultFurnitureType", "furnitureType", "stickerAttached", "canUnplace")))
+				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties", aMapWithSize(13)))
+				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties.furnitureType.enum", containsInAnyOrder("FRIDGE", "SOFA", "TV")))
+				.andExpect(jsonPath("$.paths['/api/v1/furnitures/placements'].put.requestBody.required").value(true))
+				.andExpect(jsonPath("$.paths['/api/v1/furnitures/placements'].put.security[0].bearerAuth").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/furnitures/placements'].put.responses['409']").exists())
+				.andExpect(jsonPath("$.components.schemas.FurniturePlacementsUpdateRequest.properties.placements.maxItems").value(100))
+				.andExpect(jsonPath("$.components.schemas.FurniturePlacementEntry.properties.positionY.maximum").value(586))
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.furnitures.items['$ref']")
 						.value("#/components/schemas/PlacedFurnitureResponse"));
 	}

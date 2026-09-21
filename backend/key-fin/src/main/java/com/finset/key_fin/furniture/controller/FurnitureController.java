@@ -1,6 +1,7 @@
 package com.finset.key_fin.furniture.controller;
 
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementUpdateRequest;
+import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest;
 import com.finset.key_fin.furniture.dto.response.UserFurnitureResponse;
 import com.finset.key_fin.furniture.service.FurnitureService;
 import com.finset.key_fin.global.base.BaseResponse;
@@ -10,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -33,6 +35,15 @@ public class FurnitureController implements FurnitureControllerDocs {
 			@RequestParam(required = false) String slotType
 	) {
 		return BaseResponse.ok(furnitureService.getFurnitures(userId, slotType));
+	}
+
+	@PutMapping(value = "/placements", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<List<UserFurnitureResponse>> updatePlacements(
+			@AuthenticationPrincipal Long userId,
+			@Valid @RequestBody FurniturePlacementsUpdateRequest request
+	) {
+		return BaseResponse.ok(furnitureService.updatePlacements(userId, request));
 	}
 
 	@PatchMapping(value = "/{userFurnitureId}", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)

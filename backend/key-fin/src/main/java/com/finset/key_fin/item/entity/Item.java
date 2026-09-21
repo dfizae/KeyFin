@@ -1,6 +1,7 @@
 package com.finset.key_fin.item.entity;
 
 import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -47,6 +48,10 @@ public class Item {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "default_furniture_type", length = 10)
 	private DefaultFurnitureType defaultFurnitureType;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "furniture_type", length = 10)
+	private FurnitureType furnitureType;
 
 	@Column(name = "is_active", nullable = false)
 	private boolean active = true;
