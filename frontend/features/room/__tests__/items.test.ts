@@ -2,11 +2,10 @@ import { ApiError } from "@/api/error";
 import { resetItemMocks, updateItemEquipmentMock, userItemListMock } from "@/api/mocks/item";
 import {
   applyAvatarEquipment,
-  equippedItemInSlot,
   toAvatarEquipment,
   toUserItem,
   toUserItems,
-  userItemsInSlot,
+  wornItem,
   type UserItemDto,
 } from "@/features/room/items";
 import { ContractMismatchError } from "@/lib/contract";
@@ -42,16 +41,12 @@ describe("보유 아이템 (GET /items)", () => {
     expect(() => toUserItem(dto({ itemId: -3 }))).toThrow(ContractMismatchError);
   });
 
-  it("부위 탭은 그 부위의 아이템만 서버 순서 그대로 고르고, 입은 것을 따로 꺼낸다", () => {
-    const items = toUserItems([
-      dto({ userItemId: 101, equipped: false }),
-      dto({ userItemId: 102, name: "니트", equipped: true }),
-      dto({ userItemId: 103, slotType: "HEAD", name: "모자", equipped: false }),
-    ]);
+  it("입고 있는 세트를 꺼낸다 — 아무것도 안 입었으면 기본 차림이라 null 이다", () => {
+    const items = toUserItems([dto({ userItemId: 101, equipped: false }), dto({ userItemId: 102, name: "니트", equipped: true })]);
 
-    expect(userItemsInSlot(items, "UPPER_BODY").map((item) => item.userItemId)).toEqual([101, 102]);
-    expect(equippedItemInSlot(items, "UPPER_BODY")?.name).toBe("니트");
-    expect(equippedItemInSlot(items, "HEAD")).toBeNull();
+    expect(wornItem(items)?.name).toBe("니트");
+    expect(wornItem(toUserItems([dto({ userItemId: 101, equipped: false })]))).toBeNull();
+    expect(wornItem([])).toBeNull();
   });
 });
 

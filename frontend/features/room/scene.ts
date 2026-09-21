@@ -2,7 +2,6 @@ import {
   FURNITURE,
   WALL_ITEMS,
   isWallItemId,
-  roomItem,
   type FurnitureId,
   type FurnitureItem,
   type RoomItemId,
@@ -14,7 +13,9 @@ import {
   cellAnchor,
   cellCorners,
   cellsOverlap,
+  cellToScene,
   fitsOnSurface,
+  halfSpan,
   HALF_PER_CELL,
   type GridCell,
   type GridFootprint,
@@ -26,6 +27,8 @@ import {
   distance,
   getSpriteRect,
   isPointInPolygon,
+  type AnchorRatio,
+  type PlacementDirection,
   type ScenePoint,
   type ScenePolygon,
   type SceneRect,
@@ -34,20 +37,56 @@ import {
 } from "@/features/room/model";
 
 /**
- * 씬 배치. 좌표는 모두 씬 단위(327×404)이며 anchor 는 가구는 발끝(바닥에 닿는 점), 벽 오브젝트는 스프라이트 중심이다.
+ * 씬 배치. 좌표는 모두 씬 단위(327×586)이며 anchor 는 가구는 접지면 무게중심, 벽 오브젝트는 스프라이트 중심이다.
  * surface 가 없으면 바닥이다. 백엔드 `user_furnitures.placement_status`(FLOOR/LEFT_WALL/RIGHT_WALL)와 같은 뜻이고
- * 변환은 furniture.ts 가 한다. DEFAULT_LAYOUT 은 서버에 설치된 가구가 없을 때 쓰는 폴백이다(아이템 시드 전까지, 2026-09-16).
+ * 변환은 furniture.ts 가 한다. DEFAULT_LAYOUT 은 서버에 설치된 가구가 없을 때 쓰는 폴백이다.
  */
 export type Placement = {
   itemId: RoomItemId;
   /** 서버 보유 가구 id (GET /room·/furnitures). 기본 배치 폴백에는 없어 저장 대상에서 빠진다 (3단계) */
   userFurnitureId?: number;
   anchor: ScenePoint;
-  /** 깊이 보정. 카탈로그 layer 보다 우선한다 */
+  /** 깊이 보정 */
   layer?: number;
   /** 놓인 면. 생략하면 FLOOR */
   surface?: Surface;
+  /** 바닥 가구가 보는 방향. 생략하면 FRONT_RIGHT. 벽 장식은 붙은 벽이 방향을 정하므로 쓰지 않는다(facingOf) */
+  direction?: PlacementDirection;
 };
+
+/** 배치가 보는 방향. 벽에 걸린 것은 붙은 벽을 등진다 — 왼쪽 벽이면 FRONT_RIGHT, 오른쪽 벽이면 FRONT_LEFT 다 */
+export function facingOf(placement: Placement): PlacementDirection {
+  if (placement.surface === "WALL_LEFT") return "FRONT_RIGHT";
+  if (placement.surface === "WALL_RIGHT") return "FRONT_LEFT";
+  return placement.direction ?? "FRONT_RIGHT";
+}
+
+/** 배치를 그리고 판정하는 데 필요한 것. 가구는 방향에 따라 그림과 발자국이 바뀐다 */
+export type PlacementView = { sprite: number; size: SceneSize; anchor: AnchorRatio; grid: GridFootprint; flat: boolean };
+
+/** 바닥 가구는 돌면 발자국의 가로·세로가 바뀐다. 벽 장식은 어느 벽에 걸어도 벽 칸 모양이 같다 */
+function footprintFacing(item: FurnitureItem, facing: PlacementDirection): GridFootprint {
+  if (item.slot === "WALL" || facing === "FRONT_RIGHT") return item.grid;
+  return { w: item.grid.d, d: item.grid.w };
+}
+
+export function placementView(placement: Placement): PlacementView {
+  if (isWallItemId(placement.itemId)) {
+    const item = WALL_ITEMS[placement.itemId];
+    return { sprite: item.sprite, size: item.size, anchor: item.anchor, grid: item.grid, flat: false };
+  }
+  const item = FURNITURE[placement.itemId];
+  const facing = facingOf(placement);
+  return { ...item.views[facing], grid: footprintFacing(item, facing), flat: item.flat };
+}
+
+/** 방향을 바꾼 배치. FRONT_RIGHT 는 생략형으로 둬서 서버에서 받은 배치와 모양이 같게 한다 */
+function withDirection(placement: Placement, direction: PlacementDirection): Placement {
+  const next = { ...placement };
+  if (direction === "FRONT_LEFT") next.direction = direction;
+  else delete next.direction;
+  return next;
+}
 
 /**
  * 바닥 다각형. floor-tall.jpg 에서 바닥(나뭇결)이 시작되는 y 를 열마다 훑어 최소자승으로 피팅한 값이다(2026-09-18).
@@ -130,16 +169,14 @@ export function isPlaceableOnFloor(cell: GridCell, footprint: GridFootprint): bo
 }
 
 /**
- * 기본 배치. 칸으로 정의하고 발끝 좌표는 격자에서 파생시킨다.
- * 구도는 그대로다(왼쪽 벽 화분, 오른쪽 뒷벽에 책상·냉장고, 가운데 소파). 2026-09-18 세로 긴 방으로 바꾸면서 칸을 다시 골랐다 — 옛 칸은 새 격자에서 화면 밖이거나 바닥을 벗어났다.
- * 테이블은 상점에서 산 가구를 골라 배치하는 흐름으로 옮기기로 해 기본 배치에서 뺐다(2026-09-09).
- * 서버(GET /room/layout)가 생기면 이 배열이 목 데이터의 placements 가 된다.
+ * 기본 배치. 칸으로 정의하고 발끝 좌표는 격자에서 파생시킨다. 목 데이터(api/mocks/furniture.ts)도 이 배치로 시작한다.
+ * 가구 구성은 서버 기본 가구(백엔드 V15: 냉장고·소파·TV, 전부 FRONT_RIGHT)와 같다(2026-09-21). 서버처럼 TV 는 옛 책상 자리에 둔다.
+ * 2026-09-18 세로 긴 방으로 바꾸면서 칸을 다시 골랐다 — 옛 칸은 새 격자에서 화면 밖이거나 바닥을 벗어났다.
  */
 export const DEFAULT_CELLS: readonly { itemId: FurnitureId; cell: GridCell }[] = [
-  { itemId: "desk", cell: { col: 2, row: 0 } },
-  { itemId: "fridge", cell: { col: 0, row: 2 } },
-  { itemId: "plant", cell: { col: 2, row: 6 } },
-  { itemId: "sofa", cell: { col: 6, row: 4 } },
+  { itemId: "tv_default", cell: { col: 2, row: 0 } },
+  { itemId: "fridge_default", cell: { col: 0, row: 2 } },
+  { itemId: "sofa_default", cell: { col: 6, row: 4 } },
 ];
 
 /**
@@ -182,8 +219,24 @@ export const DEFAULT_LAYOUT: readonly Placement[] = [
 /** 기준점이 칸 자리에서 이만큼(씬 단위) 안쪽이면 제자리로 본다. 서버가 좌표를 소수 3자리로 다듬어 생기는 차이를 흡수한다. */
 const SETTLED_TOLERANCE = 0.01;
 
-function isPlaceableOn(surface: Surface, cell: GridCell, footprint: GridFootprint): boolean {
+export function isPlaceableOn(surface: Surface, cell: GridCell, footprint: GridFootprint): boolean {
   return surface === "FLOOR" ? isPlaceableOnFloor(cell, footprint) : isPlaceableOnWall(surface, cell, footprint);
+}
+
+/**
+ * 면 위에서 칸을 차지한 것. 겹침은 같은 면·같은 층끼리만 본다 —
+ * 러그(flat)는 가구 밑에 깔리므로 가구와 겹쳐도 되고 러그끼리만 막는다.
+ */
+export type Occupant = { surface: Surface; flat: boolean; cell: GridCell; footprint: GridFootprint };
+
+export function occupantOf(placement: Placement): Occupant {
+  const surface = placement.surface ?? "FLOOR";
+  const { grid, flat } = placementView(placement);
+  return { surface, flat, footprint: grid, cell: anchorToCell(SURFACES[surface], placement.anchor, grid) };
+}
+
+export function occupantsCollide(a: Occupant, b: Occupant): boolean {
+  return a.surface === b.surface && a.flat === b.flat && cellsOverlap(a.cell, a.footprint, b.cell, b.footprint);
 }
 
 /** 그 면에서 놓을 수 있는 모든 칸을 기준점에 가까운 순으로 */
@@ -208,23 +261,93 @@ function placeableCellsByDistance(surface: Surface, anchor: ScenePoint, footprin
 export function settlePlacements(placements: readonly Placement[]): Placement[] {
   const candidates = placements.map((placement) => {
     const surface = placement.surface ?? "FLOOR";
-    const footprint = roomItem(placement.itemId).grid;
-    return { surface, footprint, cells: placeableCellsByDistance(surface, placement.anchor, footprint) };
+    const { grid, flat } = placementView(placement);
+    return { surface, flat, footprint: grid, cells: placeableCellsByDistance(surface, placement.anchor, grid) };
   });
   const order = candidates
     .map((candidate, index) => ({ index, drift: candidate.cells[0]?.drift ?? Infinity }))
     .sort((a, b) => a.drift - b.drift || a.index - b.index);
 
-  const taken: { surface: Surface; cell: GridCell; footprint: GridFootprint }[] = [];
+  const taken: Occupant[] = [];
   const settled = placements.map((placement) => ({ ...placement }));
   for (const { index } of order) {
-    const { surface, footprint, cells } = candidates[index];
-    const free = cells.find(({ cell }) => !taken.some((other) => other.surface === surface && cellsOverlap(cell, footprint, other.cell, other.footprint)));
+    const { surface, flat, footprint, cells } = candidates[index];
+    const free = cells.find(({ cell }) => !taken.some((other) => occupantsCollide({ surface, flat, cell, footprint }, other)));
     if (!free) continue;
-    taken.push({ surface, cell: free.cell, footprint });
+    taken.push({ surface, flat, cell: free.cell, footprint });
     if (free.drift > SETTLED_TOLERANCE) settled[index].anchor = cellAnchor(SURFACES[surface], free.cell, footprint);
   }
   return settled;
+}
+
+/** 다른 것과 겹치지 않는 가장 가까운 칸의 기준점. 그 면에 빈 칸이 없으면 null */
+function nearestFreeAnchor(placement: Placement, others: readonly Occupant[]): ScenePoint | null {
+  const surface = placement.surface ?? "FLOOR";
+  const { grid, flat } = placementView(placement);
+  const spot = placeableCellsByDistance(surface, placement.anchor, grid).find(
+    ({ cell }) => !others.some((other) => occupantsCollide({ surface, flat, cell, footprint: grid }, other))
+  );
+  return spot ? cellAnchor(SURFACES[surface], spot.cell, grid) : null;
+}
+
+/** 보관함에서 꺼낸 바닥 가구가 처음 놓일 자리를 찾는 기준점. 보이는 바닥의 가운데쯤이다 */
+const FLOOR_DROP_POINT: ScenePoint = { x: 164, y: 430 };
+
+/** 벽 가운데. 벽 장식을 처음 걸 자리를 찾는 기준점이다 */
+function wallCenter(surface: WallSurface): ScenePoint {
+  const span = halfSpan(SURFACES[surface]);
+  return cellToScene(SURFACES[surface], { col: span.cols / 2, row: span.rows / 2 });
+}
+
+/**
+ * 보관함에서 꺼낸 가구를 놓을 자리 (방 꾸미기). 바닥 가구는 방 가운데에서 가장 가까운 빈 칸에 FRONT_RIGHT 로,
+ * 벽 장식은 왼쪽 벽 가운데에서 가까운 빈 칸에 건다 — 오른쪽 벽에는 보드·캘린더가 있어 왼쪽을 먼저 본다. 둘 다 차 있으면 오른쪽 벽이다.
+ * 어디에도 자리가 없으면 null.
+ */
+export function placeNewItem(placements: readonly Placement[], itemId: FurnitureId, userFurnitureId?: number): Placement | null {
+  const others = placements.map(occupantOf);
+  const base: Placement = { itemId, anchor: FLOOR_DROP_POINT, ...(userFurnitureId === undefined ? {} : { userFurnitureId }) };
+  if (FURNITURE[itemId].slot === "FLOOR") {
+    const anchor = nearestFreeAnchor(base, others);
+    return anchor ? { ...base, anchor } : null;
+  }
+  for (const surface of ["WALL_LEFT", "WALL_RIGHT"] as const) {
+    const candidate: Placement = { ...base, surface, anchor: wallCenter(surface) };
+    const anchor = nearestFreeAnchor(candidate, others);
+    if (anchor) return { ...candidate, anchor };
+  }
+  return null;
+}
+
+/** 벽 칸을 맞은편 벽으로 옮긴 자리. 두 벽이 코너를 사이에 두고 마주 보므로 벽을 따라가는 칸 번호가 뒤집힌다 */
+function mirroredWallCell(to: WallSurface, cell: GridCell, footprint: GridFootprint): GridCell {
+  return { col: halfSpan(SURFACES[to]).cols - footprint.w - cell.col, row: cell.row };
+}
+
+/**
+ * '방향 바꾸기' (방 꾸미기). 바닥 가구는 제자리에서 반대 방향 그림으로 돌린다 — 발자국의 가로·세로가 바뀌므로
+ * 막히면 가장 가까운 빈 칸으로 비킨다. 벽 장식은 맞은편 벽의 마주 보는 자리로 옮긴다(벽 그림은 붙은 벽이 정한다).
+ * 벽 기능 오브젝트(보드·캘린더)는 한 방향 그림뿐이라 돌리지 않는다. 돌릴 수 없거나 자리가 없으면 null.
+ */
+export function flipPlacement(placements: readonly Placement[], itemId: RoomItemId): Placement[] | null {
+  const index = placements.findIndex((placement) => placement.itemId === itemId);
+  if (index === -1 || isWallItemId(itemId)) return null;
+  const current = placements[index];
+  const others = placements.filter((_, other) => other !== index).map(occupantOf);
+
+  let turned: Placement;
+  if (current.surface === "WALL_LEFT" || current.surface === "WALL_RIGHT") {
+    const target: WallSurface = current.surface === "WALL_LEFT" ? "WALL_RIGHT" : "WALL_LEFT";
+    const { grid } = placementView(current);
+    const from = anchorToCell(SURFACES[current.surface], current.anchor, grid);
+    turned = { ...current, surface: target, anchor: cellAnchor(SURFACES[target], mirroredWallCell(target, from, grid), grid) };
+  } else {
+    turned = withDirection(current, facingOf(current) === "FRONT_RIGHT" ? "FRONT_LEFT" : "FRONT_RIGHT");
+  }
+
+  const anchor = nearestFreeAnchor(turned, others);
+  if (!anchor) return null;
+  return placements.map((placement, other) => (other === index ? { ...turned, anchor } : placement));
 }
 
 /**
@@ -238,9 +361,9 @@ export function withDefaultWallItems(placements: readonly Placement[]): Placemen
   return settlePlacements([...placements, ...missing]);
 }
 
-/** 배치가 바닥 가구인지(벽 오브젝트가 아닌지). 깊이 정렬·캐릭터 경로 계산은 이것만 본다 */
+/** 배치가 바닥 가구인지(벽에 걸린 것이 아닌지). 깊이 정렬·캐릭터 경로 계산은 이것만 본다 */
 export function isFloorPlacement(placement: Placement): placement is Placement & { itemId: FurnitureId } {
-  return !isWallItemId(placement.itemId);
+  return !isWallItemId(placement.itemId) && (placement.surface ?? "FLOOR") === "FLOOR";
 }
 
 /**
@@ -259,9 +382,15 @@ export function getWallItemRect(placements: readonly Placement[], id: WallItemId
  * 배치 격자의 칸을 씬 좌표로 되돌린 평행사변형이라 배치·겹침 판정과 같은 근거를 쓴다.
  * 축 정렬 사각형으로 감싸면 실제 넓이의 두 배가 되어 캐릭터가 갈 곳을 잃는다.
  */
-export function getFootprintPolygon(item: FurnitureItem, anchor: ScenePoint): ScenePolygon {
-  const cell = anchorToCell(SURFACES.FLOOR, anchor, item.grid);
-  return cellCorners(SURFACES.FLOOR, cell, item.grid);
+export function getFootprintPolygon(placement: Placement): ScenePolygon {
+  const { grid } = placementView(placement);
+  const cell = anchorToCell(SURFACES.FLOOR, placement.anchor, grid);
+  return cellCorners(SURFACES.FLOOR, cell, grid);
+}
+
+/** 캐릭터가 피해 갈 발자국. 벽에 걸린 것과 러그(밟고 지나간다)는 빠진다 */
+export function getWalkBlockers(placements: readonly Placement[]): ScenePolygon[] {
+  return placements.filter((placement) => isFloorPlacement(placement) && !placementView(placement).flat).map(getFootprintPolygon);
 }
 
 /** 캐릭터 정지 이미지의 씬 단위 크기(char1-idle.png 496×756 비율) */
@@ -279,4 +408,29 @@ export const CHARACTER_MOTION = {
   bob: { height: 3, periodMs: 360 },
   /** 멈춰 있을 때 호흡 스케일 폭과 주기(ms) */
   breath: { amount: 0.018, periodMs: 1700 },
+  /** 다음 목적지를 고를 때 소파로 갈 확률. 나머지는 바닥의 아무 곳이다 */
+  sitChance: 0.35,
+  /** 소파에 앉아 있는 시간(ms) */
+  sitMs: { min: 4000, max: 8000 },
 } as const;
+
+/**
+ * 캐릭터 발끝이 소파 발자국의 앞 꼭짓점보다 이만큼(씬 단위) 앞에 선다.
+ * 깊이 정렬이 발끝 y 기준이라 소파보다 앞에 와야 소파에 가려지지 않고 앉은 것처럼 보인다.
+ */
+const SEAT_FRONT_MARGIN = 4;
+
+/**
+ * 소파에 앉을 자리. 소파가 놓인 곳에서 계산하므로 방 꾸미기에서 소파를 옮기면 앉는 자리도 따라간다.
+ * 소파(색상 무관)가 여럿이면 배치 순서상 첫 소파에 앉는다.
+ * 소파가 없거나 앉을 자리가 바닥 밖이면 null 이고, 그때 캐릭터는 앉지 않고 걷기만 한다.
+ */
+export function getSeatPoint(placements: readonly Placement[]): ScenePoint | null {
+  const sofa = placements.find((placement) => isFloorPlacement(placement) && FURNITURE[placement.itemId].group === "sofa");
+  if (sofa === undefined) return null;
+
+  const footprint = getFootprintPolygon(sofa);
+  const frontY = footprint.reduce((max, corner) => Math.max(max, corner.y), footprint[0].y);
+  const seat = { x: sofa.anchor.x, y: frontY + SEAT_FRONT_MARGIN };
+  return isPointInPolygon(seat, FLOOR_POLYGON) ? seat : null;
+}

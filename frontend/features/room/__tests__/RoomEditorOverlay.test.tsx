@@ -24,9 +24,9 @@ jest.mock("expo-router", () => {
 });
 
 /** 소파를 옮겨 놓는 자리. 드래그는 칸에만 놓이므로 실제 칸의 기준점을 쓴다 (111.625, 538) */
-const SOFA_MOVED = cellAnchor(SURFACES.FLOOR, { col: 8, row: 10 }, FURNITURE.sofa.grid);
+const SOFA_MOVED = cellAnchor(SURFACES.FLOOR, { col: 8, row: 10 }, FURNITURE.sofa_default.grid);
 
-const sofaAnchor = () => useRoomStore.getState().layout.find((p) => p.itemId === "sofa")!.anchor;
+const sofaAnchor = () => useRoomStore.getState().layout.find((p) => p.itemId === "sofa_default")!.anchor;
 
 /** 편집 화면은 GET /room 으로 서버 배치를 받고 나서 사본을 뜬다. 목이 기본 배치를 그대로 주므로 자리는 같다 */
 function renderEditScreen() {
@@ -63,16 +63,16 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     await renderEditing();
     expect(screen.getByText(EDIT_HINT)).toBeTruthy();
 
-    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
+    useRoomStore.getState().moveItem("sofa_default", SOFA_MOVED);
     await fireEvent.press(screen.getByRole("button", { name: "편집 취소" }));
-    expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!.anchor);
+    expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa_default")!.anchor);
     expect(useRoomStore.getState().draft).toBeNull();
     expect(mockBack).toHaveBeenCalledTimes(1);
   });
 
   it("완료는 옮긴 가구를 서버에 저장한 뒤 확정하고 돌아간다 — 벽 오브젝트도 같은 사본에서 옮긴다", async () => {
     await renderEditing();
-    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
+    useRoomStore.getState().moveItem("sofa_default", SOFA_MOVED);
     useRoomStore.getState().moveItem("board", { x: 70, y: 80 });
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
 
@@ -84,7 +84,7 @@ describe("방 꾸미기 진입과 편집 화면", () => {
 
   it("옮긴 자리는 서버 목에 남아 다시 들어와도 그대로다", async () => {
     const first = await renderEditing();
-    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
+    useRoomStore.getState().moveItem("sofa_default", SOFA_MOVED);
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1), { timeout: 3000 });
     await first.unmount();
@@ -96,9 +96,9 @@ describe("방 꾸미기 진입과 편집 화면", () => {
 
   it("화면을 떠나면(언마운트) 남은 사본은 버린다", async () => {
     const view = await renderEditing();
-    useRoomStore.getState().moveItem("sofa", SOFA_MOVED);
+    useRoomStore.getState().moveItem("sofa_default", SOFA_MOVED);
     await view.unmount();
     expect(useRoomStore.getState().draft).toBeNull();
-    expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!.anchor);
+    expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa_default")!.anchor);
   });
 });

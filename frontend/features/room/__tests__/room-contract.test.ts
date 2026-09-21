@@ -19,7 +19,7 @@ describe("toRoom", () => {
     const room = toRoom(roomMock);
     expect(room.coinBalance).toBe(1250);
     expect(room.checkedInToday).toBe(false);
-    expect(room.equipped.map((item) => item.slotType)).toEqual(["HEAD", "UPPER_BODY", "FACE"]);
+    expect(room.equipped.map((item) => item.slotType)).toEqual(["HEAD", "FACE", "UPPER_BODY"]);
     expect(room.reaction).toBeNull();
     expect(room.stickers).toBeNull();
     expect(room.overEnvelopeIds).toEqual([]);
@@ -57,6 +57,8 @@ describe("toRoom", () => {
           positionX: 165,
           positionY: 280,
           layer: 0,
+          defaultFurnitureType: null,
+          canUnplace: true,
         },
       ],
     });
@@ -72,6 +74,8 @@ describe("toRoom", () => {
         positionX: 165,
         positionY: 280,
         layer: 0,
+        defaultFurnitureType: null,
+        canUnplace: true,
       },
     ]);
     expect(toRoom(roomMock).furnitures).toEqual([]);

@@ -190,7 +190,7 @@ describe("세 면의 격자 정의", () => {
   });
 
   it("화면 밖 칸은 놓을 수 없다", () => {
-    expect(isPlaceableOnFloor({ col: 14, row: 0 }, FURNITURE.plant.grid)).toBe(false);
+    expect(isPlaceableOnFloor({ col: 14, row: 0 }, FURNITURE.plant_monstera_terracotta.grid)).toBe(false);
   });
 
   it("발끝을 칸으로 되돌리면 원래 칸이 나온다", () => {

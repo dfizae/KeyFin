@@ -56,12 +56,18 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
-/** 기준점(씬 단위)과 크기로 스프라이트의 좌상단 사각형을 구한다. */
-export function getSpriteRect(anchor: ScenePoint, size: SceneSize, anchorRatio: AnchorRatio = FOOT_ANCHOR): SceneRect {
+/**
+ * 기준점(씬 단위)과 크기로 스프라이트의 좌상단 사각형을 구한다. anchorRatio 를 생략하면 발끝(FOOT_ANCHOR)이다.
+ * 기본값을 인자 자리(`anchorRatio = FOOT_ANCHOR`)에 두면 안 된다 — worklet 이 캡처한 바깥 값은 함수 본문 안에서만 보이는데
+ * 기본 인자는 본문보다 먼저 평가돼, UI 스레드에서 "Property 'FOOT_ANCHOR' doesn't exist" 로 앱이 죽는다(2026-09-21 preview APK,
+ * 인자를 생략하는 CharacterSprite 가 매 프레임 부른다). worklet 의 기본 인자에는 리터럴이나 다른 인자만 쓴다.
+ */
+export function getSpriteRect(anchor: ScenePoint, size: SceneSize, anchorRatio?: AnchorRatio): SceneRect {
   "worklet";
+  const ratio = anchorRatio ?? FOOT_ANCHOR;
   return {
-    x: anchor.x - size.width * anchorRatio.x,
-    y: anchor.y - size.height * anchorRatio.y,
+    x: anchor.x - size.width * ratio.x,
+    y: anchor.y - size.height * ratio.y,
     width: size.width,
     height: size.height,
   };
@@ -287,6 +293,13 @@ export const SURFACE_TYPES = ["FLOOR", "WALL_LEFT", "WALL_RIGHT"] as const;
 export type Surface = (typeof SURFACE_TYPES)[number];
 
 /**
+ * 가구가 보는 방향 (서버 placementDirection). FRONT_RIGHT 는 왼쪽 벽을 등지고 오른쪽 앞을, FRONT_LEFT 는 오른쪽 벽을 등지고 왼쪽 앞을 본다.
+ * 가구 그림이 방향별로 한 장씩 있어(catalog.ts) 방 꾸미기의 '방향 바꾸기'가 둘을 오간다.
+ */
+export const PLACEMENT_DIRECTIONS = ["FRONT_RIGHT", "FRONT_LEFT"] as const;
+export type PlacementDirection = (typeof PLACEMENT_DIRECTIONS)[number];
+
+/**
  * GET /room 응답 (2026-09-16 Swagger 대조).
  * `theme` 과 `board` 는 서버 응답에 없다 — board 는 develop d80e569 에서 빠졌고 벽 보드 수치는 GET /budgets/current 로 받는다.
  * `furnitures` 는 설치된 가구의 씬 좌표다. 방 3단계에서 쓰고 지금은 받아만 둔다.
@@ -303,7 +316,10 @@ export type RoomDto = {
   overEnvelopes?: number[];
 };
 
-/** 설치된 가구 한 개. 좌표는 327×404 씬 기준이라 ScenePoint 와 같은 축이다 (3단계) */
+/**
+ * 설치된 가구 한 개. 좌표는 ScenePoint 와 같은 축이다 (3단계).
+ * defaultFurnitureType·canUnplace 는 백엔드 V15(2026-09-18, 기본 가구 지급)에서 생겼다 — 기본 가구(FRIDGE·SOFA·TV)는 치울 수 없다.
+ */
 export type PlacedFurnitureDto = {
   userFurnitureId: number;
   itemId: number;
@@ -314,6 +330,10 @@ export type PlacedFurnitureDto = {
   positionX: number;
   positionY: number;
   layer: number;
+  /** 기본 가구 식별값(FRIDGE·SOFA·TV). 일반 가구는 null */
+  defaultFurnitureType: string | null;
+  /** 설치 해제 가능 여부. 기본 가구는 false */
+  canUnplace: boolean;
 };
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };

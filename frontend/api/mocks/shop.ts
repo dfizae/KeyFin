@@ -1,4 +1,7 @@
 import { ApiError } from "@/api/error";
+import { acquireFurnitureMock, ownsFurnitureMock } from "@/api/mocks/furniture";
+import { FURNITURE, type FurnitureGroup } from "@/features/room/catalog";
+import { SHOP_FURNITURE_GROUPS } from "@/features/shop/catalog";
 import type { CoinBalanceDto, CoinHistoryDto, CoinHistoryItemDto, ShopItemDto, ShopPurchaseDto, ShopPurchaseRequest } from "@/features/shop/model";
 import { currentDateKey, parseKSTDateKey, toKSTDateKey } from "@/lib/date";
 
@@ -69,30 +72,63 @@ export function coinBalanceMock(): CoinBalanceDto {
 
 /**
  * GET /shop · POST /shop/purchase 목 (배포 서버 Swagger 2026-09-20).
- * 가구는 방 카탈로그에 있는 assetKey 를 써서 화면에 그림이 나오고, 아바타는 에셋이 아직 없어 이름만 보인다.
- * 구매는 서버처럼 한 번만 되고(두 번째는 409 SHOP_002), 코인이 모자라면 409 SHOP_003 이다.
+ * 옷은 의상 세트 카탈로그(features/room/outfits.ts), 가구는 방 카탈로그(features/room/catalog.ts)의 assetKey 를 써서 화면에 그림이 나온다.
+ * 옷은 세트 한 벌이라 부위로 나뉘지 않고, 서버가 세트를 UPPER_BODY 로 내려 주는 모양을 그대로 따랐다.
+ * 옷·가구 모두 백엔드 V19·V20 마이그레이션과 같은 구성·이름·가격이다(2026-09-21 대조). 가구는 V20 의 56종 —
+ * 앱 카탈로그 59종에서 기본 가구와 똑같은 그림(`*_original` 소파·냉장고·TV) 3종과 기본 가구 자체를 뺀 것이다.
+ * 보유 여부는 가구 목(api/mocks/furniture.ts)을 따른다.
+ * 구매는 서버처럼 한 번만 되고(두 번째는 409 SHOP_002), 코인이 모자라면 409 SHOP_003 이다. 산 가구는 가구 목에 미설치로 들어간다.
  */
-const SHOP_ITEMS: readonly ShopItemDto[] = [
-  { itemId: 1, itemCategory: "AVATAR", slotType: "HEAD", name: "노란 비니", price: 150, assetKey: "beanie_yellow", themeCode: null, owned: false },
-  { itemId: 2, itemCategory: "AVATAR", slotType: "HEAD", name: "가을 털모자", price: 300, assetKey: "hat_autumn", themeCode: "AUTUMN", owned: false },
-  { itemId: 3, itemCategory: "AVATAR", slotType: "FACE", name: "동그란 안경", price: 120, assetKey: "glasses_round", themeCode: null, owned: true },
-  { itemId: 4, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "기본 티셔츠", price: 0, assetKey: "tee_basic", themeCode: null, owned: false },
-  { itemId: 5, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "니트 가디건", price: 400, assetKey: "cardigan_knit", themeCode: "AUTUMN", owned: false },
-  { itemId: 6, itemCategory: "AVATAR", slotType: "LOWER_BODY", name: "청바지", price: 250, assetKey: "jeans_blue", themeCode: null, owned: false },
-  { itemId: 7, itemCategory: "AVATAR", slotType: "SOCKS", name: "줄무늬 양말", price: 80, assetKey: "socks_stripe", themeCode: null, owned: false },
-  { itemId: 8, itemCategory: "AVATAR", slotType: "FOOTWEAR", name: "운동화", price: 2000, assetKey: "sneakers_white", themeCode: null, owned: false },
-  { itemId: 9, itemCategory: "FURNITURE", slotType: "FLOOR", name: "책상", price: 500, assetKey: "desk_default", themeCode: null, owned: false },
-  { itemId: 10, itemCategory: "FURNITURE", slotType: "FLOOR", name: "화분", price: 200, assetKey: "plant_default", themeCode: null, owned: true },
-  { itemId: 11, itemCategory: "FURNITURE", slotType: "FLOOR", name: "냉장고", price: 900, assetKey: "fridge_default", themeCode: null, owned: false },
-  { itemId: 12, itemCategory: "FURNITURE", slotType: "WALL", name: "벽 캘린더", price: 300, assetKey: "calendar_default", themeCode: null, owned: true },
+const OUTFIT_ITEMS: readonly ShopItemDto[] = [
+  { itemId: 1, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "에픽 마법사 의상 세트", price: 500, assetKey: "outfit_epic_mage", themeCode: null, owned: true },
+  { itemId: 2, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "레전더리 성기사 의상 세트", price: 1000, assetKey: "outfit_legendary_paladin", themeCode: null, owned: true },
+  { itemId: 3, itemCategory: "AVATAR", slotType: "UPPER_BODY", name: "신화 용염 의상 세트", price: 2000, assetKey: "outfit_mythic_dragon", themeCode: null, owned: false },
 ];
 
-/** 이번 실행에서 산 상품과 그만큼 빠진 코인. 잔액 목이 함께 줄어든다 */
+/**
+ * 분류별 가격(코인). 백엔드 V20 값이다 — 큰 가구 500 · 벽 장식 300 · 식물·러그·조명 200.
+ * V20 은 상품마다 가격을 적지만 같은 분류는 값이 같아 분류로 묶어 둔다. 어긋나면 shop 모델 테스트가 잡는다.
+ */
+export const FURNITURE_PRICE_BY_GROUP: Record<FurnitureGroup, number> = {
+  bed: 500,
+  sofa: 500,
+  appliance: 500,
+  storage: 500,
+  table: 500,
+  chair: 500,
+  wall: 300,
+  rug: 200,
+  plant: 200,
+  decor: 200,
+};
+
+/** 기본 가구와 그림이 같아 팔지 않는 것 */
+const NOT_FOR_SALE = new Set<string>(["sofa_default", "fridge_default", "tv_default", "sofa_original", "refrigerator_original", "tv_set_original"]);
+const FIRST_FURNITURE_ITEM_ID = 101;
+
+/** 판매 가구. 선택창 분류 순서(침대 → 식물)대로 id 를 매긴다 */
+const FURNITURE_ITEMS: readonly ShopItemDto[] = SHOP_FURNITURE_GROUPS.flatMap(({ group }) =>
+  Object.values(FURNITURE).filter((item) => item.group === group && !NOT_FOR_SALE.has(item.id))
+).map((item, index) => ({
+  itemId: FIRST_FURNITURE_ITEM_ID + index,
+  itemCategory: "FURNITURE",
+  slotType: item.slot,
+  name: item.name,
+  price: FURNITURE_PRICE_BY_GROUP[item.group],
+  assetKey: item.assetKey,
+  themeCode: null,
+  owned: false,
+}));
+
+/** 이번 실행에서 산 옷과 그만큼 빠진 코인. 잔액 목이 함께 줄어든다. 가구 보유는 가구 목이 들고 있다 */
 const purchased = new Set<number>();
 let spent = 0;
 
 export function shopItemsMock(): ShopItemDto[] {
-  return SHOP_ITEMS.map((item) => ({ ...item, owned: item.owned || purchased.has(item.itemId) }));
+  return [
+    ...OUTFIT_ITEMS.map((item) => ({ ...item, owned: item.owned || purchased.has(item.itemId) })),
+    ...FURNITURE_ITEMS.map((item) => ({ ...item, owned: ownsFurnitureMock(item.assetKey) })),
+  ];
 }
 
 export function purchaseShopItemMock(request: ShopPurchaseRequest): ShopPurchaseDto {
@@ -101,14 +137,14 @@ export function purchaseShopItemMock(request: ShopPurchaseRequest): ShopPurchase
   if (item.owned) throw new ApiError(409, "SHOP_002", "이미 보유한 상품입니다.");
   if (BALANCE - spent < item.price) throw new ApiError(409, "SHOP_003", "코인이 부족합니다.");
 
-  purchased.add(item.itemId);
   spent += item.price;
   const isAvatar = item.itemCategory === "AVATAR";
+  if (isAvatar) purchased.add(item.itemId);
   return {
     itemId: item.itemId,
     itemCategory: item.itemCategory,
     userItemId: isAvatar ? 500 + item.itemId : null,
-    userFurnitureId: isAvatar ? null : 600 + item.itemId,
+    userFurnitureId: isAvatar ? null : acquireFurnitureMock(item.itemId, 600 + item.itemId, item.assetKey),
     price: item.price,
     balance: BALANCE - spent,
   };
