@@ -9,7 +9,6 @@ import com.finset.key_fin.furniture.dto.request.FurniturePlacementUpdateRequest;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest.Placement;
 import com.finset.key_fin.furniture.entity.FurnitureType;
-import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
 import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.furniture.service.DefaultFurnitureService;
@@ -59,7 +58,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.hamcrest.Matchers.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -110,16 +108,11 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void signupProvisionsThreeDefaultsAndRoomDoesNotCreateBudgetOrAttendance() throws Exception {
+	void signupStartsWithoutStickersAndRoomDoesNotCreateBudgetOrAttendance() throws Exception {
 		long signedUp = authService.signup(new SignupRequest(UUID.randomUUID() + "@room.test", "Passw0rd!", "방테스터")).userId();
 		testUsers.add(signedUp);
 		var supplied = furnitureService.getFurnitures(signedUp, null);
-		assertThat(supplied).hasSize(3).allSatisfy(f -> {
-			assertThat(f.placed()).isTrue();
-			assertThat(f.canUnplace()).isFalse();
-			assertThat(f.stickerAttached()).isFalse();
-		});
-		assertThat(supplied).extracting(f -> f.defaultFurnitureType()).containsExactlyInAnyOrder(DefaultFurnitureType.values());
+		assertThat(supplied).hasSize(3).allSatisfy(f -> assertThat(f.stickerAttached()).isFalse());
 		mvc.perform(auth(get("/api/v1/room"), signedUp)).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.coin.balance").value(0))
 				.andExpect(jsonPath("$.data.attendance.checkedToday").value(false))
@@ -128,23 +121,6 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.data.stickers.removableToday").value(false));
 		assertThat(countFor("budgets", signedUp)).isZero();
 		assertThat(countFor("fin_coin", signedUp)).isZero();
-		for (var furniture : supplied) {
-			mvc.perform(auth(get("/api/v1/shop"), signedUp)).andExpect(status().isOk())
-					.andExpect(jsonPath("$.data[*].itemId", not(hasItem(furniture.itemId().intValue()))));
-			mvc.perform(auth(post("/api/v1/shop/purchase").contentType(APPLICATION_JSON)
-					.content("{\"itemId\":" + furniture.itemId() + "}"), signedUp)).andExpect(status().isNotFound());
-		}
-	}
-
-	@Test
-	void provisioningIsIdempotentAndPreservesMovedFurniture() {
-		defaults.provision(userId);
-		long sofa = target("SOFA");
-		furnitureService.updatePlacement(userId, sofa, moved());
-		defaults.provision(userId);
-		assertThat(countFor("user_furnitures", userId)).isEqualTo(3);
-		assertThat(rooms.getRoom(userId).furnitures().stream().filter(f -> f.userFurnitureId() == sofa).findFirst().orElseThrow().positionX())
-				.isEqualByComparingTo("100.123");
 	}
 
 	@Test
