@@ -11,13 +11,16 @@ import com.finset.key_fin.user.exception.UserErrorCode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Limit;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.SQLException;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +41,79 @@ class FinCoinServiceTest extends SpringIntegrationTestSupport {
 
 	@Autowired
 	private JdbcClient jdbcClient;
+
+	@ParameterizedTest
+	@EnumSource(value = FinCoinReason.class, names = {"ATTEND", "CONFIRM_ALL", "WEEKLY", "MONTHLY"})
+	void databaseRejectsDuplicateRewardsButAllowsNextDate(FinCoinReason reason) {
+		LocalDate date = LocalDate.of(2026, 9, 17);
+		String insert = """
+				INSERT INTO fin_coin (user_id, delta, balance_after, reason_code, grant_date)
+				VALUES (:userId, 10, :balance, :reason, :date)
+				""";
+		jdbcClient.sql(insert).param("userId", USER).param("balance", 710)
+				.param("reason", reason.name()).param("date", date).update();
+
+		assertThatThrownBy(() -> jdbcClient.sql(insert).param("userId", USER).param("balance", 720)
+				.param("reason", reason.name()).param("date", date).update())
+				.isInstanceOf(DuplicateKeyException.class)
+				.rootCause().isInstanceOfSatisfying(SQLException.class, exception -> {
+					assertThat(exception.getErrorCode()).isEqualTo(1062);
+					assertThat(exception.getMessage()).contains("uq_coin_grant");
+				});
+
+		jdbcClient.sql(insert).param("userId", USER).param("balance", 720)
+				.param("reason", reason.name()).param("date", date.plusDays(1)).update();
+		assertThat(jdbcClient.sql("""
+				SELECT reward_grant_date FROM fin_coin
+				WHERE user_id = :userId AND reason_code = :reason AND grant_date >= :date
+				ORDER BY grant_date
+				""").param("userId", USER).param("reason", reason.name()).param("date", date)
+				.query(LocalDate.class).list()).containsExactly(date, date.plusDays(1));
+	}
+
+	@Test
+	void databaseAllowsDifferentRewardReasonsForSameUserAndDate() {
+		LocalDate date = LocalDate.of(2026, 9, 17);
+		jdbcClient.sql("""
+				INSERT INTO fin_coin (user_id, delta, balance_after, reason_code, grant_date) VALUES
+				(:userId, 10, 710, 'ATTEND', :date),
+				(:userId, 10, 720, 'CONFIRM_ALL', :date),
+				(:userId, 10, 730, 'WEEKLY', :date),
+				(:userId, 10, 740, 'MONTHLY', :date)
+				""").param("userId", USER).param("date", date).update();
+
+		assertThat(jdbcClient.sql("""
+				SELECT reason_code FROM fin_coin WHERE user_id = :userId AND grant_date = :date
+				""").param("userId", USER).param("date", date).query(String.class).list())
+				.containsExactlyInAnyOrder("ATTEND", "CONFIRM_ALL", "WEEKLY", "MONTHLY");
+	}
+
+	@Test
+	void purchasesAllowMultipleEntriesPerDayWithNullRewardGrantDate() {
+		LocalDate date = LocalDate.of(2026, 9, 17);
+		jdbcClient.sql("""
+				INSERT INTO fin_coin (user_id, delta, balance_after, reason_code, grant_date) VALUES
+				(:userId, -20, 680, 'PURCHASE', :date),
+				(:userId, -30, 650, 'PURCHASE', :date),
+				(:userId, 0, 650, 'PURCHASE', :date)
+				""").param("userId", USER).param("date", date).update();
+
+		assertThat(jdbcClient.sql("""
+				SELECT reward_grant_date FROM fin_coin
+				WHERE user_id = :userId AND reason_code = 'PURCHASE' AND grant_date = :date
+				""").param("userId", USER).param("date", date).query(LocalDate.class).list())
+				.hasSize(3).containsOnlyNulls();
+	}
+
+	@Test
+	void hasUserAndIdIndexForLedgerQueries() {
+		assertThat(jdbcClient.sql("""
+				SELECT column_name FROM information_schema.statistics
+				WHERE table_schema = DATABASE() AND table_name = 'fin_coin'
+				  AND index_name = 'idx_fin_coin_user_id'
+				ORDER BY seq_in_index
+				""").query(String.class).list()).containsExactly("user_id", "id");
+	}
 
 	@Test
 	void limitsDatabaseResultsBeforeResponseTrimming() {
