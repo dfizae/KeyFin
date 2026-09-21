@@ -31,6 +31,7 @@ import {
   subscribePushReceived,
 } from "@/features/notification/push";
 import { paymentKeys } from "@/features/payment/api/queries";
+import { roomKeys } from "@/features/room/api/queries";
 import { shopKeys } from "@/features/shop/api/queries";
 import { transactionKeys } from "@/features/transaction/api/queries";
 import { loadPushPermissionAsked, savePushPermissionAsked } from "@/lib/session-storage";
@@ -142,15 +143,16 @@ export function usePushDeviceRegistration(enabled: boolean) {
 /**
  * 푸시 종류별로 함께 새로 받을 화면 데이터 (data 규약은 docs/api-contract.md NOTIFICATION).
  * 알림함은 종류와 무관하게 갱신하므로 여기 넣지 않는다. 연출은 서버에서 다시 받을 데이터가 없다.
- * 지금 서버의 COACHING 푸시는 "새로 정리할 거래가 있어요"(refId = 거래 id)라 미확정 목록을 새로 받는다 —
- * 홈 코치의 미확정 건수와 정리 화면이 같은 캐시를 본다. WARNING 은 지금 서버가 보내는 미납 경고다(Notion 규약의 PAYMENT_RISK).
+ * 지금 서버의 COACHING 푸시는 "새로 정리할 거래가 있어요"(refId = 거래 id)다. 새 거래는 미확정 목록뿐 아니라
+ * 거래 내역·자산 탭 최근 거래에도 들어가므로 거래 조회 전체를 새로 받는다 — 미확정만 받으면 목록이 늦게 따라온다 (2026-09-22).
+ * 홈의 코인 수는 코인 잔액 조회가 아니라 방 홈(GET /room)의 값이라 COIN_GRANTED 는 방 홈도 함께 받는다. WARNING 은 지금 서버가 보내는 미납 경고다(Notion 규약의 PAYMENT_RISK).
  */
 function affectedQueryKeys(type: PushDataType): QueryKey[] {
   switch (type) {
     case "CLASSIFY_QUESTION":
     case "CLEANUP":
     case "COACHING":
-      return [transactionKeys.pending()];
+      return [transactionKeys.all];
     case "BUDGET_ALERT":
       return [budgetKeys.current()];
     case "TRANSFER_REQUEST":
@@ -159,7 +161,7 @@ function affectedQueryKeys(type: PushDataType): QueryKey[] {
     case "WARNING":
       return [paymentKeys.calendar()];
     case "COIN_GRANTED":
-      return [shopKeys.coins()];
+      return [shopKeys.coins(), roomKeys.home()];
     case "NEW_LINK_FOUND":
       return [linkKeys.candidates()];
     case "REACTION":

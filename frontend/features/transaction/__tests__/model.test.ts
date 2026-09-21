@@ -227,6 +227,7 @@ describe("거래 상세 표시 (txTypeLabel · confirmStatusLabel · transaction
 
   it("거래 종류와 분류 상태를 화면 문구로 바꾸고 모르는 상태는 자리를 비운다", () => {
     expect(txTypeLabel(card)).toBe("카드 결제");
+    expect(txTypeLabel(toTransaction({ ...pendingTransactionsMock().items[0], txType: "CARD_BILL" }))).toBe("카드대금");
     expect(txTypeLabel({ ...card, txType: "UNKNOWN" })).toBe("기타");
     expect(confirmStatusLabel(card)).toBe("확인 필요");
     expect(confirmStatusLabel({ ...card, confirmStatus: "AUTO" })).toBe("자동 분류");
