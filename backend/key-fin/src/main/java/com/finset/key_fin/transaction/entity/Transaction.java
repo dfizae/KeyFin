@@ -123,6 +123,25 @@ public class Transaction extends BaseEntity {
 		return transaction;
 	}
 
+	public static Transaction collectCardBill(
+			User user,
+			Long accountId,
+			Long cardId,
+			String financeTransactionUniqueNo,
+			String transactionSummary,
+			long amount,
+			LocalDate transactionDate,
+			LocalTime transactionTime
+	) {
+		Transaction transaction = collected(
+				user, financeTransactionUniqueNo, TransactionType.CARD_BILL, transactionSummary,
+				amount, transactionDate, transactionTime, ConfirmStatus.CONFIRMED, ExcludeTag.NONE
+		);
+		transaction.accountId = Objects.requireNonNull(accountId, "accountId must not be null");
+		transaction.cardId = Objects.requireNonNull(cardId, "cardId must not be null");
+		return transaction;
+	}
+
 	public static Transaction collectCard(
 			User user,
 			Long cardId,
@@ -250,7 +269,8 @@ public class Transaction extends BaseEntity {
 	}
 
 	private void validateClassifiable() {
-		if (transactionType == TransactionType.DEPOSIT || status == TransactionStatus.CANCELED) {
+		if (transactionType == TransactionType.DEPOSIT || transactionType == TransactionType.CARD_BILL
+				|| status == TransactionStatus.CANCELED) {
 			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
 		}
 	}
