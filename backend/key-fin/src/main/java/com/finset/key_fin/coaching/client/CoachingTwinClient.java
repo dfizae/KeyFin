@@ -18,6 +18,7 @@ public class CoachingTwinClient {
 
 	private static final String TWIN_PATH = "/v1/twin";
 	private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+	private static final String USER_HEADER = "X-Coaching-User";
 
 	private final RestClient coachingRestClient;
 
@@ -25,12 +26,12 @@ public class CoachingTwinClient {
 		this.coachingRestClient = coachingRestClient;
 	}
 
-	public TwinIdentity create(FdtBootstrap bootstrap) {
-		return create(bootstrap, UUID.randomUUID().toString());
+	public TwinIdentity create(long userId, FdtBootstrap bootstrap) {
+		return create(userId, bootstrap, UUID.randomUUID().toString());
 	}
 
 	/** 같은 요청을 재시도할 때만 같은 키를 넘긴다. 원장이 바뀌면 새 키여야 한다. */
-	public TwinIdentity create(FdtBootstrap bootstrap, String idempotencyKey) {
+	public TwinIdentity create(long userId, FdtBootstrap bootstrap, String idempotencyKey) {
 		if (bootstrap == null || bootstrap.transactions().isEmpty()) {
 			throw new IllegalArgumentException("Bootstrap 에는 거래가 최소 1건 필요합니다.");
 		}
@@ -38,6 +39,7 @@ public class CoachingTwinClient {
 				.uri(TWIN_PATH)
 				.contentType(MediaType.APPLICATION_JSON)
 				.header(IDEMPOTENCY_KEY, idempotencyKey)
+				.header(USER_HEADER, String.valueOf(userId))
 				.body(bootstrap)
 				.retrieve()
 				.body(TwinIdentity.class);
