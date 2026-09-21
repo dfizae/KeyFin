@@ -19,14 +19,18 @@ public class FdtTransactionMapper {
 
 	private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
 	private static final String UNMAPPED_MERCHANT_PREFIX = "raw:";
-	private static final String ENGINE_INTERNAL_TRANSFER = "INTERNAL_TRANSFER";
 
 	private final FdtCategoryMapper categoryMapper;
 
-	/** CARRYOVER 는 시딩 이월 마커라 원장에서 뺀다. */
+	/**
+	 * CARRYOVER 는 시딩 이월 마커라 원장에서 뺀다.
+	 * SELF_TRANSFER 는 엔진이 to_account_id 로 상대 계좌를 요구하는데 우리 원장은 방향·상대 계좌를 갖지 않아 뺀다.
+	 * 과거 이동은 스냅샷 잔액에 이미 반영돼 있어 총현금·지출 예측에는 영향이 없다.
+	 */
 	public List<FdtTransaction> map(List<Transaction> transactions) {
 		return transactions.stream()
-				.filter(transaction -> transaction.getExcludeTag() != ExcludeTag.CARRYOVER)
+				.filter(transaction -> transaction.getExcludeTag() != ExcludeTag.CARRYOVER
+						&& transaction.getExcludeTag() != ExcludeTag.SELF_TRANSFER)
 				.map(this::map)
 				.toList();
 	}
@@ -55,7 +59,7 @@ public class FdtTransactionMapper {
 
 	/**
 	 * RESTORE 는 봉투를 되돌리는 입금이라 FDT enum 에 없다. DEPOSIT 으로 보낸다.
-	 * TRANSFER 는 태그로 갈린다 — 본인 계좌 이동만 내부 이체(TRANSFER)이고, 남에게 나가는 송금은 TRANSFER_OUT 이다.
+	 * 본인 계좌 이동은 전송에서 빠지므로 남는 TRANSFER 는 전부 남에게 나가는 송금(TRANSFER_OUT)이다.
 	 */
 	private String transactionType(Transaction transaction) {
 		if (transaction.getExcludeTag() == ExcludeTag.RESTORE) {
@@ -64,20 +68,17 @@ public class FdtTransactionMapper {
 		if (transaction.getTransactionType() != TransactionType.TRANSFER) {
 			return transaction.getTransactionType().name();
 		}
-		return transaction.getExcludeTag() == ExcludeTag.SELF_TRANSFER ? "TRANSFER" : "TRANSFER_OUT";
+		return "TRANSFER_OUT";
 	}
 
 	/**
-	 * 엔진 enum 은 NONE·INTERNAL_TRANSFER·SELF_TRANSFER·DUTCH·EMERGENCY·CARRYOVER 여섯 종이다.
-	 * 여기 없는 값을 보내면 원장 적재가 통째로 거부된다.
+	 * 엔진 enum 은 NONE·INTERNAL_TRANSFER·SELF_TRANSFER·DUTCH·EMERGENCY·CARRYOVER·BUDGET_EXCLUDED 일곱 종이다.
+	 * 여기 없는 값을 보내면 원장 적재가 통째로 거부된다. BUDGET_EXCLUDED 는 엔진이 지출로 세되 봉투 집계만 뺀다.
 	 */
 	private String excludeTag(Transaction transaction) {
-		return switch (transaction.getExcludeTag()) {
-			case RESTORE -> ExcludeTag.NONE.name();
-			// 예산 제외는 엔진에 대응 값이 없다. 내부 이체로 보내 봉투 집계에서 빠지게 한다.
-			case BUDGET_EXCLUDED -> ENGINE_INTERNAL_TRANSFER;
-			default -> transaction.getExcludeTag().name();
-		};
+		return transaction.getExcludeTag() == ExcludeTag.RESTORE
+				? ExcludeTag.NONE.name()
+				: transaction.getExcludeTag().name();
 	}
 
 	/**
