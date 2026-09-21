@@ -33,6 +33,8 @@ import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.budget.repository.BudgetRepository;
 import com.finset.key_fin.budget.service.EnvelopeBalanceService.EnvelopeBalance;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.room.service.RoomStickerService;
+import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.entity.UserSettings;
 import com.finset.key_fin.user.repository.UserRepository;
 import com.finset.key_fin.user.repository.UserSettingsRepository;
@@ -113,6 +115,7 @@ public class BudgetService {
 	private final BudgetEnvelopeRepository budgetEnvelopeRepository;
 	private final UserRepository userRepository;
 	private final UserSettingsRepository userSettingsRepository;
+	private final RoomStickerService roomStickerService;
 
 	@Transactional
 	public BudgetProposalResponse propose(long userId) {
@@ -170,6 +173,8 @@ public class BudgetService {
 
 	@Transactional
 	public BudgetConfirmResponse confirm(long userId, long budgetId, BudgetConfirmRequest request) {
+		userRepository.findActiveByIdForUpdate(userId)
+				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 		Budget budget = budgetRepository.findByIdAndUserId(budgetId, userId)
 				.orElseThrow(() -> new BusinessException(BudgetErrorCode.BUDGET_NOT_FOUND));
 		if (budget.isConfirmed()) {
@@ -195,6 +200,7 @@ public class BudgetService {
 
 		rows.forEach(row -> row.confirm(amounts.get(row.getEnvelopeId())));
 		budget.confirm();
+		roomStickerService.synchronize(userId);
 		rows.forEach(row -> events.publishEvent(new EnvelopeSpendingChanged(userId, row.getEnvelopeId())));
 		return new BudgetConfirmResponse(budget.getId(), budget.getBudgetMonth(), budget.getStatus().name());
 	}

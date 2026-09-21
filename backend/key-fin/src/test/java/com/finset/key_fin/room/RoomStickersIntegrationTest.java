@@ -15,9 +15,12 @@ import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.room.service.RoomService;
 import com.finset.key_fin.room.service.RoomStickerService;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
+import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
 import com.finset.key_fin.transaction.entity.ExcludeTag;
+import com.finset.key_fin.transaction.repository.TransactionRepository;
 import com.finset.key_fin.transaction.service.TransactionService;
+import com.finset.key_fin.transaction.service.TransactionSyncWriter;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.repository.UserRepository;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +47,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
@@ -71,6 +75,8 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private AuthService authService;
 	@Autowired private BudgetService budgetService;
 	@Autowired private TransactionService transactions;
+	@Autowired private TransactionRepository transactionRepository;
+	@Autowired private TransactionSyncWriter syncWriter;
 	@Autowired private PlatformTransactionManager transactionManager;
 	@Autowired private MockMvc mvc;
 	@Autowired private JwtTokenProvider tokens;
@@ -284,6 +290,35 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		stickers.remove(userId, sofa);
 		assertBusinessCode(() -> furnitureService.updatePlacement(userId, sofa,
 				new FurniturePlacementUpdateRequest(false, null, null, null, null, null)), "FURNITURE_003");
+	}
+
+	@Test
+	void classificationAndSyncWriterApplyOverrunBeforeRoomIsRead() {
+		budget("202609", "CONFIRMED", 1000);
+		long tx = spend("2026-09-18", 2000, "PENDING", null);
+		transactions.classifyTransaction(userId, tx, new TransactionClassificationRequest(101, null, null));
+		assertThat(attachedCount()).isEqualTo(3);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
+		// A separate period exercises the sync writer with a detached, newly classified transaction.
+		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		budget("202610", "CONFIRMED", 1000);
+		long nextTx = spend("2026-10-01", 2000, "PENDING", null);
+		var changed = transactionRepository.findById(nextTx).orElseThrow();
+		changed.confirmSubcategory(101);
+		syncWriter.save(userId, List.of(), List.of(), Map.of(nextTx, changed));
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(2);
+	}
+
+	@Test
+	void bulkClassificationEvaluatesOnlyAfterAllChanges() {
+		budget("202609", "CONFIRMED", 1000);
+		long first = spend("2026-09-18", 600, "PENDING", null);
+		long second = spend("2026-09-18", 600, "PENDING", null);
+		transactions.classifyPendingTransactions(userId, new BulkTransactionClassificationRequest(List.of(
+				new BulkTransactionClassificationRequest.Item(first, 101, null, null),
+				new BulkTransactionClassificationRequest.Item(second, 101, null, null))));
+		assertThat(attachedCount()).isEqualTo(3);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 	}
 
 	@Test

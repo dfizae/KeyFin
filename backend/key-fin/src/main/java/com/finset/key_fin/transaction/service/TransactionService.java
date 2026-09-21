@@ -2,6 +2,7 @@ package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.room.service.RoomStickerService;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
 import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
 import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
@@ -56,6 +57,7 @@ public class TransactionService {
 	private final TransactionRepository transactionRepository;
 	private final TransactionQueryRepository transactionQueryRepository;
 	private final Clock clock;
+	private final RoomStickerService roomStickerService;
 
 	@Transactional(readOnly = true)
 	public TransactionListResponse getTransactions(
@@ -116,7 +118,7 @@ public class TransactionService {
 			long transactionId,
 			TransactionClassificationRequest request
 	) {
-		validateActiveUser(userId);
+		lockActiveUser(userId);
 		if (request == null) {
 			throw new BusinessException(TransactionErrorCode.INVALID_CLASSIFICATION);
 		}
@@ -124,6 +126,7 @@ public class TransactionService {
 		var transaction = transactionRepository.findByIdAndUserId(transactionId, userId)
 				.orElseThrow(() -> new BusinessException(TransactionErrorCode.TRANSACTION_NOT_FOUND));
 		applyClassification(userId, transaction, request);
+		roomStickerService.synchronize(userId);
 		return TransactionClassificationResponse.from(transaction);
 	}
 
@@ -132,7 +135,7 @@ public class TransactionService {
 			long userId,
 			BulkTransactionClassificationRequest request
 	) {
-		validateActiveUser(userId);
+		lockActiveUser(userId);
 		List<BulkTransactionClassificationRequest.Item> items = request.items();
 		Set<Long> transactionIds = items.stream()
 				.map(BulkTransactionClassificationRequest.Item::transactionId)
@@ -155,6 +158,7 @@ public class TransactionService {
 			applyClassification(userId, transaction, item.toClassificationRequest());
 		}
 
+		roomStickerService.synchronize(userId);
 		long pendingRemain = transactionRepository
 				.countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
 						userId, ConfirmStatus.PENDING, TransactionStatus.NORMAL, TransactionType.DEPOSIT
@@ -261,6 +265,11 @@ public class TransactionService {
 
 	private void validateActiveUser(long userId) {
 		userRepository.findByIdAndDeletedAtIsNull(userId)
+				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+	}
+
+	private void lockActiveUser(long userId) {
+		userRepository.findActiveByIdForUpdate(userId)
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 	}
 }

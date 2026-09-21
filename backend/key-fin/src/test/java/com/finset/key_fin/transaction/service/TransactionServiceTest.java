@@ -2,6 +2,7 @@ package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.room.service.RoomStickerService;
 import com.finset.key_fin.transaction.dto.request.TransactionClassificationRequest;
 import com.finset.key_fin.transaction.dto.request.TransactionMemoUpdateRequest;
 import com.finset.key_fin.transaction.dto.request.BulkTransactionClassificationRequest;
@@ -60,13 +61,14 @@ class TransactionServiceTest {
 	private TransactionQueryRepository transactionQueryRepository;
 
 	private TransactionService transactionService;
+	@Mock private RoomStickerService roomStickerService;
 
 	@BeforeEach
 	void setUp() {
 		Clock clock = Clock.fixed(Instant.parse("2026-09-14T00:00:00Z"), ZoneOffset.UTC);
 		transactionService = new TransactionService(mock(ApplicationEventPublisher.class),
 				mock(SubcategoryQueryRepository.class), userRepository, transactionRepository,
-				transactionQueryRepository, clock);
+				transactionQueryRepository, clock, roomStickerService);
 	}
 
 	@Test
@@ -135,7 +137,7 @@ class TransactionServiceTest {
 	void 거래를_세분류로_확정한다() {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userRepository.findActiveByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
 		given(transactionRepository.findByIdAndUserId(501L, USER_ID)).willReturn(Optional.of(transaction));
 		given(transactionQueryRepository.existsSubcategory(102)).willReturn(true);
 
@@ -152,7 +154,7 @@ class TransactionServiceTest {
 	void 거래를_예산_제외로_확정한다() {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userRepository.findActiveByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
 		given(transactionRepository.findByIdAndUserId(501L, USER_ID)).willReturn(Optional.of(transaction));
 
 		var response = transactionService.classifyTransaction(
@@ -169,7 +171,7 @@ class TransactionServiceTest {
 	void 세분류와_제외_태그를_동시에_입력하면_거절한다() {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userRepository.findActiveByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
 		given(transactionRepository.findByIdAndUserId(501L, USER_ID)).willReturn(Optional.of(transaction));
 
 		assertThatThrownBy(() -> transactionService.classifyTransaction(
@@ -181,7 +183,7 @@ class TransactionServiceTest {
 
 	@Test
 	void 다른_사용자의_거래는_찾을_수_없다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+		given(userRepository.findActiveByIdForUpdate(USER_ID))
 				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
 		given(transactionRepository.findByIdAndUserId(999L, USER_ID)).willReturn(Optional.empty());
 
@@ -196,7 +198,7 @@ class TransactionServiceTest {
 	void 환급_입금을_세분류와_RESTORE로_확정한다() {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction transaction = transaction(502L, TransactionType.DEPOSIT, TransactionStatus.NORMAL, 20_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userRepository.findActiveByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
 		given(transactionRepository.findByIdAndUserId(502L, USER_ID)).willReturn(Optional.of(transaction));
 		given(transactionQueryRepository.existsSubcategory(301)).willReturn(true);
 
@@ -240,7 +242,7 @@ class TransactionServiceTest {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction first = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
 		Transaction second = transaction(502L, TransactionType.WITHDRAW, TransactionStatus.NORMAL, 30_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userRepository.findActiveByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
 		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L, 502L), USER_ID))
 				.willReturn(List.of(first, second));
 		given(transactionQueryRepository.existsSubcategory(102)).willReturn(true);
@@ -265,7 +267,7 @@ class TransactionServiceTest {
 	void 미확정_거래를_예산_제외로_일괄_분류한다() {
 		User user = User.create("qwer@qwer.com", "password", "김예린");
 		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(userRepository.findActiveByIdForUpdate(USER_ID)).willReturn(Optional.of(user));
 		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L), USER_ID))
 				.willReturn(List.of(transaction));
 		given(transactionRepository.countByUserIdAndConfirmStatusAndStatusAndTransactionTypeNot(
@@ -286,7 +288,7 @@ class TransactionServiceTest {
 
 	@Test
 	void 일괄_분류에_중복_거래_ID가_있으면_거절한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+		given(userRepository.findActiveByIdForUpdate(USER_ID))
 				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
 		var request = new BulkTransactionClassificationRequest(List.of(
 				new Item(501L, 102, null, null),
@@ -303,7 +305,7 @@ class TransactionServiceTest {
 
 	@Test
 	void 일괄_분류에_다른_사용자의_거래가_포함되면_거절한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+		given(userRepository.findActiveByIdForUpdate(USER_ID))
 				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
 		Transaction first = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
 		given(transactionRepository.findAllByIdInAndUserId(java.util.Set.of(501L, 999L), USER_ID))
@@ -321,7 +323,7 @@ class TransactionServiceTest {
 
 	@Test
 	void 이미_확정된_거래가_일괄_분류에_포함되면_거절한다() {
-		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID))
+		given(userRepository.findActiveByIdForUpdate(USER_ID))
 				.willReturn(Optional.of(User.create("qwer@qwer.com", "password", "김예린")));
 		Transaction transaction = transaction(501L, TransactionType.CARD, TransactionStatus.NORMAL, 40_000L);
 		ReflectionTestUtils.setField(transaction, "confirmStatus", ConfirmStatus.CONFIRMED);
