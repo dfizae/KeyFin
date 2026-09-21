@@ -89,6 +89,27 @@ class TransactionTest {
 	}
 
 	@Test
+	void 카드대금_출금은_다시_분류할_수_없다() {
+		Transaction transaction = Transaction.collectCardBill(
+				User.create("qwer@qwer.com", "password", "김예린"), 1L, 7L, "202609210003", "카드대금 출금", 1_300L,
+				LocalDate.of(2026, 9, 21), LocalTime.of(16, 0, 4)
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.CARD_BILL);
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+		assertThat(transaction.getAccountId()).isEqualTo(1L);
+		assertThat(transaction.getCardId()).isEqualTo(7L);
+		assertThatThrownBy(() -> transaction.confirmSubcategory(201))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
+		assertThatThrownBy(() -> transaction.confirmExclusion(ExcludeTag.SELF_TRANSFER, null))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED));
+	}
+
+	@Test
 	void 출금_거래는_RESTORE로_확정할_수_없다() {
 		Transaction transaction = cardTransaction(20_000L);
 

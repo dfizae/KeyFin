@@ -148,6 +148,24 @@ class FdtTransactionMapperTest {
 	}
 
 	@Test
+	void 카드대금_출금은_CARD_SETTLEMENT로_계좌만_실어_보낸다() {
+		Transaction transaction = Transaction.collectCardBill(
+				user(), 1L, 7L, "202609210003", "카드대금 출금", 1_300L,
+				LocalDate.of(2026, 9, 21), LocalTime.of(16, 0, 4)
+		);
+		ReflectionTestUtils.setField(transaction, "id", 300L);
+
+		FdtTransaction result = mapper.map(transaction);
+
+		assertThat(result.transactionType()).isEqualTo("CARD_SETTLEMENT");
+		assertThat(result.accountId()).isEqualTo("1");
+		assertThat(result.cardId()).isEmpty();
+		assertThat(result.merchantId()).isEmpty();
+		assertThat(result.confirmStatus()).isEqualTo("CONFIRMED");
+		assertThat(result.excludeTag()).isEqualTo("NONE");
+	}
+
+	@Test
 	void 취소된_거래도_상태를_유지해_보낸다() {
 		Transaction transaction = cardTransaction(5_000L, 31L, "취소건", 102);
 		ReflectionTestUtils.setField(transaction, "status", TransactionStatus.CANCELED);
