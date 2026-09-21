@@ -25,6 +25,7 @@ class CoachingChatClientTest {
 
 	private static final String BASE_URL = "https://coaching.example.com";
 	private static final String TOKEN = "coaching-backend-token-0123456789abcdef";
+	private static final long USER_ID = 970L;
 	private static final String SESSION_JSON = """
 			{"id":"sess-1","coaching_id":null,"created_at":1789000000.5,"expires_at":1789086400.5,
 			 "messages":[{"role":"user","content":"복리가 뭐야?","response":null},
@@ -58,10 +59,11 @@ class CoachingChatClientTest {
 				.andExpect(method(HttpMethod.POST))
 				.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
 				.andExpect(header("Idempotency-Key", Matchers.not(Matchers.emptyOrNullString())))
+				.andExpect(header("X-Coaching-User", "970"))
 				.andExpect(content().json("{}"))
 				.andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(SESSION_JSON));
 
-		CoachingSessionView session = client.createSession();
+		CoachingSessionView session = client.createSession(USER_ID);
 
 		assertThat(session.id()).isEqualTo("sess-1");
 		assertThat(session.expiresAt()).isEqualTo(1789086400.5);
@@ -75,7 +77,7 @@ class CoachingChatClientTest {
 				.andExpect(method(HttpMethod.GET))
 				.andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(SESSION_JSON));
 
-		assertThat(client.getSession("sess-1").messages()).hasSize(2);
+		assertThat(client.getSession(USER_ID, "sess-1").messages()).hasSize(2);
 		server.verify();
 	}
 
@@ -87,7 +89,7 @@ class CoachingChatClientTest {
 				.andExpect(jsonPath("$.question").value("이번 달 얼마 썼어?"))
 				.andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(CHAT_ANSWER_JSON));
 
-		CoachingTurnReply reply = client.sendMessage("sess-1", "이번 달 얼마 썼어?");
+		CoachingTurnReply reply = client.sendMessage(USER_ID, "sess-1", "이번 달 얼마 썼어?");
 
 		assertThat(reply.isCoaching()).isFalse();
 		assertThat(reply.status()).isEqualTo("needs_data");
@@ -101,7 +103,7 @@ class CoachingChatClientTest {
 		server.expect(requestTo(BASE_URL + "/v1/sessions/sess-1/messages"))
 				.andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON).body(COACHING_JSON));
 
-		CoachingTurnReply reply = client.sendMessage("sess-1", "월말 잔액 예측해줘");
+		CoachingTurnReply reply = client.sendMessage(USER_ID, "sess-1", "월말 잔액 예측해줘");
 
 		assertThat(reply.isCoaching()).isTrue();
 		assertThat(reply.status()).isNull();

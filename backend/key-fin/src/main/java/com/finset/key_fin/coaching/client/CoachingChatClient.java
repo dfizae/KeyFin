@@ -20,6 +20,7 @@ public class CoachingChatClient {
 	private static final String SESSION_PATH = "/v1/sessions/{sessionId}";
 	private static final String MESSAGES_PATH = "/v1/sessions/{sessionId}/messages";
 	private static final String IDEMPOTENCY_KEY = "Idempotency-Key";
+	private static final String USER_HEADER = "X-Coaching-User";
 
 	private final RestClient coachingRestClient;
 
@@ -27,28 +28,31 @@ public class CoachingChatClient {
 		this.coachingRestClient = coachingRestClient;
 	}
 
-	public CoachingSessionView createSession() {
+	public CoachingSessionView createSession(long userId) {
 		return coachingRestClient.post()
 				.uri(SESSIONS_PATH)
 				.contentType(MediaType.APPLICATION_JSON)
 				.header(IDEMPOTENCY_KEY, UUID.randomUUID().toString())
+				.header(USER_HEADER, String.valueOf(userId))
 				.body(Map.of())
 				.retrieve()
 				.body(CoachingSessionView.class);
 	}
 
-	public CoachingSessionView getSession(String sessionId) {
+	public CoachingSessionView getSession(long userId, String sessionId) {
 		return coachingRestClient.get()
 				.uri(SESSION_PATH, sessionId)
+				.header(USER_HEADER, String.valueOf(userId))
 				.retrieve()
 				.body(CoachingSessionView.class);
 	}
 
-	public CoachingTurnReply sendMessage(String sessionId, String question) {
+	public CoachingTurnReply sendMessage(long userId, String sessionId, String question) {
 		return coachingRestClient.post()
 				.uri(MESSAGES_PATH, sessionId)
 				.contentType(MediaType.APPLICATION_JSON)
 				.header(IDEMPOTENCY_KEY, UUID.randomUUID().toString())
+				.header(USER_HEADER, String.valueOf(userId))
 				.body(Map.of("question", question))
 				.retrieve()
 				.body(CoachingTurnReply.class);

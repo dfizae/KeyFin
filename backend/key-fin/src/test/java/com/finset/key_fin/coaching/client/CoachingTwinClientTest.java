@@ -35,6 +35,7 @@ class CoachingTwinClientTest {
 	private static final String BASE_URL = "https://coaching.example.com";
 	private static final String TOKEN = "coaching-backend-token-0123456789abcdef";
 	private static final String TWIN_URL = BASE_URL + "/v1/twin";
+	private static final long USER_ID = 1L;
 	private static final String IDENTITY_JSON = """
 			{"user_id":"1","twin_id":"twin-abc","revision":1,"input_digest":"sha256:abc","as_of":"2026-09-10"}
 			""";
@@ -57,11 +58,12 @@ class CoachingTwinClientTest {
 				.andExpect(method(HttpMethod.POST))
 				.andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer " + TOKEN))
 				.andExpect(header("Idempotency-Key", "key-1"))
+				.andExpect(header("X-Coaching-User", "1"))
 				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andRespond(withStatus(HttpStatus.OK)
 						.contentType(MediaType.APPLICATION_JSON).body(IDENTITY_JSON));
 
-		TwinIdentity identity = client.create(bootstrap(), "key-1");
+		TwinIdentity identity = client.create(USER_ID, bootstrap(), "key-1");
 
 		assertThat(identity.twinId()).isEqualTo("twin-abc");
 		assertThat(identity.revision()).isEqualTo(1L);
@@ -79,7 +81,7 @@ class CoachingTwinClientTest {
 				.andRespond(withStatus(HttpStatus.OK)
 						.contentType(MediaType.APPLICATION_JSON).body(IDENTITY_JSON));
 
-		client.create(bootstrap(), "key-2");
+		client.create(USER_ID, bootstrap(), "key-2");
 
 		server.verify();
 	}
@@ -90,8 +92,8 @@ class CoachingTwinClientTest {
 				.andRespond(withStatus(HttpStatus.OK)
 						.contentType(MediaType.APPLICATION_JSON).body(IDENTITY_JSON));
 
-		client.create(bootstrap());
-		client.create(bootstrap());
+		client.create(USER_ID, bootstrap());
+		client.create(USER_ID, bootstrap());
 
 		server.verify();
 	}
@@ -102,8 +104,8 @@ class CoachingTwinClientTest {
 				.andRespond(withStatus(HttpStatus.OK)
 						.contentType(MediaType.APPLICATION_JSON).body(IDENTITY_JSON));
 
-		assertThat(client.create(bootstrap(), "key-3").twinId()).isEqualTo("twin-abc");
-		assertThat(client.create(bootstrap(), "key-4").twinId()).isEqualTo("twin-abc");
+		assertThat(client.create(USER_ID, bootstrap(), "key-3").twinId()).isEqualTo("twin-abc");
+		assertThat(client.create(USER_ID, bootstrap(), "key-4").twinId()).isEqualTo("twin-abc");
 
 		server.verify();
 	}
@@ -117,14 +119,14 @@ class CoachingTwinClientTest {
 								 "input_digest":"sha256:abc","as_of":"2026-09-10","engine_commit":"deadbeef"}
 								"""));
 
-		assertThat(client.create(bootstrap(), "key-5").revision()).isEqualTo(2L);
+		assertThat(client.create(USER_ID, bootstrap(), "key-5").revision()).isEqualTo(2L);
 	}
 
 	@Test
 	void 거래가_없으면_보내기_전에_막는다() {
 		FdtBootstrap empty = new FdtBootstrap("2026-09-10", List.of(), snapshot(), List.of());
 
-		assertThatIllegalArgumentException().isThrownBy(() -> client.create(empty, "key-6"));
+		assertThatIllegalArgumentException().isThrownBy(() -> client.create(USER_ID, empty, "key-6"));
 		server.verify();
 	}
 
@@ -132,7 +134,7 @@ class CoachingTwinClientTest {
 	void 서버_무응답은_장애로_올라간다() {
 		server.expect(requestTo(TWIN_URL)).andRespond(withException(new IOException("read timed out")));
 
-		assertThatThrownBy(() -> client.create(bootstrap(), "key-7"))
+		assertThatThrownBy(() -> client.create(USER_ID, bootstrap(), "key-7"))
 				.isInstanceOf(org.springframework.web.client.ResourceAccessException.class);
 	}
 
@@ -141,7 +143,7 @@ class CoachingTwinClientTest {
 		server.expect(requestTo(TWIN_URL)).andRespond(withStatus(HttpStatus.CONFLICT)
 				.contentType(MediaType.APPLICATION_JSON).body("{\"detail\":\"twin_already_exists\"}"));
 
-		assertThatThrownBy(() -> client.create(bootstrap(), "key-8"))
+		assertThatThrownBy(() -> client.create(USER_ID, bootstrap(), "key-8"))
 				.isInstanceOf(org.springframework.web.client.HttpClientErrorException.Conflict.class);
 	}
 

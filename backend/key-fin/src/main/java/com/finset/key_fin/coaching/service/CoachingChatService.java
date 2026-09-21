@@ -40,13 +40,13 @@ public class CoachingChatService {
 	public ChatReply chat(long userId, String message) {
 		CoachingSession session = activeSession(userId);
 		try {
-			return ChatReply.from(send(session, message));
+			return ChatReply.from(send(userId, session, message));
 		} catch (HttpClientErrorException e) {
 			if (!isSessionClosed(e)) {
 				throw unavailable(e);
 			}
 			log.info("코칭 세션 종료로 재생성: userId={}, status={}", userId, e.getStatusCode());
-			return ChatReply.from(send(renew(userId, session), message));
+			return ChatReply.from(send(userId, renew(userId, session), message));
 		}
 	}
 
@@ -56,7 +56,7 @@ public class CoachingChatService {
 				.filter(session -> !session.isExpired(now))
 				.map(session -> {
 					try {
-						return toHistory(chatClient.getSession(session.getSessionId()));
+						return toHistory(chatClient.getSession(userId, session.getSessionId()));
 					} catch (HttpClientErrorException e) {
 						if (isSessionClosed(e) || e.getStatusCode() == HttpStatus.NOT_FOUND) {
 							return ChatHistoryResponse.empty();
@@ -80,7 +80,7 @@ public class CoachingChatService {
 		pushTwin(userId);
 		CoachingSessionView created;
 		try {
-			created = chatClient.createSession();
+			created = chatClient.createSession(userId);
 		} catch (HttpClientErrorException | HttpServerErrorException | ResourceAccessException e) {
 			throw unavailable(e);
 		}
@@ -94,7 +94,7 @@ public class CoachingChatService {
 
 	private void pushTwin(long userId) {
 		try {
-			twinClient.create(bootstrapService.build(userId));
+			twinClient.create(userId, bootstrapService.build(userId));
 		} catch (HttpClientErrorException e) {
 			log.warn("트윈 거부: userId={}, status={}, body={}", userId, e.getStatusCode(), e.getResponseBodyAsString());
 			throw new BusinessException(CoachingErrorCode.TWIN_REJECTED, e);
@@ -103,9 +103,9 @@ public class CoachingChatService {
 		}
 	}
 
-	private CoachingTurnReply send(CoachingSession session, String message) {
+	private CoachingTurnReply send(long userId, CoachingSession session, String message) {
 		try {
-			return chatClient.sendMessage(session.getSessionId(), message);
+			return chatClient.sendMessage(userId, session.getSessionId(), message);
 		} catch (HttpServerErrorException | ResourceAccessException e) {
 			throw unavailable(e);
 		}

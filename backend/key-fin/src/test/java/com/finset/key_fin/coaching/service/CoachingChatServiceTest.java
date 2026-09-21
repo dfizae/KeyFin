@@ -3,6 +3,7 @@ package com.finset.key_fin.coaching.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
@@ -62,12 +63,12 @@ class CoachingChatServiceTest {
 	@Test
 	void 세션이_없으면_트윈을_보내고_세션을_만든_뒤_질문한다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.empty());
-		given(chatClient.createSession()).willReturn(new CoachingSessionView("sess-new", NEW_EXPIRES, List.of()));
-		given(chatClient.sendMessage("sess-new", "복리가 뭐야?")).willReturn(chatAnswer("answered", "llm"));
+		given(chatClient.createSession(USER_ID)).willReturn(new CoachingSessionView("sess-new", NEW_EXPIRES, List.of()));
+		given(chatClient.sendMessage(USER_ID, "sess-new", "복리가 뭐야?")).willReturn(chatAnswer("answered", "llm"));
 
 		ChatReply reply = service.chat(USER_ID, "복리가 뭐야?");
 
-		verify(twinClient).create(bootstrap);
+		verify(twinClient).create(USER_ID, bootstrap);
 		verify(sessionRepository).save(any(CoachingSession.class));
 		assertThat(reply.kind()).isEqualTo(ChatReply.Kind.CHAT);
 		assertThat(reply.status()).isEqualTo("answered");
@@ -78,12 +79,12 @@ class CoachingChatServiceTest {
 	@Test
 	void 유효한_세션이_있으면_트윈도_세션도_다시_만들지_않는다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
-		given(chatClient.sendMessage("sess-live", "월말 예측")).willReturn(coaching());
+		given(chatClient.sendMessage(USER_ID, "sess-live", "월말 예측")).willReturn(coaching());
 
 		ChatReply reply = service.chat(USER_ID, "월말 예측");
 
-		verify(twinClient, never()).create(any());
-		verify(chatClient, never()).createSession();
+		verify(twinClient, never()).create(anyLong(), any());
+		verify(chatClient, never()).createSession(anyLong());
 		assertThat(reply.kind()).isEqualTo(ChatReply.Kind.COACHING);
 		assertThat(reply.status()).isEqualTo("answered");
 		assertThat(reply.answerId()).isEqualTo("coach-1");
@@ -93,12 +94,12 @@ class CoachingChatServiceTest {
 	void 만료된_세션은_같은_행을_새_세션으로_바꾼다() {
 		CoachingSession expired = session("sess-old", -60);
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(expired));
-		given(chatClient.createSession()).willReturn(new CoachingSessionView("sess-new", NEW_EXPIRES, List.of()));
-		given(chatClient.sendMessage("sess-new", "질문")).willReturn(chatAnswer("answered", "engine"));
+		given(chatClient.createSession(USER_ID)).willReturn(new CoachingSessionView("sess-new", NEW_EXPIRES, List.of()));
+		given(chatClient.sendMessage(USER_ID, "sess-new", "질문")).willReturn(chatAnswer("answered", "engine"));
 
 		service.chat(USER_ID, "질문");
 
-		verify(twinClient).create(bootstrap);
+		verify(twinClient).create(USER_ID, bootstrap);
 		assertThat(expired.getSessionId()).isEqualTo("sess-new");
 		assertThat(expired.getExpiresAt()).isEqualTo(LocalDateTime.ofInstant(NOW.plusSeconds(86400), SEOUL));
 	}
@@ -107,22 +108,22 @@ class CoachingChatServiceTest {
 	void 코칭_서버가_410으로_거절하면_새_세션으로_한_번_다시_보낸다() {
 		CoachingSession live = session("sess-live", 60);
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(live));
-		given(chatClient.sendMessage("sess-live", "질문")).willThrow(clientError(HttpStatus.GONE));
-		given(chatClient.createSession()).willReturn(new CoachingSessionView("sess-new", NEW_EXPIRES, List.of()));
-		given(chatClient.sendMessage("sess-new", "질문")).willReturn(chatAnswer("answered", "llm"));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "질문")).willThrow(clientError(HttpStatus.GONE));
+		given(chatClient.createSession(USER_ID)).willReturn(new CoachingSessionView("sess-new", NEW_EXPIRES, List.of()));
+		given(chatClient.sendMessage(USER_ID, "sess-new", "질문")).willReturn(chatAnswer("answered", "llm"));
 
 		ChatReply reply = service.chat(USER_ID, "질문");
 
 		assertThat(reply.answerId()).isEqualTo("ans-1");
 		assertThat(live.getSessionId()).isEqualTo("sess-new");
-		verify(twinClient).create(bootstrap);
+		verify(twinClient).create(USER_ID, bootstrap);
 	}
 
 	@Test
 	void 그_외_4xx와_연결_실패는_AI_001이다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
-		given(chatClient.sendMessage("sess-live", "a")).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
-		given(chatClient.sendMessage("sess-live", "b")).willThrow(new ResourceAccessException("timeout"));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "a")).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "b")).willThrow(new ResourceAccessException("timeout"));
 
 		assertThatThrownBy(() -> service.chat(USER_ID, "a"))
 				.isInstanceOf(BusinessException.class)
@@ -130,18 +131,18 @@ class CoachingChatServiceTest {
 		assertThatThrownBy(() -> service.chat(USER_ID, "b"))
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_UNAVAILABLE);
-		verify(chatClient, never()).createSession();
+		verify(chatClient, never()).createSession(anyLong());
 	}
 
 	@Test
 	void 트윈이_거부되면_AI_002이고_세션을_만들지_않는다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.empty());
-		given(twinClient.create(bootstrap)).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
+		given(twinClient.create(USER_ID, bootstrap)).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
 
 		assertThatThrownBy(() -> service.chat(USER_ID, "질문"))
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.TWIN_REJECTED);
-		verify(chatClient, never()).createSession();
+		verify(chatClient, never()).createSession(anyLong());
 		verify(sessionRepository, never()).save(any());
 	}
 
@@ -151,13 +152,13 @@ class CoachingChatServiceTest {
 
 		assertThat(service.history(USER_ID).messages()).isEmpty();
 		assertThat(service.history(USER_ID).messages()).isEmpty();
-		verify(chatClient, never()).getSession(anyString());
+		verify(chatClient, never()).getSession(anyLong(), anyString());
 	}
 
 	@Test
 	void 이력은_코칭_서버_메시지를_그대로_돌려주고_닫힌_세션이면_비운다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
-		given(chatClient.getSession("sess-live"))
+		given(chatClient.getSession(USER_ID, "sess-live"))
 				.willReturn(new CoachingSessionView("sess-live", NEW_EXPIRES, List.of(
 						new CoachingSessionView.Message("user", "복리가 뭐야?"),
 						new CoachingSessionView.Message("assistant", "이자에 이자가 붙어요."))))
