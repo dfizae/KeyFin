@@ -11,8 +11,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum CoachingErrorCode implements ErrorCode {
 
-	COACHING_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "코치가 잠시 자리를 비웠어요. 잠시 후 다시 시도해 주세요."),
-	TWIN_REJECTED(HttpStatus.BAD_GATEWAY, "AI_002", "소비 기록을 코치에게 전달하지 못했어요.");
+	COACHING_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "코치가 잠시 자리를 비웠어요. 잠시 후 다시 시도해 주세요.");
 
 	private final HttpStatus httpStatus;
 	private final String code;

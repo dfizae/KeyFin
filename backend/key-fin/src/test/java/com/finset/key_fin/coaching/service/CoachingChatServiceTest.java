@@ -135,15 +135,16 @@ class CoachingChatServiceTest {
 	}
 
 	@Test
-	void 트윈이_거부되면_AI_002이고_세션을_만들지_않는다() {
-		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.empty());
-		given(twinClient.create(USER_ID, bootstrap)).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
+	void 트윈_전송이_실패해도_경고만_남기고_대화는_이어진다() {
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
+		given(twinClient.create(USER_ID, bootstrap))
+				.willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY))
+				.willThrow(new ResourceAccessException("timeout"));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "질문")).willReturn(chatAnswer("answered", "llm"));
 
-		assertThatThrownBy(() -> service.chat(USER_ID, "질문"))
-				.isInstanceOf(BusinessException.class)
-				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.TWIN_REJECTED);
+		assertThat(service.chat(USER_ID, "질문").answerId()).isEqualTo("ans-1");
+		assertThat(service.chat(USER_ID, "질문").answerId()).isEqualTo("ans-1");
 		verify(chatClient, never()).createSession(anyLong());
-		verify(sessionRepository, never()).save(any());
 	}
 
 	@Test

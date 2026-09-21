@@ -96,10 +96,10 @@ public class CoachingChatService {
 		try {
 			twinClient.create(userId, bootstrapService.build(userId));
 		} catch (HttpClientErrorException e) {
-			log.warn("트윈 거부: userId={}, status={}, body={}", userId, e.getStatusCode(), e.getResponseBodyAsString());
-			throw new BusinessException(CoachingErrorCode.TWIN_REJECTED, e);
-		} catch (HttpServerErrorException | ResourceAccessException e) {
-			throw unavailable(e);
+			log.warn("트윈 거부 — 이전 트윈으로 대화 진행: userId={}, status={}, body={}",
+					userId, e.getStatusCode(), e.getResponseBodyAsString());
+		} catch (RuntimeException e) {
+			log.warn("트윈 전송 실패 — 이전 트윈으로 대화 진행: userId={}, cause={}", userId, e.toString());
 		}
 	}
 

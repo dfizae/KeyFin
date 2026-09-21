@@ -29,7 +29,6 @@ public interface CoachingChatControllerDocs {
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "답변"),
 			@ApiResponse(responseCode = "400", description = "message가 비었거나 2000자 초과"),
-			@ApiResponse(responseCode = "502", description = "AI_002 소비 기록을 코치에게 전달하지 못함"),
 			@ApiResponse(responseCode = "503", description = "AI_001 코칭 서버 응답 없음")
 	})
 	BaseResponse<ChatReply> chat(Long userId, ChatRequest request);
