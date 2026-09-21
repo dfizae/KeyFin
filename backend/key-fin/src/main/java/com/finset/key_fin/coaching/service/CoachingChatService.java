@@ -38,6 +38,7 @@ public class CoachingChatService {
 	private final Clock clock;
 
 	public ChatReply chat(long userId, String message) {
+		pushTwin(userId);
 		CoachingSession session = activeSession(userId);
 		try {
 			return ChatReply.from(send(userId, session, message));
@@ -77,7 +78,6 @@ public class CoachingChatService {
 	}
 
 	private CoachingSession renew(long userId, CoachingSession existing) {
-		pushTwin(userId);
 		CoachingSessionView created;
 		try {
 			created = chatClient.createSession(userId);

@@ -77,13 +77,13 @@ class CoachingChatServiceTest {
 	}
 
 	@Test
-	void 유효한_세션이_있으면_트윈도_세션도_다시_만들지_않는다() {
+	void 유효한_세션이_있으면_트윈만_다시_보내고_세션은_다시_만들지_않는다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
 		given(chatClient.sendMessage(USER_ID, "sess-live", "월말 예측")).willReturn(coaching());
 
 		ChatReply reply = service.chat(USER_ID, "월말 예측");
 
-		verify(twinClient, never()).create(anyLong(), any());
+		verify(twinClient).create(USER_ID, bootstrap);
 		verify(chatClient, never()).createSession(anyLong());
 		assertThat(reply.kind()).isEqualTo(ChatReply.Kind.COACHING);
 		assertThat(reply.status()).isEqualTo("answered");
