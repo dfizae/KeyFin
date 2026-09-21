@@ -4,15 +4,12 @@ import type { AvatarEquipmentDto, ItemEquipmentRequest, UserItemDto } from "@/fe
 /**
  * GET /items · PATCH /items/{userItemId} 목 (배포 서버 Swagger 2026-09-20).
  * 서버처럼 상태를 들고 있어서 옷장에서 갈아입고 나오면 그대로다(다른 도메인 목과 같은 방식).
- * 아바타 파츠 에셋이 아직 없어 assetKey 는 이름표일 뿐이고 화면에는 그림 대신 아이콘이 나온다.
+ * 옷은 세트 한 벌이고 assetKey 가 스프라이트 조회 키다(features/room/outfits.ts) — 서버도 세트를 UPPER_BODY 로 내려 준다.
  * 보유 내역 id 는 목 안에서만 쓰는 번호이며 501 부터 매긴다. 상점 목(api/mocks/shop.ts)의 상품 id 와 맞춰 둔다.
  */
 const SEED: readonly UserItemDto[] = [
-  { userItemId: 501, itemId: 3, name: "동그란 안경", slotType: "FACE", assetKey: "glasses_round", equipped: true },
-  { userItemId: 502, itemId: 4, name: "기본 티셔츠", slotType: "UPPER_BODY", assetKey: "tee_basic", equipped: true },
-  { userItemId: 503, itemId: 5, name: "니트 가디건", slotType: "UPPER_BODY", assetKey: "cardigan_knit", equipped: false },
-  { userItemId: 504, itemId: 6, name: "청바지", slotType: "LOWER_BODY", assetKey: "jeans_blue", equipped: false },
-  { userItemId: 505, itemId: 7, name: "줄무늬 양말", slotType: "SOCKS", assetKey: "socks_stripe", equipped: false },
+  { userItemId: 501, itemId: 1, name: "에픽 마법사 의상 세트", slotType: "UPPER_BODY", assetKey: "outfit_epic_mage", equipped: true },
+  { userItemId: 502, itemId: 2, name: "레전더리 성기사 의상 세트", slotType: "UPPER_BODY", assetKey: "outfit_legendary_paladin", equipped: false },
 ];
 
 let items: UserItemDto[] | null = null;

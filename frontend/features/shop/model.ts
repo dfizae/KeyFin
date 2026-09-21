@@ -1,3 +1,4 @@
+import type { FurnitureGroup } from "@/features/room/catalog";
 import { ContractMismatchError } from "@/lib/contract";
 import { formatKRW } from "@/lib/money";
 
@@ -108,12 +109,15 @@ export function groupCoinHistoryByDate(items: CoinHistoryItem[]): CoinDateGroup[
 export const SHOP_CATEGORIES = ["AVATAR", "FURNITURE"] as const;
 export type ShopCategory = (typeof SHOP_CATEGORIES)[number] | "UNKNOWN";
 
-/** 옷(아바타)이 걸리는 6부위 */
-export const SHOP_AVATAR_SLOTS = ["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR"] as const;
-/** 가구가 놓이는 2자리 */
+/**
+ * 아바타 부위 6종. 옷은 세트 한 벌이라 상점을 부위로 나누지 않지만(features/room/outfits.ts)
+ * 서버가 세트를 UPPER_BODY 로 내려 주므로 값은 계약대로 받아 둔다.
+ */
+const AVATAR_SLOT_TYPES = ["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR"] as const;
+/** 가구가 놓이는 2자리. 선택창은 이 값 대신 가구 분류(group)로 나눈다(2026-09-21) */
 export const SHOP_FURNITURE_SLOTS = ["WALL", "FLOOR"] as const;
-/** 서버 enum 순서 그대로. 선택창도 이 순서로 옷 → 가구를 보여 준다 */
-export const SHOP_SLOTS = [...SHOP_AVATAR_SLOTS, ...SHOP_FURNITURE_SLOTS] as const;
+/** 서버 enum 순서 그대로 */
+export const SHOP_SLOTS = [...AVATAR_SLOT_TYPES, ...SHOP_FURNITURE_SLOTS] as const;
 export type ShopSlot = (typeof SHOP_SLOTS)[number] | "UNKNOWN";
 
 export type ShopItemDto = {
@@ -210,9 +214,13 @@ export function toShopPurchase(dto: ShopPurchaseDto): ShopPurchase {
 
 /**
  * 선택창 값 (사용자 결정 2026-09-20: 부위 칩 8개 대신 옷·가구로 묶은 선택창).
- * `category:` 는 그 종류 전체이고 `slot:` 은 부위 하나다 — 두 유니온 모두 UNKNOWN 을 가져서 접두사로 구분한다.
+ * `category:` 는 그 종류 전체, `slot:` 은 부위 하나, `group:` 은 가구 분류(침대·소파 …, 2026-09-21)다 —
+ * 서버에는 가구 분류가 없어 assetKey 로 방 카탈로그에서 찾는다. 유니온마다 UNKNOWN 이 있어 접두사로 구분한다.
  */
-export type ShopFilterKey = `category:${ShopCategory}` | `slot:${ShopSlot}`;
+export type ShopFilterKey = `category:${ShopCategory}` | `slot:${ShopSlot}` | `group:${FurnitureGroup}`;
+
+/** assetKey → 가구 분류. 카탈로그에 없는 가구는 null 이라 어느 분류에도 들지 않고 '가구 전체'에만 보인다 */
+export type FurnitureGroupResolver = (assetKey: string) => FurnitureGroup | null;
 
 export function shopCategoryFilterKey(category: ShopCategory): ShopFilterKey {
   return `category:${category}`;
@@ -222,13 +230,31 @@ export function shopSlotFilterKey(slot: ShopSlot): ShopFilterKey {
   return `slot:${slot}`;
 }
 
+export function shopGroupFilterKey(group: FurnitureGroup): ShopFilterKey {
+  return `group:${group}`;
+}
+
 /** 처음 보여 줄 값은 옷 전체다 */
 export const SHOP_DEFAULT_FILTER: ShopFilterKey = shopCategoryFilterKey("AVATAR");
 
 /** 고른 값에 해당하는 상품만. 서버가 id 오름차순으로 주므로 순서를 바꾸지 않는다 */
-export function shopItemsForFilter(items: readonly ShopItem[], filterKey: ShopFilterKey): ShopItem[] {
+export function shopItemsForFilter(items: readonly ShopItem[], filterKey: ShopFilterKey, groupOf: FurnitureGroupResolver): ShopItem[] {
   const [kind, value] = filterKey.split(":");
-  return items.filter((item) => (kind === "category" ? item.category === value : item.slot === value));
+  return items.filter((item) => {
+    if (kind === "category") return item.category === value;
+    if (kind === "group") return item.category === "FURNITURE" && groupOf(item.assetKey) === value;
+    return item.slot === value;
+  });
+}
+
+/** 상품이 하나라도 있는 가구 분류만, 주어진 순서대로. 판매 목록에 없는 분류를 선택창에 띄우지 않는다 */
+export function shopGroupsWithItems(
+  items: readonly ShopItem[],
+  groups: readonly FurnitureGroup[],
+  groupOf: FurnitureGroupResolver
+): FurnitureGroup[] {
+  const present = new Set(items.filter((item) => item.category === "FURNITURE").map((item) => groupOf(item.assetKey)));
+  return groups.filter((group) => present.has(group));
 }
 
 /** 모르는 부위 상품이 있는지. 있으면 선택창에 '기타'를 덧붙여 그 상품도 볼 수 있게 한다 (규칙 90) */

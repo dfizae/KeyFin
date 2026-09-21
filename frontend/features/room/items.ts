@@ -10,9 +10,10 @@ import { ContractMismatchError } from "@/lib/contract";
  * 바꾼 뒤의 **전체 착장**을 돌려준다 — 그래서 화면은 응답으로 목록의 착용 여부를 다시 맞춘다.
  */
 
-/** 아바타가 입는 부위 6종(서버 응답 순서와 같다). WALL·FLOOR 는 가구라 옷장에 나오지 않는다 */
-export const AVATAR_SLOTS = ["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR"] as const;
-export type AvatarSlot = (typeof AVATAR_SLOTS)[number];
+/**
+ * 옷은 부위별 파츠가 아니라 세트 한 벌이라 옷장은 부위로 나누지 않는다(features/room/outfits.ts).
+ * 부위 값(slotType)은 서버 계약이라 그대로 받아 두지만 화면을 나누는 기준으로는 쓰지 않는다.
+ */
 
 export type UserItemDto = {
   userItemId: number;
@@ -75,10 +76,6 @@ export function toAvatarEquipment(dto: AvatarEquipmentDto): EquippedAvatarItem[]
   });
 }
 
-/** 고른 부위의 아이템만. 서버가 보유 id 오름차순으로 주므로 순서를 바꾸지 않는다 */
-export function userItemsInSlot(items: readonly UserItem[], slot: AvatarSlot): UserItem[] {
-  return items.filter((item) => item.slot === slot);
-}
 
 /**
  * 장착·해제 응답(전체 착장)으로 목록의 착용 여부를 다시 맞춘다.
@@ -89,7 +86,10 @@ export function applyAvatarEquipment(items: readonly UserItem[], equipment: read
   return items.map((item) => (item.equipped === equipped.has(item.userItemId) ? item : { ...item, equipped: equipped.has(item.userItemId) }));
 }
 
-/** 그 부위에 지금 입고 있는 아이템. 없으면 기본 에셋 차림이라 null 이다 */
-export function equippedItemInSlot(items: readonly UserItem[], slot: AvatarSlot): UserItem | null {
-  return items.find((item) => item.slot === slot && item.equipped) ?? null;
+/**
+ * 지금 입고 있는 세트. 세트는 한 번에 한 벌이고(서버가 같은 부위의 기존 것을 자동으로 벗긴다)
+ * 아무것도 안 입었으면 기본 차림이라 null 이다. 착장이 여럿으로 오는 옛 데이터면 보유 순서상 첫 번째를 쓴다.
+ */
+export function wornItem(items: readonly UserItem[]): UserItem | null {
+  return items.find((item) => item.equipped) ?? null;
 }

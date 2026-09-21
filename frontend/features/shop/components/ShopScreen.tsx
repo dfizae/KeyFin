@@ -13,18 +13,20 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { roomKeys } from "@/features/room/api/queries";
+import { furnitureGroupOf } from "@/features/room/catalog";
+import { isOutfitKey } from "@/features/room/outfits";
 import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
 import { useCoinBalance, usePurchaseShopItem, useShopItems } from "@/features/shop/api/queries";
-import { shopCategoryIcon, shopItemSprite, shopSlotLabel } from "@/features/shop/catalog";
+import { SHOP_FURNITURE_GROUPS, shopCategoryIcon, shopItemSprite, shopSlotLabel } from "@/features/shop/catalog";
 import { shopPurchaseErrorMessage } from "@/features/shop/errors";
 import {
   canBuyShopItem,
   coinCountLabel,
   hasUnknownSlotItem,
-  SHOP_AVATAR_SLOTS,
   SHOP_DEFAULT_FILTER,
-  SHOP_FURNITURE_SLOTS,
   shopCategoryFilterKey,
+  shopGroupFilterKey,
+  shopGroupsWithItems,
   shopItemsForFilter,
   shopPriceLabel,
   shopSlotFilterKey,
@@ -34,20 +36,32 @@ import {
 import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
+/** 산 뒤 옷을 입는 곳. 장착은 옷장에서만 한다 (사용자 결정 2026-09-21) */
+const WARDROBE_ROUTE = "/character/wardrobe";
+/** 산 뒤 가구를 놓는 곳 */
+const ROOM_EDIT_ROUTE = "/room/edit";
 /** 그림은 4px 스케일 밖 크기라 style 로 준다 (BankLogoTile 과 같은 방식) */
 const SPRITE_STYLE = { width: 72, height: 72 } as const;
+/** 의상 세트 그림은 상·하의·신발이 가로로 놓여 있어(512×208) 정사각 자리에 넣으면 옷이 너무 작아진다 */
+const OUTFIT_SPRITE_STYLE = { width: "100%", height: 72 } as const;
 const FILTER_TITLE = "종류";
 
 /**
- * 선택창 목록 — 옷과 가구를 구역으로 나누고 각 구역 맨 위에 '전체'를 둔다 (사용자 결정 2026-09-20).
+ * 선택창 목록 — 세트와 가구를 구역으로 나누고, 가구는 '전체' 아래에 분류(침대·소파 … 식물)를 둔다.
+ * 분류는 파는 상품이 있는 것만 보인다(사용자 요청 2026-09-21 '가구 카테고리', 벽·바닥 두 줄에서 바꿈).
+ * 옷은 세트 한 벌이라 부위로 나누지 않으므로 세트 구역은 한 줄이다 (사용자 결정 2026-09-21).
  * 모르는 부위 상품이 오면 '기타'를 덧붙여 그 상품도 볼 수 있게 한다.
  */
 function filterOptions(items: readonly ShopItem[]): SelectOption[] {
+  const present = new Set(shopGroupsWithItems(items, SHOP_FURNITURE_GROUPS.map(({ group }) => group), furnitureGroupOf));
   const options: SelectOption[] = [
-    { key: shopCategoryFilterKey("AVATAR"), label: "옷 전체", section: "옷" },
-    ...SHOP_AVATAR_SLOTS.map((slot) => ({ key: shopSlotFilterKey(slot), label: shopSlotLabel(slot), section: "옷" })),
+    { key: shopCategoryFilterKey("AVATAR"), label: "세트", section: "옷" },
     { key: shopCategoryFilterKey("FURNITURE"), label: "가구 전체", section: "가구" },
-    ...SHOP_FURNITURE_SLOTS.map((slot) => ({ key: shopSlotFilterKey(slot), label: shopSlotLabel(slot), section: "가구" })),
+    ...SHOP_FURNITURE_GROUPS.filter(({ group }) => present.has(group)).map(({ group, label, section }) => ({
+      key: shopGroupFilterKey(group),
+      label,
+      section,
+    })),
   ];
   if (hasUnknownSlotItem(items)) options.push({ key: shopSlotFilterKey("UNKNOWN"), label: shopSlotLabel("UNKNOWN"), section: "기타" });
   return options;
@@ -57,7 +71,8 @@ function filterOptions(items: readonly ShopItem[]): SelectOption[] {
  * PAGE-29 상점 (FR-GAM-05, P1). 홈 상점 버튼에서 들어온다.
  * `GET /shop` 은 판매 중인 상품을 한 번에 주므로(페이지 없음) 한 번 받아 선택창으로 걸러 보여 준다 — 값을 바꿔도 다시 부르지 않는다.
  * 구매는 코인이 빠지는 일이라 확인 창을 거치고, 요청 중에는 창을 닫지도 다시 누르지도 못한다 (규칙 80).
- * 보유한 상품은 누를 수 없고(서버도 409 SHOP_002 로 막는다), 코인이 모자라면 가격 옆에 이유를 적는다.
+ * 보유한 상품은 다시 살 수 없고(서버도 409 SHOP_002 로 막는다) 누르면 쓰는 곳으로 간다. 코인이 모자라면 가격 옆에 이유를 적는다.
+ * 입고 놓는 것은 옷장·방 꾸미기에서만 한다 — 장착 지점이 한 곳이어야 방금 산 것과 예전에 산 것을 같은 자리에서 다룬다 (사용자 결정 2026-09-21).
  * Pencil 시안 없음 — design/DESIGN.md 의 카드·칩 규칙을 따랐다.
  */
 function ShopScreen() {
@@ -68,9 +83,10 @@ function ShopScreen() {
   const purchase = usePurchaseShopItem();
   const [filterKey, setFilterKey] = React.useState<ShopFilterKey>(SHOP_DEFAULT_FILTER);
   const [target, setTarget] = React.useState<ShopItem | null>(null);
+  const [bought, setBought] = React.useState<ShopItem | null>(null);
 
   const all = items.data ?? [];
-  const shown = shopItemsForFilter(all, filterKey);
+  const shown = shopItemsForFilter(all, filterKey, furnitureGroupOf);
 
   const openPurchase = (item: ShopItem) => {
     purchase.reset();
@@ -85,16 +101,30 @@ function ShopScreen() {
 
   const confirmPurchase = () => {
     if (target === null || purchase.isPending) return;
+    const item = target;
     purchase.mutate(
-      { itemId: target.itemId },
+      { itemId: item.itemId },
       {
         onSuccess: () => {
           setTarget(null);
+          // 산 것을 어디서 쓰는지 이어서 알려 준다. 입고 놓는 것은 옷장·방 꾸미기에서만 하고 여기서는 데려다 주기만 한다
+          // — 장착 지점이 한 곳이어야 예전에 산 것과 방금 산 것을 같은 자리에서 다룬다 (사용자 결정 2026-09-21).
+          setBought(item);
           // 가구를 사면 방 꾸미기 목록에도 생긴다. 방 쿼리가 이미 shopKeys 를 쓰고 있어 반대 방향 import 는 순환이라 여기서 무효화한다.
           void queryClient.invalidateQueries({ queryKey: roomKeys.all });
         },
       }
     );
+  };
+
+  /** 옷은 옷장에서, 가구는 방 꾸미기에서 쓴다 — 산 직후든 예전에 산 것이든 쓰는 자리는 같다 */
+  const openPlaceFor = (item: ShopItem) => router.push(item.category === "FURNITURE" ? ROOM_EDIT_ROUTE : WARDROBE_ROUTE);
+
+  const openBoughtPlace = () => {
+    if (bought === null) return;
+    const item = bought;
+    setBought(null);
+    openPlaceFor(item);
   };
 
   return (
@@ -129,7 +159,9 @@ function ShopScreen() {
           data={shown}
           numColumns={2}
           keyExtractor={(item) => String(item.itemId)}
-          renderItem={({ item }) => <ShopItemCard item={item} balance={balance.data} onPress={openPurchase} />}
+          renderItem={({ item }) => (
+            <ShopItemCard item={item} balance={balance.data} onPress={openPurchase} onOpenOwned={openPlaceFor} />
+          )}
           columnWrapperClassName="gap-3"
           contentContainerClassName="gap-3 px-6 pb-8"
           refreshing={items.isRefetching}
@@ -148,7 +180,36 @@ function ShopScreen() {
         onCancel={closePurchase}
         onConfirm={confirmPurchase}
       />
+
+      <PurchasedDialog item={bought} onClose={() => setBought(null)} onOpenPlace={openBoughtPlace} />
     </Screen>
+  );
+}
+
+// 산 직후에만 뜬다. 여기서 입히지는 않는다 — 입고 놓는 곳은 옷장·방 꾸미기 한 곳뿐이라 거기로 데려다 주기만 한다.
+function PurchasedDialog({ item, onClose, onOpenPlace }: { item: ShopItem | null; onClose: () => void; onOpenPlace: () => void }) {
+  if (item === null) return null;
+  const furniture = item.category === "FURNITURE";
+
+  return (
+    <Dialog open onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle className="text-h3 text-foreground">새 {furniture ? "가구" : "옷"}을 샀어요</DialogTitle>
+          <DialogDescription className="text-body-sm text-card-foreground">
+            {item.name} · {furniture ? "방 꾸미기에서 원하는 자리에 놓을 수 있어요." : "옷장에서 입으면 방 안 캐릭터가 바로 갈아입어요."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="secondary" className="h-button-md rounded-lg" onPress={onClose}>
+            <Text>나중에</Text>
+          </Button>
+          <Button className="h-button-md rounded-lg" onPress={onOpenPlace}>
+            <Text>{furniture ? "방 꾸미기 열기" : "옷장 열기"}</Text>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -175,32 +236,43 @@ type ShopItemCardProps = {
   item: ShopItem;
   balance: number | undefined;
   onPress: (item: ShopItem) => void;
+  /** 보유한 상품을 눌렀을 때. 사는 대신 쓰는 곳(옷장·방 꾸미기)으로 데려간다 */
+  onOpenOwned: (item: ShopItem) => void;
 };
 
-// 이미 가졌거나 코인이 모자라면 누를 수 없다 — 상태를 색만으로 전하지 않고 가격 자리의 문구로도 적는다 (규칙 40).
-function ShopItemCard({ item, balance, onPress }: ShopItemCardProps) {
+// 코인이 모자라면 누를 수 없다 — 상태를 색만으로 전하지 않고 가격 자리의 문구로도 적는다 (규칙 40).
+// 보유한 상품은 살 수는 없지만 누르면 쓰는 곳으로 간다. 눌리지 않으면 산 옷을 상점에서 보고도 입으러 갈 길이 없다.
+function ShopItemCard({ item, balance, onPress, onOpenOwned }: ShopItemCardProps) {
   const sprite = shopItemSprite(item.assetKey);
   const buyable = canBuyShopItem(item, balance);
   const price = shopPriceLabel(item.price);
   const shortage = !item.owned && !buyable;
+  const furniture = item.category === "FURNITURE";
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${item.name}, ${item.price === 0 ? "무료" : `${price}코인`}${item.owned ? ", 보유 중" : shortage ? ", 코인 부족" : ""}`}
-      accessibilityState={{ disabled: !buyable }}
-      disabled={!buyable}
-      onPress={() => onPress(item)}
+      accessibilityHint={item.owned ? (furniture ? "누르면 방 꾸미기를 엽니다" : "누르면 옷장을 엽니다") : undefined}
+      accessibilityState={{ disabled: !item.owned && !buyable }}
+      disabled={!item.owned && !buyable}
+      onPress={() => (item.owned ? onOpenOwned(item) : onPress(item))}
       className={cn(
         "flex-1 gap-2 rounded-2xl bg-card p-3 shadow shadow-black/10 active:opacity-80 dark:border dark:border-border dark:shadow-none",
-        item.owned && "opacity-60"
+        // 코인이 모자라 못 사는 것만 흐리게 둔다 — 보유한 상품은 눌러서 쓰러 갈 수 있으므로 흐리면 안 눌린다고 읽힌다.
+        shortage && "opacity-60"
       )}
     >
       <View className="h-24 items-center justify-center rounded-xl bg-muted" accessible={false}>
         {sprite === null ? (
           <Icon as={shopCategoryIcon(item.category)} size={28} className="text-card-foreground" />
         ) : (
-          <Image source={sprite} style={SPRITE_STYLE} resizeMode="contain" accessible={false} />
+          <Image
+            source={sprite}
+            style={isOutfitKey(item.assetKey) ? OUTFIT_SPRITE_STYLE : SPRITE_STYLE}
+            resizeMode="contain"
+            accessible={false}
+          />
         )}
       </View>
       <Text className="text-body-sm text-foreground" numberOfLines={1}>
@@ -211,6 +283,7 @@ function ShopItemCard({ item, balance, onPress }: ShopItemCardProps) {
         <Text className={cn("text-label tabular-nums", buyable ? "text-foreground" : "text-card-foreground")}>
           {item.owned ? "보유 중" : price}
         </Text>
+        {item.owned ? <Text className="text-caption text-card-foreground">{furniture ? "놓으러 가기" : "입으러 가기"}</Text> : null}
         {shortage ? <Text className="text-caption text-card-foreground">코인 부족</Text> : null}
       </View>
     </Pressable>
@@ -238,7 +311,7 @@ function PurchaseDialog({ item, balance, pending, error, onCancel, onConfirm }: 
           <DialogTitle className="text-h3 text-foreground">{item.name} 살까요?</DialogTitle>
           <DialogDescription className="text-body-sm text-card-foreground">
             {item.price === 0 ? "무료 상품이에요." : `${shopPriceLabel(item.price)}코인이 빠져나가요.`}
-            {after === null ? "" : ` 사고 나면 ${after}코인이 남아요.`} 산 뒤에는 옷장이나 방 꾸미기에서 직접 입히거나 놓을 수 있어요.
+            {after === null ? "" : ` 사고 나면 ${after}코인이 남아요.`}
           </DialogDescription>
         </DialogHeader>
         {error === null ? null : (

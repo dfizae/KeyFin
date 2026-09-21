@@ -5,19 +5,19 @@ import {
   toAvatarEquipment,
   toUserItems,
   type AvatarEquipmentDto,
-  type AvatarSlot,
   type EquippedAvatarItem,
   type ItemEquipmentRequest,
   type UserItem,
   type UserItemDto,
 } from "@/features/room/items";
+import type { KnownSlotType } from "@/features/room/model";
 
 /**
  * GET /items — 보유 아바타 아이템 (FR-GAM-05). 보유 내역 id 오름차순이고 페이지가 없다.
- * 부위 수가 적어 전체를 한 번에 받아 옷장 탭에서 나눈다 — slotType 파라미터는 서버도 받지만 쓰지 않는다.
+ * 옷은 세트 한 벌이라 옷장이 부위로 나누지 않으므로 전체를 한 번에 받는다 — slotType 파라미터는 서버도 받지만 쓰지 않는다.
  * 오류: 400 COMMON_001 · 404 USER_001.
  */
-export async function getUserItems(slotType?: AvatarSlot, signal?: AbortSignal): Promise<UserItem[]> {
+export async function getUserItems(slotType?: KnownSlotType, signal?: AbortSignal): Promise<UserItem[]> {
   if (isMocked("room")) return toUserItems(await withMockLatency(userItemListMock(slotType), signal));
   const { data } = await api.get<UserItemDto[]>("/items", { params: { slotType }, signal });
   return toUserItems(data);

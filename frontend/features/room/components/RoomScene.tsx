@@ -18,6 +18,7 @@ import { runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue } from "r
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { CHARACTER_IDLE, ROOM_FLOOR } from "@/features/room/assets";
+import { useRoom } from "@/features/room/api/queries";
 import { readCamera, useRoomCamera } from "@/features/room/camera";
 import { FURNITURE, WALL_ITEMS, isWallItemId, type RoomItemId } from "@/features/room/catalog";
 import {
@@ -30,9 +31,7 @@ import {
   hitTestTopmost,
   sceneRectToCanvas,
   sortByDepth,
-  type AnchorRatio,
   type ScenePoint,
-  type SceneSize,
   type Surface,
 } from "@/features/room/model";
 import {
@@ -54,18 +53,20 @@ import {
   CHARACTER_SIZE,
   FLOOR_POLYGON,
   SURFACES,
-  getFootprintPolygon,
-  isFloorPlacement,
-  isPlaceableOnFloor,
-  isPlaceableOnWall,
+  getSeatPoint,
+  getWalkBlockers,
+  isPlaceableOn,
+  placementView,
   type Placement,
+  type PlacementView,
 } from "@/features/room/scene";
+import { findOutfit } from "@/features/room/outfits";
 import { selectIsEditing, selectPlacements, useRoomStore } from "@/features/room/store";
 import { useCharacterWalker, type CharacterWalker } from "@/features/room/useCharacterWalker";
 import { getColors } from "@/lib/theme";
 
-// 바닥 1장 + 벽 오브젝트(보드·캘린더) + 가구를 그린다. 가구는 발끝 y 기준 painter's algorithm 으로 정렬하고 캐릭터는 정렬된 가구 사이에 끼운다.
-// 벽 오브젝트는 벽에 붙어 있어 깊이 정렬에 끼지 않고 바닥 바로 위, 가구보다 먼저 그린다.
+// 바닥 1장 + 벽 오브젝트(보드·캘린더·벽 장식) + 러그 + 가구를 그린다. 가구는 발끝 y 기준 painter's algorithm 으로 정렬하고 캐릭터는 정렬된 가구 사이에 끼운다.
+// 벽 오브젝트는 벽에 붙어 있어 깊이 정렬에 끼지 않고 바닥 바로 위, 가구보다 먼저 그린다. 러그는 바닥에 깔려 그다음이다(캐릭터가 밟고 지나간다).
 // 캐릭터는 매 프레임 움직이므로 JSX 를 재정렬하는 대신 캐릭터가 들어갈 위치(depthIndex)만 워크릿에서 계산해
 // 그 값이 바뀔 때만 React 상태를 갱신한다(가구 경계를 넘을 때만 리렌더).
 // 확대·이동: RoomView 가 가진 카메라(셰어드 값)를 최상위 Group transform 으로 걸어 씬을 통째로 옮긴다. 원본을 다시 그리므로 확대해도 선명하다.
@@ -75,16 +76,26 @@ import { getColors } from "@/lib/theme";
 const FLOOR_SURFACE = SURFACES.FLOOR;
 
 /**
- * 방에 쓰이는 스프라이트 전부. 한 장씩 준비되는 대로 그리면 바닥이 먼저 깔리고 가구가 하나씩 튀어나와
- * 실제보다 오래 걸리는 것처럼 보였다(사용자 지적 2026-09-20). 다 준비될 때까지 기다렸다가 방을 통째로 보여 준다.
- * 배치에 없는 가구까지 미리 데워 두므로 방 꾸미기에서 가구를 옮겨도 다시 기다리지 않는다.
+ * 방에 늘 쓰이는 스프라이트. 한 장씩 준비되는 대로 그리면 바닥이 먼저 깔리고 가구가 하나씩 튀어나와
+ * 실제보다 오래 걸리는 것처럼 보였다(사용자 지적 2026-09-20). 이것과 놓인 가구 그림이 다 준비될 때까지 기다렸다가 방을 통째로 보여 준다.
+ * 가구 그림은 146장(약 27MB)이라 전부 데우지 않고 놓인 것만 읽는다(sceneFurnitureSprites).
  */
-const SCENE_SPRITES: readonly number[] = [
-  ROOM_FLOOR,
-  CHARACTER_IDLE,
-  ...Object.values(FURNITURE).map((item) => item.sprite),
-  ...Object.values(WALL_ITEMS).map((item) => item.sprite),
-];
+const BASE_SPRITES: readonly number[] = [ROOM_FLOOR, CHARACTER_IDLE, ...Object.values(WALL_ITEMS).map((item) => item.sprite)];
+
+/**
+ * 놓인 가구 그림. `current` 는 지금 방향 그림이라 방을 보여 주기 전에 기다리고,
+ * `turned` 는 편집 중에만 미리 읽는 반대 방향 그림이다 — '방향 바꾸기'를 눌렀을 때 그림이 비지 않게 한다.
+ */
+function sceneFurnitureSprites(placements: readonly Placement[], editing: boolean): { current: number[]; turned: number[] } {
+  const current = new Set<number>();
+  const turned = new Set<number>();
+  for (const placement of placements) {
+    if (isWallItemId(placement.itemId)) continue;
+    current.add(placementView(placement).sprite);
+    if (editing) for (const view of Object.values(FURNITURE[placement.itemId].views)) turned.add(view.sprite);
+  }
+  return { current: [...current], turned: [...turned].filter((source) => !current.has(source)) };
+}
 
 /**
  * 스프라이트 한 장을 불러 위로 넘기기만 한다(그리지 않는다).
@@ -101,8 +112,12 @@ function SpriteLoader({ source, onLoad }: { source: number; onLoad: (source: num
 
 type SceneImages = ReadonlyMap<number, SkImage>;
 
-/** 방 스프라이트를 한 번씩만 읽어 모아 둔다. `loaders` 는 화면에 계속 띄워 둬야 이미지가 살아 있다 */
-function useSceneImages() {
+/**
+ * 방 스프라이트를 한 번씩만 읽어 모아 둔다. `loaders` 는 화면에 계속 띄워 둬야 이미지가 살아 있다.
+ * `required` 는 방을 보여 주기 전에 기다리는 그림, `optional` 은 입고 있는 옷 세트처럼 나중에 정해지는 그림이다 —
+ * 방을 보여 주는 조건(`ready`)에 넣지 않아 옷 그림을 기다리느라 방 전체가 늦어지지 않게 한다(FR-GAM-01 진입 1초). 준비되기 전에는 기본 차림으로 그린다.
+ */
+function useSceneImages(required: readonly number[], optional: readonly number[]) {
   const [images, setImages] = React.useState<SceneImages>(() => new Map());
   const handleLoad = React.useCallback((source: number, image: SkImage) => {
     setImages((current) => {
@@ -112,8 +127,8 @@ function useSceneImages() {
       return next;
     });
   }, []);
-  const loaders = SCENE_SPRITES.map((source) => <SpriteLoader key={source} source={source} onLoad={handleLoad} />);
-  return { images, loaders, ready: images.size === SCENE_SPRITES.length };
+  const loaders = [...new Set([...required, ...optional])].map((source) => <SpriteLoader key={source} source={source} onLoad={handleLoad} />);
+  return { images, loaders, ready: required.every((source) => images.has(source)) };
 }
 
 // Skia 기본 샘플링은 밉맵 없는 linear 라 크기 차이가 큰 그림이 뭉개진다.
@@ -121,29 +136,19 @@ function useSceneImages() {
 const SPRITE_SAMPLING = { filter: FilterMode.Linear, mipmap: MipmapMode.Linear } as const;
 const FLOOR_SAMPLING = CatmullRomCubicSampling;
 
-/** 스프라이트로 그려지는 것들의 공통 모양. 가구(catalog FURNITURE)와 벽 오브젝트(WALL_ITEMS)가 같이 쓴다 */
-type SpriteItem = { sprite: number; size: SceneSize; anchor: AnchorRatio; grid: GridFootprint };
-
+/** 그릴 준비를 마친 배치. item 은 방향·붙은 벽을 반영한 그림과 발자국이다(scene.ts placementView) */
 type PlacedItem = {
   id: RoomItemId;
   anchor: ScenePoint;
   layer: number;
-  item: SpriteItem;
+  item: PlacementView;
   surface: Surface;
 };
 
 function toPlaced(placement: Placement): PlacedItem {
   const { itemId, anchor } = placement;
-  if (isWallItemId(itemId)) {
-    const item = WALL_ITEMS[itemId];
-    return { id: itemId, anchor, layer: 0, item, surface: placement.surface ?? item.surface };
-  }
-  const item = FURNITURE[itemId];
-  return { id: itemId, anchor, layer: placement.layer ?? item.layer ?? 0, item, surface: "FLOOR" };
-}
-
-function isPlaceable(surface: Surface, cell: GridCell, footprint: GridFootprint): boolean {
-  return surface === "FLOOR" ? isPlaceableOnFloor(cell, footprint) : isPlaceableOnWall(surface, cell, footprint);
+  const fixedWall = isWallItemId(itemId) ? WALL_ITEMS[itemId].surface : undefined;
+  return { id: itemId, anchor, layer: placement.layer ?? 0, item: placementView(placement), surface: placement.surface ?? fixedWall ?? "FLOOR" };
 }
 
 type RoomSceneProps = {
@@ -155,11 +160,10 @@ function RoomScene({ width }: RoomSceneProps) {
   const { height } = getCanvasSize(width);
   const scale = getSceneScale(width);
   const camera = useRoomCamera();
-  const { images, loaders, ready } = useSceneImages();
-  const floor = images.get(ROOM_FLOOR);
-  const { colorScheme } = useColorScheme();
-  const themeColors = getColors(colorScheme);
-  const cameraTransform = useDerivedValue(() => [{ translateX: camera.tx.value }, { translateY: camera.ty.value }, { scale: camera.scale.value }]);
+  // 입고 있는 옷 세트. 카탈로그에 없는 assetKey 뿐이거나 아직 안 왔으면 null 이라 기본 차림으로 그린다.
+  const room = useRoom();
+  const outfit = React.useMemo(() => findOutfit(room.data?.equipped ?? []), [room.data]);
+  const outfitSprites = React.useMemo(() => (outfit ? [outfit.standing, outfit.sitting] : []), [outfit]);
 
   const placements = useRoomStore(selectPlacements);
   const isEditing = useRoomStore(selectIsEditing);
@@ -167,17 +171,45 @@ function RoomScene({ width }: RoomSceneProps) {
   const select = useRoomStore((s) => s.select);
   const moveItem = useRoomStore((s) => s.moveItem);
 
+  const furnitureSprites = React.useMemo(() => sceneFurnitureSprites(placements, isEditing), [placements, isEditing]);
+  const requiredSprites = React.useMemo(() => [...BASE_SPRITES, ...furnitureSprites.current], [furnitureSprites]);
+  const optionalSprites = React.useMemo(() => [...outfitSprites, ...furnitureSprites.turned], [outfitSprites, furnitureSprites]);
+  const { images, loaders, ready } = useSceneImages(requiredSprites, optionalSprites);
+  // 한 번 보여 준 방은 다시 스켈레톤으로 돌리지 않는다 — 보관함에서 새 가구를 꺼내면 그 그림만 읽히는 동안 잠깐 비어 있다.
+  const [revealed, setRevealed] = React.useState(false);
+  if (ready && !revealed) setRevealed(true);
+  const floor = images.get(ROOM_FLOOR);
+  const { colorScheme } = useColorScheme();
+  const themeColors = getColors(colorScheme);
+  const cameraTransform = useDerivedValue(() => [{ translateX: camera.tx.value }, { translateY: camera.ty.value }, { scale: camera.scale.value }]);
+
   const placed = React.useMemo(() => placements.map(toPlaced), [placements]);
   const wallItems = React.useMemo(() => placed.filter((p) => p.surface !== "FLOOR"), [placed]);
-  const sorted = React.useMemo<readonly PlacedItem[]>(() => sortByDepth(placed.filter((p) => p.surface === "FLOOR")), [placed]);
-  const sortedKeys = React.useMemo(() => sorted.map(depthKey), [sorted]);
-  // 캐릭터가 피해 갈 가구 발자국. 벽 오브젝트는 바닥을 차지하지 않는다.
-  const footprints = React.useMemo(
-    () => placements.filter(isFloorPlacement).map((p) => getFootprintPolygon(FURNITURE[p.itemId], p.anchor)),
-    [placements]
+  const rugs = React.useMemo(() => placed.filter((p) => p.surface === "FLOOR" && p.item.flat), [placed]);
+  const sorted = React.useMemo<readonly PlacedItem[]>(
+    () => sortByDepth(placed.filter((p) => p.surface === "FLOOR" && !p.item.flat)),
+    [placed]
   );
-  // 자동 보행은 편집에 방해돼 꺼 뒀다(사용자 결정 2026-09-09). 제자리에서 호흡만 한다.
-  const walker = useCharacterWalker({ polygon: FLOOR_POLYGON, blocked: footprints, walking: false });
+  const sortedKeys = React.useMemo(() => sorted.map(depthKey), [sorted]);
+  // 캐릭터가 피해 갈 가구 발자국. 벽 오브젝트와 러그는 빠진다.
+  const footprints = React.useMemo(() => getWalkBlockers(placements), [placements]);
+  // 자동 보행은 편집 중에만 끈다 — 가구를 끌 때 캐릭터가 돌아다니면 방해된다(2026-09-09 결정의 이유, 2026-09-21 되켬).
+  // 앉기는 앉은 그림이 있는 세트를 입었을 때만 한다. 기본 차림은 앉은 그림이 없어 걷기만 한다.
+  const seat = React.useMemo(() => (outfit ? getSeatPoint(placements) : null), [outfit, placements]);
+  const walker = useCharacterWalker({ polygon: FLOOR_POLYGON, blocked: footprints, walking: !isEditing, seat });
+
+  // 앉고 서는 것은 그림이 바뀌는 일이라(셰어드 값만으로는 Skia 이미지가 안 바뀐다) 바뀔 때만 React 상태로 올린다.
+  const [seated, setSeated] = React.useState(false);
+  useAnimatedReaction(
+    () => walker.sitting.value === 1,
+    (next, previous) => {
+      if (next !== previous) runOnJS(setSeated)(next);
+    }
+  );
+  // 앉은 그림이 아직 안 읽혔으면 같은 세트의 서 있는 그림으로 버틴다 — 앉는 순간 기본 차림으로 튀지 않게.
+  const seatedSprite = outfit && seated ? images.get(outfit.sitting) : undefined;
+  const standingSprite = outfit ? images.get(outfit.standing) : undefined;
+  const character = seatedSprite ?? standingSprite ?? images.get(CHARACTER_IDLE);
 
   const [depthIndex, setDepthIndex] = React.useState(() => depthIndexAt(sortedKeys, CHARACTER_MOTION.start.y));
   useAnimatedReaction(
@@ -206,8 +238,8 @@ function RoomScene({ width }: RoomSceneProps) {
         .minDistance(0)
         .onBegin((event) => {
           const point = canvasPointToScene({ x: event.x, y: event.y }, readCamera(camera), scale);
-          // 그리는 순서(벽 → 가구)대로 넘겨 가장 앞의 것을 잡는다.
-          const all = [...wallItems, ...sorted];
+          // 그리는 순서(벽 → 러그 → 가구)대로 넘겨 가장 앞의 것을 잡는다.
+          const all = [...wallItems, ...rugs, ...sorted];
           const id = hitTestTopmost(point, all.map((p) => ({ id: p.id, rect: getSpriteRect(p.anchor, p.item.size, p.item.anchor) })));
           select(id);
           if (!id) return;
@@ -218,9 +250,9 @@ function RoomScene({ width }: RoomSceneProps) {
             surface: target.surface,
             footprint: target.item.grid,
             from: anchorToCell(def, target.anchor, target.item.grid),
-            // 같은 면의 다른 것과만 겹침을 본다 — 벽 오브젝트와 가구는 면이 달라 겹칠 수 없다.
+            // 같은 면·같은 층의 다른 것과만 겹침을 본다 — 벽 오브젝트와 가구는 면이 달라, 러그와 가구는 층이 달라 겹쳐도 된다.
             others: all
-              .filter((p) => p.id !== id && p.surface === target.surface)
+              .filter((p) => p.id !== id && p.surface === target.surface && p.item.flat === target.item.flat)
               .map((p) => ({ cell: anchorToCell(def, p.anchor, p.item.grid), footprint: p.item.grid })),
           };
           dragX.value = target.anchor.x;
@@ -245,7 +277,7 @@ function RoomScene({ width }: RoomSceneProps) {
           dragX.value = anchor.x;
           dragY.value = anchor.y;
           dragValid.value = isGridPlacementValid(def, cell, start.footprint, start.others, (candidate) =>
-            isPlaceable(start.surface, candidate, start.footprint)
+            isPlaceableOn(start.surface, candidate, start.footprint)
           )
             ? 1
             : 0;
@@ -259,7 +291,7 @@ function RoomScene({ width }: RoomSceneProps) {
           setDraggingId(null);
           dragValid.value = 1;
         }),
-    [isEditing, scale, camera, wallItems, sorted, select, moveItem, dragX, dragY, dragValid]
+    [isEditing, scale, camera, wallItems, rugs, sorted, select, moveItem, dragX, dragY, dragValid]
   );
 
   React.useEffect(() => {
@@ -268,6 +300,7 @@ function RoomScene({ width }: RoomSceneProps) {
 
   const dragging = draggingId ? placed.find((p) => p.id === draggingId) ?? null : null;
   const stationaryWall = wallItems.filter((p) => p.id !== draggingId);
+  const stationaryRugs = rugs.filter((p) => p.id !== draggingId);
   const stationary = sorted.filter((p) => p.id !== draggingId);
   const behind = stationary.slice(0, Math.min(depthIndex, stationary.length));
   const inFront = stationary.slice(behind.length);
@@ -275,7 +308,7 @@ function RoomScene({ width }: RoomSceneProps) {
   const spriteProps = { scale, ringColor: themeColors.primary, images };
 
   // 로더는 두 갈래 모두에서 같은 자리에 둔다 — 자리가 바뀌면 다시 마운트되어 이미지를 또 읽는다.
-  if (!ready) {
+  if (!ready && !revealed) {
     return (
       <>
         {loaders}
@@ -297,11 +330,14 @@ function RoomScene({ width }: RoomSceneProps) {
             {stationaryWall.map((p) => (
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}
+            {stationaryRugs.map((p) => (
+              <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
+            ))}
             {isEditing ? <GridOverlay scale={scale} color={themeColors.white} /> : null}
             {behind.map((p) => (
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}
-            <CharacterSprite walker={walker} scale={scale} image={images.get(CHARACTER_IDLE)} />
+            <CharacterSprite walker={walker} scale={scale} image={character} />
             {inFront.map((p) => (
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}

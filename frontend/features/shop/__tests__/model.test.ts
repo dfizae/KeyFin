@@ -1,4 +1,6 @@
 import { ApiError } from "@/api/error";
+import { furnitureListMock, resetFurnitureMocks } from "@/api/mocks/furniture";
+import { SEEDED_FURNITURE, SEEDED_OUTFITS } from "@/api/mocks/shop-seed";
 import { coinBalanceMock, coinHistoryMock, purchaseShopItemMock, resetShopMocks, shopItemsMock } from "@/api/mocks/shop";
 import {
   coinCountLabel,
@@ -7,10 +9,11 @@ import {
   groupCoinHistoryByDate,
   canBuyShopItem,
   hasUnknownSlotItem,
-  SHOP_AVATAR_SLOTS,
   SHOP_FURNITURE_SLOTS,
   SHOP_SLOTS,
   shopCategoryFilterKey,
+  shopGroupFilterKey,
+  shopGroupsWithItems,
   shopItemsForFilter,
   shopPriceLabel,
   shopSlotFilterKey,
@@ -23,9 +26,14 @@ import {
   type CoinHistoryItemDto,
   type ShopItemDto,
 } from "@/features/shop/model";
+import { furnitureGroupOf, type FurnitureGroup } from "@/features/room/catalog";
+import { shopItemSprite } from "@/features/shop/catalog";
 import { ContractMismatchError } from "@/lib/contract";
 
 const TODAY = "2026-09-17";
+
+/** 가구 분류가 필요 없는 선택창 테스트용 */
+const noGroup = () => null;
 
 /** 계약 예시(Swagger FinCoinResponse)의 아이템 구매 */
 function dto(overrides: Partial<CoinHistoryItemDto> = {}): CoinHistoryItemDto {
@@ -152,10 +160,9 @@ describe("상점 상품 (GET /shop)", () => {
     expect(toShopItem(shopDto({ price: 0 })).price).toBe(0);
   });
 
-  it("부위 목록은 옷 6종 + 가구 2종이고 서버 enum 순서를 지킨다", () => {
-    expect(SHOP_AVATAR_SLOTS).toEqual(["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR"]);
+  it("부위 목록은 서버 enum 순서대로 옷 6종 + 가구 2종이다 — 옷은 세트라 화면에서 부위로 나누지 않아도 값은 계약대로 받는다", () => {
+    expect(SHOP_SLOTS).toEqual(["HEAD", "FACE", "UPPER_BODY", "LOWER_BODY", "SOCKS", "FOOTWEAR", "WALL", "FLOOR"]);
     expect(SHOP_FURNITURE_SLOTS).toEqual(["WALL", "FLOOR"]);
-    expect(SHOP_SLOTS).toEqual([...SHOP_AVATAR_SLOTS, ...SHOP_FURNITURE_SLOTS]);
   });
 
   it("선택창 값이 종류 전체면 그 종류를, 부위면 그 부위만 서버 순서 그대로 고른다", () => {
@@ -166,10 +173,27 @@ describe("상점 상품 (GET /shop)", () => {
       shopDto({ itemId: 126, slotType: "FLOOR", itemCategory: "FURNITURE" }),
     ]);
 
-    expect(shopItemsForFilter(items, shopCategoryFilterKey("AVATAR")).map((item) => item.itemId)).toEqual([123, 124, 125]);
-    expect(shopItemsForFilter(items, shopCategoryFilterKey("FURNITURE")).map((item) => item.itemId)).toEqual([126]);
-    expect(shopItemsForFilter(items, shopSlotFilterKey("HEAD")).map((item) => item.itemId)).toEqual([123, 124]);
-    expect(shopItemsForFilter(items, shopSlotFilterKey("WALL"))).toEqual([]);
+    expect(shopItemsForFilter(items, shopCategoryFilterKey("AVATAR"), noGroup).map((item) => item.itemId)).toEqual([123, 124, 125]);
+    expect(shopItemsForFilter(items, shopCategoryFilterKey("FURNITURE"), noGroup).map((item) => item.itemId)).toEqual([126]);
+    expect(shopItemsForFilter(items, shopSlotFilterKey("HEAD"), noGroup).map((item) => item.itemId)).toEqual([123, 124]);
+    expect(shopItemsForFilter(items, shopSlotFilterKey("WALL"), noGroup)).toEqual([]);
+  });
+
+  it("가구 분류는 assetKey 로 찾은 분류가 같은 가구만 고르고, 분류를 모르는 가구는 '가구 전체'에만 든다", () => {
+    const furniture = (itemId: number, slotType: string, assetKey: string) => shopDto({ itemId, slotType, itemCategory: "FURNITURE", assetKey });
+    const items = toShopItems([
+      shopDto(),
+      furniture(126, "FLOOR", "bed_pink"),
+      furniture(127, "WALL", "decor_round_mirror"),
+      furniture(128, "FLOOR", "sofa_blue"),
+    ]);
+    const groups: Record<string, FurnitureGroup> = { bed_pink: "bed", decor_round_mirror: "wall" };
+    const groupOf = (assetKey: string) => groups[assetKey] ?? null;
+
+    expect(shopItemsForFilter(items, shopGroupFilterKey("bed"), groupOf).map((item) => item.itemId)).toEqual([126]);
+    expect(shopItemsForFilter(items, shopGroupFilterKey("sofa"), groupOf)).toEqual([]);
+    expect(shopItemsForFilter(items, shopCategoryFilterKey("FURNITURE"), groupOf).map((item) => item.itemId)).toEqual([126, 127, 128]);
+    expect(shopGroupsWithItems(items, ["bed", "sofa", "wall"], groupOf)).toEqual(["bed", "wall"]);
   });
 
   it("모르는 부위 상품이 있을 때만 '기타' 를 붙인다", () => {
@@ -178,7 +202,7 @@ describe("상점 상품 (GET /shop)", () => {
 
     const withUnknown = [...known, toShopItem(shopDto({ itemId: 127, slotType: "TAIL" }))];
     expect(hasUnknownSlotItem(withUnknown)).toBe(true);
-    expect(shopItemsForFilter(withUnknown, shopSlotFilterKey("UNKNOWN")).map((item) => item.itemId)).toEqual([127]);
+    expect(shopItemsForFilter(withUnknown, shopSlotFilterKey("UNKNOWN"), noGroup).map((item) => item.itemId)).toEqual([127]);
   });
 
   it("보유했거나 코인이 모자라면 못 사고, 무료 상품은 잔액과 무관하게 산다", () => {
@@ -213,10 +237,11 @@ describe("상점 구매 (POST /shop/purchase)", () => {
 
   it("목은 서버처럼 한 번만 팔고, 같은 상품을 다시 사면 409 SHOP_002 다", () => {
     resetShopMocks();
-    const item = shopItemsMock().find((candidate) => !candidate.owned && candidate.price > 0);
+    const before = coinBalanceMock().balance;
+    // 신화 세트(2,000)처럼 잔액보다 비싼 상품은 SHOP_003 이라 구매 흐름을 볼 수 없다 — 잔액 안에서 고른다.
+    const item = shopItemsMock().find((candidate) => !candidate.owned && candidate.price > 0 && candidate.price <= before);
     if (item === undefined) throw new Error("살 수 있는 목 상품이 없다");
 
-    const before = coinBalanceMock().balance;
     const result = purchaseShopItemMock({ itemId: item.itemId });
     expect(result.balance).toBe(before - item.price);
     expect(coinBalanceMock().balance).toBe(before - item.price);
@@ -233,5 +258,50 @@ describe("상점 구매 (POST /shop/purchase)", () => {
     expect(codeOf(() => purchaseShopItemMock({ itemId: item.itemId }))).toBe("SHOP_002");
     expect(codeOf(() => purchaseShopItemMock({ itemId: 9999 }))).toBe("COMMON_001");
     resetShopMocks();
+  });
+
+  it("목의 가구 상품은 모두 그림·분류가 있고, 기본 가구와 같은 그림은 팔지 않는다", () => {
+    const furniture = shopItemsMock().filter((item) => item.itemCategory === "FURNITURE");
+
+    expect(furniture).toHaveLength(56);
+    expect(furniture.every((item) => shopItemSprite(item.assetKey) !== null && furnitureGroupOf(item.assetKey) !== null)).toBe(true);
+    expect(furniture.map((item) => item.assetKey)).not.toEqual(expect.arrayContaining(["sofa_original"]));
+    expect(furniture.map((item) => item.assetKey)).not.toEqual(expect.arrayContaining(["sofa_default"]));
+  });
+
+  it("목 상품은 백엔드 시드(V19 의상 · V20 가구)와 키·이름·부위·가격이 한 행씩 같다", () => {
+    const seedRow = (item: ShopItemDto) => ({ assetKey: item.assetKey, name: item.name, slotType: item.slotType, price: item.price });
+    const byKey = (a: { assetKey: string }, b: { assetKey: string }) => a.assetKey.localeCompare(b.assetKey);
+    const mock = shopItemsMock();
+
+    const outfits = mock.filter((item) => item.itemCategory === "AVATAR").map(seedRow);
+    const furniture = mock.filter((item) => item.itemCategory === "FURNITURE").map(seedRow);
+
+    expect([...outfits].sort(byKey)).toEqual([...SEEDED_OUTFITS].sort(byKey));
+    expect([...furniture].sort(byKey)).toEqual([...SEEDED_FURNITURE].sort(byKey));
+  });
+
+  it("서버가 파는 상품은 빠짐없이 앱에 그림이 있다 — 없으면 상점에 아이콘만 나온다", () => {
+    for (const item of [...SEEDED_OUTFITS, ...SEEDED_FURNITURE]) {
+      expect([item.assetKey, shopItemSprite(item.assetKey) !== null]).toEqual([item.assetKey, true]);
+    }
+  });
+
+  it("가구를 사면 보관함(가구 목)에 미설치로 들어가고 상점은 보유 중으로 보여 준다", () => {
+    resetShopMocks();
+    resetFurnitureMocks();
+    const item = shopItemsMock().find((candidate) => candidate.itemCategory === "FURNITURE" && !candidate.owned);
+    if (item === undefined) throw new Error("살 수 있는 가구 목 상품이 없다");
+
+    const result = purchaseShopItemMock({ itemId: item.itemId });
+
+    expect(furnitureListMock().find((furniture) => furniture.userFurnitureId === result.userFurnitureId)).toMatchObject({
+      assetKey: item.assetKey,
+      placed: false,
+      canUnplace: true,
+    });
+    expect(shopItemsMock().find((candidate) => candidate.itemId === item.itemId)?.owned).toBe(true);
+    resetShopMocks();
+    resetFurnitureMocks();
   });
 });

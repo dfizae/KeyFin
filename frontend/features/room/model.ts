@@ -287,6 +287,13 @@ export const SURFACE_TYPES = ["FLOOR", "WALL_LEFT", "WALL_RIGHT"] as const;
 export type Surface = (typeof SURFACE_TYPES)[number];
 
 /**
+ * 가구가 보는 방향 (서버 placementDirection). FRONT_RIGHT 는 왼쪽 벽을 등지고 오른쪽 앞을, FRONT_LEFT 는 오른쪽 벽을 등지고 왼쪽 앞을 본다.
+ * 가구 그림이 방향별로 한 장씩 있어(catalog.ts) 방 꾸미기의 '방향 바꾸기'가 둘을 오간다.
+ */
+export const PLACEMENT_DIRECTIONS = ["FRONT_RIGHT", "FRONT_LEFT"] as const;
+export type PlacementDirection = (typeof PLACEMENT_DIRECTIONS)[number];
+
+/**
  * GET /room 응답 (2026-09-16 Swagger 대조).
  * `theme` 과 `board` 는 서버 응답에 없다 — board 는 develop d80e569 에서 빠졌고 벽 보드 수치는 GET /budgets/current 로 받는다.
  * `furnitures` 는 설치된 가구의 씬 좌표다. 방 3단계에서 쓰고 지금은 받아만 둔다.
@@ -303,7 +310,10 @@ export type RoomDto = {
   overEnvelopes?: number[];
 };
 
-/** 설치된 가구 한 개. 좌표는 327×404 씬 기준이라 ScenePoint 와 같은 축이다 (3단계) */
+/**
+ * 설치된 가구 한 개. 좌표는 ScenePoint 와 같은 축이다 (3단계).
+ * defaultFurnitureType·canUnplace 는 백엔드 V15(2026-09-18, 기본 가구 지급)에서 생겼다 — 기본 가구(FRIDGE·SOFA·TV)는 치울 수 없다.
+ */
 export type PlacedFurnitureDto = {
   userFurnitureId: number;
   itemId: number;
@@ -314,6 +324,10 @@ export type PlacedFurnitureDto = {
   positionX: number;
   positionY: number;
   layer: number;
+  /** 기본 가구 식별값(FRIDGE·SOFA·TV). 일반 가구는 null */
+  defaultFurnitureType: string | null;
+  /** 설치 해제 가능 여부. 기본 가구는 false */
+  canUnplace: boolean;
 };
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };

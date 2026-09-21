@@ -25,7 +25,7 @@ import {
   travelDurationMs,
   zoomAround,
 } from "@/features/room/model";
-import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintPolygon, isFloorPlacement } from "@/features/room/scene";
+import { CHARACTER_MOTION, DEFAULT_LAYOUT, FLOOR_POLYGON, getFootprintPolygon, getWalkBlockers, isFloorPlacement } from "@/features/room/scene";
 
 describe("room scene 좌표계", () => {
   it("씬 단위는 세로 긴 방 그림과 같은 327×586 이다", () => {
@@ -187,10 +187,13 @@ describe("바닥 다각형", () => {
   });
 
   it("카탈로그 크기는 PNG 비율을 유지한다", () => {
-    // 크기는 칸을 채우도록 바뀔 수 있으므로 값이 아니라 PNG 종횡비를 검사한다(sofa-v2.png 828x624).
-    expect(FURNITURE.sofa.size.height / FURNITURE.sofa.size.width).toBeCloseTo(624 / 828, 2);
-    expect(FURNITURE.fridge.size.height).toBeGreaterThan(FURNITURE.fridge.size.width);
-    expect(FURNITURE.plant.size.height).toBeGreaterThan(FURNITURE.plant.size.width);
+    // 크기는 배율(6.3px/씬 단위)로 줄인 값이라 PNG 종횡비를 검사한다(sofa_original/left.png 830x707).
+    const sofa = FURNITURE.sofa_default.views.FRONT_RIGHT.size;
+    const fridge = FURNITURE.fridge_default.views.FRONT_RIGHT.size;
+    const plant = FURNITURE.plant_monstera_terracotta.views.FRONT_RIGHT.size;
+    expect(sofa.height / sofa.width).toBeCloseTo(707 / 830, 2);
+    expect(fridge.height).toBeGreaterThan(fridge.width);
+    expect(plant.height).toBeGreaterThan(plant.width);
   });
 });
 
@@ -200,7 +203,7 @@ describe("캐릭터 이동 (웨이포인트)", () => {
     let i = 0;
     return () => values[i++ % values.length];
   };
-  const blocked = DEFAULT_LAYOUT.filter(isFloorPlacement).map((p) => getFootprintPolygon(FURNITURE[p.itemId], p.anchor));
+  const blocked = getWalkBlockers(DEFAULT_LAYOUT);
 
   it("선분이 다각형을 지나는지 근사로 판정한다", () => {
     const square = [
@@ -216,8 +219,8 @@ describe("캐릭터 이동 (웨이포인트)", () => {
   });
 
   it("가구 발자국은 발끝을 앞쪽 경계로 두고 뒤로 뻗는다", () => {
-    const sofa = DEFAULT_LAYOUT.find((p) => p.itemId === "sofa")!;
-    const polygon = getFootprintPolygon(FURNITURE.sofa, sofa.anchor);
+    const sofa = DEFAULT_LAYOUT.find((p) => p.itemId === "sofa_default")!;
+    const polygon = getFootprintPolygon(sofa);
     const xs = polygon.map((p) => p.x);
     const ys = polygon.map((p) => p.y);
     expect(Math.min(...ys)).toBeLessThan(sofa.anchor.y);

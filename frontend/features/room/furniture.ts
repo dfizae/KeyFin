@@ -1,6 +1,13 @@
-import { isWallItemId, roomItem, roomItemIdByAssetKey, type RoomItemId } from "@/features/room/catalog";
-import { SCENE_HEIGHT, SCENE_WIDTH, type PlacedFurnitureDto, type Surface } from "@/features/room/model";
-import { settlePlacements, type Placement } from "@/features/room/scene";
+import { hangsOnWall, isWallItemId, roomItemIdByAssetKey, type FurnitureId, type RoomItemId } from "@/features/room/catalog";
+import {
+  PLACEMENT_DIRECTIONS,
+  SCENE_HEIGHT,
+  SCENE_WIDTH,
+  type PlacedFurnitureDto,
+  type PlacementDirection,
+  type Surface,
+} from "@/features/room/model";
+import { facingOf, settlePlacements, type Placement } from "@/features/room/scene";
 
 /**
  * 가구 배치의 서버 계약 ↔ 씬 배치 변환 (docs/api-contract.md GAME, 방 3단계).
@@ -12,12 +19,20 @@ import { settlePlacements, type Placement } from "@/features/room/scene";
 export const PLACEMENT_STATUSES = ["FLOOR", "LEFT_WALL", "RIGHT_WALL"] as const;
 export type PlacementStatus = (typeof PLACEMENT_STATUSES)[number];
 
-/** 설치 방향. 지금 스프라이트는 한 방향뿐이라 보낼 때는 FRONT_RIGHT 고정이고 받은 값은 쓰지 않는다 (TBD: 좌우 반전 에셋) */
-export const PLACEMENT_DIRECTIONS = ["FRONT_LEFT", "FRONT_RIGHT"] as const;
-export type PlacementDirection = (typeof PLACEMENT_DIRECTIONS)[number];
+/**
+ * 설치 방향 (서버 placementDirection). 가구 그림이 방향별로 있어 받은 값대로 그리고, 방 꾸미기의 '방향 바꾸기'가 바꾼 값을 보낸다.
+ * 벽에 걸린 것은 붙은 벽이 방향을 정한다(scene.ts facingOf). 모르는 값은 FRONT_RIGHT 로 흡수한다 (규칙 90).
+ */
 const DEFAULT_DIRECTION: PlacementDirection = "FRONT_RIGHT";
 
-/** GET /furnitures 항목 — 보유 가구 + 배치 상태. 미설치면 배치 필드가 null 이고 layer 는 0 */
+function toDirection(raw: string | null): PlacementDirection {
+  return (PLACEMENT_DIRECTIONS as readonly (string | null)[]).includes(raw) ? (raw as PlacementDirection) : DEFAULT_DIRECTION;
+}
+
+/**
+ * GET /furnitures 항목 — 보유 가구 + 배치 상태. 미설치면 배치 필드가 null 이고 layer 는 0.
+ * 기본 가구(백엔드 V15: 냉장고·소파·TV)는 defaultFurnitureType 이 있고 canUnplace 가 false 다 — 옮길 수만 있고 치우면 409 FURNITURE_003.
+ */
 export type UserFurnitureDto = {
   userFurnitureId: number;
   itemId: number;
@@ -30,6 +45,8 @@ export type UserFurnitureDto = {
   positionX: number | null;
   positionY: number | null;
   layer: number;
+  defaultFurnitureType: string | null;
+  canUnplace: boolean;
 };
 
 export type UserFurniture = {
@@ -40,6 +57,8 @@ export type UserFurniture = {
   assetKey: string;
   placed: boolean;
   placement: Placement | null;
+  /** 방 꾸미기에서 '넣어 두기'를 할 수 있는지. 기본 가구는 false */
+  canUnplace: boolean;
 };
 
 /** PATCH /furnitures/{userFurnitureId} 요청. 해제는 나머지 필드를 같이 보내면 400 이다 */
@@ -80,16 +99,19 @@ export function toPlacement(dto: PlacedFurnitureDto): Placement | null {
   const itemId = roomItemIdByAssetKey(dto.assetKey);
   const surface = surfaceOfStatus(dto.placementStatus);
   if (itemId === undefined || surface === null) return null;
-  if (isWallItemId(itemId) !== (surface !== "FLOOR")) return null;
+  if (hangsOnWall(itemId) !== (surface !== "FLOOR")) return null;
   if (!Number.isFinite(dto.positionX) || !Number.isFinite(dto.positionY)) return null;
   if (dto.positionX < 0 || dto.positionX > SCENE_WIDTH || dto.positionY < 0 || dto.positionY > SCENE_HEIGHT) return null;
 
+  // 방향은 바닥 가구만 쓰고 FRONT_RIGHT 는 생략형으로 둔다(scene.ts Placement). 벽에 걸린 것은 붙은 벽이 방향을 정한다.
+  const turned = surface === "FLOOR" && toDirection(dto.placementDirection) === "FRONT_LEFT";
   return {
     itemId,
     userFurnitureId: dto.userFurnitureId,
     anchor: { x: dto.positionX, y: dto.positionY },
     layer: dto.layer,
     ...(surface === "FLOOR" ? {} : { surface }),
+    ...(turned ? { direction: "FRONT_LEFT" as const } : {}),
   };
 }
 
@@ -115,10 +137,20 @@ export function toUserFurniture(dto: UserFurnitureDto): UserFurniture {
           positionX: dto.positionX,
           positionY: dto.positionY,
           layer: dto.layer,
+          defaultFurnitureType: dto.defaultFurnitureType,
+          canUnplace: dto.canUnplace,
         })
       : null;
 
-  return { userFurnitureId: dto.userFurnitureId, itemId, name: dto.name, assetKey: dto.assetKey, placed: dto.placed, placement: placed };
+  return {
+    userFurnitureId: dto.userFurnitureId,
+    itemId,
+    name: dto.name,
+    assetKey: dto.assetKey,
+    placed: dto.placed,
+    placement: placed,
+    canUnplace: dto.canUnplace,
+  };
 }
 
 export function toUserFurnitures(dtos: readonly UserFurnitureDto[]): UserFurniture[] {
@@ -126,14 +158,13 @@ export function toUserFurnitures(dtos: readonly UserFurnitureDto[]): UserFurnitu
 }
 
 export function toPlacementRequest(placement: Placement): FurniturePlacementRequest {
-  const item = roomItem(placement.itemId);
   return {
     placed: true,
     placementStatus: statusOfSurface(placement.surface),
-    placementDirection: DEFAULT_DIRECTION,
+    placementDirection: facingOf(placement),
     positionX: toServerCoord(placement.anchor.x, SCENE_WIDTH),
     positionY: toServerCoord(placement.anchor.y, SCENE_HEIGHT),
-    layer: placement.layer ?? ("layer" in item ? (item.layer ?? 0) : 0),
+    layer: placement.layer ?? 0,
   };
 }
 
@@ -141,21 +172,58 @@ export type PlacementSave = { userFurnitureId: number; request: FurniturePlaceme
 
 /**
  * 편집 완료 시 보낼 것만 고른다 (PATCH 는 가구 한 개씩이고 일괄 엔드포인트가 없다).
- * - 자리가 그대로면 보내지 않는다.
+ * - 넣어 둔(편집 전에는 있다가 사라진) 가구는 설치 해제(`placed: false`)를 먼저 보낸다.
+ * - 새로 놓았거나 자리·방향이 바뀐 가구는 설치를 보낸다. 그대로인 것은 보내지 않는다.
  * - `userFurnitureId` 가 없는 배치는 서버에 대응하는 보유 가구가 없는 기본 배치라 건너뛴다.
- *   (아이템 시드가 들어오기 전까지 방을 비워 두지 않으려고 쓰는 폴백이다 — 사용자 결정 2026-09-16)
  */
 export function changedPlacements(before: readonly Placement[], after: readonly Placement[]): PlacementSave[] {
-  const previous = new Map(before.map((placement) => [placement.itemId, placement] as const));
+  const previous = new Map(before.flatMap((placement) => (placement.userFurnitureId === undefined ? [] : [[placement.userFurnitureId, placement] as const])));
+  const kept = new Set(after.map((placement) => placement.userFurnitureId));
   const saves: PlacementSave[] = [];
 
+  for (const userFurnitureId of previous.keys()) {
+    if (!kept.has(userFurnitureId)) saves.push({ userFurnitureId, request: { placed: false } });
+  }
   for (const placement of after) {
     if (placement.userFurnitureId === undefined) continue;
-    const old = previous.get(placement.itemId);
+    const old = previous.get(placement.userFurnitureId);
     if (old && samePlacement(old, placement)) continue;
     saves.push({ userFurnitureId: placement.userFurnitureId, request: toPlacementRequest(placement) });
   }
   return saves;
+}
+
+/** 보관함의 가구 한 개. 그릴 수 있는 가구만 들어온다 */
+export type StoredFurniture = UserFurniture & { itemId: FurnitureId };
+
+/**
+ * 방 꾸미기 보관함에 보일 가구: 보유했지만 지금 배치(편집 사본)에 없는 것. 서버 보유 가구 id 오름차순을 그대로 둔다.
+ * 카탈로그에 없어 그릴 수 없는 가구와, 늘 홈에 있어야 하는 벽 기능 오브젝트(보드·캘린더)는 뺀다.
+ */
+export function storedFurnitures(owned: readonly UserFurniture[], placements: readonly Placement[]): StoredFurniture[] {
+  const placedIds = new Set(placements.map((placement) => placement.userFurnitureId));
+  const placedItems = new Set<RoomItemId>(placements.map((placement) => placement.itemId));
+  return owned.filter(
+    (furniture): furniture is StoredFurniture =>
+      furniture.itemId !== null &&
+      !isWallItemId(furniture.itemId) &&
+      !placedIds.has(furniture.userFurnitureId) &&
+      !placedItems.has(furniture.itemId)
+  );
+}
+
+/** '넣어 두기'를 못 하는 이유. 할 수 있으면 null */
+export type StoreAwayBlock = "WALL_OBJECT" | "DEFAULT_FURNITURE";
+
+/**
+ * 배치된 것을 보관함으로 넣을 수 있는지. 벽 기능 오브젝트는 홈의 입구라 넣어 두지 않고,
+ * 기본 가구(서버 canUnplace=false)와 서버에 대응하는 보유 가구가 없는 기본 배치는 서버가 해제를 받지 않는다.
+ * 보유 목록을 아직 못 받았으면 기본 가구인지 알 수 없어 막는다.
+ */
+export function storeAwayBlock(placement: Placement, owned: readonly UserFurniture[] | undefined): StoreAwayBlock | null {
+  if (isWallItemId(placement.itemId)) return "WALL_OBJECT";
+  const furniture = owned?.find((candidate) => candidate.userFurnitureId === placement.userFurnitureId);
+  return furniture?.canUnplace ? null : "DEFAULT_FURNITURE";
 }
 
 function samePlacement(left: Placement, right: Placement): boolean {
