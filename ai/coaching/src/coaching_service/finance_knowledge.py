@@ -207,6 +207,16 @@ _VOLATILE_OR_DECISION_REQUEST: Final = re.compile(
     r"대출.{0,20}(?:가능(?:한가|해)?|계획(?:을)?))|"
     r"어떻게\s*(?:해야|할까))"
 )
+# A narrow carve-out: "비상금은 얼마가 적당해?" asks for qualitative sizing
+# guidance, not a live rate, product recommendation, or personal figure. It
+# would otherwise be caught by the generic "얼마" branch of
+# ``_VOLATILE_OR_DECISION_REQUEST`` above. This pattern only recognizes the
+# emergency-fund sizing question itself; it does not loosen that guard for any
+# other volatile or decision wording, and the catalog answer it unlocks still
+# contains no digits or fabricated figures.
+_QUALITATIVE_AMOUNT_GUIDE_REQUEST: Final = re.compile(
+    r"비상금.{0,12}(?:얼마|적정|적당|알맞)"
+)
 _LATEST_STATUS_REQUEST: Final = re.compile(
     r"(?:최신|오늘|지금|현재|이번\s*주|가장|최고|최저|높은|낮은).{0,32}"
     r"(?:금리|규정|규제|한도|조건|상품|수익률|예금|적금)"
@@ -791,7 +801,10 @@ def _stable_catalog_facts(
         )
         or _PERSONAL_MARKER.search(evidence.question) is not None
         or _STATEFUL_FINANCE_REQUEST.search(evidence.question) is not None
-        or _VOLATILE_OR_DECISION_REQUEST.search(evidence.question) is not None
+        or (
+            _VOLATILE_OR_DECISION_REQUEST.search(evidence.question) is not None
+            and _QUALITATIVE_AMOUNT_GUIDE_REQUEST.search(evidence.question) is None
+        )
         or re.search(r"\d", evidence.question) is not None
         or _UNREVIEWED_COMPLEX_PRODUCT_REQUEST.search(evidence.question) is not None
     ):

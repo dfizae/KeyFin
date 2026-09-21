@@ -62,7 +62,12 @@ class PinnedBackend:
     def __init__(self, tag: str) -> None:
         if _EXECUTION_BACKEND == "vllm_async":
             raise RuntimeError("async_vllm_requires_async_backend")
-        if tag not in {"base8", "latest27_nf4"}:
+        # FP8 checkpoints load only under vLLM; the transformers path (gpu_models)
+        # rejects the fp8 quantization pair, so gate prod27_fp8 to the vllm backend.
+        allowed = {"base8", "latest27_nf4"}
+        if _EXECUTION_BACKEND == "vllm":
+            allowed = allowed | {"prod27_fp8"}
+        if tag not in allowed:
             raise ValueError("unsupported_model_tag")
         self.model, self.tokenizer, entry = load_model(tag)
         # Rust tokenizers mutate padding/truncation configuration during batch encoding.
@@ -150,7 +155,8 @@ class AsyncPinnedBackend:
     def __init__(self, tag: str) -> None:
         if _EXECUTION_BACKEND != "vllm_async":
             raise RuntimeError("async_vllm_backend_not_selected")
-        if tag not in {"base8", "latest27_nf4"}:
+        # vLLM async serves FP8 (prod27_fp8) alongside the bf16/nf4 checkpoints.
+        if tag not in {"base8", "latest27_nf4", "prod27_fp8"}:
             raise ValueError("unsupported_model_tag")
         self.model, self.tokenizer, entry = load_async_model(tag)
         self.count_tokenizer = deepcopy(self.tokenizer)

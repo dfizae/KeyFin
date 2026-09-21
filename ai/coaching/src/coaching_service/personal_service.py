@@ -10,10 +10,21 @@ import anyio
 
 from coaching_service.chat_answers import ChatAnswer
 from coaching_service.errors import ServiceError
-from coaching_service.personal_contract import PersonalContext, PersonalInput, PersonalSummary
-from coaching_service.personal_query import select_personal_topic
+from coaching_service.payments import Ledger
+from coaching_service.personal_contract import (
+    PersonalContext,
+    PersonalInput,
+    PersonalRow,
+    PersonalSummary,
+    PersonalTopic,
+)
+from coaching_service.personal_query import (
+    has_unmatched_fragment,
+    select_personal_topic,
+    select_personal_topics,
+)
 from coaching_service.personal_snapshot import snapshot_summary
-from coaching_service.personal_summary import context_summary, missing
+from coaching_service.personal_summary import LABELS, context_summary, missing
 from coaching_service.repository import Mutation, Repository, document, write
 from coaching_service.schemas import JsonDocument
 from coaching_service.store import Operation
@@ -41,15 +52,18 @@ async def save_personal_context(repository: Repository, op: Operation, body: Per
     return await repository.mutate(op, action)
 
 
-async def personal_summary(repository: Repository, owner: str, question: str) -> PersonalSummary:
-    topic = select_personal_topic(question)
-    if topic is None:
-        return PersonalSummary(
-            topic=None,
-            status="needs_clarification",
-            text="계좌 잔액·자산·부채·보험·월 소득·월 고정비·예정 결제·목표 중 하나를 질문해 주세요. "
-            "특정 기관·기간·항목의 필터나 두 항목의 비교는 아직 지원하지 않습니다.",
-        )
+_UNSUPPORTED_TOPIC_TEXT: Final = (
+    "계좌 잔액·자산·부채·보험·월 소득·월 고정비·예정 결제·목표·봉투 예산 잔액 중 하나를 질문해 주세요. "
+    "특정 기관·기간·항목의 필터나 두 항목의 비교는 아직 지원하지 않습니다."
+)
+_UNMATCHED_FRAGMENT_NOTE: Final = (
+    "그중 일부 항목은 계좌 잔액·자산·부채·보험·월 소득·월 고정비·예정 결제·목표·봉투 예산 잔액에 "
+    "해당하지 않아 이 조회로는 답하지 않습니다."
+)
+
+
+async def summary_for_topic(repository: Repository, owner: str, topic: PersonalTopic) -> PersonalSummary:
+    """한 등록 주제의 현황만 조회한다. 복수 주제 질문도 이 함수를 그대로 재사용한다."""
     match topic:
         case "accounts" | "assets" | "debts" | "payments":
             stored = await anyio.to_thread.run_sync(repository.store.load, owner, "twin")
@@ -65,8 +79,56 @@ async def personal_summary(repository: Repository, owner: str, question: str) ->
                 if stored is not None
                 else missing(topic)
             )
+        case "budget":
+            stored = await anyio.to_thread.run_sync(repository.store.load, owner, "ledger")
+            if stored is None:
+                return missing(topic)
+            return _budget_summary(Ledger.model_validate_json(stored))
         case unreachable:
             assert_never(unreachable)
+
+
+def _budget_summary(ledger: Ledger) -> PersonalSummary:
+    """봉투(envelope)별 예산 잔액을 결제 이벤트가 갱신한 ledger에서 그대로 읽는다."""
+    if not ledger.envelopes:
+        return missing("budget")
+    rows = tuple(
+        PersonalRow(id="envelope/" + row.envelope, label=row.envelope, amount_krw=row.balance_krw)
+        for row in ledger.envelopes
+    )
+    total = sum(row.amount_krw for row in rows)
+    row_text = " ".join(f"{row.label}: {row.amount_krw:,}원." for row in rows)
+    return PersonalSummary(
+        topic="budget",
+        status="answered",
+        text=f"{LABELS['budget']} 합계는 {total:,}원입니다. {row_text}".strip(),
+        coverage="complete",
+        total_krw=total,
+        total_label=LABELS["budget"],
+        rows=rows,
+        warnings=(
+            "이 봉투 잔액은 결제 이벤트로 갱신된 값이며 계좌 잔액과는 별도로 관리됩니다.",
+            "예측 계산에 반영되었다는 뜻은 아닙니다.",
+        ),
+    )
+
+
+async def personal_summary(repository: Repository, owner: str, question: str) -> PersonalSummary:
+    topic = select_personal_topic(question)
+    if topic is not None:
+        return await summary_for_topic(repository, owner, topic)
+    topics = select_personal_topics(question)
+    if not topics:
+        return PersonalSummary(topic=None, status="needs_clarification", text=_UNSUPPORTED_TOPIC_TEXT)
+    summaries = tuple([await summary_for_topic(repository, owner, item) for item in topics])
+    pieces = [summary.text for summary in summaries]
+    if has_unmatched_fragment(question):
+        pieces.append(_UNMATCHED_FRAGMENT_NOTE)
+    return PersonalSummary(
+        topic=None,
+        status="answered" if any(summary.status == "answered" for summary in summaries) else "needs_data",
+        text="\n\n".join(pieces),
+    )
 
 
 async def personal_answer(repository: Repository, owner: str, question: str) -> ChatAnswer:

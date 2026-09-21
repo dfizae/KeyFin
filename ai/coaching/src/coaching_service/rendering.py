@@ -1,10 +1,11 @@
 """Render amounts and causal claims only from the immutable decision receipt."""
 
 from datetime import date
+from typing import Final
 
-from coaching_service.numeric_rendering import numeric_text
+from coaching_service.numeric_rendering import numeric_text, purchase_verdict_text
 from coaching_service.periods import period_text
-from coaching_service.schemas import JsonDocument, Receipt
+from coaching_service.schemas import JsonDocument, Receipt, Tone
 
 
 def authoritative_text(receipt: Receipt) -> str:
@@ -68,6 +69,117 @@ def historical_text(receipt: Receipt) -> list[str]:
         for envelope in receipt.current_envelopes
     )
     return pieces
+
+
+_OVER_BUDGET_ENCOURAGING: Final = (
+    "{env} 지출이 예산을 넘고 있어요. 이번 기간 {env} 소비를 조금 줄여보면 좋아요."
+)
+_OVER_BUDGET_DIRECT: Final = "{env} 예산을 초과했어요. {env} 소비를 줄이세요."
+_NEAR_LIMIT_ENCOURAGING: Final = "{env} 예산이 거의 다 찼어요. 남은 기간 지출을 조절해 보세요."
+_NEAR_LIMIT_DIRECT: Final = "{env} 예산이 얼마 남지 않았어요. {env} 지출을 줄이세요."
+_SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루는 편이 좋아요."
+_SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루세요."
+_SHORTFALL_MARKER: Final = "부족 예측 있음."
+_NEAR_LIMIT_MAX_PERCENT: Final = 10
+_HEALTHY_ENCOURAGING: Final = (
+    "{env} 예산에 여유가 있어요. 남는 만큼은 저축이나 비상금으로 옮겨 두면 좋아요."
+)
+_HEALTHY_DIRECT: Final = "{env} 예산에 여유가 있어요. 남는 만큼은 저축으로 옮겨 두세요."
+_HEALTHY_MIN_PERCENT: Final = 80
+
+
+def _over_budget_envelope(receipt: Receipt) -> str | None:
+    """Name one envelope already confirmed over budget by the engine's own facts.
+
+    ``remaining_percent`` is the service-computed payment ledger fact
+    (``PaymentFacts``); a value at or below zero means this payment already
+    consumed the envelope. ``current_envelopes`` is the separately maintained
+    ledger balance. Neither path invents a new threshold: both simply read an
+    existing signal that the engine already produced.
+    """
+    payment = receipt.payment
+    if payment is not None and payment.remaining_percent is not None:
+        try:
+            remaining = float(payment.remaining_percent)
+        except ValueError:
+            remaining = None
+        if remaining is not None and remaining <= 0:
+            return payment.envelope
+    for envelope in receipt.current_envelopes:
+        if envelope.balance_krw < 0:
+            return envelope.envelope
+    return None
+
+
+def _near_limit_envelope(receipt: Receipt) -> str | None:
+    """Name an envelope that is not over budget yet but is nearly exhausted.
+
+    Reads the same already-validated ``remaining_percent`` payment fact as
+    ``_over_budget_envelope`` and fires only in the strictly-between band
+    ``0 < remaining_percent <= 10``. A value outside that band, missing, or
+    unparseable returns ``None`` instead of guessing.
+    """
+    payment = receipt.payment
+    if payment is None or payment.remaining_percent is None:
+        return None
+    try:
+        remaining = float(payment.remaining_percent)
+    except ValueError:
+        return None
+    if 0 < remaining <= _NEAR_LIMIT_MAX_PERCENT:
+        return payment.envelope
+    return None
+
+
+def _healthy_envelope(receipt: Receipt) -> str | None:
+    """Name an envelope the engine already reports as comfortably in surplus.
+
+    Reads the same already-validated ``remaining_percent`` payment fact as
+    ``_near_limit_envelope`` and ``_over_budget_envelope`` and fires only when it
+    sits at or above ``_HEALTHY_MIN_PERCENT``. This is the lowest-precedence
+    signal: a value below that band, missing, or unparseable returns ``None`` so
+    no maintenance nudge is invented for an account with no clear surplus.
+    """
+    payment = receipt.payment
+    if payment is None or payment.remaining_percent is None:
+        return None
+    try:
+        remaining = float(payment.remaining_percent)
+    except ValueError:
+        return None
+    if remaining >= _HEALTHY_MIN_PERCENT:
+        return payment.envelope
+    return None
+
+
+def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str | None:
+    """Return one server-templated advice sentence, or ``None`` when no engine concern fires.
+
+    This never calls the language model and contains no digits of its own; every
+    branch is gated on an existing, already-validated engine fact (an over-budget
+    or near-limit envelope's name, or the same forecast-shortfall signal already
+    rendered by ``purchase_verdict_text``). Precedence per envelope is
+    over-budget > near-limit > shortfall > healthy-surplus: only the single most
+    severe sentence is ever returned, never more than one stacked together. The
+    lowest-precedence healthy branch fires only when the engine's own
+    ``remaining_percent`` surplus fact is actually present and comfortably high;
+    a missing signal returns ``None`` instead of nudging every healthy account.
+    """
+    envelope = _over_budget_envelope(receipt)
+    if envelope is not None:
+        template = _OVER_BUDGET_DIRECT if tone == "direct" else _OVER_BUDGET_ENCOURAGING
+        return template.format(env=envelope)
+    envelope = _near_limit_envelope(receipt)
+    if envelope is not None:
+        template = _NEAR_LIMIT_DIRECT if tone == "direct" else _NEAR_LIMIT_ENCOURAGING
+        return template.format(env=envelope)
+    if _SHORTFALL_MARKER in purchase_verdict_text(receipt):
+        return _SHORTFALL_DIRECT if tone == "direct" else _SHORTFALL_ENCOURAGING
+    envelope = _healthy_envelope(receipt)
+    if envelope is not None:
+        template = _HEALTHY_DIRECT if tone == "direct" else _HEALTHY_ENCOURAGING
+        return template.format(env=envelope)
+    return None
 
 
 def user_warnings(result: JsonDocument) -> list[str]:

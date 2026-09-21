@@ -134,6 +134,34 @@ async def test_a_roundtrip_through_the_llm_client_including_token_preflight() ->
 
 
 @pytest.mark.anyio
+async def test_a_roundtrip_over_ws_needs_no_endpoint_url() -> None:
+    """ws 모드에선 endpoint_url 없이도 추론이 disabled로 막히지 않고 왕복해야 한다.
+
+    ws 역터널이 전송을 대신하므로 endpoint_url은 불필요하다. 이전에는 endpoint_url이
+    None이면 _execute가 "disabled"로 즉시 폴백해, 호출자가 더미 URL로 우회해야 했다.
+    """
+
+    class FixedTextBackend(BatchBackend):
+        def complete_batch(self, requests: list[object]) -> list[object]:
+            from scripts.gpu_worker import Generated  # noqa: PLC0415 - test-local, avoids a module cycle.
+
+            return [Generated(text="확인해 주세요.", prompt_tokens=1, completion_tokens=1, seconds=0.01)
+                    for _ in requests]
+
+    backend = FixedTextBackend()
+    execution = WorkerExecution(backend, None, 8, validate_prompt_count)
+    async with running_link(execution) as (registry, url), running_worker(url, execution, backend):
+        assert await wait_until(lambda: registry.worker_connected, timeout=5)
+        config = ModelConfig(endpoint_url=None, token_preflight=False, model="fixture")
+        model = OpenAICompatibleCoachModel(config, gpu_link_submit=registry.submit)
+        evidence = EvidenceInput(purpose="coaching", question="", facts_json='{"a":1}')
+        wording = await model.write(evidence)
+        assert wording.source == "llm"
+        assert wording.fallback_reason is None
+        assert wording.text == "확인해 주세요."
+
+
+@pytest.mark.anyio
 async def test_b_concurrent_requests_do_not_cross_talk() -> None:
     """(b) N in-flight requests on one multiplexed socket resolve to their OWN id."""
     backend = AsyncBackend()

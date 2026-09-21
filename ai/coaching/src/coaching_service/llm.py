@@ -373,7 +373,11 @@ class OpenAICompatibleCoachModel:
     async def _execute(  # noqa: PLR0911 - each terminal transport outcome preserves its exact fallback reason.
         self, evidence: EvidenceInput, operation: Operation, trace: InferenceTrace,
     ) -> InferenceText | InferenceFailure:
-        if self._config.endpoint_url is None:
+        # In COACH_GPU_LINK_MODE=ws the outbound tunnel (``_gpu_link_submit``) is the
+        # transport, so no ``endpoint_url`` is needed; inference is only truly disabled
+        # when neither an HTTP endpoint nor a ws submit path exists. The loopback
+        # (default) path still requires ``endpoint_url`` exactly as before.
+        if self._config.endpoint_url is None and self._gpu_link_submit is None:
             trace.set_outcome("rejected")
             return InferenceFailure("disabled")
         # In COACH_GPU_LINK_MODE=ws there is no httpx client transport; the loopback

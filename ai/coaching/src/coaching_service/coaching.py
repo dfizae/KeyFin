@@ -14,7 +14,7 @@ from coaching_service.llm_contract import EvidenceInput, Judgment, Routing, Word
 from coaching_service.llm_prompt import TEMPLATE_TEXT
 from coaching_service.numeric_rendering import purchase_verdict_text
 from coaching_service.periods import ResolvedPeriod, ThroughDate, resolve_period
-from coaching_service.rendering import authoritative_text
+from coaching_service.rendering import authoritative_text, deterministic_advice
 from coaching_service.repository import Repository, write
 from coaching_service.request_timing import measure_fdt, run_measured_fdt
 from coaching_service.schemas import (
@@ -24,6 +24,7 @@ from coaching_service.schemas import (
     PaymentFacts,
     Receipt,
     ReviewRequest,
+    Tone,
     TwinIdentity,
 )
 from coaching_service.store import Write
@@ -134,13 +135,21 @@ class CoachingCore:
         receipt = await self.receipt(twin, review)
         return receipt.model_copy(update={"payment": facts})
 
-    async def compose(self, receipt: Receipt, evidence: EvidenceInput) -> Coaching:
+    async def compose(
+        self, receipt: Receipt, evidence: EvidenceInput, *, tone: Tone | None = None
+    ) -> Coaching:
         """금액·날짜는 검증된 receipt로 작성하고 LLM은 보조 안내만 덧붙인다.
 
         근거가 한도를 넘거나 문장을 채택하지 못해도 금융 결과를 바꾸지 않는다.
         대체 문구의 출처·원인은 응답에 남겨 실제 모델 성공과 구분한다.
+        예산 초과·근접·부족 예측 조언은 엔진 사실만으로 만든 결정형 문장이며 LLM이
+        만들지 않는다. tone은 이 문장의 어투만 고르고 발동 조건은 바꾸지 않는다.
         """
-        answer_text = "\n".join([authoritative_text(receipt), *purchase_verdict_text(receipt)])
+        pieces = [authoritative_text(receipt), *purchase_verdict_text(receipt)]
+        advice = deterministic_advice(receipt, tone=tone)
+        if advice is not None:
+            pieces.append(advice)
+        answer_text = "\n".join(pieces)
         receipt_wording = authoritative_fdt_wording(receipt)
         if receipt_wording is not None:
             wording = receipt_wording

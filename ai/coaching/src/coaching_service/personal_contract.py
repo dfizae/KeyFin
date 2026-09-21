@@ -7,12 +7,12 @@ from pydantic import AwareDatetime, Field, model_validator
 from pydantic_core import PydanticCustomError
 
 from coaching_service.periods import DateOnly
-from coaching_service.schemas import Frozen, Identifier, Money
+from coaching_service.schemas import Frozen, Identifier, Money, Tone
 
 NonnegativeMoney = Annotated[int, Field(strict=True, ge=0, le=10**12)]
 Coverage = Literal["complete", "partial", "unknown"]
 PersonalTopic = Literal[
-    "accounts", "assets", "debts", "insurance", "income", "fixed_costs", "payments", "goals"
+    "accounts", "assets", "debts", "insurance", "income", "fixed_costs", "payments", "goals", "budget"
 ]
 
 
@@ -67,6 +67,8 @@ class PersonalInput(Frozen):
     income: Section[MonthlyItem] = Section[MonthlyItem]()
     fixed_costs: Section[MonthlyItem] = Section[MonthlyItem]()
     goals: Section[GoalItem] = Section[GoalItem]()
+    # Stored verbatim and reused by the turn path when a TurnRequest omits tone.
+    tone: Tone | None = None
 
 
 class PersonalContext(PersonalInput):
