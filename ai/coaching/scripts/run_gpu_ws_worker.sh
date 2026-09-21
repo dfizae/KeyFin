@@ -35,12 +35,25 @@ GPU_WORKER_PYTHON="${GPU_WORKER_PYTHON:-$HOME/r53_vllm019/bin/python}"
 : "${COACH_GPU_API_URL:?set to wss://<ec2>:8000/internal/gpu-link}"
 
 # vLLM 0.19 parses CUDA_VISIBLE_DEVICES as integer device indices and aborts
-# when handed a "GPU-..." UUID. Resolve the pinned UUID to its PCI-ordered
-# nvidia-smi index and pin CUDA_DEVICE_ORDER so that index selects the same
-# physical device. The UUID is still the source of truth for the operator; the
-# worker's own allow-list (COACH_GPU_ALLOWED_DEVICES) keeps validating by UUID.
+# when handed a "GPU-..." UUID. The operator pins the device by UUID (stable
+# identity); this block resolves that UUID to its PCI-ordered nvidia-smi index
+# and pins CUDA_DEVICE_ORDER so the index selects the same physical device.
+# validate_device (gpu_registry.py) requires CUDA_VISIBLE_DEVICES to be a single
+# value present in COACH_GPU_ALLOWED_DEVICES via string equality, so BOTH must
+# use the same representation -- we translate both to the resolved index, after
+# checking the pinned UUID is actually in the operator's declared allow-list.
 if [[ "${CUDA_VISIBLE_DEVICES}" == GPU-* ]]; then
   _pinned_uuid="${CUDA_VISIBLE_DEVICES}"
+  # Operator intent gate: the pinned UUID must be one the operator allow-listed.
+  _allowed_hit=""
+  IFS=',' read -ra _allowed_arr <<< "${COACH_GPU_ALLOWED_DEVICES}"
+  for _a in "${_allowed_arr[@]}"; do
+    if [[ "${_a// /}" == "${_pinned_uuid}" ]]; then _allowed_hit="yes"; break; fi
+  done
+  if [[ -z "${_allowed_hit}" ]]; then
+    echo "error: pinned UUID ${_pinned_uuid} is not in COACH_GPU_ALLOWED_DEVICES" >&2
+    exit 1
+  fi
   _pinned_index="$(nvidia-smi --query-gpu=index,uuid --format=csv,noheader,nounits \
     | awk -F', *' -v u="${_pinned_uuid}" '$2 == u { print $1; exit }')"
   if [[ -z "${_pinned_index}" ]]; then
@@ -48,7 +61,10 @@ if [[ "${CUDA_VISIBLE_DEVICES}" == GPU-* ]]; then
     exit 1
   fi
   export CUDA_DEVICE_ORDER="PCI_BUS_ID"
+  # Translate BOTH the visible device and the allow-list to the resolved index so
+  # vLLM gets an int and validate_device's equality check still passes.
   CUDA_VISIBLE_DEVICES="${_pinned_index}"
+  COACH_GPU_ALLOWED_DEVICES="${_pinned_index}"
   echo "  resolved device:    ${_pinned_uuid} -> index ${_pinned_index} (PCI_BUS_ID)" >&2
 fi
 
