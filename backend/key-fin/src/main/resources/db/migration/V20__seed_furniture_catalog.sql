@@ -1,5 +1,5 @@
 -- Mobile-bundled furniture. Two views share one item; colors are separate items.
--- Frozen asset mapping and exclusions: docs/catalog/items.json.
+-- Default furniture originals, tabletop accessories and hanging plants are excluded.
 -- Validate the entire target set before a single atomic INSERT (InnoDB).
 -- Explicit key collation handles JSON_TABLE/MySQL connection collation differences;
 -- binary field validation below rejects case/spacing variants instead of reusing them.

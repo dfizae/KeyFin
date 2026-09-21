@@ -52,8 +52,3 @@ tasks.named('test') {
 		systemProperty 'fdt.bootstrap.out', System.getProperty('fdt.bootstrap.out')
 	}
 }
-
-// Verify migrations against the reviewed, mobile-facing catalog without external asset folders.
-tasks.named('processTestResources') {
-	from('docs/catalog') { into 'catalog' }
-}
