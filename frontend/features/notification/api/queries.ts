@@ -141,24 +141,27 @@ export function usePushDeviceRegistration(enabled: boolean) {
 
 /**
  * 푸시 종류별로 함께 새로 받을 화면 데이터 (data 규약은 docs/api-contract.md NOTIFICATION).
- * 알림함은 종류와 무관하게 갱신하므로 여기 넣지 않는다. 코칭·연출은 서버에서 다시 받을 데이터가 없다.
+ * 알림함은 종류와 무관하게 갱신하므로 여기 넣지 않는다. 연출은 서버에서 다시 받을 데이터가 없다.
+ * 지금 서버의 COACHING 푸시는 "새로 정리할 거래가 있어요"(refId = 거래 id)라 미확정 목록을 새로 받는다 —
+ * 홈 코치의 미확정 건수와 정리 화면이 같은 캐시를 본다. WARNING 은 지금 서버가 보내는 미납 경고다(Notion 규약의 PAYMENT_RISK).
  */
 function affectedQueryKeys(type: PushDataType): QueryKey[] {
   switch (type) {
     case "CLASSIFY_QUESTION":
     case "CLEANUP":
+    case "COACHING":
       return [transactionKeys.pending()];
     case "BUDGET_ALERT":
       return [budgetKeys.current()];
     case "TRANSFER_REQUEST":
       return [paymentKeys.transfers()];
     case "PAYMENT_RISK":
+    case "WARNING":
       return [paymentKeys.calendar()];
     case "COIN_GRANTED":
       return [shopKeys.coins()];
     case "NEW_LINK_FOUND":
       return [linkKeys.candidates()];
-    case "COACHING":
     case "REACTION":
     case "UNKNOWN":
       return [];

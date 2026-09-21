@@ -12,7 +12,9 @@ import { currentDateKey, parseKSTDateKey, toKSTDateKey } from "@/lib/date";
  * GET /notifications · PATCH /notifications/{id}/read 목 (백엔드 NotificationService, 2026-09-17).
  * 최근 5건은 Pencil PAGE-28 알림함 (XZ84O) 과 같다: 오늘 예산 알림·이체 요청(안 읽음), 어제 미확정 정리·코칭, 사흘 전 미납 경고.
  * 그 앞으로 20일 전까지 미확정 정리·코칭을 채워 모두 27건이라 한 쪽(20건)을 넘긴다 — 스크롤 끝에서 다음 쪽을 부르는지 보기 위한 값이다.
- * refId 는 다른 목과 잇는다: 이체 501(api/mocks/transfer.ts), 봉투 1 외식(api/mocks/budget.ts).
+ * refId 는 다른 목과 잇는다: 이체 501(api/mocks/transfer.ts), 봉투 1 외식(api/mocks/budget.ts), 미확정 거래 501(api/mocks/transaction.ts).
+ * COACHING 은 서버가 실제로 만드는 "새로 정리할 거래가 있어요"(TransactionNotificationService, refId = 거래 id) 모양이다 —
+ * 누르면 미확정 정리 화면에서 그 거래의 분류 창이 열린다(2026-09-21).
  * 서버처럼 읽음 상태를 들고 있어 다시 들어와도 읽은 건은 읽은 채로 남는다.
  */
 type MockNotification = Omit<NotificationItemDto, "id" | "createdAt"> & { daysAgo: number; time: string };
@@ -32,11 +34,11 @@ const RECENT: MockNotification[] = [
     daysAgo: 1,
     time: "20:00",
     type: "COACHING",
-    title: "이번 주 소비 코칭이 도착했어요",
-    body: "편의점 지출이 지난주보다 18% 늘었어요. 이번 주는 3번 이하로 줄여 볼까요?",
-    refId: "31",
-    requiresAction: false,
-    isRead: true,
+    title: "새로 정리할 거래가 있어요",
+    body: "메가커피 역삼점 4,500원을 분류해 주세요.",
+    refId: "501",
+    requiresAction: true,
+    isRead: false,
   },
   {
     daysAgo: 1,
