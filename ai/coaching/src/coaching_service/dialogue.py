@@ -42,7 +42,8 @@ from coaching_service.knowledge_retrieval import is_followup
 from coaching_service.llm_contract import ChatMessage, EvidenceInput, FinanceWording, Routing
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
-from coaching_service.personal_service import personal_answer
+from coaching_service.personal_contract import PersonalContext
+from coaching_service.personal_service import CONTEXT_KEY, personal_answer
 from coaching_service.repository import Mutation, document, write
 from coaching_service.schemas import (
     AnswerReference,
@@ -52,6 +53,7 @@ from coaching_service.schemas import (
     ReviewRequest,
     Session,
     SessionRequest,
+    Tone,
     TurnRequest,
 )
 from coaching_service.spending_history import spending_answer
@@ -273,6 +275,20 @@ class Dialogue:
             raise ServiceError("session_turn_limit", 409)
         return session
 
+    async def _effective_tone(self, owner: str, request: TurnRequest) -> Tone | None:
+        """Resolve the tone for a turn: an explicit request tone always wins.
+
+        Falls back to the stored personal context's tone when the request omits
+        one. When neither is set this returns ``None``, which preserves the
+        existing encouraging-by-default ``deterministic_advice`` wording exactly.
+        """
+        if request.tone is not None:
+            return request.tone
+        stored = await anyio.to_thread.run_sync(self.core.repository.store.load, owner, CONTEXT_KEY)
+        if stored is None:
+            return None
+        return PersonalContext.model_validate_json(stored).tone
+
     async def turn(  # noqa: C901 - one durable turn orchestrates every admitted no-model shortcut in sequence.
         self, op: Operation, session_id: str, request: TurnRequest
     ) -> JsonDocument:
@@ -360,7 +376,7 @@ class Dialogue:
                 coaching = await self.core.compose(
                     receipt,
                     EvidenceInput(question=request.question, facts_json=LIMITED_CONTEXT),
-                    tone=request.tone,
+                    tone=await self._effective_tone(op.owner, request),
                 )
                 return save_turn(session, request.question, coaching)
             identity = await anyio.to_thread.run_sync(self.core.engine.identity, twin)
@@ -431,7 +447,9 @@ class Dialogue:
                 route = Routing(mode="review", source="template", fallback_reason="context_limit")
             receipt = receipt.model_copy(update={"routing": document(route)})
             evidence = bounded_evidence(receipt, request.question, history)
-            coaching = await self.core.compose(receipt, evidence, tone=request.tone)
+            coaching = await self.core.compose(
+                receipt, evidence, tone=await self._effective_tone(op.owner, request)
+            )
             return save_turn(session, request.question, coaching)
 
         return await self.core.repository.mutate(op, action)

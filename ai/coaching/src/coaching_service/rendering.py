@@ -75,9 +75,12 @@ _OVER_BUDGET_ENCOURAGING: Final = (
     "{env} 지출이 예산을 넘고 있어요. 이번 기간 {env} 소비를 조금 줄여보면 좋아요."
 )
 _OVER_BUDGET_DIRECT: Final = "{env} 예산을 초과했어요. {env} 소비를 줄이세요."
+_NEAR_LIMIT_ENCOURAGING: Final = "{env} 예산이 거의 다 찼어요. 남은 기간 지출을 조절해 보세요."
+_NEAR_LIMIT_DIRECT: Final = "{env} 예산이 얼마 남지 않았어요. {env} 지출을 줄이세요."
 _SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루는 편이 좋아요."
 _SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루세요."
 _SHORTFALL_MARKER: Final = "부족 예측 있음."
+_NEAR_LIMIT_MAX_PERCENT: Final = 10
 
 
 def _over_budget_envelope(receipt: Receipt) -> str | None:
@@ -103,18 +106,44 @@ def _over_budget_envelope(receipt: Receipt) -> str | None:
     return None
 
 
+def _near_limit_envelope(receipt: Receipt) -> str | None:
+    """Name an envelope that is not over budget yet but is nearly exhausted.
+
+    Reads the same already-validated ``remaining_percent`` payment fact as
+    ``_over_budget_envelope`` and fires only in the strictly-between band
+    ``0 < remaining_percent <= 10``. A value outside that band, missing, or
+    unparseable returns ``None`` instead of guessing.
+    """
+    payment = receipt.payment
+    if payment is None or payment.remaining_percent is None:
+        return None
+    try:
+        remaining = float(payment.remaining_percent)
+    except ValueError:
+        return None
+    if 0 < remaining <= _NEAR_LIMIT_MAX_PERCENT:
+        return payment.envelope
+    return None
+
+
 def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str | None:
     """Return one server-templated advice sentence, or ``None`` when no engine concern fires.
 
     This never calls the language model and contains no digits of its own; every
     branch is gated on an existing, already-validated engine fact (an over-budget
-    envelope's name, or the same forecast-shortfall signal already rendered by
-    ``purchase_verdict_text``). A missing or healthy signal returns ``None``
-    instead of guessing a concern that the engine did not report.
+    or near-limit envelope's name, or the same forecast-shortfall signal already
+    rendered by ``purchase_verdict_text``). Precedence per envelope is
+    over-budget > near-limit > shortfall: only the single most severe sentence is
+    ever returned, never more than one stacked together. A missing or healthy
+    signal returns ``None`` instead of guessing a concern the engine did not report.
     """
     envelope = _over_budget_envelope(receipt)
     if envelope is not None:
         template = _OVER_BUDGET_DIRECT if tone == "direct" else _OVER_BUDGET_ENCOURAGING
+        return template.format(env=envelope)
+    envelope = _near_limit_envelope(receipt)
+    if envelope is not None:
+        template = _NEAR_LIMIT_DIRECT if tone == "direct" else _NEAR_LIMIT_ENCOURAGING
         return template.format(env=envelope)
     if _SHORTFALL_MARKER in purchase_verdict_text(receipt):
         return _SHORTFALL_DIRECT if tone == "direct" else _SHORTFALL_ENCOURAGING

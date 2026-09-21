@@ -142,7 +142,7 @@ class CoachingCore:
 
         근거가 한도를 넘거나 문장을 채택하지 못해도 금융 결과를 바꾸지 않는다.
         대체 문구의 출처·원인은 응답에 남겨 실제 모델 성공과 구분한다.
-        예산 초과·부족 예측 조언은 엔진 사실만으로 만든 결정형 문장이며 LLM이
+        예산 초과·근접·부족 예측 조언은 엔진 사실만으로 만든 결정형 문장이며 LLM이
         만들지 않는다. tone은 이 문장의 어투만 고르고 발동 조건은 바꾸지 않는다.
         """
         pieces = [authoritative_text(receipt), *purchase_verdict_text(receipt)]
