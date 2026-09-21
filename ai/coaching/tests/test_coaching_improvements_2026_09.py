@@ -33,9 +33,11 @@ def test_wording_problem_guards_are_unchanged() -> None:
 
 
 def test_write_prompt_still_forbids_every_numeric_form() -> None:
-    # The strengthened instruction must not drop any existing constraint text.
+    # #2 prompt elaboration was reverted (real-model A/B showed it increased
+    # numeric_output fallbacks); the write prompt keeps its baseline no-numbers
+    # constraint and the guard (tested above) is what actually rejects quantities.
     assert "숫자" in _WRITE
-    assert "절반" in _WRITE
+    assert "수량" in _WRITE
     assert "실행 완료" in _WRITE
 
 
