@@ -95,10 +95,19 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 	@ParameterizedTest
 	@ValueSource(strings = {"LEFT_WALL", "RIGHT_WALL"})
 	void supportsBothWallSurfacesAndCoordinateBoundaries(String surface) throws Exception {
-		String body = PLACEMENT_JSON.replace("FLOOR", surface).replace("165.123", "0").replace("280.456", "404.000");
+		String body = PLACEMENT_JSON.replace("FLOOR", surface).replace("165.123", "0").replace("280.456", "586.000");
 		mvc.perform(auth(change(88202, body), 88001)).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.placementStatus").value(surface));
-		assertThat(furnitures.findById(88202L).orElseThrow().getPositionY()).isEqualByComparingTo("404");
+		assertThat(furnitures.findById(88202L).orElseThrow().getPositionY()).isEqualByComparingTo("586");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"404.001", "500.000", "586.000"})
+	void persistsFloorPlacementBeyondPreviousYLimit(String positionY) throws Exception {
+		String body = PLACEMENT_JSON.replace("280.456", positionY);
+		mvc.perform(auth(change(88201, body), 88001)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.positionY").value(Double.parseDouble(positionY)));
+		assertThat(furnitures.findById(88201L).orElseThrow().getPositionY()).isEqualByComparingTo(positionY);
 	}
 
 	@ParameterizedTest
@@ -112,12 +121,15 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 
 	@Test
 	void beanValidationRunsInFullApplicationAndDoesNotMutateDatabase() throws Exception {
+		var beforeY = furnitures.findById(88201L).orElseThrow().getPositionY();
 		for (String body : List.of("{\"placed\":true}", "{\"placed\":false,\"layer\":0}",
-				PLACEMENT_JSON.replace("165.123", "327.001"), PLACEMENT_JSON.replace("280.456", "1.1234"))) {
+				PLACEMENT_JSON.replace("165.123", "327.001"), PLACEMENT_JSON.replace("280.456", "586.001"),
+				PLACEMENT_JSON.replace("280.456", "1.1234"))) {
 			mvc.perform(auth(change(88201, body), 88001)).andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.code").value("COMMON_001"));
 		}
 		assertThat(furnitures.findById(88201L).orElseThrow().getPositionX()).isEqualByComparingTo("165.123");
+		assertThat(furnitures.findById(88201L).orElseThrow().getPositionY()).isEqualByComparingTo(beforeY);
 	}
 
 	@ParameterizedTest

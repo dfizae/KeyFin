@@ -40,6 +40,12 @@ class FurnitureTransactionIntegrationTest extends SpringIntegrationTestSupport {
 		assertThatThrownBy(() -> jdbc.sql("UPDATE user_furnitures SET position_x = 327.001 WHERE id = 88201").update())
 				.isInstanceOf(DataAccessException.class).hasMessageContaining("chk_uf_position_x")
 				.rootCause().isInstanceOfSatisfying(SQLException.class, e -> assertThat(e.getErrorCode()).isEqualTo(3819));
+		for (String positionY : new String[]{"-0.001", "586.001"}) {
+			assertThatThrownBy(() -> jdbc.sql("UPDATE user_furnitures SET position_y = :positionY WHERE id = 88201")
+					.param("positionY", new BigDecimal(positionY)).update())
+					.isInstanceOf(DataAccessException.class).hasMessageContaining("chk_uf_position_y")
+					.rootCause().isInstanceOfSatisfying(SQLException.class, e -> assertThat(e.getErrorCode()).isEqualTo(3819));
+		}
 	}
 
 	@Test

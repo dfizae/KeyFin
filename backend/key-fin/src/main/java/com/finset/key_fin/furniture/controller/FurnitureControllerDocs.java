@@ -54,7 +54,7 @@ public interface FurnitureControllerDocs {
 			+ "일반 가구 해제 시 면·방향·좌표는 null, layer는 0으로 초기화하고 보유 내역은 유지합니다. "
 			+ "defaultFurnitureType이 있는 기본 가구는 canUnplace=false이며 이동만 가능합니다. 이동 시 stickerAttached는 유지됩니다. "
 			+ "같은 요청을 반복해도 성공하며 변경된 가구를 반환합니다. 타인 소유와 미존재 가구는 같은 오류입니다. "
-			+ "좌표는 327×404 씬 기준으로 소수점 최대 3자리입니다. 겹침·격자·실제 면 내부 판정은 클라이언트가 담당합니다.")
+			+ "좌표는 327×586 씬 기준으로 소수점 최대 3자리입니다. 겹침·격자·실제 면 내부 판정은 클라이언트가 담당합니다.")
 	@ApiResponse(responseCode = "200", description = "변경된 가구", useReturnTypeSchema = true,
 			content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = {
 					@ExampleObject(name = "설치 후", value = """

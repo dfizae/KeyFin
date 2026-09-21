@@ -26,10 +26,10 @@ public record FurniturePlacementUpdateRequest(
 		FurniturePlacementStatus placementStatus,
 		@Schema(description = "설치 방향") FurniturePlacementDirection placementDirection,
 		@DecimalMin("0") @DecimalMax("327") @Digits(integer = 3, fraction = 3)
-		@Schema(description = "327×404 씬 기준 X 좌표, 소수점 최대 3자리", minimum = "0", maximum = "327", example = "165.000")
+		@Schema(description = "327×586 씬 기준 X 좌표, 소수점 최대 3자리", minimum = "0", maximum = "327", example = "165.000")
 		BigDecimal positionX,
-		@DecimalMin("0") @DecimalMax("404") @Digits(integer = 3, fraction = 3)
-		@Schema(description = "327×404 씬 기준 Y 좌표, 소수점 최대 3자리", minimum = "0", maximum = "404", example = "280.000")
+		@DecimalMin("0") @DecimalMax("586") @Digits(integer = 3, fraction = 3)
+		@Schema(description = "327×586 씬 기준 Y 좌표, 소수점 최대 3자리", minimum = "0", maximum = "586", example = "280.000")
 		BigDecimal positionY,
 		@JsonDeserialize(using = LayerDeserializer.class)
 		@Schema(description = "깊이 보정 정수. 음수 허용. 설치 시 생략 또는 null이면 0", example = "0") Integer layer

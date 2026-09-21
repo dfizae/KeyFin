@@ -33,7 +33,7 @@ class FurnitureDocumentationIntegrationTest extends SpringIntegrationTestSupport
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.placed.type").value("boolean"))
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.layer.type").value("integer"))
 				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionX.maximum").value(327))
-				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionY.maximum").value(404))
+				.andExpect(jsonPath("$.components.schemas.FurniturePlacementUpdateRequest.properties.positionY.maximum").value(586))
 				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.properties", aMapWithSize(14)))
 				.andExpect(jsonPath("$.components.schemas.UserFurnitureResponse.required", containsInAnyOrder(
 						"userFurnitureId", "itemId", "name", "slotType", "assetKey", "placed", "placementStatus", "placementDirection", "positionX", "positionY", "layer",
