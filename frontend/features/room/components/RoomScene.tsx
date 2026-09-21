@@ -61,6 +61,7 @@ import {
   type PlacementView,
 } from "@/features/room/scene";
 import { findOutfit } from "@/features/room/outfits";
+import { useNotifySceneReady } from "@/features/room/sceneReady";
 import { selectIsEditing, selectPlacements, useRoomStore } from "@/features/room/store";
 import { useCharacterWalker, type CharacterWalker } from "@/features/room/useCharacterWalker";
 import { getColors } from "@/lib/theme";
@@ -178,6 +179,7 @@ function RoomScene({ width }: RoomSceneProps) {
   // 한 번 보여 준 방은 다시 스켈레톤으로 돌리지 않는다 — 보관함에서 새 가구를 꺼내면 그 그림만 읽히는 동안 잠깐 비어 있다.
   const [revealed, setRevealed] = React.useState(false);
   if (ready && !revealed) setRevealed(true);
+  useNotifySceneReady(ready || revealed);
   const floor = images.get(ROOM_FLOOR);
   const { colorScheme } = useColorScheme();
   const themeColors = getColors(colorScheme);

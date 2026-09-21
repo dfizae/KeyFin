@@ -1,31 +1,23 @@
 import { useRouter } from "expo-router";
 import * as React from "react";
-import { Image, View } from "react-native";
 
-import { LottieLoop } from "@/components/ui/lottie-loop";
-import { Sprite } from "@/components/ui/sprite";
-import { Text } from "@/components/ui/text";
 import { useCurrentBudget } from "@/features/budget/api/queries";
-import { CHARACTER_FRAMES } from "@/features/room/assets";
 import { useRoom } from "@/features/room/api/queries";
-import { cn } from "@/lib/utils";
+import { MOVING_IN_COPY, RoomWaiting } from "@/features/room/components/RoomWaiting";
 
-const HOME_ROUTE = "/";
+/**
+ * 입주 연출에서 넘어왔다는 표시. 홈은 방 그림을 다 읽을 때까지 대기 화면을 덮어 두는데(HomeScreen),
+ * 이 값이 있으면 그동안 입주 문구를 그대로 이어서 보여 준다 — 입주 화면이 방이 다 그려질 때까지 이어지는 것처럼 보인다.
+ */
+export const MOVING_IN_FROM = "moving-in";
+const HOME_AFTER_MOVING_IN = { pathname: "/", params: { from: MOVING_IN_FROM } } as const;
 
 /** 방 데이터가 금방 와도 연출이 보이도록 최소한 이만큼은 머문다 */
 const MIN_VISIBLE_MS = 1_500;
-const DOT_INTERVAL_MS = 400;
-const DOTS = [0, 1, 2];
-
-/** 시안(sla4v)의 원형 200 · 캐릭터 160. 4px 스케일 밖 값이라 크기만 style 로 준다 */
-const CIRCLE_STYLE = { width: 200, height: 200 } as const;
-const CHARACTER_STYLE = { width: 160, height: 160 } as const;
-
-/** 원 둘레에서 별이 번갈아 반짝이는 장식(직접 만든 Lottie, 240×240). 원보다 20씩 크게 겹친다 */
-const SPARKLES = require("@/assets/lottie/moving-in-sparkles.json");
-const SPARKLES_STYLE = { width: 240, height: 240 } as const;
 
 // Pencil character-moving-in (sla4v). GET /room 을 미리 받아 두고 홈으로 넘긴다 (PAGE-08).
+// 방 그림(스프라이트)은 여기서 미리 읽어 둘 수 없다 — Skia useImage 는 부르는 곳마다 따로 읽어 캐시가 없다(RoomScene).
+// 그래서 그림을 기다리는 일은 홈이 같은 화면(RoomWaiting)을 덮어 이어받는다.
 function MovingInScreen() {
   const router = useRouter();
   const room = useRoom();
@@ -43,50 +35,10 @@ function MovingInScreen() {
   const settled = !room.isPending && !budget.isFetching;
 
   React.useEffect(() => {
-    if (waited && settled) router.replace(HOME_ROUTE);
+    if (waited && settled) router.replace(HOME_AFTER_MOVING_IN);
   }, [waited, settled, router]);
 
-  return (
-    <View className="flex-1 items-center justify-center gap-8 bg-background px-6" accessibilityLiveRegion="polite">
-      <View className="items-center justify-center" style={SPARKLES_STYLE}>
-        <View className="pointer-events-none absolute">
-          <LottieLoop source={SPARKLES} width={SPARKLES_STYLE.width} height={SPARKLES_STYLE.height} />
-        </View>
-        <View className="items-center justify-center overflow-hidden rounded-full bg-muted" style={CIRCLE_STYLE}>
-          <Sprite frames={CHARACTER_FRAMES.celebrate} style={CHARACTER_STYLE} accessibilityLabel="입주하는 캐릭터" />
-        </View>
-      </View>
-
-      <View className="items-center gap-2">
-        <Text className="text-h1 text-foreground" accessibilityRole="header">
-          캐릭터가 입주하고 있어요
-        </Text>
-        <Text className="text-center text-body-sm text-card-foreground">
-          잠시만 기다려 주세요.{"\n"}방을 준비하고 있어요.
-        </Text>
-      </View>
-
-      <LoadingDots />
-    </View>
-  );
-}
-
-/** 점 세 개가 차례로 켜지는 인디케이터. 화면이 곧 사라지므로 애니메이션 라이브러리 없이 간격만 돌린다. */
-function LoadingDots() {
-  const [active, setActive] = React.useState(0);
-
-  React.useEffect(() => {
-    const timer = setInterval(() => setActive((prev) => (prev + 1) % DOTS.length), DOT_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <View className="flex-row gap-2" accessible accessibilityLabel="불러오는 중">
-      {DOTS.map((dot) => (
-        <View key={dot} className={cn("h-2.5 w-2.5 rounded-full", dot === active ? "bg-primary" : "bg-border")} />
-      ))}
-    </View>
-  );
+  return <RoomWaiting copy={MOVING_IN_COPY} />;
 }
 
 export { MovingInScreen, MIN_VISIBLE_MS };

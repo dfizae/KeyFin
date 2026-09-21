@@ -34,6 +34,17 @@ jest.mock("@/features/transaction/api/transaction.api", () => ({
   classifyTransaction: jest.fn(),
 }));
 
+// 테스트에는 그림을 읽어 주는 Skia 가 없어 방 씬이 영영 '준비 중'이다. 그러면 홈이 방 대기 덮개를 걷지 않으므로
+// 씬을 "다 그린 상태"로 바꿔 둔다 — 방 데이터가 와서 씬이 올라가는 순간 준비됐다고 알린다.
+jest.mock("@/features/room/components/RoomSceneLoader", () => {
+  const { useNotifySceneReady } = jest.requireActual("@/features/room/sceneReady");
+  function MockRoomSceneLoader() {
+    useNotifySceneReady(true);
+    return null;
+  }
+  return { RoomSceneLoader: MockRoomSceneLoader };
+});
+
 // 홈 화면은 최종 예산 표시를 검증한다. 실제 시간에 따른 카운트업은 CI 속도에 의존하지 않도록 생략한다.
 jest.mock("@/hooks/use-count-up", () => ({ useCountUp: (target: string) => target }));
 
@@ -87,7 +98,7 @@ async function waitForQueriesToSettle() {
   await waitFor(() => expect(client.isFetching()).toBe(0));
 }
 
-function renderHome() {
+function renderHome(props: { arriving?: boolean } = {}) {
   client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: 0 },
@@ -97,7 +108,7 @@ function renderHome() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <HomeScreen />
+      <HomeScreen {...props} />
     </QueryClientProvider>
   );
 }
@@ -181,7 +192,43 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith("/transaction/pending");
   });
 
-  it("불러오는 동안 스켈레톤을 보여주고, 코인·알림·방을 표시하며 예산 카드는 리스트를 탭한 시트에 있다", async () => {
+  it("입주 연출에서 넘어오면 방을 다 그릴 때까지 입주 문구를 이어서 보여 준다", async () => {
+    let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
+    mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome({ arriving: true });
+
+    expect(screen.getByRole("header", { name: "캐릭터가 입주하고 있어요" })).toBeTruthy();
+
+    await act(async () => resolveRoom(toRoom({ ...roomMock, attendance: { checkedToday: true } })));
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
+    expect(screen.queryByText("캐릭터가 입주하고 있어요")).toBeNull();
+  });
+
+  it("이미 입주한 계정은 방을 기다리는 동안 입주 문구 대신 다른 문구를 본다", async () => {
+    let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
+    mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome();
+
+    expect(screen.queryByText("캐릭터가 입주하고 있어요")).toBeNull();
+    expect(screen.getByText(/^캐릭터가 .+ 있어요$/)).toBeTruthy();
+
+    await act(async () => resolveRoom(toRoom({ ...roomMock, attendance: { checkedToday: true } })));
+    expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
+    expect(screen.queryByText(/^캐릭터가 .+ 있어요$/)).toBeNull();
+  });
+
+  it("방 정보를 못 받으면 대기 화면을 걷고 다시 시도를 보여 준다", async () => {
+    mockedGetRoom.mockRejectedValue(new Error("network"));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome();
+
+    expect(await screen.findByText("방 정보를 불러오지 못했어요")).toBeTruthy();
+    expect(screen.queryByLabelText("불러오는 중")).toBeNull();
+  });
+
+  it("불러오는 동안 대기 화면을 보여주고, 코인·알림·방을 표시하며 예산 카드는 리스트를 탭한 시트에 있다", async () => {
     let resolveRoom: (room: ReturnType<typeof toRoom>) => void = () => undefined;
     mockedGetRoom.mockReturnValue(new Promise((resolve) => (resolveRoom = resolve)));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
