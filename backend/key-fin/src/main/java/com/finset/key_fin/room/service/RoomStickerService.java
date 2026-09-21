@@ -1,7 +1,7 @@
 package com.finset.key_fin.room.service;
 
 import com.finset.key_fin.budget.service.BudgetOverrunService;
-import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 import com.finset.key_fin.furniture.entity.UserFurniture;
 import com.finset.key_fin.furniture.exception.FurnitureErrorCode;
 import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
@@ -49,7 +49,7 @@ public class RoomStickerService {
 		lockUser(userId);
 		var target = furnitures.findByIdAndUserId(userFurnitureId, userId)
 				.orElseThrow(() -> new BusinessException(FurnitureErrorCode.USER_FURNITURE_NOT_FOUND));
-		if (target.canUnplace()) {
+		if (!target.isPlaced() || target.getItem().getFurnitureType() == null) {
 			throw new BusinessException(RoomErrorCode.NOT_STICKER_TARGET);
 		}
 		LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
@@ -81,7 +81,7 @@ public class RoomStickerService {
 
 	private StickerStatusResponse status(long userId, List<UserFurniture> targets, LocalDate today) {
 		int count = (int) targets.stream().filter(UserFurniture::isStickerAttached).count();
-		return new StickerStatusResponse(count, DefaultFurnitureType.values().length,
+		return new StickerStatusResponse(count, FurnitureType.values().length,
 				count > 0 && !removedToday(userId, today));
 	}
 

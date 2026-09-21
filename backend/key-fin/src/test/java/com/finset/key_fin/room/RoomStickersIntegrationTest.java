@@ -6,6 +6,9 @@ import com.finset.key_fin.auth.service.AuthService;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.service.BudgetService;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementUpdateRequest;
+import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest;
+import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest.Placement;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
 import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
@@ -290,6 +293,34 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		stickers.remove(userId, sofa);
 		assertBusinessCode(() -> furnitureService.updatePlacement(userId, sofa,
 				new FurniturePlacementUpdateRequest(false, null, null, null, null, null)), "FURNITURE_003");
+	}
+
+	@Test
+	void replacementReceivesFutureBudgetStickersWithoutReinstallingStarter() {
+		budget("202609", "CONFIRMED", 1000);
+		spend("2026-09-18", 2000, "CONFIRMED", 101);
+		rooms.getRoom(userId);
+		long oldSofa = target("SOFA");
+		jdbc.sql("INSERT INTO user_furnitures (user_id, item_id) SELECT :user, id FROM items WHERE asset_key = 'sofa_black'")
+				.param("user", userId).update();
+		long newSofa = jdbc.sql("SELECT uf.id FROM user_furnitures uf JOIN items i ON i.id = uf.item_id WHERE uf.user_id = :user AND i.asset_key = 'sofa_black'")
+				.param("user", userId).query(Long.class).single();
+		var request = new FurniturePlacementsUpdateRequest(furnitureService.getPlacedFurnitures(userId).stream()
+				.map(f -> new Placement(f.furnitureType() == FurnitureType.SOFA ? newSofa : f.userFurnitureId(),
+						f.placementStatus(), f.placementDirection(), f.positionX(), f.positionY(), f.layer())).toList());
+		furnitureService.updatePlacements(userId, request);
+		assertThat(stickers.remove(userId, newSofa).stickers().count()).isEqualTo(2);
+		furnitureService.updatePlacements(userId, request);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
+		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		budget("202610", "CONFIRMED", 1000);
+		spend("2026-10-01", 2000, "CONFIRMED", 101);
+		var next = rooms.getRoom(userId);
+		assertThat(next.stickers().count()).isEqualTo(3);
+		assertThat(next.furnitures()).extracting(f -> f.userFurnitureId()).contains(newSofa).doesNotContain(oldSofa);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(2);
+		assertThat(jdbc.sql("SELECT sticker_attached FROM user_furnitures WHERE id = :id").param("id", oldSofa).query(Boolean.class).single()).isFalse();
 	}
 
 	@Test

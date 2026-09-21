@@ -2,8 +2,10 @@ package com.finset.key_fin.furniture.controller;
 
 import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
+import com.finset.key_fin.furniture.service.DefaultFurnitureService;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -32,6 +34,12 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private JwtTokenProvider tokens;
 	@Autowired private JdbcClient jdbc;
 	@Autowired private UserFurnitureRepository furnitures;
+	@Autowired private DefaultFurnitureService defaults;
+
+	@BeforeEach
+	void provideRequiredFurniture() {
+		defaults.provision(88001);
+	}
 
 	private MockHttpServletRequestBuilder auth(MockHttpServletRequestBuilder request, long userId) {
 		return request.header("Authorization", "Bearer " + tokens.generateAccessToken(userId));
@@ -44,14 +52,14 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 	@Test
 	void listsOnlyOwnedFurnitureSortedIncludingInactiveAndUnplaced() throws Exception {
 		mvc.perform(auth(get("/api/v1/furnitures").param("userId", "88002"), 88001))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88201, 88202, 88203)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88202, 88203)))
 				.andExpect(jsonPath("$.data[0].placed").value(true))
 				.andExpect(jsonPath("$.data[2].placed").value(false))
 				.andExpect(jsonPath("$.data[2].assetKey").value("desk_old"))
 				.andExpect(jsonPath("$.data[2].placementStatus").value(nullValue()))
 				.andExpect(jsonPath("$.data[2].positionX").value(nullValue()));
 		mvc.perform(auth(get("/api/v1/furnitures").param("slotType", "FLOOR"), 88001))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88201, 88203)));
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88203)));
 		mvc.perform(auth(get("/api/v1/furnitures").param("slotType", "WALL"), 88001))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88202)));
 		mvc.perform(auth(get("/api/v1/furnitures"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());

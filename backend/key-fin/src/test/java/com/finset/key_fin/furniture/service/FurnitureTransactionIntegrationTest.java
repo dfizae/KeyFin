@@ -6,6 +6,7 @@ import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -31,6 +32,12 @@ class FurnitureTransactionIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private FurnitureService service;
 	@Autowired private JdbcClient jdbc;
 	@Autowired private PlatformTransactionManager transactions;
+	@Autowired private DefaultFurnitureService defaults;
+
+	@BeforeEach
+	void provideRequiredFurniture() {
+		defaults.provision(88001);
+	}
 
 	@Test
 	void databaseRejectsPartialPlacementAndOutOfSceneCoordinates() {
