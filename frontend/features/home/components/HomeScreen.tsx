@@ -19,12 +19,13 @@ import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWa
 import { AVATAR_SCENE } from "@/features/home/components/CoachBubble";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
-import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
+import { roomKeys, useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
 import { getWallItemRect } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
+import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,8 @@ const ERROR_TOP_GAP = 24;
 function HomeScreen() {
   const router = useRouter();
   const room = useRoom();
+  // 코인 수는 방 홈의 값이다. 코인 이력·상점에서 돌아왔을 때 옛 잔액이 남지 않게 한다
+  useRefetchStaleOnFocus(roomKeys.all);
   useRoomLayoutSync();
   const topInset = useTopInset();
   const month = currentMonthKey();
