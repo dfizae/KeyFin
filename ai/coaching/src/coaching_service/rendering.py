@@ -81,6 +81,11 @@ _SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요
 _SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루세요."
 _SHORTFALL_MARKER: Final = "부족 예측 있음."
 _NEAR_LIMIT_MAX_PERCENT: Final = 10
+_HEALTHY_ENCOURAGING: Final = (
+    "{env} 예산에 여유가 있어요. 남는 만큼은 저축이나 비상금으로 옮겨 두면 좋아요."
+)
+_HEALTHY_DIRECT: Final = "{env} 예산에 여유가 있어요. 남는 만큼은 저축으로 옮겨 두세요."
+_HEALTHY_MIN_PERCENT: Final = 80
 
 
 def _over_budget_envelope(receipt: Receipt) -> str | None:
@@ -126,6 +131,27 @@ def _near_limit_envelope(receipt: Receipt) -> str | None:
     return None
 
 
+def _healthy_envelope(receipt: Receipt) -> str | None:
+    """Name an envelope the engine already reports as comfortably in surplus.
+
+    Reads the same already-validated ``remaining_percent`` payment fact as
+    ``_near_limit_envelope`` and ``_over_budget_envelope`` and fires only when it
+    sits at or above ``_HEALTHY_MIN_PERCENT``. This is the lowest-precedence
+    signal: a value below that band, missing, or unparseable returns ``None`` so
+    no maintenance nudge is invented for an account with no clear surplus.
+    """
+    payment = receipt.payment
+    if payment is None or payment.remaining_percent is None:
+        return None
+    try:
+        remaining = float(payment.remaining_percent)
+    except ValueError:
+        return None
+    if remaining >= _HEALTHY_MIN_PERCENT:
+        return payment.envelope
+    return None
+
+
 def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str | None:
     """Return one server-templated advice sentence, or ``None`` when no engine concern fires.
 
@@ -133,9 +159,11 @@ def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str |
     branch is gated on an existing, already-validated engine fact (an over-budget
     or near-limit envelope's name, or the same forecast-shortfall signal already
     rendered by ``purchase_verdict_text``). Precedence per envelope is
-    over-budget > near-limit > shortfall: only the single most severe sentence is
-    ever returned, never more than one stacked together. A missing or healthy
-    signal returns ``None`` instead of guessing a concern the engine did not report.
+    over-budget > near-limit > shortfall > healthy-surplus: only the single most
+    severe sentence is ever returned, never more than one stacked together. The
+    lowest-precedence healthy branch fires only when the engine's own
+    ``remaining_percent`` surplus fact is actually present and comfortably high;
+    a missing signal returns ``None`` instead of nudging every healthy account.
     """
     envelope = _over_budget_envelope(receipt)
     if envelope is not None:
@@ -147,6 +175,10 @@ def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str |
         return template.format(env=envelope)
     if _SHORTFALL_MARKER in purchase_verdict_text(receipt):
         return _SHORTFALL_DIRECT if tone == "direct" else _SHORTFALL_ENCOURAGING
+    envelope = _healthy_envelope(receipt)
+    if envelope is not None:
+        template = _HEALTHY_DIRECT if tone == "direct" else _HEALTHY_ENCOURAGING
+        return template.format(env=envelope)
     return None
 
 
