@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
@@ -77,6 +78,88 @@ class ShopApiIntegrationTest extends SpringIntegrationTestSupport {
 			users.deleteById(id);
 		}
 		for (long id : itemIds) jdbc.sql("DELETE FROM items WHERE id = :id").param("id", id).update();
+	}
+
+	@Test
+	void stagedCatalogIsHiddenAndCannotBePurchased() throws Exception {
+		seedBalance(5000);
+		List<String> catalogKeys = CatalogFixture.keys();
+		assertThat(catalogKeys).hasSize(59);
+		assertThat(shop.getItems(userId, null, null))
+				.extracting(item -> item.assetKey()).doesNotContainAnyElementsOf(catalogKeys);
+		for (String assetKey : catalogKeys) {
+			long itemId = jdbc.sql("SELECT id FROM items WHERE asset_key = :assetKey")
+					.param("assetKey", assetKey).query(Long.class).single();
+			mvc.perform(auth(post("/api/v1/shop/purchase").contentType(APPLICATION_JSON)
+					.content("{\"itemId\":" + itemId + "}")))
+					.andExpect(status().isNotFound())
+					.andExpect(jsonPath("$.code").value("SHOP_001"));
+		}
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_items WHERE user_id = :id")
+				.param("id", userId).query(Long.class).single()).isZero();
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_furnitures WHERE user_id = :id")
+				.param("id", userId).query(Long.class).single()).isZero();
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM fin_coin WHERE user_id = :id")
+				.param("id", userId).query(Long.class).single()).isEqualTo(1);
+		assertThat(jdbc.sql("SELECT balance_after FROM fin_coin WHERE user_id = :id ORDER BY id DESC LIMIT 1")
+				.param("id", userId).query(Integer.class).single()).isEqualTo(5000);
+	}
+
+	@Test
+	@Transactional // Activation and purchases are rolled back in the disposable Testcontainers database.
+	void activatedOutfitsCanBePurchasedAndReplaceOnlyTheUpperBodySlot() throws Exception {
+		seedBalance(5000);
+		long hat = createItem("AVATAR", "HEAD", 0, true);
+		long ownedHat = shop.purchase(userId, hat).userItemId();
+		mvc.perform(auth(patch("/api/v1/items/" + ownedHat)).contentType(APPLICATION_JSON).content("{\"equipped\":true}"))
+				.andExpect(status().isOk());
+
+		for (String key : List.of("outfit_epic_mage", "outfit_legendary_paladin")) {
+			long id = activateCatalogItemForTest(key);
+			int price = key.equals("outfit_epic_mage") ? 500 : 1000;
+			purchase(id).andExpect(status().isOk()).andExpect(jsonPath("$.data.price").value(price));
+			long owned = jdbc.sql("SELECT id FROM user_items WHERE user_id = :user AND item_id = :item")
+					.param("user", userId).param("item", id).query(Long.class).single();
+			mvc.perform(auth(patch("/api/v1/items/" + owned)).contentType(APPLICATION_JSON).content("{\"equipped\":true}"))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.equipped[*].userItemId", containsInAnyOrder((int) ownedHat, (int) owned)))
+					.andExpect(jsonPath("$.data.equipped[?(@.slotType == 'UPPER_BODY')].assetKey", contains(key)));
+		}
+		assertThat(count("SELECT COUNT(*) FROM user_items WHERE user_id = :id AND equipped_slot = 'UPPER_BODY'")).isEqualTo(1);
+		assertThat(count("SELECT COUNT(*) FROM user_items WHERE user_id = :id AND equipped_slot IS NULL")).isEqualTo(1);
+		assertThat(balance()).isEqualTo(3500);
+	}
+
+	@Test
+	@Transactional
+	void activatedFloorAndWallFurnitureCanBePurchasedAndPlacedIndividually() throws Exception {
+		seedBalance(5000);
+		for (String key : List.of("desk_original", "window_sky_clouds")) {
+			long id = activateCatalogItemForTest(key);
+			boolean floor = key.equals("desk_original");
+			purchase(id).andExpect(status().isOk()).andExpect(jsonPath("$.data.price").value(floor ? 500 : 300));
+			long owned = jdbc.sql("SELECT id FROM user_furnitures WHERE user_id = :user AND item_id = :item")
+					.param("user", userId).param("item", id).query(Long.class).single();
+			String placement = floor ? "FLOOR" : "LEFT_WALL";
+			mvc.perform(auth(patch("/api/v1/furnitures/" + owned)).contentType(APPLICATION_JSON).content("""
+					{"placed":true,"placementStatus":"%s","placementDirection":"FRONT_LEFT","positionX":100.123,"positionY":200.456,"layer":2}
+					""".formatted(placement)))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data.assetKey").value(key))
+					.andExpect(jsonPath("$.data.placementStatus").value(placement))
+					.andExpect(jsonPath("$.data.canUnplace").value(true));
+			mvc.perform(auth(get("/api/v1/furnitures")))
+					.andExpect(status().isOk())
+					.andExpect(jsonPath("$.data[?(@.assetKey == '" + key + "')].positionX", contains(100.123)))
+					.andExpect(jsonPath("$.data[?(@.assetKey == '" + key + "')].layer", contains(2)));
+		}
+		assertThat(count("SELECT COUNT(*) FROM user_furnitures WHERE user_id = :id AND placement_status IS NOT NULL")).isEqualTo(2);
+		assertThat(balance()).isEqualTo(4200);
+	}
+
+	private long activateCatalogItemForTest(String key) {
+		jdbc.sql("UPDATE items SET is_active = TRUE WHERE asset_key = :key").param("key", key).update();
+		return jdbc.sql("SELECT id FROM items WHERE asset_key = :key").param("key", key).query(Long.class).single();
 	}
 
 	@Test
