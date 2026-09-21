@@ -34,6 +34,24 @@ GPU_WORKER_PYTHON="${GPU_WORKER_PYTHON:-$HOME/r53_vllm019/bin/python}"
 # endpoint this worker dials out to.
 : "${COACH_GPU_API_URL:?set to wss://<ec2>:8000/internal/gpu-link}"
 
+# vLLM 0.19 parses CUDA_VISIBLE_DEVICES as integer device indices and aborts
+# when handed a "GPU-..." UUID. Resolve the pinned UUID to its PCI-ordered
+# nvidia-smi index and pin CUDA_DEVICE_ORDER so that index selects the same
+# physical device. The UUID is still the source of truth for the operator; the
+# worker's own allow-list (COACH_GPU_ALLOWED_DEVICES) keeps validating by UUID.
+if [[ "${CUDA_VISIBLE_DEVICES}" == GPU-* ]]; then
+  _pinned_uuid="${CUDA_VISIBLE_DEVICES}"
+  _pinned_index="$(nvidia-smi --query-gpu=index,uuid --format=csv,noheader,nounits \
+    | awk -F', *' -v u="${_pinned_uuid}" '$2 == u { print $1; exit }')"
+  if [[ -z "${_pinned_index}" ]]; then
+    echo "error: device UUID ${_pinned_uuid} not found by nvidia-smi" >&2
+    exit 1
+  fi
+  export CUDA_DEVICE_ORDER="PCI_BUS_ID"
+  CUDA_VISIBLE_DEVICES="${_pinned_index}"
+  echo "  resolved device:    ${_pinned_uuid} -> index ${_pinned_index} (PCI_BUS_ID)" >&2
+fi
+
 # --- fixed for this deployment (prod27_fp8 ws worker) ----------------------
 export CUDA_VISIBLE_DEVICES
 export COACH_GPU_ALLOWED_DEVICES
