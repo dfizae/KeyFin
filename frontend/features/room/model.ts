@@ -260,6 +260,22 @@ export function pickWaypoint({
   return null;
 }
 
+/**
+ * 고른 오브젝트 옆에 띄우는 말풍선(동작 버튼)의 좌상단. 단위는 부르는 쪽이 맞춘다(모두 캔버스 pt 든 모두 씬 단위든).
+ * 기본은 오브젝트 바로 아래 가운데다 — 위에 두면 손가락이 방금 고른 가구를 가린다. 아래로 넘치면 위로 올리고,
+ * 위아래 모두 자리가 없으면(화면만큼 큰 가구) 영역 안쪽 아래에 붙인다. 좌우는 영역 밖으로 나가지 않게 당긴다.
+ */
+export function placeBubble(target: SceneRect, bubble: SceneSize, bounds: SceneSize, gap = 8): ScenePoint {
+  const centered = target.x + target.width / 2 - bubble.width / 2;
+  const x = clamp(centered, gap, Math.max(gap, bounds.width - bubble.width - gap));
+
+  const below = target.y + target.height + gap;
+  if (below + bubble.height + gap <= bounds.height) return { x, y: below };
+  const above = target.y - gap - bubble.height;
+  if (above >= gap) return { x, y: above };
+  return { x, y: Math.max(gap, bounds.height - bubble.height - gap) };
+}
+
 /** 일정 속도(씬 단위/초)로 이동할 때 걸리는 시간(ms) */
 export function travelDurationMs(from: ScenePoint, to: ScenePoint, speed: number): number {
   return Math.round((distance(from, to) / speed) * 1000);
