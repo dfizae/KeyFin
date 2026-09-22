@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { roomKeys } from "@/features/room/api/queries";
 import { furnitureGroupOf } from "@/features/room/catalog";
+import { EDIT_FROM_SHOP } from "@/features/room/components/RoomEditScreen";
 import { isOutfitKey } from "@/features/room/outfits";
 import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
 import { useCoinBalance, usePurchaseShopItem, useShopItems } from "@/features/shop/api/queries";
@@ -118,7 +119,9 @@ function ShopScreen() {
   };
 
   /** 옷은 옷장에서, 가구는 방 꾸미기에서 쓴다 — 산 직후든 예전에 산 것이든 쓰는 자리는 같다 */
-  const openPlaceFor = (item: ShopItem) => router.push(item.category === "FURNITURE" ? ROOM_EDIT_ROUTE : WARDROBE_ROUTE);
+  // 가구는 놓으러 가는 길이라 방 꾸미기가 보관함을 펴 둔 채로 열리게 어디서 왔는지 알린다
+  const openPlaceFor = (item: ShopItem) =>
+    router.push(item.category === "FURNITURE" ? { pathname: ROOM_EDIT_ROUTE, params: { from: EDIT_FROM_SHOP } } : WARDROBE_ROUTE);
 
   const openBoughtPlace = () => {
     if (bought === null) return;
