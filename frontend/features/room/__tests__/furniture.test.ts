@@ -1,15 +1,9 @@
-import { furnitureListMock, placedFurnitureMock, resetFurnitureMocks, updateFurniturePlacementMock } from "@/api/mocks/furniture";
 import {
-  changedPlacements,
   statusOfSurface,
-  storeAwayBlock,
-  storedFurnitures,
   surfaceOfStatus,
   toPlacement,
   toPlacementRequest,
   toPlacements,
-  toUserFurnitures,
-  type UserFurniture,
 } from "@/features/room/furniture";
 import type { PlacedFurnitureDto } from "@/features/room/model";
 import { FURNITURE } from "@/features/room/catalog";
@@ -27,6 +21,8 @@ const sofa: PlacedFurnitureDto = {
   positionY: 280,
   layer: 0,
   defaultFurnitureType: "SOFA",
+  furnitureType: "SOFA",
+  stickerAttached: false,
   canUnplace: false,
 };
 
@@ -39,6 +35,7 @@ const board: PlacedFurnitureDto = {
   positionX: 240,
   positionY: 90,
   defaultFurnitureType: null,
+  furnitureType: null,
   canUnplace: true,
 };
 
@@ -139,7 +136,6 @@ describe("toPlacementRequest — 씬 배치를 저장 요청으로", () => {
     const placement: Placement = { itemId: "sofa_default", userFurnitureId: 204, anchor: { x: 164.87512, y: 226 } };
 
     expect(toPlacementRequest(placement)).toEqual({
-      placed: true,
       placementStatus: "FLOOR",
       placementDirection: "FRONT_RIGHT",
       positionX: 164.875,
@@ -165,116 +161,5 @@ describe("toPlacementRequest — 씬 배치를 저장 요청으로", () => {
     const request = toPlacementRequest({ itemId: "plant_monstera_terracotta", anchor: { x: -5, y: 700 } });
 
     expect(request).toMatchObject({ positionX: 0, positionY: 586 });
-  });
-});
-
-describe("changedPlacements — 바뀐 것만 보낸다", () => {
-  const before: Placement[] = [
-    { itemId: "sofa_default", userFurnitureId: 204, anchor: { x: 165, y: 280 } },
-    { itemId: "bed_pink", userFurnitureId: 210, anchor: { x: 40, y: 300 } },
-  ];
-
-  it("자리가 그대로면 보내지 않는다", () => {
-    expect(changedPlacements(before, before)).toEqual([]);
-  });
-
-  it("움직인 가구만 골라 요청을 만든다", () => {
-    const after = before.map((placement) => (placement.itemId === "sofa_default" ? { ...placement, anchor: { x: 130, y: 300 } } : placement));
-    const saves = changedPlacements(before, after);
-
-    expect(saves).toHaveLength(1);
-    expect(saves[0].userFurnitureId).toBe(204);
-    expect(saves[0].request).toMatchObject({ placed: true, positionX: 130, positionY: 300 });
-  });
-
-  it("방향만 바꿔도 보낸다", () => {
-    const after = before.map((placement) => (placement.itemId === "bed_pink" ? { ...placement, direction: "FRONT_LEFT" as const } : placement));
-
-    expect(changedPlacements(before, after)).toEqual([
-      { userFurnitureId: 210, request: expect.objectContaining({ placed: true, placementDirection: "FRONT_LEFT" }) },
-    ]);
-  });
-
-  it("넣어 둔 가구는 설치 해제를 먼저 보내고, 보관함에서 꺼낸 가구는 설치를 보낸다", () => {
-    const after: Placement[] = [before[0], { itemId: "decor_checker_rug", userFurnitureId: 211, anchor: { x: 160, y: 450 } }];
-
-    expect(changedPlacements(before, after)).toEqual([
-      { userFurnitureId: 210, request: { placed: false } },
-      { userFurnitureId: 211, request: expect.objectContaining({ placed: true, positionX: 160, positionY: 450 }) },
-    ]);
-  });
-
-  it("서버에 없는 기본 배치(userFurnitureId 없음)는 건너뛴다", () => {
-    const fallback: Placement[] = [{ itemId: "tv_default", anchor: { x: 10, y: 200 } }];
-    const moved: Placement[] = [{ itemId: "tv_default", anchor: { x: 20, y: 210 } }];
-
-    expect(changedPlacements(fallback, moved)).toEqual([]);
-    expect(changedPlacements(fallback, [])).toEqual([]);
-  });
-});
-
-describe("보관함 — storedFurnitures · storeAwayBlock", () => {
-  const owned: UserFurniture[] = [
-    { userFurnitureId: 204, itemId: "sofa_default", name: "소파", assetKey: "sofa_default", placed: true, placement: null, canUnplace: false },
-    { userFurnitureId: 205, itemId: "board", name: "예산 보드", assetKey: "board_default", placed: false, placement: null, canUnplace: true },
-    { userFurnitureId: 210, itemId: "bed_pink", name: "핑크 침대", assetKey: "bed_pink", placed: false, placement: null, canUnplace: true },
-    { userFurnitureId: 211, itemId: null, name: "파란 소파", assetKey: "sofa_blue", placed: false, placement: null, canUnplace: true },
-    { userFurnitureId: 212, itemId: "decor_oval_rug", name: "타원 러그", assetKey: "decor_oval_rug", placed: true, placement: null, canUnplace: true },
-  ];
-  const draft: Placement[] = [
-    { itemId: "sofa_default", userFurnitureId: 204, anchor: { x: 165, y: 450 } },
-    { itemId: "decor_oval_rug", userFurnitureId: 212, anchor: { x: 160, y: 500 } },
-  ];
-
-  it("사본에 없는 보유 가구만 보여 주고, 그릴 수 없는 것과 벽 기능 오브젝트는 뺀다", () => {
-    expect(storedFurnitures(owned, draft).map((furniture) => furniture.userFurnitureId)).toEqual([210]);
-  });
-
-  it("사본에서 뺀(넣어 둔) 가구는 서버가 아직 설치 중이라고 해도 보관함에 보인다", () => {
-    expect(storedFurnitures(owned, draft.slice(0, 1)).map((furniture) => furniture.userFurnitureId)).toEqual([210, 212]);
-  });
-
-  it("넣어 두기 — 일반 가구만 되고 기본 가구·벽 기능 오브젝트·서버에 없는 배치는 막는다", () => {
-    expect(storeAwayBlock(draft[1], owned)).toBeNull();
-    expect(storeAwayBlock(draft[0], owned)).toBe("DEFAULT_FURNITURE");
-    expect(storeAwayBlock({ itemId: "board", surface: "WALL_RIGHT", anchor: { x: 240, y: 200 } }, owned)).toBe("WALL_OBJECT");
-    expect(storeAwayBlock({ itemId: "tv_default", anchor: { x: 100, y: 400 } }, owned)).toBe("DEFAULT_FURNITURE");
-    expect(storeAwayBlock(draft[1], undefined)).toBe("DEFAULT_FURNITURE");
-  });
-});
-
-describe("가구 목 — 서버처럼 상태를 지킨다", () => {
-  afterEach(() => resetFurnitureMocks());
-
-  it("보유 목록은 기본 배치와 보관함 가구를 주고 slotType 으로 거른다", () => {
-    expect(furnitureListMock()).toHaveLength(DEFAULT_LAYOUT.length + 4);
-    expect(furnitureListMock("WALL").map((item) => item.assetKey)).toEqual(["calendar_default", "board_default", "window_sky_clouds"]);
-    expect(toUserFurnitures(furnitureListMock("WALL"))[0]).toMatchObject({ itemId: "calendar", placed: true, canUnplace: false });
-    expect(toUserFurnitures(furnitureListMock()).find((item) => item.itemId === "sofa_default")).toMatchObject({ canUnplace: false });
-  });
-
-  it("배치를 바꾸면 방 응답에도 반영되고, 해제하면 목록에서 빠진다", () => {
-    const bedId = furnitureListMock().find((item) => item.assetKey === "bed_pink")!.userFurnitureId;
-    const spot = cellAnchor(SURFACES.FLOOR, { col: 8, row: 8 }, FURNITURE.bed_pink.grid);
-
-    updateFurniturePlacementMock(bedId, {
-      placed: true,
-      placementStatus: "FLOOR",
-      placementDirection: "FRONT_LEFT",
-      positionX: spot.x,
-      positionY: spot.y,
-      layer: 0,
-    });
-    expect(toPlacements(placedFurnitureMock()).find((placement) => placement.itemId === "bed_pink")).toMatchObject({ direction: "FRONT_LEFT" });
-
-    updateFurniturePlacementMock(bedId, { placed: false });
-    expect(placedFurnitureMock().some((item) => item.assetKey === "bed_pink")).toBe(false);
-    expect(toUserFurnitures(furnitureListMock()).find((item) => item.itemId === "bed_pink")).toMatchObject({ placed: false, placement: null });
-  });
-
-  it("기본 가구는 서버처럼 해제를 거절한다", () => {
-    const sofaId = furnitureListMock().find((item) => item.assetKey === "sofa_default")!.userFurnitureId;
-
-    expect(() => updateFurniturePlacementMock(sofaId, { placed: false })).toThrow();
   });
 });

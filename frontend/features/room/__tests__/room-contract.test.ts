@@ -58,6 +58,8 @@ describe("toRoom", () => {
           positionY: 280,
           layer: 0,
           defaultFurnitureType: null,
+          furnitureType: null,
+          stickerAttached: false,
           canUnplace: true,
         },
       ],
@@ -75,6 +77,8 @@ describe("toRoom", () => {
         positionY: 280,
         layer: 0,
         defaultFurnitureType: null,
+        furnitureType: null,
+        stickerAttached: false,
         canUnplace: true,
       },
     ]);
