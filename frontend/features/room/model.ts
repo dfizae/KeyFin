@@ -373,7 +373,7 @@ export type Room = {
   checkedInToday: boolean;
   /** P1 압류 딱지. 응답에 없으면 null */
   stickers: RoomStickers | null;
-  /** P1 초과 봉투 id. 응답에 없으면 빈 배열 */
+  /** 현재 확정 예산에서 지출 > 예산인 봉투 ID. 구버전 응답에 없으면 빈 배열 */
   overEnvelopeIds: number[];
 };
 

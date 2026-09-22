@@ -114,6 +114,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.data.attendance.checkedToday").value(false))
 				.andExpect(jsonPath("$.data.stickers.count").value(0))
 				.andExpect(jsonPath("$.data.stickers.total").value(4))
+				.andExpect(jsonPath("$.data.overEnvelopes").isEmpty())
 				.andExpect(jsonPath("$.data.stickers.removableToday").value(false));
 		assertThat(countFor("budgets", signedUp)).isZero();
 		assertThat(countFor("fin_coin", signedUp)).isZero();
@@ -140,10 +141,49 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	void equalityAndOneEnvelopeOverrunDoNotExceedTotalBudget() {
 		long budget = budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 1000, "CONFIRMED", 101);
+		assertThat(rooms.getRoom(userId).overEnvelopes()).isEmpty();
 		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
 		jdbc.sql("UPDATE budget_envelopes SET confirmed_amount = CASE envelope_id WHEN 1 THEN 0 WHEN 2 THEN 1000 ELSE 0 END WHERE budget_id = :id")
 				.param("id", budget).update();
+		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(1);
 		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
+	}
+
+	@Test
+	void categoryEffectsFollowRefundReclassificationAndCancellationIndependentlyOfStickers() throws Exception {
+		budget("202609", "CONFIRMED", 1000);
+		spend("2026-09-18", 1001, "AUTO", 101);
+		long leisure = spend("2026-09-18", 1, "CONFIRMED", 401);
+		mvc.perform(auth(get("/api/v1/room"), userId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.overEnvelopes.length()").value(2))
+				.andExpect(jsonPath("$.data.overEnvelopes[0]").value(1))
+				.andExpect(jsonPath("$.data.overEnvelopes[1]").value(4));
+		stickers.remove(userId, target("DINING_TABLE"));
+		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(1, 4);
+		long refund = spend("2026-09-18", 1, "AUTO", 101);
+		jdbc.sql("UPDATE transactions SET tx_type = 'DEPOSIT', exclude_tag = 'RESTORE' WHERE id = :id").param("id", refund).update();
+		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(4);
+		transactions.classifyTransaction(userId, leisure, new TransactionClassificationRequest(201, null, null));
+		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(2);
+		jdbc.sql("UPDATE transactions SET status = 'CANCELED' WHERE id = :id").param("id", leisure).update();
+		assertThat(rooms.getRoom(userId).overEnvelopes()).isEmpty();
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
+	}
+
+	@Test
+	void categoryEffectsClearAtAnchorBoundaryAndWaitForNextConfirmation() {
+		jdbc.sql("INSERT INTO user_settings (user_id, budget_anchor_day) VALUES (:user, 23)").param("user", userId).update();
+		budget("202608", "CONFIRMED", 1000);
+		spend("2026-09-22", 1001, "CONFIRMED", 101);
+		testClock.set(Instant.parse("2026-09-22T14:59:59Z"));
+		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(1);
+		testClock.set(Instant.parse("2026-09-22T15:00:00Z"));
+		assertThat(rooms.getRoom(userId).overEnvelopes()).isEmpty();
+		long next = budget("202609", "PROPOSED", 1000);
+		spend("2026-09-23", 1, "CONFIRMED", 401);
+		assertThat(rooms.getRoom(userId).overEnvelopes()).isEmpty();
+		budgetService.confirm(userId, next, confirmation(1000));
+		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(4);
 	}
 
 	@Test
@@ -484,6 +524,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.paths['/api/v1/room/stickers/removals'].post.responses['409'].description")
 						.value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ROOM_002"))))
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.stickers").exists())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.overEnvelopes.items.type").value("integer"))
 				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties.stickerAttached").exists())
 				.andExpect(jsonPath("$.components.schemas.StickerStatusResponse.properties.count.maximum").doesNotExist())
 				.andExpect(jsonPath("$.components.schemas.StickerStatusResponse.properties.total.enum").doesNotExist())

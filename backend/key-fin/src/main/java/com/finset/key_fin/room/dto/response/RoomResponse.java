@@ -11,7 +11,8 @@ public record RoomResponse(
 		List<PlacedFurnitureResponse> furnitures,
 		CoinResponse coin,
 		AttendanceResponse attendance,
-		StickerStatusResponse stickers
+		StickerStatusResponse stickers,
+		List<Integer> overEnvelopes
 ) {
 
 	public record AvatarResponse(
