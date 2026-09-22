@@ -6,6 +6,7 @@ import { Pressable, View } from "react-native";
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,11 +60,14 @@ function SettingsScreen() {
     <Screen>
       <ScreenHeader title="설정" onBack={() => (router.canGoBack() ? router.back() : router.replace(MY_ROUTE))} />
 
-      <ScreenScrollView contentContainerClassName="gap-10 px-6 pb-8" keyboardShouldPersistTaps="handled">
-        <TransferSection />
-        <NotificationSection />
-        <CoachSection />
-      </ScreenScrollView>
+      {/* 이체 한도 금액 입력이 있어 키패드가 덮지 않게 밀어 올린다 */}
+      <KeyboardAvoidingView className="flex-1">
+        <ScreenScrollView contentContainerClassName="gap-10 px-6 pb-8" keyboardShouldPersistTaps="handled">
+          <TransferSection />
+          <NotificationSection />
+          <CoachSection />
+        </ScreenScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }

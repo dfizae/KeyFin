@@ -14,15 +14,14 @@ import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
 import { MOVING_IN_COPY, RoomWaiting, pickReturningCopy } from "@/features/room/components/RoomWaiting";
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
-import { HomeCoach } from "@/features/home/components/HomeCoach";
+import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
-import { AVATAR_SCENE } from "@/features/home/components/CoachBubble";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
 import { roomKeys, useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
-import { getWallItemRect } from "@/features/room/scene";
+import { COACH_CAT_RECT, getWallItemRect } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
@@ -97,28 +96,21 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   // 화면은 씬(327:404)보다 세로로 길기 때문에 폭을 넘치게 키워(coverSceneWidth) 가운데를 보여 주고 좌우는 잘라 낸다.
   // 인사말은 버렸고 코인·알림만 방 위에 뜨는 사이드 버튼으로 남는다. 방이 화면을 꽉 채우니 세로 스크롤도 없다.
   const roomWidth = box.width > 0 && box.height > 0 ? coverSceneWidth(box.width, box.height) : 0;
-  // 방이 화면보다 넓으면 씬 x 0 이 화면 밖이다. 코치는 카메라를 따라가지 않는 패널이라 넘친 절반만큼 밀어 화면 안에 둔다.
-  const coachOffsetX = Math.max(0, (roomWidth - box.width) / 2);
 
   // 방 레이어는 화면 가운데에 놓이고 넘치는 만큼 잘리므로, 씬 좌표를 화면 좌표로 옮길 때 그 절반을 빼 준다.
   const roomScale = roomWidth > 0 ? getSceneScale(roomWidth) : 0;
+  const offsetX = Math.max(0, (roomWidth - box.width) / 2);
   const offsetY = roomWidth > 0 ? Math.max(0, (getCanvasSize(roomWidth).height - box.height) / 2) : 0;
   const sceneToScreen = (rect: SceneRect): SceneRect => ({
-    x: rect.x * roomScale - coachOffsetX,
+    x: rect.x * roomScale - offsetX,
     y: rect.y * roomScale - offsetY,
     width: rect.width * roomScale,
     height: rect.height * roomScale,
   });
-  // 코치는 패널 레이어에서 이미 coachOffsetX 만큼 밀어 두므로 화면 x 가 그대로 씬 x 다
-  const coachScreenRect = (): SceneRect => ({
-    x: AVATAR_SCENE.x * roomScale,
-    y: AVATAR_SCENE.y * roomScale - offsetY,
-    width: AVATAR_SCENE.size * roomScale,
-    height: AVATAR_SCENE.size * roomScale,
-  });
   const guideRect = (target: GuideTargetId): SceneRect | null => {
     if (roomScale === 0) return null;
-    if (target === "coach") return coachScreenRect();
+    // 코치는 방에 앉은 고양이라 벽 오브젝트처럼 씬 좌표에 있다
+    if (target === "coach") return sceneToScreen(COACH_CAT_RECT);
     if (target === "board" || target === "calendar") {
       const rect = getWallItemRect(placements, target);
       return rect === null ? null : sceneToScreen(rect);
@@ -159,11 +151,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
               <>
                 <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
-              </>
-            )}
-            panels={(width) => (
-              <>
-                <HomeCoach width={width} offsetX={coachOffsetX} />
+                <HomeCoachTarget width={width} onOpen={guide.finish} />
               </>
             )}
           />

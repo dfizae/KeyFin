@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { FillBar } from "@/components/ui/fill-bar";
 import { Icon } from "@/components/ui/icon";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { Screen, ScreenScrollView, useHeaderlessTop } from "@/components/ui/screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -79,7 +80,9 @@ function BudgetContent({ budget }: BudgetContentProps) {
   const { total, envelopes } = budget.data;
 
   return (
-    <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6">
+    // 비상금 금액 입력이 화면 아래쪽에 있어 키패드가 덮지 않게 밀어 올린다
+    <KeyboardAvoidingView className="flex-1">
+    <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6" keyboardShouldPersistTaps="handled">
       {/* 남는 높이를 카드 위아래로 나눠 총액 카드가 위쪽 영역 가운데에 온다 — 화면이 길면 카드 밑이 휑해 보였다(사용자 결정 2026-09-20). */}
       <View className="flex-grow justify-center gap-4">
         {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
@@ -103,6 +106,7 @@ function BudgetContent({ budget }: BudgetContentProps) {
         )}
       </View>
     </ScreenScrollView>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -28,3 +28,9 @@ export const CHARACTER_FRAMES = {
   scan: { base: CHARACTER_SCAN },
   celebrate: { base: CHARACTER_CELEBRATE },
 } satisfies Record<string, SpriteFrames>;
+
+/**
+ * 코치 고양이(AI 챗봇). 방 씬(Skia)에 늘 앉아 있고 탭하면 코치 말풍선이 열린다 (2026-09-22 사용자 결정 — 옛 32pt 원형 아이콘 버튼을 대신한다).
+ * 원본 1254×1254 를 512×512 로 줄였다(그려지는 크기의 약 6배). 자리·크기는 features/room/scene.ts COACH_CAT_* 에 있다.
+ */
+export const COACH_CAT = require("@/assets/sprites/coach-cat.png");
