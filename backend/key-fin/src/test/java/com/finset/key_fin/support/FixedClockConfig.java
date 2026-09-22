@@ -1,6 +1,5 @@
 package com.finset.key_fin.support;
 
-import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
 
@@ -12,10 +11,11 @@ import org.springframework.context.annotation.Primary;
 public class FixedClockConfig {
 
 	public static final Instant NOW = Instant.parse("2026-09-10T03:00:00Z");
+	public static final ZoneId ZONE = ZoneId.of("Asia/Seoul");
 
 	@Bean
 	@Primary
-	Clock fixedClock() {
-		return Clock.fixed(NOW, ZoneId.of("Asia/Seoul"));
+	TestClock fixedClock() {
+		return new TestClock(NOW, ZONE);
 	}
 }

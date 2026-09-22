@@ -31,7 +31,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -62,8 +61,6 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@AutoConfigureMockMvc
-@Import(RoomStickersIntegrationTest.TimeConfig.class)
 @Timeout(90)
 class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	private static final Instant NOW = Instant.parse("2026-09-18T03:00:00Z");
@@ -81,14 +78,13 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private PlatformTransactionManager transactionManager;
 	@Autowired private MockMvc mvc;
 	@Autowired private JwtTokenProvider tokens;
-	@Autowired private TestClock clock;
 	private final List<Long> testUsers = new ArrayList<>();
 	private final List<Long> testItems = new ArrayList<>();
 	private long userId;
 
 	@BeforeEach
 	void setUp() {
-		clock.set(NOW);
+		testClock.set(NOW);
 		userId = createUser();
 	}
 
@@ -174,9 +170,9 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
 		transactions.classifyTransaction(userId, tx, new TransactionClassificationRequest(101, null, null));
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
-		clock.set(NOW.plusSeconds(86400));
+		testClock.set(NOW.plusSeconds(86400));
 		stickers.remove(userId, target("SOFA"));
-		clock.set(NOW.plusSeconds(172800));
+		testClock.set(NOW.plusSeconds(172800));
 		stickers.remove(userId, target("TV"));
 		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
 		assertThat(rooms.getRoom(userId).stickers().removableToday()).isFalse();
@@ -188,7 +184,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
 		stickers.remove(userId, target("FRIDGE"));
-		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
 		long next = budget("202610", "PROPOSED", 1000);
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
 		stickers.remove(userId, target("SOFA"));
@@ -220,10 +216,10 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
-		clock.set(Instant.parse("2026-09-18T14:59:59Z"));
+		testClock.set(Instant.parse("2026-09-18T14:59:59Z"));
 		stickers.remove(userId, target("FRIDGE"));
 		assertBusinessCode(() -> stickers.remove(userId, target("SOFA")), "ROOM_002");
-		clock.set(Instant.parse("2026-09-18T15:00:00Z"));
+		testClock.set(Instant.parse("2026-09-18T15:00:00Z"));
 		assertThat(stickers.remove(userId, target("SOFA")).stickers().count()).isEqualTo(1);
 		assertBusinessCode(() -> stickers.remove(userId, target("TV")), "ROOM_002");
 	}
@@ -289,7 +285,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		furnitureService.updatePlacements(userId, request);
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
-		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
 		budget("202610", "CONFIRMED", 1000);
 		spend("2026-10-01", 2000, "CONFIRMED", 101);
 		var next = rooms.getRoom(userId);
@@ -307,7 +303,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(attachedCount()).isEqualTo(3);
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 		// A separate period exercises the sync writer with a detached, newly classified transaction.
-		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
 		budget("202610", "CONFIRMED", 1000);
 		long nextTx = spend("2026-10-01", 2000, "PENDING", null);
 		var changed = transactionRepository.findById(nextTx).orElseThrow();
@@ -375,7 +371,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(room.coin().balance()).isEqualTo(7);
 		assertThat(room.attendance().checkedToday()).isTrue();
 		assertThat(countFor("fin_coin", userId)).isEqualTo(2);
-		clock.set(Instant.parse("2026-09-18T15:00:00Z"));
+		testClock.set(Instant.parse("2026-09-18T15:00:00Z"));
 		assertThat(rooms.getRoom(userId).attendance().checkedToday()).isFalse();
 	}
 
@@ -472,18 +468,5 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		} finally { start.countDown(); }
 	}
 
-	@TestConfiguration(proxyBeanMethods = false)
-	static class TimeConfig {
-		@Bean @Primary TestClock stickerClock() { return new TestClock(new AtomicReference<>(NOW), ZoneOffset.UTC); }
-	}
 
-	static final class TestClock extends Clock {
-		private final AtomicReference<Instant> instant;
-		private final ZoneId zone;
-		TestClock(AtomicReference<Instant> instant, ZoneId zone) { this.instant = instant; this.zone = zone; }
-		void set(Instant value) { instant.set(value); }
-		@Override public ZoneId getZone() { return zone; }
-		@Override public Clock withZone(ZoneId zone) { return new TestClock(instant, zone); }
-		@Override public Instant instant() { return instant.get(); }
-	}
 }

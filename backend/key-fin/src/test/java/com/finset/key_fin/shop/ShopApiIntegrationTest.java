@@ -17,7 +17,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -47,8 +46,6 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@AutoConfigureMockMvc
-@Import(ShopApiIntegrationTest.TimeConfig.class)
 @Timeout(90)
 class ShopApiIntegrationTest extends SpringIntegrationTestSupport {
 	private static final LocalDate PURCHASE_DATE = LocalDate.of(2026, 9, 18);
@@ -66,6 +63,7 @@ class ShopApiIntegrationTest extends SpringIntegrationTestSupport {
 
 	@BeforeEach
 	void setUp() {
+		testClock.set(Instant.parse("2026-09-17T15:01:00Z"));
 		userId = createUser();
 	}
 
@@ -380,13 +378,4 @@ class ShopApiIntegrationTest extends SpringIntegrationTestSupport {
 		}
 	}
 
-	@TestConfiguration(proxyBeanMethods = false)
-	static class TimeConfig {
-		@Bean
-		@Primary
-		Clock shopTestClock() {
-			// UTC 날짜와 한국 날짜가 다른 시점으로 원장의 한국 날짜 저장도 검증한다.
-			return Clock.fixed(Instant.parse("2026-09-17T15:01:00Z"), ZoneOffset.UTC);
-		}
-	}
 }

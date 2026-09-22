@@ -1,31 +1,39 @@
-import { FURNITURE, WALL_ITEMS, isWallItemId, type FurnitureId } from "@/features/room/catalog";
-import { statusOfSurface, toPlacementRequest, type FurniturePlacementRequest, type UserFurnitureDto } from "@/features/room/furniture";
-import type { PlacedFurnitureDto } from "@/features/room/model";
+import { FURNITURE, isWallItemId, type FurnitureId } from "@/features/room/catalog";
+import { placedFurnitureDtos, statusOfSurface, toPlacementRequest, toUserFurnitures, type UserFurnitureDto } from "@/features/room/furniture";
+import type { FurnitureType, PlacedFurnitureDto } from "@/features/room/model";
+import { validatePlacements, type FurniturePlacementsRequest } from "@/features/room/placements";
 import { DEFAULT_LAYOUT } from "@/features/room/scene";
 
 /**
- * GET /furnitures · PATCH /furnitures/{userFurnitureId} 목.
+ * GET /furnitures · PUT /furnitures/placements 목.
  * 서버처럼 상태를 들고 있어서 방 꾸미기에서 옮기고 나오면 그 자리가 유지된다(다른 도메인 목과 같은 방식).
  *
- * 시작 상태는 기본 배치(scene.ts DEFAULT_LAYOUT) — 서버 기본 가구(백엔드 V15: 냉장고·소파·TV, 치울 수 없음)와 벽 보드·캘린더다.
+ * 기본 3종은 서버 보유 가구다. 보드·캘린더는 서버 ID 없이 앱 배치에만 둔다.
  * 여기에 보관함을 볼 수 있게 산 뒤 아직 안 놓은 가구 몇 개를 더 둔다(상점 목도 이것을 '보유 중'으로 보여 준다).
  * 상점 목에서 가구를 사면 acquireFurnitureMock 이 미설치 상태로 더한다. userFurnitureId 는 목 안에서만 쓰는 번호다.
  */
 const FIRST_ID = 201;
 
-/** 서버 DefaultFurnitureType. 앱은 값을 쓰지 않고 canUnplace 로만 판단한다 */
-const DEFAULT_FURNITURE_TYPES: Partial<Record<FurnitureId, string>> = {
+const DEFAULT_FURNITURE_TYPES: Partial<Record<FurnitureId, FurnitureType>> = {
   fridge_default: "FRIDGE",
   sofa_default: "SOFA",
   tv_default: "TV",
+};
+
+/** V23 상품 분류를 재현한다. 실서버 응답의 종류는 클라이언트가 추측하지 않는다. */
+const FURNITURE_TYPES: Partial<Record<FurnitureId, FurnitureType>> = {
+  ...DEFAULT_FURNITURE_TYPES,
+  refrigerator_black: "FRIDGE", refrigerator_pink: "FRIDGE", refrigerator_sunset: "FRIDGE",
+  sofa_black: "SOFA", sofa_pink: "SOFA", sofa_sunset: "SOFA",
+  tv_set_black: "TV", tv_set_pink: "TV", tv_set_sunset: "TV",
 };
 
 /** 산 뒤 보관함에 있는 가구(목 시작 상태). 바닥 가구·벽 장식·러그를 하나씩 넣어 꺼내 놓는 흐름을 모두 볼 수 있게 했다 */
 export const MOCK_STORED_FURNITURE: readonly FurnitureId[] = ["bed_pink", "decor_checker_rug", "window_sky_clouds", "plant_monstera_terracotta"];
 
 function seed(): UserFurnitureDto[] {
-  const placed = DEFAULT_LAYOUT.map((placement, index): UserFurnitureDto => {
-    const item = isWallItemId(placement.itemId) ? WALL_ITEMS[placement.itemId] : FURNITURE[placement.itemId];
+  const placed = DEFAULT_LAYOUT.filter((placement) => !isWallItemId(placement.itemId)).map((placement, index): UserFurnitureDto => {
+    const item = FURNITURE[placement.itemId as FurnitureId];
     const request = toPlacementRequest(placement);
     const defaultType = isWallItemId(placement.itemId) ? undefined : DEFAULT_FURNITURE_TYPES[placement.itemId];
     return {
@@ -36,13 +44,14 @@ function seed(): UserFurnitureDto[] {
       assetKey: item.assetKey,
       placed: true,
       placementStatus: statusOfSurface(placement.surface),
-      placementDirection: request.placed ? request.placementDirection : null,
-      positionX: placement.anchor.x,
-      positionY: placement.anchor.y,
+      placementDirection: request.placementDirection,
+      positionX: request.positionX,
+      positionY: request.positionY,
       layer: placement.layer ?? 0,
       defaultFurnitureType: defaultType ?? null,
-      // 벽 보드·캘린더는 서버에 없는 목 전용 보유 가구다. 홈의 입구라 앱도 넣어 두지 않는다
-      canUnplace: defaultType === undefined && !isWallItemId(placement.itemId),
+      furnitureType: FURNITURE_TYPES[placement.itemId as FurnitureId] ?? null,
+      stickerAttached: false,
+      canUnplace: defaultType === undefined,
     };
   });
   const stored = MOCK_STORED_FURNITURE.map((id, index) => unplaced(FIRST_ID + placed.length + index, 100 + index, id));
@@ -64,6 +73,8 @@ function unplaced(userFurnitureId: number, itemId: number, id: FurnitureId): Use
     positionY: null,
     layer: 0,
     defaultFurnitureType: null,
+    furnitureType: FURNITURE_TYPES[id] ?? null,
+    stickerAttached: false,
     canUnplace: true,
   };
 }
@@ -79,6 +90,7 @@ function ensure(): UserFurnitureDto[] {
 export function furnitureListMock(slotType?: string): UserFurnitureDto[] {
   return ensure()
     .filter((furniture) => slotType === undefined || furniture.slotType === slotType)
+    .sort((a, b) => a.userFurnitureId - b.userFurnitureId)
     .map((furniture) => ({ ...furniture }));
 }
 
@@ -96,51 +108,26 @@ export function acquireFurnitureMock(itemId: number, userFurnitureId: number, as
 
 /** GET /room 의 furnitures — 설치된 것만, 배치 필드가 채워진 모양으로 */
 export function placedFurnitureMock(): PlacedFurnitureDto[] {
-  return ensure()
-    .filter((furniture) => furniture.placed && furniture.placementStatus !== null)
-    .map((furniture) => ({
-      userFurnitureId: furniture.userFurnitureId,
-      itemId: furniture.itemId,
-      slotType: furniture.slotType,
-      assetKey: furniture.assetKey,
-      placementStatus: furniture.placementStatus as string,
-      placementDirection: furniture.placementDirection ?? "FRONT_RIGHT",
-      positionX: furniture.positionX as number,
-      positionY: furniture.positionY as number,
-      layer: furniture.layer,
-      defaultFurnitureType: furniture.defaultFurnitureType,
-      canUnplace: furniture.canUnplace,
-    }));
+  return placedFurnitureDtos(toUserFurnitures(ensure()));
 }
 
-/**
- * PATCH /furnitures/{userFurnitureId} — 설치·이동은 배치를 통째로 바꾸고, 해제는 배치 필드를 null 로 되돌린다.
- * 같은 요청을 반복해도 성공한다(서버도 멱등). 없는 가구와 기본 가구 해제는 서버처럼 오류로 던져 호출부가 잡게 한다.
- */
-export function updateFurniturePlacementMock(userFurnitureId: number, request: FurniturePlacementRequest): UserFurnitureDto {
+/** 검증과 새 배열 작성이 모두 끝난 뒤 한 번에 반영한다. 교체는 딱지 제거로 세지 않는다. */
+export function updateFurniturePlacementsMock(request: FurniturePlacementsRequest): UserFurnitureDto[] {
   const list = ensure();
-  const index = list.findIndex((furniture) => furniture.userFurnitureId === userFurnitureId);
-  if (index === -1) throw new Error(`furniture ${userFurnitureId} not found`);
-
-  const current = list[index];
-  if (!request.placed && !current.canUnplace) throw new Error(`furniture ${userFurnitureId} cannot be unplaced`);
-  const updated: UserFurnitureDto = request.placed
-    ? {
-        ...current,
-        placed: true,
-        placementStatus: request.placementStatus,
-        placementDirection: request.placementDirection,
-        positionX: request.positionX,
-        positionY: request.positionY,
-        layer: request.layer,
-      }
-    : { ...current, placed: false, placementStatus: null, placementDirection: null, positionX: null, positionY: null, layer: 0 };
-
-  list[index] = updated;
-  return { ...updated };
+  validatePlacements(request, toUserFurnitures(list));
+  const stickers = new Set(list.filter((item) => item.placed && item.stickerAttached).map((item) => item.furnitureType));
+  const placements = new Map(request.placements.map((placement) => [placement.userFurnitureId, placement]));
+  furnitures = list.map((item): UserFurnitureDto => {
+    const placement = placements.get(item.userFurnitureId);
+    return placement ? { ...item, ...placement, placed: true, canUnplace: item.furnitureType === null,
+      stickerAttached: item.furnitureType !== null && stickers.has(item.furnitureType) }
+      : { ...item, placed: false, placementStatus: null, placementDirection: null, positionX: null, positionY: null,
+        layer: 0, stickerAttached: false, canUnplace: true };
+  });
+  return furnitureListMock();
 }
 
 /** 테스트·개발 재시작용 */
-export function resetFurnitureMocks(): void {
-  furnitures = null;
+export function resetFurnitureMocks(initial?: UserFurnitureDto[]): void {
+  furnitures = initial?.map((item) => ({ ...item })) ?? null;
 }

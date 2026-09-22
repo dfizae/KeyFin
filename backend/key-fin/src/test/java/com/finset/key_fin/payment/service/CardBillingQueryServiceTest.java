@@ -23,11 +23,9 @@ import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.CardSu
 import com.finset.key_fin.payment.dto.response.CardBillingSummaryResponse.Statement;
 import com.finset.key_fin.payment.entity.CardBilling.BillingStatus;
 import com.finset.key_fin.payment.exception.PaymentErrorCode;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/card-billing-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class CardBillingQueryServiceTest extends SpringIntegrationTestSupport {
 

@@ -68,6 +68,11 @@ RUN pnpm test --ci --runInBand
 pipeline {
     agent { label 'backend-ci' }
 
+    environment {
+        // The workspace is wiped every build; keep Gradle's dependency and build caches on the persistent agent volume.
+        GRADLE_USER_HOME = '/home/jenkins/agent/.gradle'
+    }
+
     options {
         skipDefaultCheckout(true)
         disableConcurrentBuilds()
@@ -182,7 +187,7 @@ pipeline {
             when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
-                    sh 'bash ./gradlew --no-daemon --max-workers=1 --console=plain --stacktrace clean test'
+                    sh 'bash ./gradlew --max-workers=2 --build-cache --console=plain --stacktrace test --rerun'
                 }
             }
             post {
@@ -203,7 +208,7 @@ pipeline {
             when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
-                    sh 'bash ./gradlew --no-daemon --max-workers=1 --console=plain --stacktrace bootJar'
+                    sh 'bash ./gradlew --max-workers=2 --build-cache --console=plain --stacktrace bootJar'
                 }
             }
             post {

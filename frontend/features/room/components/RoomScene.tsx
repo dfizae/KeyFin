@@ -182,6 +182,7 @@ function RoomScene({ width }: RoomSceneProps) {
 
   const placements = useRoomStore(selectPlacements);
   const isEditing = useRoomStore(selectIsEditing);
+  const saving = useRoomStore((state) => state.saving);
   const selectedId = useRoomStore((s) => s.selectedId);
   const select = useRoomStore((s) => s.select);
   const moveItem = useRoomStore((s) => s.moveItem);
@@ -251,7 +252,7 @@ function RoomScene({ width }: RoomSceneProps) {
   const pan = React.useMemo(
     () =>
       Gesture.Pan()
-        .enabled(isEditing)
+        .enabled(isEditing && !saving)
         .runOnJS(true)
         .minDistance(0)
         .onBegin((event) => {
@@ -309,12 +310,12 @@ function RoomScene({ width }: RoomSceneProps) {
           setDraggingId(null);
           dragValid.value = 1;
         }),
-    [isEditing, scale, camera, wallItems, rugs, sorted, select, moveItem, dragX, dragY, dragValid]
+    [isEditing, saving, scale, camera, wallItems, rugs, sorted, select, moveItem, dragX, dragY, dragValid]
   );
 
   React.useEffect(() => {
-    if (!isEditing) setDraggingId(null);
-  }, [isEditing]);
+    if (!isEditing || saving) setDraggingId(null);
+  }, [isEditing, saving]);
 
   const dragging = draggingId ? placed.find((p) => p.id === draggingId) ?? null : null;
   const stationaryWall = wallItems.filter((p) => p.id !== draggingId);

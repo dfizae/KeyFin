@@ -1,9 +1,12 @@
 package com.finset.key_fin.user.service;
 
 import com.finset.key_fin.global.exception.BusinessException;
+import com.finset.key_fin.budget.repository.BudgetRepository;
+import com.finset.key_fin.user.dto.request.BudgetSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.BudgetSettingsResponse;
 import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
 import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
@@ -21,6 +24,7 @@ public class UserSettingsService {
 
 	private final UserRepository userRepository;
 	private final UserSettingsRepository userSettingsRepository;
+	private final BudgetRepository budgetRepository;
 
 	@Transactional(readOnly = true)
 	public TransferSettingsResponse getTransferSettings(long userId) {
@@ -67,6 +71,24 @@ public class UserSettingsService {
 				request.quietHoursStart(),
 				request.quietHoursEnd()
 		);
+	}
+
+	@Transactional(readOnly = true)
+	public BudgetSettingsResponse getBudgetSettings(long userId) {
+		validateActiveUser(userId);
+		return BudgetSettingsResponse.from(findSettings(userId));
+	}
+
+	/** 기준일은 예산 주기·잔액·알림의 기준이라 예산이 생긴 뒤에는 바꾸지 않는다. */
+	@Transactional
+	public BudgetSettingsResponse updateBudgetSettings(long userId, BudgetSettingsUpdateRequest request) {
+		validateActiveUser(userId);
+		if (budgetRepository.existsByUserId(userId)) {
+			throw new BusinessException(UserErrorCode.BUDGET_ANCHOR_LOCKED);
+		}
+		UserSettings settings = findSettings(userId);
+		settings.updateBudgetAnchorDay(request.budgetAnchorDay());
+		return BudgetSettingsResponse.from(settings);
 	}
 
 	@Transactional

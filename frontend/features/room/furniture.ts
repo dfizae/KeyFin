@@ -1,13 +1,16 @@
 import { hangsOnWall, isWallItemId, roomItemIdByAssetKey, type FurnitureId, type RoomItemId } from "@/features/room/catalog";
 import {
+  FURNITURE_TYPES,
   PLACEMENT_DIRECTIONS,
   SCENE_HEIGHT,
   SCENE_WIDTH,
   type PlacedFurnitureDto,
   type PlacementDirection,
   type Surface,
+  type FurnitureType,
 } from "@/features/room/model";
 import { facingOf, settlePlacements, type Placement } from "@/features/room/scene";
+import { ContractMismatchError } from "@/lib/contract";
 
 /**
  * 가구 배치의 서버 계약 ↔ 씬 배치 변환 (docs/api-contract.md GAME, 방 3단계).
@@ -31,7 +34,7 @@ function toDirection(raw: string | null): PlacementDirection {
 
 /**
  * GET /furnitures 항목 — 보유 가구 + 배치 상태. 미설치면 배치 필드가 null 이고 layer 는 0.
- * 기본 가구(백엔드 V15: 냉장고·소파·TV)는 defaultFurnitureType 이 있고 canUnplace 가 false 다 — 옮길 수만 있고 치우면 409 FURNITURE_003.
+ * canUnplace는 단독 해제 가능 여부이며, 일괄 편집 중에는 필수 가구도 보관할 수 있다.
  */
 export type UserFurnitureDto = {
   userFurnitureId: number;
@@ -46,6 +49,8 @@ export type UserFurnitureDto = {
   positionY: number | null;
   layer: number;
   defaultFurnitureType: string | null;
+  furnitureType: FurnitureType | null;
+  stickerAttached: boolean;
   canUnplace: boolean;
 };
 
@@ -57,21 +62,32 @@ export type UserFurniture = {
   assetKey: string;
   placed: boolean;
   placement: Placement | null;
-  /** 방 꾸미기에서 '넣어 두기'를 할 수 있는지. 기본 가구는 false */
+  furnitureType: FurnitureType | null;
+  stickerAttached: boolean;
+  /** 화면에 표현하지 못하는 가구도 원본 배치와 메타데이터를 보존한다. */
+  serverState: UserFurnitureDto;
+  serverPlacement: FurniturePlacementEntry | null;
+  /** 단독 해제 가능 여부. 일괄 편집의 보관 가능 여부와는 다르다. */
   canUnplace: boolean;
 };
 
-/** PATCH /furnitures/{userFurnitureId} 요청. 해제는 나머지 필드를 같이 보내면 400 이다 */
-export type FurniturePlacementRequest =
-  | {
-      placed: true;
-      placementStatus: PlacementStatus;
-      placementDirection: PlacementDirection;
-      positionX: number;
-      positionY: number;
-      layer: number;
-    }
-  | { placed: false };
+export type FurniturePlacementEntry = {
+  userFurnitureId: number;
+  placementStatus: PlacementStatus;
+  placementDirection: PlacementDirection;
+  positionX: number;
+  positionY: number;
+  layer: number;
+};
+
+/** 원본을 조용히 보정하면 숨겨진 가구까지 바뀌므로 읽을 때 계약을 검사한다. */
+export function validPlacementFields(value: Omit<FurniturePlacementEntry, "userFurnitureId">): boolean {
+  const coordinate = (number: number, max: number) =>
+    Number.isFinite(number) && number >= 0 && number <= max && Math.abs(number * 1000 - Math.round(number * 1000)) < 0.000001;
+  return PLACEMENT_STATUSES.includes(value.placementStatus) && PLACEMENT_DIRECTIONS.includes(value.placementDirection)
+    && coordinate(value.positionX, SCENE_WIDTH) && coordinate(value.positionY, SCENE_HEIGHT)
+    && Number.isInteger(value.layer) && value.layer >= -2147483648 && value.layer <= 2147483647;
+}
 
 export function surfaceOfStatus(status: string): Surface | null {
   if (status === "FLOOR") return "FLOOR";
@@ -124,6 +140,23 @@ export function toPlacements(dtos: readonly PlacedFurnitureDto[]): Placement[] {
 }
 
 export function toUserFurniture(dto: UserFurnitureDto): UserFurniture {
+  if (!Number.isSafeInteger(dto.userFurnitureId) || dto.userFurnitureId <= 0
+    || (dto.furnitureType !== null && !FURNITURE_TYPES.includes(dto.furnitureType))
+    || typeof dto.stickerAttached !== "boolean" || typeof dto.placed !== "boolean") {
+    throw new ContractMismatchError("furnitures");
+  }
+  let serverPlacement: FurniturePlacementEntry | null = null;
+  if (dto.placed) {
+    if (dto.placementStatus === null || dto.placementDirection === null || dto.positionX === null || dto.positionY === null) {
+      throw new ContractMismatchError("furnitures.placement");
+    }
+    const candidate = { userFurnitureId: dto.userFurnitureId, placementStatus: dto.placementStatus as PlacementStatus,
+      placementDirection: dto.placementDirection as PlacementDirection, positionX: dto.positionX, positionY: dto.positionY, layer: dto.layer };
+    if (!validPlacementFields(candidate) || !placementMatchesSlot(candidate.placementStatus, dto.slotType)) {
+      throw new ContractMismatchError("furnitures.placement");
+    }
+    serverPlacement = candidate;
+  }
   const itemId = roomItemIdByAssetKey(dto.assetKey) ?? null;
   const placed =
     dto.placed && dto.placementStatus !== null && dto.positionX !== null && dto.positionY !== null
@@ -138,6 +171,8 @@ export function toUserFurniture(dto: UserFurnitureDto): UserFurniture {
           positionY: dto.positionY,
           layer: dto.layer,
           defaultFurnitureType: dto.defaultFurnitureType,
+          furnitureType: dto.furnitureType,
+          stickerAttached: dto.stickerAttached,
           canUnplace: dto.canUnplace,
         })
       : null;
@@ -149,48 +184,35 @@ export function toUserFurniture(dto: UserFurnitureDto): UserFurniture {
     assetKey: dto.assetKey,
     placed: dto.placed,
     placement: placed,
+    furnitureType: dto.furnitureType,
+    stickerAttached: dto.stickerAttached,
+    serverState: { ...dto },
+    serverPlacement,
     canUnplace: dto.canUnplace,
   };
 }
 
 export function toUserFurnitures(dtos: readonly UserFurnitureDto[]): UserFurniture[] {
+  if (new Set(dtos.map((dto) => dto.userFurnitureId)).size !== dtos.length) throw new ContractMismatchError("furnitures.userFurnitureId");
   return dtos.map(toUserFurniture);
 }
 
-export function toPlacementRequest(placement: Placement): FurniturePlacementRequest {
+export function placementMatchesSlot(status: PlacementStatus, slot: string): boolean {
+  return slot === "FLOOR" ? status === "FLOOR" : slot === "WALL" && (status === "LEFT_WALL" || status === "RIGHT_WALL");
+}
+
+export function placedFurnitureDtos(owned: readonly UserFurniture[]): PlacedFurnitureDto[] {
+  return owned.flatMap((furniture) => furniture.serverPlacement === null ? [] : [{ ...furniture.serverState, ...furniture.serverPlacement }]);
+}
+
+export function toPlacementRequest(placement: Placement): Omit<FurniturePlacementEntry, "userFurnitureId"> {
   return {
-    placed: true,
     placementStatus: statusOfSurface(placement.surface),
     placementDirection: facingOf(placement),
     positionX: toServerCoord(placement.anchor.x, SCENE_WIDTH),
     positionY: toServerCoord(placement.anchor.y, SCENE_HEIGHT),
     layer: placement.layer ?? 0,
   };
-}
-
-export type PlacementSave = { userFurnitureId: number; request: FurniturePlacementRequest };
-
-/**
- * 편집 완료 시 보낼 것만 고른다 (PATCH 는 가구 한 개씩이고 일괄 엔드포인트가 없다).
- * - 넣어 둔(편집 전에는 있다가 사라진) 가구는 설치 해제(`placed: false`)를 먼저 보낸다.
- * - 새로 놓았거나 자리·방향이 바뀐 가구는 설치를 보낸다. 그대로인 것은 보내지 않는다.
- * - `userFurnitureId` 가 없는 배치는 서버에 대응하는 보유 가구가 없는 기본 배치라 건너뛴다.
- */
-export function changedPlacements(before: readonly Placement[], after: readonly Placement[]): PlacementSave[] {
-  const previous = new Map(before.flatMap((placement) => (placement.userFurnitureId === undefined ? [] : [[placement.userFurnitureId, placement] as const])));
-  const kept = new Set(after.map((placement) => placement.userFurnitureId));
-  const saves: PlacementSave[] = [];
-
-  for (const userFurnitureId of previous.keys()) {
-    if (!kept.has(userFurnitureId)) saves.push({ userFurnitureId, request: { placed: false } });
-  }
-  for (const placement of after) {
-    if (placement.userFurnitureId === undefined) continue;
-    const old = previous.get(placement.userFurnitureId);
-    if (old && samePlacement(old, placement)) continue;
-    saves.push({ userFurnitureId: placement.userFurnitureId, request: toPlacementRequest(placement) });
-  }
-  return saves;
 }
 
 /** 보관함의 가구 한 개. 그릴 수 있는 가구만 들어온다 */
@@ -213,21 +235,15 @@ export function storedFurnitures(owned: readonly UserFurniture[], placements: re
 }
 
 /** '넣어 두기'를 못 하는 이유. 할 수 있으면 null */
-export type StoreAwayBlock = "WALL_OBJECT" | "DEFAULT_FURNITURE";
+export type StoreAwayBlock = "WALL_OBJECT" | "UNKNOWN_FURNITURE";
 
 /**
  * 배치된 것을 보관함으로 넣을 수 있는지. 벽 기능 오브젝트는 홈의 입구라 넣어 두지 않고,
- * 기본 가구(서버 canUnplace=false)와 서버에 대응하는 보유 가구가 없는 기본 배치는 서버가 해제를 받지 않는다.
- * 보유 목록을 아직 못 받았으면 기본 가구인지 알 수 없어 막는다.
+ * 서버에 대응하는 보유 가구가 없는 기본 배치는 보관할 수 없다.
+ * 필수 가구의 개수는 편집을 마치고 전체 배치를 저장할 때 검사한다.
  */
 export function storeAwayBlock(placement: Placement, owned: readonly UserFurniture[] | undefined): StoreAwayBlock | null {
   if (isWallItemId(placement.itemId)) return "WALL_OBJECT";
   const furniture = owned?.find((candidate) => candidate.userFurnitureId === placement.userFurnitureId);
-  return furniture?.canUnplace ? null : "DEFAULT_FURNITURE";
-}
-
-function samePlacement(left: Placement, right: Placement): boolean {
-  const leftRequest = toPlacementRequest(left);
-  const rightRequest = toPlacementRequest(right);
-  return JSON.stringify(leftRequest) === JSON.stringify(rightRequest);
+  return furniture ? null : "UNKNOWN_FURNITURE";
 }

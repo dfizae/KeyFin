@@ -22,12 +22,10 @@ import com.finset.key_fin.payment.event.TransferProposed;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
 import com.finset.key_fin.payment.service.TransferProposalService.ProposalResult;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
 @RecordApplicationEvents
-@Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/transfer-proposal-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class TransferProposalServiceTest extends SpringIntegrationTestSupport {
 
