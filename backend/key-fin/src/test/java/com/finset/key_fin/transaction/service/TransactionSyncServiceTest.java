@@ -16,6 +16,7 @@ import com.finset.key_fin.transaction.entity.ExcludeTag;
 import com.finset.key_fin.transaction.entity.Transaction;
 import com.finset.key_fin.transaction.entity.TransactionStatus;
 import com.finset.key_fin.transaction.entity.TransactionType;
+import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
 import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
 import com.finset.key_fin.user.entity.User;
@@ -75,6 +76,10 @@ class TransactionSyncServiceTest {
 	private TransactionClassificationService classificationService;
 	@Mock
 	private TransactionSyncWriter syncWriter;
+	@Mock
+	private ApplicationEventPublisher events;
+	@Mock
+	private SubcategoryQueryRepository subcategoryQueryRepository;
 
 	private TransactionSyncService syncService;
 	private User user;
@@ -82,8 +87,8 @@ class TransactionSyncServiceTest {
 	@BeforeEach
 	void setUp() {
 		syncService = new TransactionSyncService(
-				mock(ApplicationEventPublisher.class),
-				mock(SubcategoryQueryRepository.class),
+				events,
+				subcategoryQueryRepository,
 				userRepository,
 				accountRepository,
 				cardRepository,
@@ -287,6 +292,68 @@ class TransactionSyncServiceTest {
 		verify(syncWriter).save(USER_ID, List.of(), List.of(transaction), Map.of());
 		verifyNoInteractions(accountTransactionClient);
 		assertThat(account.getBalance()).isEqualTo(1_000_000L);
+	}
+
+	@Test
+	void 승인으로_수집한_카드_거래가_취소로_오면_CANCELED로_바꾸고_봉투_변경을_알린다() {
+		Account account = account(3L, "0016174648358792");
+		Card card = card(7L, account);
+		FinanceCardTransaction revoked = cardResponse("20", "취소");
+		Transaction stored = cardTransaction(card, "20", TransactionStatus.NORMAL);
+		ReflectionTestUtils.setField(stored, "id", 981L);
+		given(cardTransactionClient.findTransactions(
+				"finance-user-key", card.getFinCardNo(), card.getCvc(), START_DATE, END_DATE))
+				.willReturn(List.of(revoked));
+		given(transactionRepository.findByUserIdAndFinTransactionUniqueNo(USER_ID, "20"))
+				.willReturn(Optional.of(stored));
+		given(classificationService.isCardCanceled(revoked)).willReturn(true);
+		given(subcategoryQueryRepository.findEnvelopeId(203)).willReturn(Optional.of(2));
+
+		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
+
+		assertThat(stored.getStatus()).isEqualTo(TransactionStatus.CANCELED);
+		assertThat(stored.getAmount()).isEqualTo(20_000L);
+		assertThat(stored.getSubcategoryId()).isEqualTo(203);
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(981L, stored));
+		verify(events).publishEvent(new EnvelopeSpendingChanged(USER_ID, 2));
+		verify(classificationService, never()).fromCard(user, card, revoked);
+	}
+
+	@Test
+	void 이미_CANCELED인_카드_거래를_다시_받아도_저장과_알림이_없다() {
+		Account account = account(3L, "0016174648358792");
+		Card card = card(7L, account);
+		FinanceCardTransaction revoked = cardResponse("20", "취소");
+		Transaction stored = cardTransaction(card, "20", TransactionStatus.CANCELED);
+		given(cardTransactionClient.findTransactions(
+				"finance-user-key", card.getFinCardNo(), card.getCvc(), START_DATE, END_DATE))
+				.willReturn(List.of(revoked));
+		given(transactionRepository.findByUserIdAndFinTransactionUniqueNo(USER_ID, "20"))
+				.willReturn(Optional.of(stored));
+
+		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
+
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of());
+		verifyNoInteractions(events);
+	}
+
+	@Test
+	void 승인_상태로_다시_받은_카드_거래는_건너뛴다() {
+		Account account = account(3L, "0016174648358792");
+		Card card = card(7L, account);
+		FinanceCardTransaction approved = cardResponse("20", "승인");
+		Transaction stored = cardTransaction(card, "20", TransactionStatus.NORMAL);
+		given(cardTransactionClient.findTransactions(
+				"finance-user-key", card.getFinCardNo(), card.getCvc(), START_DATE, END_DATE))
+				.willReturn(List.of(approved));
+		given(transactionRepository.findByUserIdAndFinTransactionUniqueNo(USER_ID, "20"))
+				.willReturn(Optional.of(stored));
+
+		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
+
+		assertThat(stored.getStatus()).isEqualTo(TransactionStatus.NORMAL);
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of());
+		verifyNoInteractions(events);
 	}
 
 	private void givenCommonAssets(List<Account> accounts, List<Card> cards) {

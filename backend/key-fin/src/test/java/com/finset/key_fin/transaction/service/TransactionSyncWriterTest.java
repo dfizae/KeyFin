@@ -9,6 +9,8 @@ import com.finset.key_fin.transaction.entity.TransactionType;
 import com.finset.key_fin.transaction.event.AccountWithdrawn;
 import com.finset.key_fin.transaction.event.PendingTransactionSaved;
 import com.finset.key_fin.user.entity.User;
+import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
+import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
 import com.finset.key_fin.room.service.RoomStickerService;
 import com.finset.key_fin.user.repository.UserRepository;
@@ -42,6 +44,7 @@ class TransactionSyncWriterTest {
 	private TransactionRepository transactionRepository;
 	@Mock private UserRepository users;
 	@Mock private RoomStickerService stickers;
+	@Mock private SubcategoryQueryRepository subcategories;
 
 	@Mock
 	private ApplicationEventPublisher events;
@@ -146,6 +149,45 @@ class TransactionSyncWriterTest {
 		syncWriter.save(1L, List.of(), List.of(card, deposit), Map.of());
 
 		verify(events, never()).publishEvent(any(AccountWithdrawn.class));
+	}
+
+	@Test
+	void 자동_분류된_신규_거래는_봉투마다_한_번씩_EnvelopeSpendingChanged를_발행한다() {
+		Transaction first = autoClassifiedCardTransaction(101);
+		Transaction second = autoClassifiedCardTransaction(103);
+		Transaction other = autoClassifiedCardTransaction(602);
+		given(subcategories.findEnvelopeId(101)).willReturn(Optional.of(1));
+		given(subcategories.findEnvelopeId(103)).willReturn(Optional.of(1));
+		given(subcategories.findEnvelopeId(602)).willReturn(Optional.of(6));
+
+		syncWriter.save(1L, List.of(), List.of(first, second, other), Map.of());
+
+		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 1));
+		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 6));
+		verify(events, times(2)).publishEvent(any(EnvelopeSpendingChanged.class));
+	}
+
+	@Test
+	void 미분류_거래와_취소_거래에는_EnvelopeSpendingChanged를_발행하지_않는다() {
+		User user = mock(User.class);
+		given(user.getId()).willReturn(1L);
+		Transaction pending = pendingCardTransaction(user, 10L, "메가커피 역삼점", 4_500L);
+		Transaction canceled = mock(Transaction.class);
+		given(canceled.getStatus()).willReturn(TransactionStatus.CANCELED);
+
+		syncWriter.save(1L, List.of(), List.of(pending, canceled), Map.of());
+
+		verify(events, never()).publishEvent(any(EnvelopeSpendingChanged.class));
+		verify(subcategories, never()).findEnvelopeId(any(Integer.class));
+	}
+
+	private Transaction autoClassifiedCardTransaction(int subcategoryId) {
+		Transaction transaction = mock(Transaction.class);
+		given(transaction.getStatus()).willReturn(TransactionStatus.NORMAL);
+		given(transaction.getConfirmStatus()).willReturn(ConfirmStatus.AUTO);
+		given(transaction.getSubcategoryId()).willReturn(subcategoryId);
+		given(transaction.getAccountId()).willReturn(null);
+		return transaction;
 	}
 
 	private Transaction accountTransaction(long accountId, TransactionType type) {

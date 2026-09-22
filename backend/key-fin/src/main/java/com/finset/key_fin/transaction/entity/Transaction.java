@@ -240,6 +240,10 @@ public class Transaction extends BaseEntity {
 		this.confirmStatus = ConfirmStatus.CONFIRMED;
 	}
 
+	public void cancel() {
+		this.status = TransactionStatus.CANCELED;
+	}
+
 	public void markAsSelfTransfer() {
 		if (accountId == null || status == TransactionStatus.CANCELED) {
 			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
