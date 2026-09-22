@@ -11,6 +11,8 @@ import com.finset.key_fin.user.entity.CoachPersona;
 import com.finset.key_fin.user.service.UserSettingsService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import com.finset.key_fin.user.dto.request.BudgetSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.BudgetSettingsResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -56,6 +58,40 @@ class UserSettingsControllerTest {
 	@AfterEach
 	void tearDown() {
 		SecurityContextHolder.clearContext();
+	}
+
+	@Test
+	void 예산_기준일을_조회한다() throws Exception {
+		when(userSettingsService.getBudgetSettings(USER_ID)).thenReturn(new BudgetSettingsResponse(25));
+
+		mockMvc.perform(get("/api/v1/settings/budget"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.budgetAnchorDay").value(25));
+	}
+
+	@Test
+	void 예산_기준일을_변경한다() throws Exception {
+		when(userSettingsService.updateBudgetSettings(eq(USER_ID), any(BudgetSettingsUpdateRequest.class)))
+				.thenReturn(new BudgetSettingsResponse(25));
+
+		mockMvc.perform(put("/api/v1/settings/budget")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"budgetAnchorDay\":25}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.budgetAnchorDay").value(25));
+	}
+
+	@Test
+	void 범위_밖_예산_기준일은_400을_반환한다() throws Exception {
+		for (String body : new String[]{"{\"budgetAnchorDay\":0}", "{\"budgetAnchorDay\":29}", "{}"}) {
+			mockMvc.perform(put("/api/v1/settings/budget")
+							.contentType(MediaType.APPLICATION_JSON)
+							.content(body))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("COMMON_001"));
+		}
+
+		verifyNoInteractions(userSettingsService);
 	}
 
 	@Test

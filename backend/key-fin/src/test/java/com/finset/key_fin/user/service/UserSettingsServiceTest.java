@@ -14,6 +14,9 @@ import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
 import com.finset.key_fin.user.repository.UserSettingsRepository;
 import org.junit.jupiter.api.BeforeEach;
+import com.finset.key_fin.budget.repository.BudgetRepository;
+import com.finset.key_fin.user.dto.request.BudgetSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.BudgetSettingsResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -40,6 +43,9 @@ class UserSettingsServiceTest {
 	@Mock
 	private UserSettingsRepository userSettingsRepository;
 
+	@Mock
+	private BudgetRepository budgetRepository;
+
 	@InjectMocks
 	private UserSettingsService userSettingsService;
 
@@ -51,6 +57,41 @@ class UserSettingsServiceTest {
 		user = User.create("qwer@qwer.com", "encoded-password", "김예린");
 		ReflectionTestUtils.setField(user, "id", USER_ID);
 		settings = UserSettings.create(user);
+	}
+
+	@Test
+	void 예산_기준일을_조회한다() {
+		settings.updateBudgetAnchorDay(25);
+		givenActiveUserAndSettings();
+
+		BudgetSettingsResponse response = userSettingsService.getBudgetSettings(USER_ID);
+
+		assertThat(response.budgetAnchorDay()).isEqualTo(25);
+	}
+
+	@Test
+	void 예산이_없으면_기준일을_저장한다() {
+		givenActiveUserAndSettings();
+		given(budgetRepository.existsByUserId(USER_ID)).willReturn(false);
+
+		BudgetSettingsResponse response = userSettingsService.updateBudgetSettings(
+				USER_ID, new BudgetSettingsUpdateRequest(25));
+
+		assertThat(response.budgetAnchorDay()).isEqualTo(25);
+		assertThat(settings.getBudgetAnchorDay()).isEqualTo(25);
+	}
+
+	@Test
+	void 예산이_있으면_기준일_변경을_거절한다() {
+		given(userRepository.findByIdAndDeletedAtIsNull(USER_ID)).willReturn(Optional.of(user));
+		given(budgetRepository.existsByUserId(USER_ID)).willReturn(true);
+
+		assertThatThrownBy(() -> userSettingsService.updateBudgetSettings(
+				USER_ID, new BudgetSettingsUpdateRequest(25)))
+				.isInstanceOfSatisfying(BusinessException.class,
+						exception -> assertThat(exception.getErrorCode())
+								.isEqualTo(UserErrorCode.BUDGET_ANCHOR_LOCKED));
+		assertThat(settings.getBudgetAnchorDay()).isEqualTo(1);
 	}
 
 	@Test
