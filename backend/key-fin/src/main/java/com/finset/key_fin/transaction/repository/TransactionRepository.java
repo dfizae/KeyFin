@@ -43,6 +43,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
 	boolean existsByUserIdAndFinTransactionUniqueNo(Long userId, String finTransactionUniqueNo);
 
+	Optional<Transaction> findByUserIdAndFinTransactionUniqueNo(Long userId, String finTransactionUniqueNo);
+
 	Optional<Transaction> findFirstByUserIdAndAccountIdAndTransactionDateAndTransactionTimeAndAmountAndStatusAndExcludeTagNotAndConfirmStatusInOrderByIdDesc(
 			Long userId,
 			Long accountId,
