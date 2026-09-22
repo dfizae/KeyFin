@@ -1,9 +1,11 @@
 package com.finset.key_fin.user.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.user.dto.request.BudgetSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.BudgetSettingsResponse;
 import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
 import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
@@ -49,6 +51,23 @@ public class UserSettingsController implements UserSettingsControllerDocs {
 			@AuthenticationPrincipal Long userId
 	) {
 		return BaseResponse.ok(userSettingsService.getCoachPersona(userId));
+	}
+
+	@GetMapping(value = "/budget", produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<BudgetSettingsResponse> getBudgetSettings(
+			@AuthenticationPrincipal Long userId
+	) {
+		return BaseResponse.ok(userSettingsService.getBudgetSettings(userId));
+	}
+
+	@PutMapping(value = "/budget", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)
+	@Override
+	public BaseResponse<BudgetSettingsResponse> updateBudgetSettings(
+			@AuthenticationPrincipal Long userId,
+			@Valid @RequestBody BudgetSettingsUpdateRequest request
+	) {
+		return BaseResponse.ok(userSettingsService.updateBudgetSettings(userId, request));
 	}
 
 	@PutMapping(value = "/transfer", consumes = APPLICATION_JSON_VALUE, produces = APPLICATION_JSON_VALUE)

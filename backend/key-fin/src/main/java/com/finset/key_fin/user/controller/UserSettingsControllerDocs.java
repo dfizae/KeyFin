@@ -1,9 +1,11 @@
 package com.finset.key_fin.user.controller;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.user.dto.request.BudgetSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.CoachPersonaUpdateRequest;
 import com.finset.key_fin.user.dto.request.NotificationSettingsUpdateRequest;
 import com.finset.key_fin.user.dto.request.TransferSettingsUpdateRequest;
+import com.finset.key_fin.user.dto.response.BudgetSettingsResponse;
 import com.finset.key_fin.user.dto.response.CoachPersonaResponse;
 import com.finset.key_fin.user.dto.response.NotificationSettingsResponse;
 import com.finset.key_fin.user.dto.response.TransferSettingsResponse;
@@ -156,5 +158,44 @@ public interface UserSettingsControllerDocs {
 	ResponseEntity<Void> updateCoachPersona(
 			@Parameter(hidden = true) Long userId,
 			CoachPersonaUpdateRequest request
+	);
+
+	@Operation(summary = "예산 기준일 조회", description = "예산 주기의 시작일(1~28)을 조회합니다.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "예산 기준일 조회 성공", useReturnTypeSchema = true,
+					content = @Content(mediaType = APPLICATION_JSON_VALUE,
+							examples = @ExampleObject(value = """
+									{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{"budgetAnchorDay":25}}
+									"""))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "활성 사용자 또는 사용자 설정을 찾을 수 없음 (USER_001, USER_006)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<BudgetSettingsResponse> getBudgetSettings(@Parameter(hidden = true) Long userId);
+
+	@Operation(summary = "예산 기준일 변경", description = "예산 주기의 시작일(1~28)을 저장합니다. 온보딩 단계용으로, 예산이 하나라도 생긴 뒤에는 변경할 수 없습니다.")
+	@ApiResponses({
+			@ApiResponse(responseCode = "200", description = "예산 기준일 변경 성공", useReturnTypeSchema = true),
+			@ApiResponse(responseCode = "400", description = "기준일 누락 또는 1~28 범위 밖 (COMMON_001, USER_011)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "401", description = "Access Token이 없거나 유효하지 않거나 만료됨",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "403", description = "접근 권한 없음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "404", description = "활성 사용자 또는 사용자 설정을 찾을 수 없음 (USER_001, USER_006)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "409", description = "예산이 이미 있어 기준일을 바꿀 수 없음 (USER_010)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
+			@ApiResponse(responseCode = "500", description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class)))
+	})
+	BaseResponse<BudgetSettingsResponse> updateBudgetSettings(
+			@Parameter(hidden = true) Long userId,
+			BudgetSettingsUpdateRequest request
 	);
 }
