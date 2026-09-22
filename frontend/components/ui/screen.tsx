@@ -119,7 +119,14 @@ function ScreenScrollView({ onScroll, contentContainerStyle, overlapHeader = tru
  * 위 여백은 contentContainerStyle 이 아니라 목록 머리의 빈 View 로 넣는다 — NativeWind 가 FlatList 의 contentContainerClassName 을
  * remapProps 로 처리해 웹에서 인라인 contentContainerStyle 을 덮어써, 여백이 빠지고 내용이 헤더 밑에 깔렸다 (2026-09-17).
  */
-function ScreenFlatList<ItemT>({ onScroll, style, ListHeaderComponent, overlapHeader = true, ...props }: FlatListProps<ItemT> & OverlapOption) {
+function ScreenFlatList<ItemT>({
+  onScroll,
+  style,
+  ListHeaderComponent,
+  overlapHeader = true,
+  ref,
+  ...props
+}: FlatListProps<ItemT> & OverlapOption & { ref?: React.Ref<FlatList<ItemT>> }) {
   const { handleScroll, offset, overlaid } = useScrollTracking(onScroll, overlapHeader);
   const header = overlaid ? (
     <View>
@@ -129,7 +136,8 @@ function ScreenFlatList<ItemT>({ onScroll, style, ListHeaderComponent, overlapHe
   ) : (
     ListHeaderComponent
   );
-  const list = <FlatList {...props} style={style} ListHeaderComponent={header} onScroll={handleScroll} scrollEventThrottle={16} />;
+  // 코칭 대화처럼 새 줄이 붙을 때 끝으로 스크롤하려면 목록 ref 가 필요하다(React 19 는 ref 를 보통 prop 으로 받는다).
+  const list = <FlatList {...props} ref={ref} style={style} ListHeaderComponent={header} onScroll={handleScroll} scrollEventThrottle={16} />;
   return overlaid ? <PulledUp offset={offset}>{list}</PulledUp> : list;
 }
 

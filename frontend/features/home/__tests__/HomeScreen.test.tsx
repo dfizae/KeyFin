@@ -13,7 +13,7 @@ import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
 import { ROOM_LABEL } from "@/features/home/components/CharacterRoom";
-import { COACH_PLACEHOLDER, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
+import { COACHING_CHAT_ROUTE } from "@/features/home/components/HomeCoach";
 import { HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
@@ -178,7 +178,7 @@ describe("HomeScreen", () => {
     await waitFor(async () => expect(await SecureStore.getItemAsync(ROOM_GUIDE_KEY)).toBe("1"));
   });
 
-  it("코치를 탭하면 임시 말풍선이 열리고, 미확정 결제가 있으면 정리 화면 링크를 보여준다", async () => {
+  it("코치(고양이)를 탭하면 코칭 대화 화면으로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetPending.mockResolvedValue(toPendingTransactions(pendingTransactionsMock()));
@@ -187,9 +187,7 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "코치" }));
-    expect(await screen.findByText(COACH_PLACEHOLDER)).toBeTruthy();
-    await fireEvent.press(screen.getByRole("link", { name: cleanupLinkLabel(2) }));
-    expect(mockPush).toHaveBeenCalledWith("/transaction/pending");
+    expect(mockPush).toHaveBeenCalledWith(COACHING_CHAT_ROUTE);
   });
 
   it("입주 연출에서 넘어오면 방을 다 그릴 때까지 입주 문구를 이어서 보여 준다", async () => {
