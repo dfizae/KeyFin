@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from "react-native";
+import { Image, Pressable, ScrollView, View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { isMocked } from "@/api/client";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Floating } from "@/components/ui/floating";
 import { Sprite } from "@/components/ui/sprite";
 import { Icon } from "@/components/ui/icon";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
@@ -56,7 +57,7 @@ function LoginScreen() {
   };
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView className="flex-1 bg-background">
       <ScrollView className="flex-1" contentContainerClassName="gap-7 px-6 pt-4" keyboardShouldPersistTaps="handled">
         <Animated.View style={intro.revealStyle}>
           <Image source={WORDMARK} style={WORDMARK_STYLE} resizeMode="contain" accessibilityRole="image" accessibilityLabel="KeyFin" />

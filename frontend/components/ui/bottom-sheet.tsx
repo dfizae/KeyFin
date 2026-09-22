@@ -2,6 +2,8 @@ import * as React from "react";
 import { Modal, Pressable, View, type LayoutChangeEvent } from "react-native";
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
+
 /** 뒤 화면이 어두워지는(밝아지는) 시간이자 시트가 오르내리는 시간 (2026-09-16 사용자 요청) */
 const SHEET_MS = 280;
 const SCRIM_FILL = { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 } as const;
@@ -77,7 +79,8 @@ function BottomSheet({ visible, onClose, closeLabel, maxHeight, children }: Bott
 
   return (
     <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose}>
-      <View className="flex-1 justify-end">
+      {/* 시트 안 입력(세분류 시트의 더치페이 금액)에 키패드가 뜨면 시트째 밀어 올린다 — Modal 은 창이 줄지 않는다 */}
+      <KeyboardAvoidingView className="flex-1 justify-end">
         <Animated.View style={[SCRIM_FILL, scrimStyle]} pointerEvents={visible ? "auto" : "none"}>
           <Pressable className="flex-1 bg-black/50" accessibilityRole="button" accessibilityLabel={closeLabel} onPress={onClose} />
         </Animated.View>
@@ -88,7 +91,7 @@ function BottomSheet({ visible, onClose, closeLabel, maxHeight, children }: Bott
             </View>
           </Animated.View>
         ) : null}
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

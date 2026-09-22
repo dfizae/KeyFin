@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { CircleAlert, Info } from "lucide-react-native";
 import * as React from "react";
-import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
 import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Input } from "@/components/ui/input";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { useConnectFinance } from "@/features/link/api/queries";
@@ -38,7 +39,7 @@ function FinanceEmailScreen() {
   };
 
   return (
-    <KeyboardAvoidingView className="flex-1 bg-background" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView className="flex-1 bg-background">
       <Animated.View style={intro.revealStyle}>
         <ScreenHeader flat title="금융망 이메일 확인" />
       </Animated.View>
