@@ -32,6 +32,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -64,13 +65,14 @@ public class TransactionSyncService {
 		List<Transaction> newTransactions = new ArrayList<>();
 		List<Account> balanceUpdatedAccounts = new ArrayList<>();
 		Set<String> transactionNumbers = new HashSet<>();
+		Map<Long, Transaction> canceledTransactions = new LinkedHashMap<>();
 		syncAccountTransactions(
 				user, userKey, accounts, startDate, endDate,
 				transactionNumbers, newTransactions, balanceUpdatedAccounts);
 		syncCardTransactions(
 				user, userKey, cards, startDate, endDate,
-				transactionNumbers, newTransactions);
-		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, Map.of());
+				transactionNumbers, newTransactions, canceledTransactions);
+		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, canceledTransactions);
 	}
 
 	public void syncAccountTransactions(
@@ -100,10 +102,11 @@ public class TransactionSyncService {
 		validateManagedCard(user, card);
 		String userKey = requireFinanceUserKey(user);
 		List<Transaction> newTransactions = new ArrayList<>();
+		Map<Long, Transaction> canceledTransactions = new LinkedHashMap<>();
 		syncCardTransactions(
 				user, userKey, List.of(card), startDate, endDate,
-				new HashSet<>(), newTransactions);
-		syncWriter.save(user.getId(), List.of(), newTransactions, Map.of());
+				new HashSet<>(), newTransactions, canceledTransactions);
+		syncWriter.save(user.getId(), List.of(), newTransactions, canceledTransactions);
 	}
 
 	public void syncNewlyManagedAccountHistory(
@@ -184,17 +187,43 @@ public class TransactionSyncService {
 			LocalDate startDate,
 			LocalDate endDate,
 			Set<String> transactionNumbers,
-			List<Transaction> newTransactions
+			List<Transaction> newTransactions,
+			Map<Long, Transaction> canceledTransactions
 	) {
 		for (Card card : cards) {
 			List<FinanceCardTransaction> financeTransactions = cardTransactionClient.findTransactions(
 					userKey, card.getFinCardNo(), card.getCvc(), startDate, endDate);
 			for (FinanceCardTransaction financeTransaction : financeTransactions) {
-				if (isDuplicate(user.getId(), financeTransaction.transactionUniqueNo(), transactionNumbers)) {
+				if (!transactionNumbers.add(financeTransaction.transactionUniqueNo())) {
+					continue;
+				}
+				Optional<Transaction> stored = transactionRepository.findByUserIdAndFinTransactionUniqueNo(
+						user.getId(), financeTransaction.transactionUniqueNo());
+				if (stored.isPresent()) {
+					cancelIfRevoked(user.getId(), stored.get(), financeTransaction, canceledTransactions);
 					continue;
 				}
 				newTransactions.add(classificationService.fromCard(user, card, financeTransaction));
 			}
+		}
+	}
+
+	/** 금융망 취소는 같은 거래번호의 cardStatus 만 바뀌므로 이미 수집한 승인 건을 취소로 옮긴다. */
+	private void cancelIfRevoked(
+			long userId,
+			Transaction transaction,
+			FinanceCardTransaction financeTransaction,
+			Map<Long, Transaction> canceledTransactions
+	) {
+		if (transaction.getStatus() != TransactionStatus.NORMAL
+				|| !classificationService.isCardCanceled(financeTransaction)) {
+			return;
+		}
+		transaction.cancel();
+		canceledTransactions.put(transaction.getId(), transaction);
+		if (transaction.getSubcategoryId() != null) {
+			subcategoryQueryRepository.findEnvelopeId(transaction.getSubcategoryId())
+					.ifPresent(envelopeId -> events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId)));
 		}
 	}
 
