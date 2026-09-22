@@ -28,18 +28,21 @@ public class BudgetOverrunService {
 				.orElseGet(List::of);
 	}
 
-	/** Uses the existing budget board aggregation, without creating a proposal. */
-	public Optional<Long> currentExceededBudgetId(long userId, LocalDate today) {
+	/** An absent/unconfirmed budget is distinct from a confirmed budget whose overrun has cleared. */
+	public Optional<BudgetOverrun> currentBudgetOverrun(long userId, LocalDate today) {
 		int anchor = settings.findById(userId).map(UserSettings::getBudgetAnchorDay).orElse(1);
 		String month = BudgetPeriod.current(today, anchor).month();
-		return budgets.findByUserIdAndBudgetMonth(userId, month).filter(b -> b.isConfirmed()).flatMap(budget -> {
+		return budgets.findByUserIdAndBudgetMonth(userId, month).filter(b -> b.isConfirmed()).map(budget -> {
 			long confirmed = 0;
 			long spent = 0;
 			for (var balance : balances.getMonthlyBalances(userId, month)) {
 				confirmed += balance.confirmedAmount();
 				spent += balance.spent();
 			}
-			return spent > confirmed ? Optional.of(budget.getId()) : Optional.empty();
+			return new BudgetOverrun(budget.getId(), spent > confirmed);
 		});
+	}
+
+	public record BudgetOverrun(long budgetId, boolean exceeded) {
 	}
 }

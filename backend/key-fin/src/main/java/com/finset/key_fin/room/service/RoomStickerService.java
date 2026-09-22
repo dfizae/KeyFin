@@ -64,11 +64,16 @@ public class RoomStickerService {
 		defaults.provision(userId);
 		// JDBC aggregation must see pending JPA classifications and budget confirmation.
 		entityManager.flush();
-		var targets = furnitures.findByUserIdAndPlacementStatusIsNotNullOrderByIdAsc(userId).stream()
+		var owned = furnitures.findByUserIdOrderByIdAsc(userId);
+		var targets = owned.stream()
 				.filter(f -> f.getPlacementStatus() == FurniturePlacementStatus.FLOOR).toList();
-		budgets.currentExceededBudgetId(userId, now.toLocalDate()).ifPresent(budgetId -> {
-			if (!stickers.wasApplied(budgetId)) {
-				stickers.recordApplication(userId, budgetId, now);
+		budgets.currentBudgetOverrun(userId, now.toLocalDate()).ifPresent(budget -> {
+			if (!budget.exceeded()) {
+				// Recovery also clears stored furniture so reinstalling cannot restore an old sticker.
+				// Keep the application history: each budget period can attach stickers only once.
+				owned.forEach(UserFurniture::removeSticker);
+			} else if (!stickers.wasApplied(budget.budgetId())) {
+				stickers.recordApplication(userId, budget.budgetId(), now);
 				targets.forEach(UserFurniture::attachSticker);
 			}
 		});

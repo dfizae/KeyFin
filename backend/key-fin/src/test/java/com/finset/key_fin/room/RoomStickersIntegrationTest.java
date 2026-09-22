@@ -5,6 +5,7 @@ import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.auth.service.AuthService;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.service.BudgetService;
+import com.finset.key_fin.budget.service.EnvelopeBalanceService;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementUpdateRequest;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest.Placement;
@@ -29,6 +30,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -73,6 +76,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private FurnitureService furnitureService;
 	@Autowired private AuthService authService;
 	@Autowired private BudgetService budgetService;
+	@Autowired private EnvelopeBalanceService balances;
 	@Autowired private TransactionService transactions;
 	@Autowired private TransactionRepository transactionRepository;
 	@Autowired private TransactionSyncWriter syncWriter;
@@ -151,7 +155,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void categoryEffectsFollowRefundReclassificationAndCancellationIndependentlyOfStickers() throws Exception {
+	void categoryEffectsAndStickersFollowRefundReclassificationAndCancellation() throws Exception {
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 1001, "AUTO", 101);
 		long leisure = spend("2026-09-18", 1, "CONFIRMED", 401);
@@ -166,9 +170,11 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(4);
 		transactions.classifyTransaction(userId, leisure, new TransactionClassificationRequest(201, null, null));
 		assertThat(rooms.getRoom(userId).overEnvelopes()).containsExactly(2);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
 		jdbc.sql("UPDATE transactions SET status = 'CANCELED' WHERE id = :id").param("id", leisure).update();
 		assertThat(rooms.getRoom(userId).overEnvelopes()).isEmpty();
-		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
+		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
+		assertThat(rooms.getRoom(userId).furnitures()).allSatisfy(f -> assertThat(f.stickerAttached()).isFalse());
 	}
 
 	@Test
@@ -202,23 +208,52 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void removingAllAndRecoveringBudgetDoesNotAllowSamePeriodReattachment() {
+	void recoveringBudgetAutomaticallyRemovesStickersWithoutAllowingSamePeriodReattachment() {
 		budget("202609", "CONFIRMED", 1000);
 		long tx = spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
 		stickers.remove(userId, target("DINING_TABLE"));
 		transactions.classifyTransaction(userId, tx, new TransactionClassificationRequest(null, ExcludeTag.EMERGENCY, null));
-		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
+		assertThat(attachedCount()).isZero();
 		transactions.classifyTransaction(userId, tx, new TransactionClassificationRequest(101, null, null));
-		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
-		stickers.remove(userId, target("SOFA"));
-		stickers.remove(userId, target("TV"));
-		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(1);
-		stickers.remove(userId, target("COFFEE_TABLE"));
 		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
 		assertThat(rooms.getRoom(userId).stickers().removableToday()).isFalse();
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 		assertThat(countFor("room_sticker_states", userId)).isZero();
 		assertBusinessCode(() -> stickers.remove(userId, target("SOFA")), "ROOM_003");
+	}
+
+	@ParameterizedTest
+	@ValueSource(longs = {0, 1000, 1001})
+	void cancellationSyncRemovesPlacedAndStoredStickersOnlyAfterTotalBudgetRecovers(long remainingSpending) throws Exception {
+		defaults.provision(userId);
+		long fridge = acquireCatalog("refrigerator_black");
+		furnitureService.updatePlacement(userId, fridge, moved());
+		budget("202609", "CONFIRMED", 1000);
+		if (remainingSpending > 0) spend("2026-09-18", remainingSpending, "CONFIRMED", 101);
+		long tx = spend("2026-09-18", 2000, "CONFIRMED", 101);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(5);
+		furnitureService.updatePlacement(userId, fridge, new FurniturePlacementUpdateRequest(false, null, null, null, null, null));
+
+		var canceled = transactionRepository.findById(tx).orElseThrow();
+		canceled.cancel();
+		syncWriter.save(userId, List.of(), List.of(), Map.of(tx, canceled), Set.of(1));
+
+		boolean stillExceeded = remainingSpending > 1000;
+		assertThat(balances.getRemaining(userId, "202609", 1)).contains(1000 - remainingSpending);
+		// Check committed state before a room read can repair it.
+		assertThat(attachedCount()).isEqualTo(stillExceeded ? 5 : 0);
+		assertThat(furnitureService.getFurnitures(userId, null))
+				.allSatisfy(f -> assertThat(f.stickerAttached()).isEqualTo(stillExceeded));
+		mvc.perform(auth(get("/api/v1/room"), userId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.stickers.count").value(stillExceeded ? 4 : 0))
+				.andExpect(jsonPath("$.data.stickers.total").value(4))
+				.andExpect(jsonPath("$.data.stickers.removableToday").value(stillExceeded));
+		furnitureService.updatePlacement(userId, fridge, moved());
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(stillExceeded ? 5 : 0);
+		syncWriter.save(userId, List.of(), List.of(), Map.of(tx, canceled), Set.of(1));
+		assertThat(attachedCount()).isEqualTo(stillExceeded ? 5 : 0);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 	}
 
 	@Test
