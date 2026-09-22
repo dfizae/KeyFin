@@ -1,7 +1,7 @@
 package com.finset.key_fin.room.service;
 
 import com.finset.key_fin.budget.service.BudgetOverrunService;
-import com.finset.key_fin.furniture.entity.FurnitureType;
+import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.furniture.entity.UserFurniture;
 import com.finset.key_fin.furniture.exception.FurnitureErrorCode;
 import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
@@ -19,7 +19,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -41,7 +40,7 @@ public class RoomStickerService {
 		lockUser(userId);
 		LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
 		var targets = synchronizeLocked(userId, now);
-		return status(userId, targets, now.toLocalDate());
+		return status(targets);
 	}
 
 	@Transactional
@@ -49,27 +48,24 @@ public class RoomStickerService {
 		lockUser(userId);
 		var target = furnitures.findByIdAndUserId(userFurnitureId, userId)
 				.orElseThrow(() -> new BusinessException(FurnitureErrorCode.USER_FURNITURE_NOT_FOUND));
-		if (!target.isPlaced() || target.getItem().getFurnitureType() == null) {
+		if (target.getPlacementStatus() != FurniturePlacementStatus.FLOOR) {
 			throw new BusinessException(RoomErrorCode.NOT_STICKER_TARGET);
 		}
 		LocalDateTime now = LocalDateTime.now(clock.withZone(KST));
-		LocalDate today = now.toLocalDate();
-		if (removedToday(userId, today)) {
-			throw new BusinessException(RoomErrorCode.ALREADY_REMOVED_TODAY);
-		}
 		var targets = synchronizeLocked(userId, now);
 		if (!target.isStickerAttached()) {
 			throw new BusinessException(RoomErrorCode.STICKER_NOT_ATTACHED);
 		}
 		target.removeSticker();
-		stickers.recordRemoval(userId, today);
-		return new StickerRemovalResponse(userFurnitureId, false, status(userId, targets, today));
+		return new StickerRemovalResponse(userFurnitureId, false, status(targets));
 	}
 
 	private List<UserFurniture> synchronizeLocked(long userId, LocalDateTime now) {
-		var targets = defaults.provision(userId);
+		defaults.provision(userId);
 		// JDBC aggregation must see pending JPA classifications and budget confirmation.
 		entityManager.flush();
+		var targets = furnitures.findByUserIdAndPlacementStatusIsNotNullOrderByIdAsc(userId).stream()
+				.filter(f -> f.getPlacementStatus() == FurniturePlacementStatus.FLOOR).toList();
 		budgets.currentExceededBudgetId(userId, now.toLocalDate()).ifPresent(budgetId -> {
 			if (!stickers.wasApplied(budgetId)) {
 				stickers.recordApplication(userId, budgetId, now);
@@ -79,14 +75,9 @@ public class RoomStickerService {
 		return targets;
 	}
 
-	private StickerStatusResponse status(long userId, List<UserFurniture> targets, LocalDate today) {
+	private StickerStatusResponse status(List<UserFurniture> targets) {
 		int count = (int) targets.stream().filter(UserFurniture::isStickerAttached).count();
-		return new StickerStatusResponse(count, FurnitureType.values().length,
-				count > 0 && !removedToday(userId, today));
-	}
-
-	private boolean removedToday(long userId, LocalDate today) {
-		return stickers.lastRemovedDate(userId).filter(today::equals).isPresent();
+		return new StickerStatusResponse(count, targets.size(), count > 0);
 	}
 
 	private void lockUser(long userId) {

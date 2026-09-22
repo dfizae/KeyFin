@@ -260,14 +260,15 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void replacementDoesNotResetDailyStickerRemovalLimit() {
+	void replacementPreservesRemovedStickerAndAllowsAnotherRemoval() {
 		attachAll();
 		service.updatePlacements(userId, layout(sofa));
 		assertThat(stickers.remove(userId, sofa).stickers().count()).isEqualTo(3);
 		service.updatePlacements(userId, layout(pinkSofa));
 		assertThat(current(pinkSofa).stickerAttached()).isFalse();
-		assertThatThrownBy(() -> stickers.remove(userId, starter.get(FurnitureType.DINING_TABLE)))
-				.isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode().getCode()).isEqualTo("ROOM_002"));
+		assertThat(stickers.remove(userId, starter.get(FurnitureType.DINING_TABLE)).stickers().count()).isEqualTo(2);
+		assertThatThrownBy(() -> stickers.remove(userId, pinkSofa))
+				.isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode().getCode()).isEqualTo("ROOM_003"));
 		assertThatThrownBy(() -> stickers.remove(userId, sofa))
 				.isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode().getCode()).isEqualTo("ROOM_001"));
 	}

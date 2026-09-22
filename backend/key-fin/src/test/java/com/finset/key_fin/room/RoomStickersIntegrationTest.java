@@ -131,7 +131,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.data.userFurnitureId").value(sofa))
 				.andExpect(jsonPath("$.data.stickerAttached").value(false))
 				.andExpect(jsonPath("$.data.stickers.count").value(3))
-				.andExpect(jsonPath("$.data.stickers.removableToday").value(false));
+				.andExpect(jsonPath("$.data.stickers.removableToday").value(true));
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 	}
@@ -170,18 +170,18 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
 		transactions.classifyTransaction(userId, tx, new TransactionClassificationRequest(101, null, null));
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(3);
-		testClock.set(NOW.plusSeconds(86400));
 		stickers.remove(userId, target("SOFA"));
-		testClock.set(NOW.plusSeconds(172800));
 		stickers.remove(userId, target("TV"));
-		testClock.set(NOW.plusSeconds(259200));
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(1);
 		stickers.remove(userId, target("COFFEE_TABLE"));
 		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
 		assertThat(rooms.getRoom(userId).stickers().removableToday()).isFalse();
+		assertThat(countFor("room_sticker_states", userId)).isZero();
+		assertBusinessCode(() -> stickers.remove(userId, target("SOFA")), "ROOM_003");
 	}
 
 	@Test
-	void resetsFourOnNextExceededBudgetWithoutResettingDailyRemoval() {
+	void nextExceededBudgetStickersCanBeRemovedImmediatelyAfterEarlierRemoval() {
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
@@ -194,8 +194,8 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		spend("2026-10-01", 2000, "CONFIRMED", 101);
 		budgetService.confirm(userId, next, confirmation(1000));
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(4);
-		assertThat(rooms.getRoom(userId).stickers().removableToday()).isFalse();
-		assertBusinessCode(() -> stickers.remove(userId, target("TV")), "ROOM_002");
+		assertThat(rooms.getRoom(userId).stickers().removableToday()).isTrue();
+		assertThat(stickers.remove(userId, target("TV")).stickers().count()).isEqualTo(3);
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(2);
 	}
 
@@ -214,20 +214,45 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void midnightAllowsExactlyOneMoreRemovalUsingKoreanDate() {
+	void consecutiveRemovalsWorkBothBeforeAndAfterKoreanMidnight() {
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
 		testClock.set(Instant.parse("2026-09-18T14:59:59Z"));
 		stickers.remove(userId, target("DINING_TABLE"));
-		assertBusinessCode(() -> stickers.remove(userId, target("SOFA")), "ROOM_002");
-		testClock.set(Instant.parse("2026-09-18T15:00:00Z"));
 		assertThat(stickers.remove(userId, target("SOFA")).stickers().count()).isEqualTo(2);
-		assertBusinessCode(() -> stickers.remove(userId, target("TV")), "ROOM_002");
+		testClock.set(Instant.parse("2026-09-18T15:00:00Z"));
+		assertThat(stickers.remove(userId, target("TV")).stickers().count()).isEqualTo(1);
+		var last = stickers.remove(userId, target("COFFEE_TABLE")).stickers();
+		assertThat(last.count()).isZero();
+		assertThat(last.removableToday()).isFalse();
 	}
 
 	@Test
-	void validatesOwnershipTargetAndDailyErrorsWithoutConsumingRemoval() throws Exception {
+	void legacyRemovalDateDoesNotBlockOrChangeAfterFurtherRemovals() throws Exception {
+		budget("202609", "CONFIRMED", 1000);
+		spend("2026-09-18", 2000, "CONFIRMED", 101);
+		rooms.getRoom(userId);
+		jdbc.sql("INSERT INTO room_sticker_states (user_id, last_removed_date) VALUES (:user, '2026-09-18')")
+				.param("user", userId).update();
+		assertThat(rooms.getRoom(userId).stickers().removableToday()).isTrue();
+		mvc.perform(auth(removal(target("SOFA")), userId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.stickers.count").value(3))
+				.andExpect(jsonPath("$.data.stickers.removableToday").value(true));
+		mvc.perform(auth(removal(target("TV")), userId)).andExpect(status().isOk());
+		mvc.perform(auth(removal(target("SOFA")), userId)).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("ROOM_003"));
+		testClock.set(NOW.plusSeconds(86400));
+		stickers.remove(userId, target("DINING_TABLE"));
+		var last = stickers.remove(userId, target("COFFEE_TABLE")).stickers();
+		assertThat(last.count()).isZero();
+		assertThat(last.removableToday()).isFalse();
+		assertThat(jdbc.sql("SELECT last_removed_date FROM room_sticker_states WHERE user_id = :user")
+				.param("user", userId).query(LocalDate.class).single()).isEqualTo(LocalDate.parse("2026-09-18"));
+	}
+
+	@Test
+	void validatesOwnershipPlacementAndMissingSticker() throws Exception {
 		defaults.provision(userId);
 		long ordinary = ordinaryFurniture();
 		mvc.perform(auth(removal(ordinary), userId)).andExpect(status().isBadRequest())
@@ -253,6 +278,80 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		jdbc.sql("INSERT INTO user_furnitures (user_id, item_id) VALUES (:user, :item)").param("user", userId).param("item", item).update();
 		return jdbc.sql("SELECT id FROM user_furnitures WHERE user_id = :user AND item_id = :item")
 				.param("user", userId).param("item", item).query(Long.class).single();
+	}
+
+	@Test
+	void firstOverrunStampsEveryFloorKindButNotWallsStorageOrLaterInstallations() throws Exception {
+		defaults.provision(userId);
+		var floorIds = List.of("refrigerator_black", "refrigerator_pink", "bed_pink", "decor_checker_rug",
+				"plant_monstera_terracotta", "decor_arc_floor_lamp").stream().map(this::acquireCatalog).toList();
+		floorIds.forEach(id -> furnitureService.updatePlacement(userId, id, moved()));
+		long wall = acquireCatalog("decor_round_wall_clock");
+		furnitureService.updatePlacement(userId, wall, new FurniturePlacementUpdateRequest(true,
+				FurniturePlacementStatus.LEFT_WALL, FurniturePlacementDirection.FRONT_RIGHT,
+				BigDecimal.TEN, BigDecimal.TEN, 0));
+		long stored = acquireCatalog("desk_black");
+		budget("202609", "CONFIRMED", 1000);
+		spend("2026-09-18", 2000, "CONFIRMED", 101);
+		var first = rooms.getRoom(userId);
+		assertThat(first.stickers().total()).isEqualTo(10);
+		assertThat(first.stickers().count()).isEqualTo(10);
+		assertThat(first.furnitures()).filteredOn(f -> f.placementStatus() == FurniturePlacementStatus.FLOOR)
+				.allSatisfy(f -> assertThat(f.stickerAttached()).isTrue());
+		assertThat(furnitureService.getFurnitures(userId, null)).filteredOn(f -> f.userFurnitureId() == wall || f.userFurnitureId() == stored)
+				.allSatisfy(f -> assertThat(f.stickerAttached()).isFalse());
+		mvc.perform(auth(removal(wall), userId)).andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("ROOM_001"));
+		furnitureService.updatePlacement(userId, stored, moved());
+		assertThat(rooms.getRoom(userId).stickers().total()).isEqualTo(11);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(10);
+		mvc.perform(auth(removal(stored), userId)).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("ROOM_003"));
+		mvc.perform(auth(removal(floorIds.getFirst()), userId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.stickers.count").value(9)).andExpect(jsonPath("$.data.stickers.total").value(11));
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(9);
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		budget("202610", "CONFIRMED", 1000);
+		spend("2026-10-01", 2000, "CONFIRMED", 101);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(11);
+	}
+
+	@Test
+	void ordinaryStickerSurvivesSingleAndBatchStorage() {
+		defaults.provision(userId);
+		long fridge = acquireCatalog("refrigerator_black");
+		furnitureService.updatePlacement(userId, fridge, moved());
+		budget("202609", "CONFIRMED", 1000);
+		spend("2026-09-18", 2000, "CONFIRMED", 101);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(5);
+		assertThat(furnitureService.updatePlacement(userId, fridge, moved()).stickerAttached()).isTrue();
+		var stored = furnitureService.updatePlacement(userId, fridge, new FurniturePlacementUpdateRequest(false, null, null, null, null, null));
+		assertThat(stored.stickerAttached()).isTrue();
+		assertThat(rooms.getRoom(userId).stickers().total()).isEqualTo(4);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(4);
+		assertBusinessCode(() -> stickers.remove(userId, fridge), "ROOM_001");
+		assertThat(countFor("room_sticker_states", userId)).isZero();
+		assertThat(furnitureService.updatePlacement(userId, fridge, moved()).stickerAttached()).isTrue();
+		var full = new FurniturePlacementsUpdateRequest(furnitureService.getPlacedFurnitures(userId).stream()
+				.map(f -> new Placement(f.userFurnitureId(), f.placementStatus(), f.placementDirection(), f.positionX(), f.positionY(), f.layer())).toList());
+		furnitureService.updatePlacements(userId, full);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(5);
+		var withoutFridge = new FurniturePlacementsUpdateRequest(full.placements().stream().filter(f -> f.userFurnitureId() != fridge).toList());
+		assertThat(furnitureService.updatePlacements(userId, withoutFridge)).filteredOn(f -> f.userFurnitureId() == fridge)
+				.singleElement().satisfies(f -> { assertThat(f.placed()).isFalse(); assertThat(f.stickerAttached()).isTrue(); });
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(4);
+		furnitureService.updatePlacements(userId, full);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(5);
+		stickers.remove(userId, fridge);
+		furnitureService.updatePlacements(userId, withoutFridge);
+		furnitureService.updatePlacements(userId, full);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(4);
+		assertThat(rooms.getRoom(userId).stickers().removableToday()).isTrue();
+	}
+
+	private long acquireCatalog(String assetKey) {
+		jdbc.sql("INSERT INTO user_furnitures (user_id, item_id) SELECT :user, id FROM items WHERE asset_key = :asset")
+				.param("user", userId).param("asset", assetKey).update();
+		return jdbc.sql("SELECT uf.id FROM user_furnitures uf JOIN items i ON i.id = uf.item_id WHERE uf.user_id = :user AND i.asset_key = :asset")
+				.param("user", userId).param("asset", assetKey).query(Long.class).single();
 	}
 
 	@Test
@@ -327,14 +426,15 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void concurrentDifferentAndSameFurnitureRemovalsSucceedOnce() throws Exception {
+	void concurrentRemovalsSucceedForEveryDistinctFurnitureAndRejectDuplicate() throws Exception {
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
-		long sofa = target("SOFA"), fridge = target("DINING_TABLE"), tv = target("TV");
-		var results = concurrently(List.of(() -> removeCode(sofa), () -> removeCode(sofa), () -> removeCode(fridge), () -> removeCode(tv)));
-		assertThat(results).containsExactlyInAnyOrder("SUCCESS", "ROOM_002", "ROOM_002", "ROOM_002");
-		assertThat(attachedCount()).isEqualTo(3);
+		long sofa = target("SOFA"), diningTable = target("DINING_TABLE"), tv = target("TV");
+		var results = concurrently(List.of(() -> removeCode(sofa), () -> removeCode(sofa), () -> removeCode(diningTable), () -> removeCode(tv)));
+		assertThat(results).containsExactlyInAnyOrder("SUCCESS", "ROOM_003", "SUCCESS", "SUCCESS");
+		assertThat(attachedCount()).isEqualTo(1);
+		assertThat(rooms.getRoom(userId).stickers().removableToday()).isTrue();
 	}
 
 	@Test
@@ -349,7 +449,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void rollbackRestoresAttachmentHistoryAndRemovalDate() {
+	void rollbackRestoresAttachmentHistoryAndStickerState() {
 		defaults.provision(userId);
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
@@ -381,8 +481,12 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	void documentsRemovalAndStickerFields() throws Exception {
 		mvc.perform(get("/v3/api-docs")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.paths['/api/v1/room/stickers/removals'].post.responses['409']").exists())
+				.andExpect(jsonPath("$.paths['/api/v1/room/stickers/removals'].post.responses['409'].description")
+						.value(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("ROOM_002"))))
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.stickers").exists())
 				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties.stickerAttached").exists())
+				.andExpect(jsonPath("$.components.schemas.StickerStatusResponse.properties.count.maximum").doesNotExist())
+				.andExpect(jsonPath("$.components.schemas.StickerStatusResponse.properties.total.enum").doesNotExist())
 				.andExpect(jsonPath("$.paths['/api/v1/furnitures/{userFurnitureId}'].patch.responses['409']").exists());
 	}
 
