@@ -1,12 +1,18 @@
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, skipToken, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getChatHistory, sendChatMessage } from "@/features/coaching/api/coaching.api";
+import { getChartHtml, getChatHistory, sendChatMessage } from "@/features/coaching/api/coaching.api";
+import { isChartNotFoundError } from "@/features/coaching/errors";
 import { appendChatTurn, EMPTY_CHAT_HISTORY, type ChatHistory } from "@/features/coaching/model";
 
 export const coachingKeys = {
   all: ["coaching"] as const,
   chat: () => [...coachingKeys.all, "chat"] as const,
+  chart: (chartId: string) => [...coachingKeys.all, "chart", chartId] as const,
 };
+
+/** 저장된 차트는 바뀌지 않아 한동안 캐시를 쓴다 */
+const CHART_STALE_MS = 5 * 60 * 1000;
+const CHART_RETRY_MAX = 2;
 
 /** 세션은 서버가 24시간 잇지만 다른 기기에서 물었을 수도 있어 화면에 들어올 때마다 새로 받는다 */
 export function chatHistoryQueryOptions() {
@@ -36,5 +42,15 @@ export function useSendChatMessage() {
         appendChatTurn(current ?? EMPTY_CHAT_HISTORY, question, reply)
       );
     },
+  });
+}
+
+/** 예산 예측 차트 HTML. id 가 없으면(라우트 파라미터가 모양이 아니면) 요청하지 않고, 404 는 다시 시도하지 않는다 */
+export function useChartHtml(chartId: string | null) {
+  return useQuery({
+    queryKey: coachingKeys.chart(chartId ?? ""),
+    queryFn: chartId === null ? skipToken : ({ signal }) => getChartHtml(chartId, signal),
+    staleTime: CHART_STALE_MS,
+    retry: (failureCount, error) => !isChartNotFoundError(error) && failureCount < CHART_RETRY_MAX,
   });
 }

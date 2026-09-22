@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { MessageCircle, SendHorizontal, WifiOff } from "lucide-react-native";
+import { ChartLine, MessageCircle, SendHorizontal, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { FlatList, Image, Pressable, View } from "react-native";
 
@@ -17,10 +17,13 @@ import { CHAT_MESSAGE_MAX_LENGTH, validateChatMessage, type ChatMessage } from "
 import { COACH_CAT } from "@/features/room/assets";
 import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 import { formatDateTime, parseKSTLocalDateTime } from "@/lib/date";
+import { typography } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
 const CLEANUP_ROUTE = "/transaction/pending";
+const CHART_ROUTE = "/coaching/chart";
+export const CHART_LINK_LABEL = "예산 예측 차트 보기";
 export const COACH_TITLE = "코치";
 export const CHAT_INPUT_LABEL = "코치에게 물어보기";
 export const SEND_LABEL = "보내기";
@@ -28,8 +31,17 @@ export const SEND_LABEL = "보내기";
 export const THINKING_LABEL = "코치가 생각하고 있어요";
 /** NativeWind className 은 RN Image 에 적용되지 않아 크기만 style 로 준다 */
 const AVATAR_STYLE = { width: 36, height: 36 } as const;
-/** 말풍선은 화면 폭의 85% 를 넘지 않는다(비율 값이라 style 로 준다) */
+/** 내 질문 말풍선은 화면 폭의 85% 를 넘지 않는다(비율 값이라 style 로 준다) */
 const BUBBLE_MAX_STYLE = { maxWidth: "85%" } as const;
+/**
+ * 말풍선 글자는 `text-label`(15/22) 보다 4 작은 11/16 — 폰에서 한 말풍선이 너무 길게 늘어져 보여 줄였다(2026-09-22 사용자 요청).
+ * 토큰에 없는 크기라 CoachRow 처럼 label 토큰에서 빼서 style 로 준다. DESIGN.md 의 최소 12 아래라 대화 말풍선에만 쓴다.
+ */
+const CHAT_TEXT_SHRINK = 4;
+const CHAT_TEXT_STYLE = {
+  fontSize: typography.label.fontSize - CHAT_TEXT_SHRINK,
+  lineHeight: typography.label.lineHeight - CHAT_TEXT_SHRINK - 2,
+} as const;
 
 export function cleanupLinkLabel(pendingCount: number, pendingMore = false): string {
   return `미확정 결제 ${pendingCount}건${pendingMore ? "+" : ""} 정리`;
@@ -47,7 +59,9 @@ type ChatRow =
  * 코치 말투·문구는 서버가 만들고 앱은 만들지 않는다(docs/frontend-spec.md 비즈니스 규칙) — 빈 화면 안내는 앱 문구, 답변은 전부 서버 문구다.
  * 답을 기다리는 동안 보낸 질문을 먼저 보여 주고, 실패하면 입력값을 살려 둔 채 그 자리에 다시 시도를 둔다(돈이 움직이지 않아 다시 보내도 된다).
  * 홈 코치에 있던 '미확정 결제 n건 정리' 링크(2026-09-13 사용자 결정)는 여기 상단으로 옮겼다.
- * Pencil 미대조(시안 없음) — 말풍선은 DESIGN.md 의 코치 말풍선(bg-card border-border rounded-lg p-3.5) 스타일을 따른다.
+ * Pencil 미대조(시안 없음). 내 질문만 오른쪽 `bg-primary` 말풍선이고, 코치 답변은 말풍선 없이 고양이 얼굴 아래 바탕에 그대로 적는다
+ * (2026-09-22 사용자 요청 — 처음엔 얼굴 옆 bg-card 말풍선이었는데 폰 폭에서 글이 세로로 길게 늘어졌다).
+ * 답변에 예산 예측 차트가 딸리면(chartId, 계약 TBD) 글 아래 '차트 보기' 버튼이 PAGE-31B 로 간다 — 차트 HTML 은 한 페이지라 말풍선에 넣지 않는다.
  */
 function CoachingChatScreen() {
   const router = useRouter();
@@ -75,7 +89,7 @@ function CoachingChatScreen() {
     const list: ChatRow[] = messages.map((message, index) => ({ key: `m-${index}`, kind: "message", message }));
     // 보낸 질문은 답이 올 때까지(성공 시 캐시에 붙는다) 여기서만 보인다. 실패하면 질문 아래에 다시 시도를 둔다.
     if (send.isPending || send.isError) {
-      list.push({ key: "q-pending", kind: "message", message: { role: "user", content: send.variables ?? "" } });
+      list.push({ key: "q-pending", kind: "message", message: { role: "user", content: send.variables ?? "", chartId: null } });
       list.push(send.isPending ? { key: "thinking", kind: "thinking" } : { key: "error", kind: "error", message: chatErrorMessage(send.error) });
     }
     return list;
@@ -104,7 +118,9 @@ function CoachingChatScreen() {
             data={rows}
             keyExtractor={(row) => row.key}
             contentContainerClassName="gap-3 px-6 pb-4"
-            renderItem={({ item }) => <ChatRowView row={item} onRetry={retry} />}
+            renderItem={({ item }) => (
+              <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+            )}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
@@ -149,49 +165,72 @@ function CoachingChatScreen() {
   );
 }
 
-function ChatRowView({ row, onRetry }: { row: ChatRow; onRetry: () => void }) {
+type ChatRowViewProps = { row: ChatRow; onRetry: () => void; onOpenChart: (chartId: string) => void };
+
+function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
   if (row.kind === "thinking") {
     return (
-      <CoachBubble>
-        <Text className="text-label text-muted-foreground" accessibilityLiveRegion="polite">
+      <CoachReply>
+        <Text className="text-label text-muted-foreground" style={CHAT_TEXT_STYLE} accessibilityLiveRegion="polite">
           {THINKING_LABEL}
         </Text>
-      </CoachBubble>
+      </CoachReply>
     );
   }
   if (row.kind === "error") {
     return (
-      <CoachBubble>
-        <Text className="text-label text-destructive" accessibilityLiveRegion="polite">
+      <CoachReply>
+        <Text className="text-label text-destructive" style={CHAT_TEXT_STYLE} accessibilityLiveRegion="polite">
           {row.message}
         </Text>
         <Pressable accessibilityRole="button" accessibilityLabel="다시 시도" hitSlop={6} onPress={onRetry} className="self-start">
-          <Text className="text-label text-primary">다시 시도</Text>
+          <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
+            다시 시도
+          </Text>
         </Pressable>
-      </CoachBubble>
+      </CoachReply>
     );
   }
   const { message } = row;
+  const { chartId } = message;
   if (message.role === "user") {
     return (
       <View className="self-end rounded-2xl bg-primary px-4 py-3" style={BUBBLE_MAX_STYLE} accessibilityRole="text">
-        <Text className="text-label text-primary-foreground">{message.content}</Text>
+        <Text className="text-label text-primary-foreground" style={CHAT_TEXT_STYLE}>
+          {message.content}
+        </Text>
       </View>
     );
   }
   return (
-    <CoachBubble>
-      <Text className="text-label text-foreground">{message.content}</Text>
-    </CoachBubble>
+    <CoachReply>
+      <Text className="text-label text-foreground" style={CHAT_TEXT_STYLE}>
+        {message.content}
+      </Text>
+      {chartId === null ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={CHART_LINK_LABEL}
+          hitSlop={6}
+          onPress={() => onOpenChart(chartId)}
+          className="flex-row items-center gap-1.5 self-start rounded-lg bg-accent px-3.5 py-2 active:opacity-80"
+        >
+          <Icon as={ChartLine} size={16} className="text-primary" />
+          <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
+            {CHART_LINK_LABEL}
+          </Text>
+        </Pressable>
+      )}
+    </CoachReply>
   );
 }
 
-/** 코치(고양이) 말풍선 — 왼쪽에 고양이 얼굴, 옆에 bg-card 말풍선(DESIGN.md 코치 말풍선) */
-function CoachBubble({ children }: { children: React.ReactNode }) {
+/** 코치(고양이) 답변 — 고양이 얼굴 아래에 말풍선 카드 없이 바탕에 그대로 적는다(2026-09-22 사용자 요청). 카드가 없으니 폭 제한도 없다 */
+function CoachReply({ children }: { children: React.ReactNode }) {
   return (
-    <View className="flex-row items-end gap-2 self-start" style={BUBBLE_MAX_STYLE}>
+    <View className="gap-1.5">
       <Image source={COACH_CAT} style={AVATAR_STYLE} resizeMode="contain" accessible={false} />
-      <View className="flex-shrink gap-2 rounded-lg border border-border bg-card p-3.5" accessibilityRole="text">
+      <View className="gap-2" accessibilityRole="text">
         {children}
       </View>
     </View>
