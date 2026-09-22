@@ -1,5 +1,6 @@
 import { ContractMismatchError } from "@/lib/contract";
 import { KST_LOCAL_DATE_TIME } from "@/lib/date";
+import { fromServerWon, type KRW } from "@/lib/money";
 
 /**
  * 코칭 대화 계약 (배포 서버 Swagger `/api/v1/coaching/chat`, 백엔드 develop CoachingChatController, 2026-09-22 대조. FR-AI-04 · PAGE-31).
@@ -31,6 +32,9 @@ export type ChatRole = (typeof CHAT_ROLES)[number] | "UNKNOWN";
 
 export type ChatRequestDto = { message: string };
 
+export type ChatSpendingRowDto = { envelope: string; totalKrw: number; count: number };
+export type ChatSpendingRow = { envelope: string; totalKrw: KRW; count: number };
+
 export type ChatReplyDto = {
   reply: string;
   kind: string;
@@ -38,10 +42,14 @@ export type ChatReplyDto = {
   source: string | null;
   fallbackReason: string | null;
   answerId: string | null;
-  /** 답변에 예산 예측 차트가 딸렸을 때 그 id — 앱 제안 필드(TBD 2026-09-22, HTML 로 받기로만 결정). 없으면 undefined·null */
+  /** 답변에 예산 예측 차트가 딸렸을 때 그 id. 없으면 undefined·null */
   chartId?: string | null;
+  /** 소비 조회 답변의 봉투별 집계. 그 외 답변은 빈 배열·null */
+  rows: ChatSpendingRowDto[];
+  totalKrw: number | null;
 };
 
+/** GET 이력에는 소비 집계(rows·totalKrw)가 포함되지 않는다 */
 export type ChatMessageDto = { role: string; content: string; chartId?: string | null };
 
 export type ChatHistoryDto = {
@@ -61,9 +69,17 @@ export type ChatReply = {
   isAnswered: boolean;
   /** 딸린 예산 예측 차트. 모양이 아니면 없는 것으로 본다 */
   chartId: string | null;
+  rows: ChatSpendingRow[];
+  totalKrw: KRW | null;
 };
 
-export type ChatMessage = { role: ChatRole; content: string; chartId: string | null };
+export type ChatMessage = {
+  role: ChatRole;
+  content: string;
+  chartId: string | null;
+  rows: ChatSpendingRow[];
+  totalKrw: KRW | null;
+};
 
 export type ChatHistory = {
   messages: ChatMessage[];
@@ -76,8 +92,24 @@ function toUnion<T extends string>(values: readonly T[], raw: string | null | un
   return typeof raw === "string" && (values as readonly string[]).includes(raw) ? (raw as T) : "UNKNOWN";
 }
 
+function won(value: number, field: string): KRW {
+  try {
+    return fromServerWon(value);
+  } catch {
+    throw new ContractMismatchError(field);
+  }
+}
+
+function toSpendingRow(dto: ChatSpendingRowDto): ChatSpendingRow {
+  if (typeof dto?.envelope !== "string") throw new ContractMismatchError("rows.envelope");
+  if (!Number.isSafeInteger(dto.count) || dto.count < 0) throw new ContractMismatchError("rows.count");
+  return { envelope: dto.envelope, totalKrw: won(dto.totalKrw, "rows.totalKrw"), count: dto.count };
+}
+
 export function toChatReply(dto: ChatReplyDto): ChatReply {
   if (typeof dto.reply !== "string") throw new ContractMismatchError("reply");
+  const rows = dto.rows ?? [];
+  if (!Array.isArray(rows)) throw new ContractMismatchError("rows");
   const status = toUnion(CHAT_STATUSES, dto.status);
   return {
     reply: dto.reply,
@@ -88,12 +120,20 @@ export function toChatReply(dto: ChatReplyDto): ChatReply {
     answerId: dto.answerId ?? null,
     isAnswered: status === "answered",
     chartId: parseChartId(dto.chartId ?? undefined),
+    rows: rows.map(toSpendingRow),
+    totalKrw: dto.totalKrw == null ? null : won(dto.totalKrw, "totalKrw"),
   };
 }
 
 export function toChatMessage(dto: ChatMessageDto): ChatMessage {
   if (typeof dto.content !== "string") throw new ContractMismatchError("messages.content");
-  return { role: toUnion(CHAT_ROLES, dto.role), content: dto.content, chartId: parseChartId(dto.chartId ?? undefined) };
+  return {
+    role: toUnion(CHAT_ROLES, dto.role),
+    content: dto.content,
+    chartId: parseChartId(dto.chartId ?? undefined),
+    rows: [],
+    totalKrw: null,
+  };
 }
 
 export function toChatHistory(dto: ChatHistoryDto): ChatHistory {
@@ -119,14 +159,15 @@ export function validateChatMessage(raw: string): ChatMessageValidation {
 /**
  * 답변을 받은 뒤 이력 캐시에 질문·답변 한 턴을 붙인다 — 이력을 다시 받지 않아도 화면이 이어진다.
  * 세션 만료 시각은 서버만 알아서(만료 뒤 첫 질문이면 새 세션) 그대로 두고, 세션이 없던 상태였으면 있는 것으로 본다.
+ * 소비 집계는 POST 응답을 캐시에 보관하는 동안만 표시한다. GET 이력으로 재조회하면 집계는 없다.
  */
 export function appendChatTurn(history: ChatHistory, question: string, reply: ChatReply): ChatHistory {
   return {
     ...history,
     messages: [
       ...history.messages,
-      { role: "user", content: question, chartId: null },
-      { role: "assistant", content: reply.reply, chartId: reply.chartId },
+      { role: "user", content: question, chartId: null, rows: [], totalKrw: null },
+      { role: "assistant", content: reply.reply, chartId: reply.chartId, rows: reply.rows, totalKrw: reply.totalKrw },
     ],
     hasSession: true,
   };
