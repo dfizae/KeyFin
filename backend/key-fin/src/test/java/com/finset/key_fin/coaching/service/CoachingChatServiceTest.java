@@ -35,6 +35,7 @@ import com.finset.key_fin.coaching.dto.ChartCreated;
 import com.finset.key_fin.coaching.dto.ChartHint;
 import com.finset.key_fin.coaching.dto.SpendingRow;
 import com.finset.key_fin.coaching.dto.ChatReply;
+import com.finset.key_fin.coaching.dto.CoachingNumericRows;
 import com.finset.key_fin.coaching.dto.CoachingSessionView;
 import com.finset.key_fin.coaching.dto.CoachingTurnReply;
 import com.finset.key_fin.coaching.dto.FdtBootstrap;
@@ -228,7 +229,7 @@ class CoachingChatServiceTest {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
 		given(chatClient.sendMessage(USER_ID, "sess-live", "이번 달 얼마 썼어?")).willReturn(
 				new CoachingTurnReply("ans-5", "spending_history", "answered", "외식 45,000원", "engine", null, null, null,
-						List.of(new SpendingRow("외식", 45_000L, 3)), 45_000L));
+						List.of(new SpendingRow("외식", 45_000L, 3)), 45_000L, null));
 
 		ChatReply reply = service.chat(USER_ID, "이번 달 얼마 썼어?");
 
@@ -266,23 +267,44 @@ class CoachingChatServiceTest {
 		assertThat(service.chartHtml(USER_ID, "ok")).isEqualTo("<!doctype html>");
 	}
 
+	@Test
+	void 위험_답변의_numeric_rows를_camelCase로_통과시키고_없으면_null이다() {
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "돈 모자랄까?")).willReturn(
+				new CoachingTurnReply("coach-7", null, null, "위험 답변", "template", null, Map.of("trigger", "risk"),
+						null, null, null, new CoachingNumericRows("risk",
+								List.of(new CoachingNumericRows.EnvelopeSpend("외식", 100_000L, 150_000L, 240_000L)),
+								List.of(new CoachingNumericRows.BudgetRisk("외식", 297_000L, 63_800L, 213_800L, 0.12)))));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "질문")).willReturn(coaching());
+
+		ChatReply risk = service.chat(USER_ID, "돈 모자랄까?");
+		ChatReply plain = service.chat(USER_ID, "질문");
+
+		assertThat(risk.numericRows().mode()).isEqualTo("risk");
+		assertThat(risk.numericRows().envelopeSpend())
+				.containsExactly(new ChatReply.NumericRows.EnvelopeSpend("외식", 100_000L, 150_000L, 240_000L));
+		assertThat(risk.numericRows().budgetRisk())
+				.containsExactly(new ChatReply.NumericRows.BudgetRisk("외식", 297_000L, 63_800L, 213_800L, 0.12));
+		assertThat(plain.numericRows()).isNull();
+	}
+
 	private static CoachingSession session(String sessionId, long secondsFromNow) {
 		return CoachingSession.open(USER_ID, sessionId,
 				LocalDateTime.ofInstant(NOW.plusSeconds(secondsFromNow), SEOUL));
 	}
 
 	private static CoachingTurnReply chatAnswer(String status, String source) {
-		return new CoachingTurnReply("ans-1", "finance_education", status, "답변", source, null, null, null, null, null);
+		return new CoachingTurnReply("ans-1", "finance_education", status, "답변", source, null, null, null, null, null, null);
 	}
 
 	private static CoachingTurnReply coaching() {
 		return new CoachingTurnReply("coach-1", null, null, "예측 답변", "llm", null,
-				Map.of("trigger", "forecast"), null, null, null);
+				Map.of("trigger", "forecast"), null, null, null, null);
 	}
 
 	private static CoachingTurnReply coachingWithChart() {
 		return new CoachingTurnReply("coach-2", null, null, "예측 답변", "llm", null,
-				Map.of("trigger", "forecast"), new ChartHint("2026-09-01", "이번 달 예산 어때?", null), null, null);
+				Map.of("trigger", "forecast"), new ChartHint("2026-09-01", "이번 달 예산 어때?", null), null, null, null);
 	}
 
 	private static HttpClientErrorException clientError(HttpStatus status) {
