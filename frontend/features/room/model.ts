@@ -344,7 +344,9 @@ export type FurnitureType = (typeof FURNITURE_TYPES)[number];
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };
 /** type 값 목록은 미확정(frontend-spec §6 #2). until 은 시간대 없는 KST 문자열 */
 export type AvatarReaction = { type: string; until: string };
+/** removableToday는 호환용 이름이며 현재 설치된 바닥 가구에 딱지가 남아 있는지를 뜻한다. 일일 제한은 없다. */
 export type RoomStickers = { count: number; total: number; removableToday: boolean };
+export type StickerRemoval = { userFurnitureId: number; stickerAttached: boolean; stickers: RoomStickers };
 
 export type Room = {
   equipped: EquippedItem[];

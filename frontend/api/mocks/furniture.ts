@@ -1,6 +1,7 @@
 import { FURNITURE, isWallItemId, type FurnitureId } from "@/features/room/catalog";
 import { placedFurnitureDtos, statusOfSurface, toPlacementRequest, toUserFurnitures, type UserFurnitureDto } from "@/features/room/furniture";
-import type { FurnitureType, PlacedFurnitureDto } from "@/features/room/model";
+import type { FurnitureType, PlacedFurnitureDto, RoomStickers, StickerRemoval } from "@/features/room/model";
+import { ApiError } from "@/api/error";
 import { validatePlacements, type FurniturePlacementsRequest } from "@/features/room/placements";
 import { DEFAULT_LAYOUT } from "@/features/room/scene";
 
@@ -113,7 +114,7 @@ export function placedFurnitureMock(): PlacedFurnitureDto[] {
   return placedFurnitureDtos(toUserFurnitures(ensure()));
 }
 
-/** 검증과 새 배열 작성이 모두 끝난 뒤 한 번에 반영한다. 교체는 딱지 제거로 세지 않는다. */
+/** 검증과 새 배열 작성이 모두 끝난 뒤 한 번에 반영한다. */
 export function updateFurniturePlacementsMock(request: FurniturePlacementsRequest): UserFurnitureDto[] {
   const list = ensure();
   validatePlacements(request, toUserFurnitures(list));
@@ -122,9 +123,9 @@ export function updateFurniturePlacementsMock(request: FurniturePlacementsReques
   furnitures = list.map((item): UserFurnitureDto => {
     const placement = placements.get(item.userFurnitureId);
     return placement ? { ...item, ...placement, placed: true, canUnplace: item.furnitureType === null,
-      stickerAttached: item.furnitureType !== null && stickers.has(item.furnitureType) }
+      stickerAttached: item.furnitureType !== null ? stickers.has(item.furnitureType) : item.stickerAttached }
       : { ...item, placed: false, placementStatus: null, placementDirection: null, positionX: null, positionY: null,
-        layer: 0, stickerAttached: false, canUnplace: true };
+        layer: 0, stickerAttached: item.furnitureType === null && item.stickerAttached, canUnplace: true };
   });
   return furnitureListMock();
 }
@@ -132,4 +133,29 @@ export function updateFurniturePlacementsMock(request: FurniturePlacementsReques
 /** 테스트·개발 재시작용 */
 export function resetFurnitureMocks(initial?: UserFurnitureDto[]): void {
   furnitures = initial?.map((item) => ({ ...item })) ?? null;
+  appliedPeriods.clear();
+}
+
+const appliedPeriods = new Set<string>();
+
+/** 개발·테스트에서 예산 초과 이벤트를 재현한다. 조회·배치 저장에서는 새로 부착하지 않는다. */
+export function applyBudgetStickersMock(period: string): void {
+  if (appliedPeriods.has(period)) return;
+  appliedPeriods.add(period);
+  ensure().forEach((item) => { if (item.placementStatus === "FLOOR") item.stickerAttached = true; });
+}
+
+export function stickerStatusMock(): RoomStickers {
+  const installed = ensure().filter((item) => item.placementStatus === "FLOOR");
+  const count = installed.filter((item) => item.stickerAttached).length;
+  return { count, total: installed.length, removableToday: count > 0 };
+}
+
+export function removeStickerMock(userFurnitureId: number): StickerRemoval {
+  const target = ensure().find((item) => item.userFurnitureId === userFurnitureId);
+  if (!target) throw new ApiError(404, "FURNITURE_001", "보유 가구를 찾을 수 없습니다.");
+  if (target.placementStatus !== "FLOOR") throw new ApiError(400, "ROOM_001", "바닥에 설치된 가구만 제거할 수 있습니다.");
+  if (!target.stickerAttached) throw new ApiError(409, "ROOM_003", "부착된 딱지가 없습니다.");
+  target.stickerAttached = false;
+  return { userFurnitureId, stickerAttached: false, stickers: stickerStatusMock() };
 }

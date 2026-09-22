@@ -2,7 +2,7 @@ import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as React from "react";
 
-import { acquireFurnitureMock, furnitureListMock, resetFurnitureMocks } from "@/api/mocks/furniture";
+import { acquireFurnitureMock, applyBudgetStickersMock, furnitureListMock, resetFurnitureMocks } from "@/api/mocks/furniture";
 import { ApiError } from "@/api/error";
 import * as furnitureApi from "@/features/room/api/furniture.api";
 import * as roomApi from "@/features/room/api/room.api";
@@ -70,6 +70,20 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     await fireEvent.press(screen.getByRole("button", { name: EDIT_LABEL }));
     expect(mockPush).toHaveBeenCalledWith(ROOM_EDIT_ROUTE);
     expect(useRoomStore.getState().draft).toBeNull();
+  });
+
+  it("딱지가 붙은 일반 가구를 보관하면 부착 표시와 재설치 안내가 보인다", async () => {
+    const list = furnitureListMock();
+    const bed = list.find((item) => item.assetKey === "bed_pink")!;
+    resetFurnitureMocks(list.map((item) => item.userFurnitureId === bed.userFurnitureId ? {
+      ...item, placed: true, placementStatus: "FLOOR", placementDirection: "FRONT_RIGHT", positionX: 100, positionY: 500,
+    } : item));
+    applyBudgetStickersMock("202609");
+    await renderEditing();
+    await act(() => useRoomStore.getState().removeItem("bed_pink"));
+    expect(screen.getByRole("button", { name: `${bed.name}, 압류 딱지 부착, 방에 놓기` })).toBeTruthy();
+    expect(screen.getByText("압류 딱지는 다시 설치한 뒤 제거할 수 있어요.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "딱지 제거" })).toBeNull();
   });
 
   it("편집 화면에 들어오면 사본을 만들고, 취소는 옮긴 것을 버리고 돌아간다", async () => {

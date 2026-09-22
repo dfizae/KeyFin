@@ -274,6 +274,9 @@ function StorageTray({ stored, pending, failed, retrying, disabled, onRetry, onP
           renderItem={({ item }) => <StoredTile furniture={item} disabled={disabled} onPress={onPlace} />}
         />
       )}
+      {stored.some((item) => item.stickerAttached) ? (
+        <Text className="px-6 text-caption text-card-foreground">압류 딱지는 다시 설치한 뒤 제거할 수 있어요.</Text>
+      ) : null}
     </View>
   );
 }
@@ -284,7 +287,7 @@ function StoredTile({ furniture, disabled, onPress }: { furniture: StoredFurnitu
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${furniture.name}, 방에 놓기`}
+      accessibilityLabel={`${furniture.name}${furniture.stickerAttached ? ", 압류 딱지 부착" : ""}, 방에 놓기`}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => onPress(furniture)}
@@ -296,6 +299,7 @@ function StoredTile({ furniture, disabled, onPress }: { furniture: StoredFurnitu
         ) : (
           <Image source={thumbnail} style={TRAY_SPRITE_STYLE} resizeMode="contain" accessible={false} />
         )}
+        {furniture.stickerAttached ? <Text className="absolute bottom-0 rounded bg-destructive px-1 text-caption text-white">압류</Text> : null}
       </View>
       <Text className="text-caption text-card-foreground" numberOfLines={1}>
         {furniture.name}
