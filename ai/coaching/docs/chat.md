@@ -86,3 +86,38 @@ flowchart TD
 월말 예측의 중복 JSON을 보조 작성기에 다시 보내던 경로는 수정했습니다. 숫자는 먼저 검증해 본문에 표시하고, GPU에는 그 표시 내용을 한 번만 전달합니다. 실제 토크나이저의 입력 한도 검사를 계속 적용합니다. 큰 원본의 기존 불완전 근거 차단과 잘못된 수치·보장 문구의 거절도 유지합니다.
 
 실제 GPU 비교, 지연, 회귀 증거와 Jira 잔여 작업은 [응답 검증 보고서](chat-response-validation.md)에 있습니다.
+
+## 위험·가정 대화의 봉투별 표 데이터 (`numeric_rows`)
+
+위험(risk)·가정(what-if) 수치 대화의 `Coaching` 응답은 `text`와 별개로 봉투별 구조화 행을 1급 필드 `numeric_rows`로 함께 내려, 앱이 소비 조회 `rows`처럼 표로 그릴 수 있게 합니다. 서버가 수치를 새로 만들지 않고 엔진이 이미 계산한 값(`receipt.numeric_result.datasets`)을 그대로 노출하므로 같은 값이 receipt에도 남아 계약 보증이 이중입니다. `text`는 변하지 않습니다.
+
+```json
+"numeric_rows": {
+  "mode": "risk",                       // "risk" | "what_if"
+  "envelope_spend": [                    // 두 모드 모두. 봉투별 예측 소비 분위수
+    {"envelope": "외식", "p10_krw": 90000, "p50_krw": 150000, "p90_krw": 230000}
+  ],
+  "budget_risk": [                       // 위험 대화 + 스냅샷에 예산이 있을 때만
+    {"envelope": "외식", "budget_krw": 200000, "observed_used_krw": 136300,
+     "projected_used_p50_krw": 210000, "p_over_budget": 0.62}
+  ]
+}
+```
+
+- `numeric_rows`는 위험·가정 대화에서만 채워지고 그 외 대화는 `null`입니다. 근거가 없는 행은 비웁니다(빈 배열).
+- `budget_risk`는 위험 대화에서 스냅샷에 봉투 예산이 있을 때만 채워집니다(없으면 `[]`).
+- 앱은 `numeric_rows`로 봉투별(외식·교통비·의료·취미·쇼핑 등) 표를, `text`로 사람 문장을 그립니다. 백엔드는 DTO를 통과시켜 앱에 `numericRows`(camelCase)로 내려주면 됩니다.
+
+## 예산 주기 시작일 (`Bootstrap.budget_start_day`)
+
+`POST /v1/twin` 부트스트랩의 **최상위**(as_of·envelopes와 같은 위치)에 선택적 `budget_start_day`(정수 **1–28**)를 실으면, "이번 달" 등 예산 주기와 예산 차트가 **그 시작일 기준**으로 계산되고 질문 기준일 변화를 따라갑니다. 고정 FDT snapshot(`additionalProperties:false`)은 건드리지 않으려고 최상위에 둡니다.
+
+```json
+{ "as_of": "2026-09-22", "transactions": [/* … */], "snapshot": {/* … */},
+  "envelopes": [/* … */], "budget_start_day": 15 }
+```
+
+- 예: `budget_start_day=15`, 기준일 2026-09-20 → 예산 주기 2026-09-15~2026-10-14. 기준일 2026-09-10 → 시작일 이전이라 직전 주기 2026-08-15~2026-09-14.
+- **생략하면 서비스가 저장하지 않고 기간 계산이 1일로 폴백**해 기존 호출자 동작이 그대로 유지됩니다(하위호환).
+- 값은 서비스측 `BudgetConfig`(`budget/config`)로 한 번 보관되며 Twin/원장과 분리돼 이벤트마다 재구성되지 않습니다. `chart_hint.period_start`도 이 시작일을 반영합니다.
+- 백엔드는 사용자 설정값(예: `user_settings.budget_anchor_day`)을 이 필드로 실어 보내면 됩니다.
