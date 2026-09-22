@@ -17,7 +17,7 @@
 
 **메시지 응답이 이제 두 형식입니다.** 클라이언트가 모든 응답에 `receipt`가 있다고 가정하면 수정해야 합니다. `answer_type`이 있으면 `ChatAnswer`, `receipt`가 있으면 기존 `Coaching`으로 처리합니다. 기존 코칭·차트의 응답 필드는 유지했습니다. 최신 스키마는 실행 중인 `/docs`와 `routes.py`, `chat_answers.py`에 있습니다.
 
-예측 대화(`Coaching`)는 선택적 `chart_hint`를 함께 반환할 수 있습니다. `mode=forecast` 예측이나 구매 검토 대화처럼 예산 차트가 의미 있는 경우에만 채워지며, 그 밖의 대화는 `chart_hint=null`입니다. 값이 있으면 `{"endpoint":"/v1/charts/budget-forecast", "period_start", "question", "purchase"}` 형태로, 이 대화와 같은 예산 월의 차트를 얻기 위해 앱이 그대로 [`POST /v1/charts/budget-forecast`](charts.md)로 보낼 본문입니다. `period_start`는 대화 기준일이 속한 예산 월의 1일이라 그 기준일을 포함하는 유효한 예산 주기입니다. `purchase`는 구매 what-if 차트를 위한 자리로 현재는 항상 `null`입니다. 서버는 힌트를 만들 때 두 번째 시뮬레이션이나 차트 저장을 하지 않으므로, 시각화가 필요할 때만 앱이 한 번 더 호출합니다. 엔드포인트는 그대로 분리되어 있습니다.
+예측 대화(`Coaching`)는 선택적 `chart_hint`를 함께 반환할 수 있습니다. `mode=forecast` 예측이나 구매 검토 대화처럼 예산 차트가 의미 있는 경우에만 채워지며, 그 밖의 대화는 `chart_hint=null`입니다. 값이 있으면 `{"endpoint":"/v1/charts/budget-forecast", "period_start", "question", "purchase"}` 형태로, 이 대화와 같은 예산 월의 차트를 얻기 위해 앱이 그대로 [`POST /v1/charts/budget-forecast`](charts.md)로 보낼 본문입니다. `period_start`는 대화 기준일이 속한 예산 월의 1일이라 그 기준일을 포함하는 유효한 예산 주기입니다. `purchase`는 구매 검토 대화에서 확정한 예정 구매가 예산 월·기준일 이후 조건을 만족할 때 `{envelope, amount_krw, on_date}`로 채워지며, 그 밖에는 `null`입니다. 서버는 힌트를 만들 때 두 번째 시뮬레이션이나 차트 저장을 하지 않으므로, 시각화가 필요할 때만 앱이 한 번 더 호출합니다. 엔드포인트는 그대로 분리되어 있습니다.
 
 `ChatAnswer`는 `id`, `answer_type`, `status`, `text`, `wording_source`, `model`, `fallback_reason`, `evidence`, `created_at`을 반환합니다.
 
@@ -47,6 +47,18 @@
 확정 소비 이력 조회는 봉투 소비에 한정합니다. 계좌·자산·부채·예정 결제는 기존 Twin의 snapshot, 보험·등록 소득·고정비·목표는 인증된 백엔드의 개인 현황 자료를 조회하는 `personal` 경로로 분리합니다. [개인 현황 계약](personal-context.md)에 지원 범위와 결측·불완전 자료의 표시를 설명합니다. 실제 연동 없이 개인 금액을 추정해 답하지 않습니다.
 
 구조화된 `period`는 **미래 예측 기간** 계약입니다. `finance`·`history`·`personal`·`other` 의도에 이를 주고 명시적 `analysis`가 없으면 `422 period_not_supported_for_intent`로 거절합니다. 과거 소비 필터로 해석하거나 조용히 무시하지 않습니다. 명시적 `analysis`는 일반 의도 분기보다 우선하며 기존 금융 계산·기간 검사를 받습니다.
+
+### 구매 검토 되묻기 코드
+
+"닌텐도 스위치 사고싶어"처럼 구매 의도는 분명하지만 금액·품목 봉투·결제 수단·구매 시점 중 하나가 빠지거나 애매하면, 서버는 금액을 추정하지 않고 소비 조회의 되묻기와 같은 방식으로 **`200` `ChatAnswer`(`answer_type=purchase_review`, `status=needs_clarification`)** 한 턴을 돌려줍니다. `text`에 아래 표의 후속 질문 문장이 그대로 담기므로 앱은 이를 대화 말풍선으로 바로 렌더링하면 됩니다. 이 턴은 정상 대화 한 턴으로 저장되며(재전송 시 같은 `Idempotency-Key`로 동일 결과), 모델은 호출되지 않습니다. 어떤 필드가 필요한지 기계적으로 분기하려면 `fallback_reason`(원 코드)이나 `evidence.purchase.clarification`을 읽습니다.
+
+| 코드(`fallback_reason`) | 뜻 | `text`로 반환되는 후속 질문 |
+| --- | --- | --- |
+| `purchase_amount_required` | 금액이 없거나 두 개 이상이라 특정 불가 | "얼마짜리 구매인지 금액을 알려주시면 이번 예산에 미치는 영향을 확인해 드릴게요." |
+| `purchase_envelope_required` | 어떤 소비 봉투에 넣을 품목인지 특정 불가 | "어떤 항목의 지출인지 알려주시면 해당 봉투 기준으로 살펴볼게요." |
+| `purchase_payment_method_required` | 현금·카드가 함께 나오거나, 실제 결제 수단·카드 결제일이 특정 불가 | "현금·계좌 결제인지 카드 결제인지 알려주세요. 카드라면 결제 예정일도 함께 알려주시면 정확히 반영할 수 있어요." |
+| `purchase_installment_unsupported` | 할부는 Phase 1 범위 밖(단건 결제만 지원) | "할부 구매는 아직 지원하지 않아요. 일시불 기준으로 다시 여쭤봐 주시면 확인해 드릴게요." |
+| `purchase_date_required` | 구매 시점(오늘·내일·이번주·YYYY-MM-DD)을 특정 불가 | "언제 구매할 예정인지 알려주세요. 오늘·내일·이번주처럼 시점을 알려주시면 그 기준으로 확인해 드릴게요." |
 
 ## 처리 구조
 

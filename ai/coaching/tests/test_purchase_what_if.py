@@ -4,9 +4,11 @@
 Cases (a)-(g) follow scratchpad/SPEC-purchase.md section 5. Every clarification
 and the deterministic route below must never call the injected model's
 ``route``/``write``/``judge`` methods; a purchase question either resolves to
-one FDT ``expense`` change through the existing review path, or it is refused
-with a clarification code before any model call, exactly like the existing
-``period_clarification_required`` contract.
+one FDT ``expense`` change through the existing review path, or it clarifies
+before any model call. The agreed clarify codes (amount/envelope/payment
+method/installment/date) now return a normal 200 ``needs_clarification`` turn (an
+``answer_type=purchase_review`` ``ChatAnswer``, recorded like a spending
+clarification).
 """
 
 from pathlib import Path
@@ -16,7 +18,7 @@ import pytest
 from test_api import TOKEN, TestModel, setup
 from test_engine import fixture
 
-from coaching_service.fast_routes import natural_purchase
+from coaching_service.fast_routes import NaturalPurchase, natural_purchase
 from coaching_service.llm_contract import EvidenceInput, Routing
 from coaching_service.numeric_rendering import _PURCHASE_OK, _PURCHASE_RISK, purchase_verdict_text
 from coaching_service.schemas import Bootstrap, JsonDocument, Receipt, Session, TwinIdentity
@@ -75,6 +77,95 @@ async def _bootstrap(client: httpx2.AsyncClient, twin: Bootstrap) -> str:
 
 def test_price_only_question_is_not_a_purchase_route() -> None:
     assert natural_purchase("아이폰 가격이 얼마야?") is None
+
+
+# --- casual purchase phrasings are now recognized as purchase intent (DO a) ---
+
+
+def test_casual_buy_phrasing_is_recognized_as_purchase_missing_amount() -> None:
+    # "사고싶어" must no longer fall through to off-topic: it is a purchase with a
+    # missing amount, so it clarifies rather than returning None.
+    assert natural_purchase("닌텐도 스위치 사고싶어") == "purchase_amount_required"
+
+
+def test_casual_buy_phrasing_variants_are_recognized() -> None:
+    # Casual verbs are recognized only alongside a concrete purchase signal (here
+    # an item alias). "장만하" was removed entirely (collides with 장만하다 뜻 / 집 장만).
+    for question in ("에어팟 사볼까", "청소기 사둘까", "냉장고 사고싶어"):
+        assert natural_purchase(question) == "purchase_amount_required", question
+
+
+def test_casual_buy_with_all_fields_parses_to_full_natural_purchase() -> None:
+    parsed = natural_purchase("40만원짜리 닌텐도 스위치 이번주에 현금으로 사도 될까")
+    assert isinstance(parsed, NaturalPurchase)
+    assert parsed.amount_krw == 400_000
+    assert parsed.envelope == "기타"
+    assert parsed.date_token == "this_week"
+    assert parsed.payment_hint == "cash"
+
+
+def test_given_casual_cash_question_recognized_but_missing_amount() -> None:
+    # The exact casual phrasing from the task: recognized as a purchase (verb
+    # "사도"), missing only its amount, so it clarifies instead of guessing.
+    assert natural_purchase("닌텐도 스위치 이번주에 현금으로 사도 될까") == "purchase_amount_required"
+
+
+# --- new consumer-item aliases resolve to an envelope (DO c) ---
+
+
+def test_new_item_aliases_resolve_to_envelope() -> None:
+    for item, envelope in (
+        ("닌텐도", "기타"),
+        ("스위치", "기타"),
+        ("게임기", "기타"),
+        ("에어팟", "기타"),
+        ("티비", "기타"),
+        ("tv", "기타"),
+        ("청소기", "기타"),
+        ("에어컨", "기타"),
+        ("냉장고", "기타"),
+    ):
+        parsed = natural_purchase(f"50만원짜리 {item} 이번주에 현금으로 사도 될까")
+        assert isinstance(parsed, NaturalPurchase), item
+        assert parsed.envelope == envelope, item
+
+
+# --- FALSE-POSITIVE guard: non-purchase sentences must stay non-purchase (DO a) ---
+
+
+def test_added_verbs_do_not_create_false_positive_purchases() -> None:
+    assert natural_purchase("동물원에서 사자 봤어") is None  # 사자 = lion, not 사다
+    assert natural_purchase("여기서 며칠 살래") is None  # 살다 = live, not buy
+    assert natural_purchase("복리가 뭐야") is None
+    assert natural_purchase("이번달 소비 얼마야") is None
+
+
+def test_casual_verb_without_concrete_signal_does_not_hijack_finance_routing() -> None:
+    # Regression: casual buy verbs (사고싶/사볼까/사둘까) with no amount and no item
+    # alias must fall through to finance/definition/goal routing, not emit a
+    # purchase clarify. "장만하" is gone entirely.
+    assert natural_purchase("예금 사고싶은데 뭐가 좋아") is None  # finance concept
+    assert natural_purchase("장만하다 뜻이 뭐야") is None  # definition
+    assert natural_purchase("집 장만하려면 얼마 모아야 해") is None  # goal/concept
+    assert natural_purchase("이거 사고싶다는 생각만 했어") is None  # no amount, no item
+
+
+def test_casual_verb_with_concrete_signal_is_recognized() -> None:
+    # An item alias is enough of a concrete signal to admit the casual verb.
+    assert natural_purchase("닌텐도 스위치 사고싶어") == "purchase_amount_required"
+    # A full casual purchase parses through to NaturalPurchase (or the next
+    # missing-field code); here every field is present, so it is a full purchase.
+    parsed = natural_purchase("닌텐도 스위치 30만원 이번주에 현금으로 사고싶어")
+    assert isinstance(parsed, (NaturalPurchase, str))
+    if isinstance(parsed, NaturalPurchase):
+        assert parsed.amount_krw == 300_000
+        assert parsed.envelope == "기타"
+
+
+def test_already_covered_buy_edge_stays_sane() -> None:
+    # "사서" is a pre-existing verb form; behavior is unchanged: it is a purchase
+    # with a missing amount, so it clarifies (it must not crash or become None).
+    assert natural_purchase("책을 사서 읽었어") == "purchase_amount_required"
 
 
 # --- (a) a clear single-payment purchase reaches the review route deterministically ---
@@ -152,36 +243,59 @@ async def test_missing_amount_clarifies_without_model_call(tmp_path: Path) -> No
     ) as client:
         session_id = await _bootstrap(client, fixture())
         path = "/v1/sessions/" + session_id
-        before = await client.get(path)
         response = await client.post(
             path + "/messages",
             json={"question": "노트북 이번 주에 사면 이번 달 괜찮아?"},
             headers={"Idempotency-Key": "turn"},
         )
-        assert response.status_code == 422
-        assert response.json()["error"] == "purchase_amount_required"
-        assert Session.model_validate_json((await client.get(path)).content) == Session.model_validate_json(
-            before.content
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["answer_type"] == "purchase_review"
+        assert answer["status"] == "needs_clarification"
+        assert answer["fallback_reason"] == "purchase_amount_required"
+        assert answer["evidence"]["purchase"]["clarification"] == "purchase_amount_required"
+        assert answer["text"] == (
+            "얼마짜리 구매인지 금액을 알려주시면 이번 예산에 미치는 영향을 확인해 드릴게요."
         )
+        assert answer["model"] == "not_called"
+        # A 200 clarification is a normal recorded turn (user + assistant message).
+        session = Session.model_validate_json((await client.get(path)).content)
+        assert len(session.messages) == 2
         assert model.writes == 0
         assert model.routes == 0
 
 
 @pytest.mark.anyio
 async def test_missing_date_clarifies_without_model_call(tmp_path: Path) -> None:
+    # A clear purchase (amount + item + verb) that only omits its date now
+    # returns the same 200 needs_clarification turn as the other clarify codes,
+    # not a 422.
     model = RouteMustNotRun()
     async with httpx2.AsyncClient(
         transport=httpx2.ASGITransport(app=setup(tmp_path / "purchase-c2.sqlite3", model)),
         base_url="http://test", headers={"Authorization": "Bearer " + TOKEN},
     ) as client:
-        path = "/v1/sessions/" + await _bootstrap(client, fixture())
+        session_id = await _bootstrap(client, fixture())
+        path = "/v1/sessions/" + session_id
         response = await client.post(
             path + "/messages",
             json={"question": "300만원짜리 노트북 사면 이번 달 괜찮아?"},
             headers={"Idempotency-Key": "turn"},
         )
-        assert response.status_code == 422
-        assert response.json()["error"] == "purchase_date_required"
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["answer_type"] == "purchase_review"
+        assert answer["status"] == "needs_clarification"
+        assert answer["fallback_reason"] == "purchase_date_required"
+        assert answer["evidence"]["purchase"]["clarification"] == "purchase_date_required"
+        assert answer["text"] == (
+            "언제 구매할 예정인지 알려주세요. "
+            "오늘·내일·이번주처럼 시점을 알려주시면 그 기준으로 확인해 드릴게요."
+        )
+        assert answer["model"] == "not_called"
+        # A 200 clarification is a normal recorded turn (user + assistant message).
+        session = Session.model_validate_json((await client.get(path)).content)
+        assert len(session.messages) == 2
         assert model.writes == 0
         assert model.routes == 0
 
@@ -199,8 +313,13 @@ async def test_missing_envelope_mapping_clarifies_without_model_call(tmp_path: P
             json={"question": "300만원짜리 이번 주에 사면 이번 달 괜찮아?"},
             headers={"Idempotency-Key": "turn"},
         )
-        assert response.status_code == 422
-        assert response.json()["error"] == "purchase_envelope_required"
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["answer_type"] == "purchase_review"
+        assert answer["status"] == "needs_clarification"
+        assert answer["fallback_reason"] == "purchase_envelope_required"
+        assert answer["text"] == "어떤 항목의 지출인지 알려주시면 해당 봉투 기준으로 살펴볼게요."
+        assert answer["model"] == "not_called"
         assert model.writes == 0
         assert model.routes == 0
 
@@ -220,8 +339,42 @@ async def test_ambiguous_payment_method_clarifies_without_model_call(tmp_path: P
             json={"question": "300만원짜리 노트북 이번 주에 사면 이번 달 괜찮아?"},
             headers={"Idempotency-Key": "turn"},
         )
-        assert response.status_code == 422
-        assert response.json()["error"] == "purchase_payment_method_required"
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["answer_type"] == "purchase_review"
+        assert answer["status"] == "needs_clarification"
+        assert answer["fallback_reason"] == "purchase_payment_method_required"
+        assert answer["text"] == (
+            "현금·계좌 결제인지 카드 결제인지 알려주세요. "
+            "카드라면 결제 예정일도 함께 알려주시면 정확히 반영할 수 있어요."
+        )
+        assert answer["model"] == "not_called"
+        assert model.writes == 0
+        assert model.routes == 0
+
+
+@pytest.mark.anyio
+async def test_conflicting_payment_words_clarify_at_200_without_model_call(tmp_path: Path) -> None:
+    # Both a cash word and a card word appear: the text-only parser (site 1)
+    # emits purchase_payment_method_required before any twin load, and it must
+    # also surface as a 200 needs_clarification turn, not a 422.
+    model = RouteMustNotRun()
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=setup(tmp_path / "purchase-c5.sqlite3", model)),
+        base_url="http://test", headers={"Authorization": "Bearer " + TOKEN},
+    ) as client:
+        path = "/v1/sessions/" + await _bootstrap(client, fixture())
+        response = await client.post(
+            path + "/messages",
+            json={"question": "300만원짜리 노트북 이번 주에 카드로 현금으로 사면 이번 달 괜찮아?"},
+            headers={"Idempotency-Key": "turn"},
+        )
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["answer_type"] == "purchase_review"
+        assert answer["status"] == "needs_clarification"
+        assert answer["fallback_reason"] == "purchase_payment_method_required"
+        assert answer["model"] == "not_called"
         assert model.writes == 0
         assert model.routes == 0
 
@@ -242,8 +395,15 @@ async def test_installment_purchase_is_refused_not_answered_as_single_payment(tm
             json={"question": "300만원짜리 노트북 12개월 할부로 사면 이번 달 괜찮아?"},
             headers={"Idempotency-Key": "turn"},
         )
-        assert response.status_code == 422
-        assert response.json()["error"] == "purchase_installment_unsupported"
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["answer_type"] == "purchase_review"
+        assert answer["status"] == "needs_clarification"
+        assert answer["fallback_reason"] == "purchase_installment_unsupported"
+        assert answer["text"] == (
+            "할부 구매는 아직 지원하지 않아요. 일시불 기준으로 다시 여쭤봐 주시면 확인해 드릴게요."
+        )
+        assert answer["model"] == "not_called"
         assert model.writes == 0
         assert model.routes == 0
 
