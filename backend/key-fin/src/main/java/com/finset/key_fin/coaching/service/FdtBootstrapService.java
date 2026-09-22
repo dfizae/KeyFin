@@ -59,7 +59,8 @@ public class FdtBootstrapService {
 						cards.stream().map(Card::getId).toList()));
 		List<FixedExpense> fixedExpenses = fixedExpenseRepository.findAllByUserIdAndActiveTrueOrderByIdAsc(userId);
 
-		String month = BudgetPeriod.current(asOf, anchorDayOf(userId)).month();
+		int anchorDay = anchorDayOf(userId);
+		String month = BudgetPeriod.current(asOf, anchorDay).month();
 		List<EnvelopeBalance> balances = envelopeBalanceService.getMonthlyBalances(userId, month);
 
 		FdtSnapshot snapshot = snapshotAssembler.assemble(
@@ -70,7 +71,8 @@ public class FdtBootstrapService {
 				transactionMapper.map(
 						transactionRepository.findAllByUserIdOrderByTransactionDateAscTransactionTimeAscIdAsc(userId)),
 				snapshot,
-				envelopes(balances)
+				envelopes(balances),
+				anchorDay
 		);
 	}
 

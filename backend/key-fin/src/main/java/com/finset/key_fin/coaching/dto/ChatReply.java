@@ -11,9 +11,34 @@ public record ChatReply(
 		String answerId,
 		String chartId,
 		List<Row> rows,
-		Long totalKrw
+		Long totalKrw,
+		NumericRows numericRows
 ) {
 	public record Row(String envelope, long totalKrw, int count) {
+	}
+
+	public record NumericRows(String mode, List<EnvelopeSpend> envelopeSpend, List<BudgetRisk> budgetRisk) {
+		public record EnvelopeSpend(String envelope, long p10Krw, long p50Krw, long p90Krw) {
+		}
+
+		public record BudgetRisk(String envelope, long budgetKrw, long observedUsedKrw, long projectedUsedP50Krw,
+				double pOverBudget) {
+		}
+
+		static NumericRows from(CoachingNumericRows source) {
+			if (source == null) {
+				return null;
+			}
+			return new NumericRows(
+					source.mode(),
+					source.envelopeSpend() == null ? List.of() : source.envelopeSpend().stream()
+							.map(row -> new EnvelopeSpend(row.envelope(), row.p10Krw(), row.p50Krw(), row.p90Krw()))
+							.toList(),
+					source.budgetRisk() == null ? List.of() : source.budgetRisk().stream()
+							.map(row -> new BudgetRisk(row.envelope(), row.budgetKrw(), row.observedUsedKrw(),
+									row.projectedUsedP50Krw(), row.pOverBudget()))
+							.toList());
+		}
 	}
 	public enum Kind { CHAT, COACHING }
 
@@ -31,6 +56,7 @@ public record ChatReply(
 				turn.id(),
 				chartId,
 				rows,
-				turn.totalKrw());
+				turn.totalKrw(),
+				NumericRows.from(turn.numericRows()));
 	}
 }
