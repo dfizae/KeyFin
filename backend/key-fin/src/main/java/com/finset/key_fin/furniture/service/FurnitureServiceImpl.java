@@ -105,12 +105,13 @@ public class FurnitureServiceImpl implements FurnitureService {
 		}
 		for (var furniture : owned) {
 			if (!ids.contains(furniture.getId())) furniture.unplace();
+			// Essential stickers belong to the type; ordinary stickers stay with the owned item.
+			if (furniture.getItem().getFurnitureType() != null) furniture.removeSticker();
 		}
 		for (var placement : request.placements()) {
 			var furniture = byId.get(placement.userFurnitureId());
 			furniture.place(placement.placementStatus(), placement.placementDirection(),
 					placement.positionX(), placement.positionY(), placement.layer() == null ? 0 : placement.layer());
-			furniture.removeSticker();
 			if (stickerTypes.contains(furniture.getItem().getFurnitureType())) furniture.attachSticker();
 		}
 		userFurnitureRepository.flush();

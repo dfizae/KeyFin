@@ -17,8 +17,9 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { CHARACTER_IDLE, COACH_CAT, ROOM_FLOOR } from "@/features/room/assets";
-import { useRoom } from "@/features/room/api/queries";
+import { CHARACTER_IDLE, COACH_CAT, ROOM_FLOOR, SEIZURE_STICKER } from "@/features/room/assets";
+import { useFurnitures, useRoom } from "@/features/room/api/queries";
+import { stickerGeometry, stickerPlacements } from "@/features/room/stickers";
 import { readCamera, useRoomCamera } from "@/features/room/camera";
 import { FURNITURE, WALL_ITEMS, isWallItemId, type RoomItemId } from "@/features/room/catalog";
 import {
@@ -84,7 +85,7 @@ const FLOOR_SURFACE = SURFACES.FLOOR;
  * 실제보다 오래 걸리는 것처럼 보였다(사용자 지적 2026-09-20). 이것과 놓인 가구 그림이 다 준비될 때까지 기다렸다가 방을 통째로 보여 준다.
  * 가구 그림은 146장(약 27MB)이라 전부 데우지 않고 놓인 것만 읽는다(sceneFurnitureSprites).
  */
-const BASE_SPRITES: readonly number[] = [ROOM_FLOOR, CHARACTER_IDLE, COACH_CAT, ...Object.values(WALL_ITEMS).map((item) => item.sprite)];
+const BASE_SPRITES: readonly number[] = [ROOM_FLOOR, CHARACTER_IDLE, COACH_CAT, SEIZURE_STICKER, ...Object.values(WALL_ITEMS).map((item) => item.sprite)];
 
 /**
  * 놓인 가구 그림. `current` 는 지금 방향 그림이라 방을 보여 주기 전에 기다리고,
@@ -147,12 +148,14 @@ type PlacedItem = {
   layer: number;
   item: PlacementView;
   surface: Surface;
+  sticker: ReturnType<typeof stickerGeometry>;
 };
 
-function toPlaced(placement: Placement): PlacedItem {
+function toPlaced(placement: Placement, stickerAttached: boolean): PlacedItem {
   const { itemId, anchor } = placement;
   const fixedWall = isWallItemId(itemId) ? WALL_ITEMS[itemId].surface : undefined;
-  return { id: itemId, anchor, layer: placement.layer ?? 0, item: placementView(placement), surface: placement.surface ?? fixedWall ?? "FLOOR" };
+  return { id: itemId, anchor, layer: placement.layer ?? 0, item: placementView(placement), surface: placement.surface ?? fixedWall ?? "FLOOR",
+    sticker: stickerAttached ? stickerGeometry(placement) : null };
 }
 
 /**
@@ -182,6 +185,7 @@ function RoomScene({ width }: RoomSceneProps) {
 
   const placements = useRoomStore(selectPlacements);
   const isEditing = useRoomStore(selectIsEditing);
+  const owned = useFurnitures(undefined, isEditing);
   const saving = useRoomStore((state) => state.saving);
   const selectedId = useRoomStore((s) => s.selectedId);
   const select = useRoomStore((s) => s.select);
@@ -200,7 +204,11 @@ function RoomScene({ width }: RoomSceneProps) {
   const themeColors = getColors(colorScheme);
   const cameraTransform = useDerivedValue(() => [{ translateX: camera.tx.value }, { translateY: camera.ty.value }, { scale: camera.scale.value }]);
 
-  const placed = React.useMemo(() => placements.map(toPlaced), [placements]);
+  const placed = React.useMemo(() => {
+    const source = isEditing && owned.data ? owned.data.map((item) => item.serverState) : room.data?.furnitures ?? [];
+    const stamped = new Set(stickerPlacements(placements, source, isEditing));
+    return placements.map((placement) => toPlaced(placement, stamped.has(placement)));
+  }, [placements, isEditing, owned.data, room.data?.furnitures]);
   const wallItems = React.useMemo(() => placed.filter((p) => p.surface !== "FLOOR"), [placed]);
   const rugs = React.useMemo(() => placed.filter((p) => p.surface === "FLOOR" && p.item.flat), [placed]);
   const sorted = React.useMemo<readonly PlacedItem[]>(
@@ -475,6 +483,7 @@ function ItemSprite({ placed, scale, highlighted = false, ringColor, images }: I
         </Group>
       ) : null}
       <SkiaImage image={image} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />
+      <StickerSprite geometry={placed.sticker} scale={scale} image={images.get(SEIZURE_STICKER)} />
     </>
   );
 }
@@ -490,6 +499,16 @@ type DraggingSpriteProps = {
   blockedColor: string;
   images: SceneImages;
 };
+
+function StickerSprite({ geometry, scale, image }: { geometry: ReturnType<typeof stickerGeometry>; scale: number; image: SkImage | undefined }) {
+  if (!geometry || !image) return null;
+  const rect = sceneRectToCanvas(geometry.rect, scale);
+  return (
+    <Group origin={{ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }} transform={[{ rotate: geometry.angle }]}>
+      <SkiaImage image={image} {...rect} fit="contain" sampling={SPRITE_SAMPLING} />
+    </Group>
+  );
+}
 
 /** 끌리는 동안의 오브젝트. 위치는 셰어드 값에서 매 프레임 읽고, 놓일 칸을 그 면의 격자 모양 그대로 깔아 보여준다. */
 function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blockedColor, images }: DraggingSpriteProps) {
@@ -529,6 +548,11 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
         sampling={SPRITE_SAMPLING}
         opacity={spriteOpacity}
       />
+      <Group transform={ringTransform} opacity={spriteOpacity}>
+        <StickerSprite geometry={placed.sticker ? { ...placed.sticker, rect: { ...placed.sticker.rect,
+          x: placed.sticker.rect.x - placed.anchor.x, y: placed.sticker.rect.y - placed.anchor.y } } : null}
+          scale={scale} image={images.get(SEIZURE_STICKER)} />
+      </Group>
     </>
   );
 }

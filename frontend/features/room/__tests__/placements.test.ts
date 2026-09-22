@@ -6,6 +6,7 @@ import { updateFurniturePlacements } from "@/features/room/api/furniture.api";
 import { storeAwayBlock, storedFurnitures, toPlacements, toUserFurniture, toUserFurnitures, type UserFurnitureDto } from "@/features/room/furniture";
 import { buildPlacementsRequest, placementErrorMessage, validatePlacements } from "@/features/room/placements";
 import { DEFAULT_LAYOUT } from "@/features/room/scene";
+import { FURNITURE_TYPES } from "@/features/room/model";
 import { ContractMismatchError } from "@/lib/contract";
 
 const owned = () => toUserFurnitures(furnitureListMock());
@@ -21,9 +22,36 @@ beforeEach(() => resetFurnitureMocks());
 afterEach(() => jest.restoreAllMocks());
 
 describe("최종 배치 요청", () => {
+  it.each(FURNITURE_TYPES)("%s는 스타일과 무관하게 정확히 1개를 설치해야 한다", (type) => {
+    const initial = request();
+    const target = owned().find((item) => item.furnitureType === type)!;
+    const missing = initial.placements.filter((item) => item.userFurnitureId !== target.userFurnitureId);
+    expect(() => validatePlacements({ placements: missing }, owned())).toThrow("종류별로 1개");
+    const variants = { SOFA: "sofa", TV: "tv_set", DINING_TABLE: "dining_table", COFFEE_TABLE: "coffee_table" } as const;
+    for (const [index, style] of ["black", "pink", "sunset"].entries()) {
+      const id = 900 + index;
+      acquireFurnitureMock(id, id, `${variants[type]}_${style}`);
+      const placement = { ...initial.placements.find((item) => item.userFurnitureId === target.userFurnitureId)!, userFurnitureId: id };
+      expect(() => validatePlacements({ placements: [...initial.placements, placement] }, owned())).toThrow("종류별로 1개");
+      expect(() => validatePlacements({ placements: [...missing, placement] }, owned())).not.toThrow();
+    }
+  });
+
+  it("냉장고는 없어도 되고 여러 스타일을 함께 설치하거나 보관할 수 있다", () => {
+    const initial = request();
+    const fridges = ["fridge_default", "refrigerator_black", "refrigerator_pink", "refrigerator_sunset"];
+    fridges.forEach((assetKey, index) => acquireFurnitureMock(900 + index, 900 + index, assetKey));
+    const placements = fridges.map((_, index) => ({ ...initial.placements[0], userFurnitureId: 900 + index }));
+    updateFurniturePlacementsMock({ placements: [...initial.placements, ...placements] });
+    expect(furnitureListMock().filter((item) => fridges.includes(item.assetKey)))
+      .toEqual(fridges.map((assetKey) => expect.objectContaining({ assetKey, placed: true, furnitureType: null, canUnplace: true })));
+    updateFurniturePlacementsMock(initial);
+    expect(furnitureListMock().filter((item) => fridges.includes(item.assetKey)).every((item) => !item.placed)).toBe(true);
+  });
+
   it("그대로인 필수 가구까지 모두 포함하고 앱 전용 오브젝트는 제외한다", () => {
     const result = buildPlacementsRequest([...draft(), ...DEFAULT_LAYOUT.filter((item) => item.itemId === "board")], owned());
-    expect(result.placements).toHaveLength(3);
+    expect(result.placements).toHaveLength(4);
     expect(result.placements.map((item) => item.userFurnitureId)).toEqual(placedFurnitureMock().map((item) => item.userFurnitureId));
     expect(Object.keys(result.placements[0]).sort()).toEqual(["layer", "placementDirection", "placementStatus", "positionX", "positionY", "userFurnitureId"]);
   });
@@ -39,7 +67,7 @@ describe("최종 배치 요청", () => {
 
   it("사용자가 보관한 일반 가구는 원본 목록에 설치되어 있어도 제외한다", () => {
     const snapshot = toUserFurnitures([...furnitureListMock(), placedExtra(900, "desk_black")]);
-    expect(buildPlacementsRequest(draft(), snapshot).placements).toHaveLength(3);
+    expect(buildPlacementsRequest(draft(), snapshot).placements).toHaveLength(4);
   });
 
   it("필수 종류를 이미지 키가 아닌 서버 분류로 검사한다", () => {
@@ -96,16 +124,16 @@ describe("최종 배치 요청", () => {
 
 describe("일괄 저장 Mock", () => {
   it("보드·캘린더는 서버 보유 목록에 없고 구매 가구의 종류는 보존한다", () => {
-    expect(furnitureListMock()).toHaveLength(7);
+    expect(furnitureListMock()).toHaveLength(8);
     expect(furnitureListMock("WALL").map((item) => item.assetKey)).toEqual(["window_sky_clouds"]);
     acquireFurnitureMock(18, 900, "sofa_black");
     expect(furnitureListMock().find((item) => item.userFurnitureId === 900)).toMatchObject({ furnitureType: "SOFA", defaultFurnitureType: null, canUnplace: true });
   });
 
-  it("3종 교체·재교체·동일 요청 재시도에서 딱지와 보유를 보존한다", () => {
+  it("4종 교체·재교체·동일 요청 재시도에서 딱지와 보유를 보존한다", () => {
     resetFurnitureMocks(furnitureListMock().map((item) => ({ ...item, stickerAttached: item.placed })));
     const initial = request();
-    ["refrigerator_black", "sofa_black", "tv_set_black"].forEach((asset, index) => acquireFurnitureMock(900 + index, 900 + index, asset));
+    ["dining_table_black", "coffee_table_black", "sofa_black", "tv_set_black"].forEach((asset, index) => acquireFurnitureMock(900 + index, 900 + index, asset));
     const all = owned();
     const replacement = { placements: initial.placements.map((placement) => {
       const original = all.find((item) => item.userFurnitureId === placement.userFurnitureId)!;
@@ -113,14 +141,14 @@ describe("일괄 저장 Mock", () => {
       return { ...placement, userFurnitureId: next.userFurnitureId };
     }) };
     const result = updateFurniturePlacementsMock(replacement);
-    expect(result.filter((item) => item.placed).map((item) => item.userFurnitureId)).toEqual([900, 901, 902]);
-    expect(result.filter((item) => item.stickerAttached)).toHaveLength(3);
+    expect(result.filter((item) => item.placed).map((item) => item.userFurnitureId)).toEqual([900, 901, 902, 903]);
+    expect(result.filter((item) => item.stickerAttached)).toHaveLength(4);
     expect(result.filter((item) => item.defaultFurnitureType !== null).every((item) => !item.placed && item.canUnplace && !item.stickerAttached)).toBe(true);
     expect(updateFurniturePlacementsMock(replacement)).toEqual(result);
     const restored = updateFurniturePlacementsMock(initial);
-    expect(restored.filter((item) => item.placed && item.stickerAttached)).toHaveLength(3);
+    expect(restored.filter((item) => item.placed && item.stickerAttached)).toHaveLength(4);
     expect(restored.filter((item) => item.userFurnitureId >= 900).every((item) => !item.placed && !item.stickerAttached)).toBe(true);
-    expect(restored).toHaveLength(10);
+    expect(restored).toHaveLength(12);
   });
 
   it("검증 실패 시 일부 배치도 변경하지 않는다", () => {
@@ -140,7 +168,7 @@ describe("API와 오류", () => {
     const put = jest.spyOn(api, "put").mockResolvedValue({ data: furnitureListMock() });
     const patch = jest.spyOn(api, "patch");
     const payload = request();
-    expect(await updateFurniturePlacements(payload)).toHaveLength(7);
+    expect(await updateFurniturePlacements(payload)).toHaveLength(8);
     expect(put).toHaveBeenCalledTimes(1);
     expect(put).toHaveBeenCalledWith("/furnitures/placements", payload);
     expect(patch).not.toHaveBeenCalled();

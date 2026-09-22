@@ -225,13 +225,15 @@ export type StoredFurniture = UserFurniture & { itemId: FurnitureId };
 export function storedFurnitures(owned: readonly UserFurniture[], placements: readonly Placement[]): StoredFurniture[] {
   const placedIds = new Set(placements.map((placement) => placement.userFurnitureId));
   const placedItems = new Set<RoomItemId>(placements.map((placement) => placement.itemId));
+  const placedTypes = new Set(owned.filter((item) => placedIds.has(item.userFurnitureId)).map((item) => item.furnitureType));
   return owned.filter(
     (furniture): furniture is StoredFurniture =>
       furniture.itemId !== null &&
       !isWallItemId(furniture.itemId) &&
       !placedIds.has(furniture.userFurnitureId) &&
       !placedItems.has(furniture.itemId)
-  );
+  ).map((furniture) => furniture.furnitureType !== null && placedTypes.has(furniture.furnitureType)
+    ? { ...furniture, stickerAttached: false } : furniture);
 }
 
 /** '넣어 두기'를 못 하는 이유. 할 수 있으면 null */

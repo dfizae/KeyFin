@@ -61,7 +61,7 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 		mvc.perform(auth(get("/api/v1/furnitures").param("slotType", "WALL"), 88001))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88202)));
 		mvc.perform(auth(get("/api/v1/furnitures"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
-		mvc.perform(auth(get("/api/v1/room"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data.furnitures", hasSize(3)));
+		mvc.perform(auth(get("/api/v1/room"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data.furnitures", hasSize(4)));
 	}
 
 	@Test
@@ -95,7 +95,7 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.data.furnitures[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88202)));
 		assertThat(furnitures.findById(88203L).orElseThrow().getAcquiredAt()).isEqualTo(acquired);
 		assertThat(furnitures.findById(88201L).orElseThrow().getPositionX()).isEqualByComparingTo("165.123");
-		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_furnitures WHERE user_id = 88001").query(Long.class).single()).isEqualTo(6);
+		assertThat(jdbc.sql("SELECT COUNT(*) FROM user_furnitures WHERE user_id = 88001").query(Long.class).single()).isEqualTo(7);
 	}
 
 	@ParameterizedTest

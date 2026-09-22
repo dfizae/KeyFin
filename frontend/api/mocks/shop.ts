@@ -74,8 +74,8 @@ export function coinBalanceMock(): CoinBalanceDto {
  * GET /shop · POST /shop/purchase 목 (배포 서버 Swagger 2026-09-20).
  * 옷은 의상 세트 카탈로그(features/room/outfits.ts), 가구는 방 카탈로그(features/room/catalog.ts)의 assetKey 를 써서 화면에 그림이 나온다.
  * 옷은 세트 한 벌이라 부위로 나뉘지 않고, 서버가 세트를 UPPER_BODY 로 내려 주는 모양을 그대로 따랐다.
- * 옷·가구 모두 백엔드 V19·V20 마이그레이션과 같은 구성·이름·가격이다(2026-09-21 대조). 가구는 V20 의 56종 —
- * 앱 카탈로그 59종에서 기본 가구와 똑같은 그림(`*_original` 소파·냉장고·TV) 3종과 기본 가구 자체를 뺀 것이다.
+ * V19·V20·V24 적용 후의 구성·이름·가격이다. 판매 가구는 54종이며, V24에서 식탁·커피테이블 오리지널은 기본 지급으로 전환했다.
+ * 냉장고는 기본 지급에서 제외하되 기존 판매 목록은 유지한다.
  * 보유 여부는 가구 목(api/mocks/furniture.ts)을 따른다.
  * 구매는 서버처럼 한 번만 되고(두 번째는 409 SHOP_002), 코인이 모자라면 409 SHOP_003 이다. 산 가구는 가구 목에 미설치로 들어간다.
  */
@@ -102,8 +102,8 @@ export const FURNITURE_PRICE_BY_GROUP: Record<FurnitureGroup, number> = {
   decor: 200,
 };
 
-/** 기본 가구와 그림이 같아 팔지 않는 것 */
-const NOT_FOR_SALE = new Set<string>(["sofa_default", "fridge_default", "tv_default", "sofa_original", "refrigerator_original", "tv_set_original"]);
+/** 기본 지급 상품·중복 그림 및 기존 비판매 냉장고 */
+const NOT_FOR_SALE = new Set<string>(["sofa_default", "fridge_default", "tv_default", "sofa_original", "refrigerator_original", "tv_set_original", "dining_table_original", "coffee_table_original"]);
 const FIRST_FURNITURE_ITEM_ID = 101;
 
 /** 판매 가구. 선택창 분류 순서(침대 → 식물)대로 id 를 매긴다 */

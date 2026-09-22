@@ -47,27 +47,31 @@ class DefaultFurnitureIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private JwtTokenProvider tokens;
 
 	@Test
-	void signupInstallsThreeDefaultsAtInitialPositionsAndRoomReturnsThem() {
+	void signupInstallsFourDefaultsAtInitialPositionsAndRoomReturnsThem() {
 		long userId = signup();
 		var owned = furnitures.getFurnitures(userId, null);
-		assertThat(owned).hasSize(3).allSatisfy(f -> {
+		assertThat(owned).hasSize(4).allSatisfy(f -> {
 			assertThat(f.placed()).isTrue();
 			assertThat(f.canUnplace()).isFalse();
 			assertThat(f.placementStatus()).isEqualTo(FurniturePlacementStatus.FLOOR);
 			assertThat(f.placementDirection()).isEqualTo(FurniturePlacementDirection.FRONT_RIGHT);
 			assertThat(f.layer()).isZero();
 			switch (f.defaultFurnitureType()) {
-				case FRIDGE -> {
-					assertThat(f.positionX()).isEqualByComparingTo("280.438");
-					assertThat(f.positionY()).isEqualByComparingTo("217.813");
+				case DINING_TABLE -> {
+					assertThat(f.positionX()).isEqualByComparingTo("64.604");
+					assertThat(f.positionY()).isEqualByComparingTo("362.438");
+				}
+				case COFFEE_TABLE -> {
+					assertThat(f.positionX()).isEqualByComparingTo("127.417");
+					assertThat(f.positionY()).isEqualByComparingTo("429.875");
 				}
 				case SOFA -> {
-					assertThat(f.positionX()).isEqualByComparingTo("164.875");
-					assertThat(f.positionY()).isEqualByComparingTo("226.000");
+					assertThat(f.positionX()).isEqualByComparingTo("198.125");
+					assertThat(f.positionY()).isEqualByComparingTo("443.250");
 				}
 				case TV -> {
-					assertThat(f.positionX()).isEqualByComparingTo("172.719");
-					assertThat(f.positionY()).isEqualByComparingTo("176.094");
+					assertThat(f.positionX()).isEqualByComparingTo("190.625");
+					assertThat(f.positionY()).isEqualByComparingTo("334.688");
 				}
 			}
 		});
@@ -87,22 +91,22 @@ class DefaultFurnitureIntegrationTest extends SpringIntegrationTestSupport {
 				       IF(default_furniture_type = 'SOFA', 100.123, NULL),
 				       IF(default_furniture_type = 'SOFA', 200.456, NULL),
 				       IF(default_furniture_type = 'SOFA', 2, 0)
-				FROM items WHERE default_furniture_type IN ('FRIDGE', 'SOFA')
+				FROM items WHERE default_furniture_type IN ('DINING_TABLE', 'SOFA')
 				""").param("user", userId).update();
 		var originalIds = furnitures.getFurnitures(userId, null).stream().map(f -> f.userFurnitureId()).toList();
 		defaults.provision(userId);
 		defaults.provision(userId);
 		var owned = furnitures.getFurnitures(userId, null);
-		assertThat(owned).hasSize(3).allSatisfy(f -> assertThat(f.placed()).isTrue());
+		assertThat(owned).hasSize(4).allSatisfy(f -> assertThat(f.placed()).isTrue());
 		assertThat(owned).extracting(f -> f.userFurnitureId()).containsAll(originalIds);
 		var sofa = owned.stream().filter(f -> f.defaultFurnitureType() == DefaultFurnitureType.SOFA).findFirst().orElseThrow();
 		assertThat(sofa.positionX()).isEqualByComparingTo("100.123");
 		assertThat(sofa.positionY()).isEqualByComparingTo("200.456");
 		assertThat(sofa.placementDirection()).isEqualTo(FurniturePlacementDirection.FRONT_LEFT);
 		assertThat(sofa.layer()).isEqualTo(2);
-		var fridge = owned.stream().filter(f -> f.defaultFurnitureType() == DefaultFurnitureType.FRIDGE).findFirst().orElseThrow();
-		assertThat(fridge.positionX()).isEqualByComparingTo("280.438");
-		assertThat(fridge.positionY()).isEqualByComparingTo("217.813");
+		var diningTable = owned.stream().filter(f -> f.defaultFurnitureType() == DefaultFurnitureType.DINING_TABLE).findFirst().orElseThrow();
+		assertThat(diningTable.positionX()).isEqualByComparingTo("64.604");
+		assertThat(diningTable.positionY()).isEqualByComparingTo("362.438");
 	}
 
 	@Test
