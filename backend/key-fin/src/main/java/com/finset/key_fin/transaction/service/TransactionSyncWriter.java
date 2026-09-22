@@ -44,12 +44,13 @@ public class TransactionSyncWriter {
 			long userId,
 			List<Account> balanceUpdatedAccounts,
 			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+			Map<Long, Transaction> reclassifiedTransactions,
+			Set<Integer> changedEnvelopeIds
 	) {
 		persist(userId, balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 		publishPendingTransactionEvents(newTransactions);
 		publishAccountWithdrawnEvents(newTransactions);
-		publishEnvelopeSpendingEvents(userId, newTransactions);
+		publishEnvelopeSpendingEvents(userId, newTransactions, changedEnvelopeIds);
 	}
 
 	@Transactional
@@ -57,9 +58,11 @@ public class TransactionSyncWriter {
 			long userId,
 			List<Account> balanceUpdatedAccounts,
 			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+			Map<Long, Transaction> reclassifiedTransactions,
+			Set<Integer> changedEnvelopeIds
 	) {
 		persist(userId, balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
+		publishEnvelopeSpendingEvents(userId, List.of(), changedEnvelopeIds);
 	}
 
 	private void persist(
@@ -94,9 +97,13 @@ public class TransactionSyncWriter {
 		}
 	}
 
-	private void publishEnvelopeSpendingEvents(long userId, List<Transaction> newTransactions) {
+	private void publishEnvelopeSpendingEvents(
+			long userId,
+			List<Transaction> newTransactions,
+			Set<Integer> changedEnvelopeIds
+	) {
 		Map<Integer, Optional<Integer>> envelopeBySubcategory = new HashMap<>();
-		Set<Integer> envelopeIds = new LinkedHashSet<>();
+		Set<Integer> envelopeIds = new LinkedHashSet<>(changedEnvelopeIds);
 		for (Transaction transaction : newTransactions) {
 			if (transaction.getStatus() != TransactionStatus.NORMAL
 					|| transaction.getConfirmStatus() == ConfirmStatus.PENDING

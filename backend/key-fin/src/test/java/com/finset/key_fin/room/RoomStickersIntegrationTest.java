@@ -48,6 +48,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -409,7 +410,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		long nextTx = spend("2026-10-01", 2000, "PENDING", null);
 		var changed = transactionRepository.findById(nextTx).orElseThrow();
 		changed.confirmSubcategory(101);
-		syncWriter.save(userId, List.of(), List.of(), Map.of(nextTx, changed));
+		syncWriter.save(userId, List.of(), List.of(), Map.of(nextTx, changed), Set.of());
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(2);
 	}
 
