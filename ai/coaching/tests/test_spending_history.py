@@ -7,7 +7,7 @@ import pytest
 
 from coaching_service.engine import EngineAdapter
 from coaching_service.schemas import JsonDocument, TransactionView
-from coaching_service.spending_history import spending_answer
+from coaching_service.spending_history import _COVERAGE, _COVERAGE_SHORT, spending_answer
 from tests.test_engine import fixture
 
 
@@ -80,6 +80,12 @@ def test_last_month_matches_independent_raw_ledger_arithmetic() -> None:
     }
     assert answer.coverage == "unknown"
     assert answer.coverage_caveat
+    # 말풍선 본문은 한 문장짜리 짧은 정직성 문구만 담고 장황한 4문장을 붙이지 않는다.
+    assert _COVERAGE_SHORT in answer.text
+    assert _COVERAGE not in answer.text
+    # 전체 근거·범위는 구조화 필드(coverage/basis/coverage_caveat)로 손실 없이 남는다.
+    assert answer.coverage_caveat == _COVERAGE
+    assert answer.basis == "confirmed_envelope_budget_amount"
 
 
 @pytest.mark.parametrize(

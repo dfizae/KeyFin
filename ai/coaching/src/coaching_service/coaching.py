@@ -12,7 +12,7 @@ from coaching_service.engine import ENGINE_COMMIT, EngineAdapter
 from coaching_service.evidence import LIMITED_CONTEXT, bounded_evidence, context_limited
 from coaching_service.llm_contract import EvidenceInput, Judgment, Routing, Wording
 from coaching_service.llm_prompt import TEMPLATE_TEXT
-from coaching_service.numeric_rendering import purchase_verdict_text
+from coaching_service.numeric_rendering import numeric_rows_for, purchase_verdict_text
 from coaching_service.periods import ResolvedPeriod, ThroughDate, resolve_period
 from coaching_service.rendering import authoritative_text, deterministic_advice
 from coaching_service.repository import Repository, write
@@ -170,6 +170,7 @@ class CoachingCore:
             fallback_reason=wording.fallback_reason,
             receipt=receipt,
             created_at=time.time(),
+            numeric_rows=numeric_rows_for(receipt),
         )
 
 
