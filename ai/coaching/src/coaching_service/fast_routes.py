@@ -309,6 +309,9 @@ _PURCHASE_AMOUNT: Final = re.compile(
     r"(?<![\d,.])(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+))(?P<unit>만원|원)"
 )
 _PURCHASE_DATE_TOMORROW: Final = re.compile(r"내일")
+# "다음주" is a distinct string from "이번주" (no substring overlap), but it is checked
+# before "이번주" in ``_purchase_date_token`` so the ordering stays unambiguous.
+_PURCHASE_DATE_NEXT_WEEK: Final = re.compile(r"다음주")
 _PURCHASE_DATE_THIS_WEEK: Final = re.compile(r"이번주")
 _PURCHASE_DATE_TODAY: Final = re.compile(r"오늘")
 _PURCHASE_DATE_ISO: Final = re.compile(r"(?P<date>\d{4}-\d{2}-\d{2})")
@@ -410,6 +413,8 @@ def _purchase_date_token(normalized: str, *, exclude: str | None) -> str | None:
     """Resolve only the four calendar expressions the spec admits, never a guess."""
     if _PURCHASE_DATE_TOMORROW.search(normalized) is not None:
         return "tomorrow"
+    if _PURCHASE_DATE_NEXT_WEEK.search(normalized) is not None:
+        return "next_week"
     if _PURCHASE_DATE_THIS_WEEK.search(normalized) is not None:
         return "this_week"
     if _PURCHASE_DATE_TODAY.search(normalized) is not None:
@@ -576,6 +581,7 @@ def is_bare_purchase_fragment(question: str) -> bool:
         pattern.search(normalized) is not None
         for pattern in (
             _PURCHASE_DATE_TOMORROW,
+            _PURCHASE_DATE_NEXT_WEEK,
             _PURCHASE_DATE_THIS_WEEK,
             _PURCHASE_DATE_TODAY,
             _PURCHASE_DATE_ISO,
