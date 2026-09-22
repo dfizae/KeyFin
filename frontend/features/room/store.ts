@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-import type { RoomItemId } from "@/features/room/catalog";
+import { isWallItemId, type RoomItemId } from "@/features/room/catalog";
 import type { ScenePoint } from "@/features/room/model";
 import { DEFAULT_LAYOUT, facingOf, flipPlacement, withDefaultWallItems, type Placement } from "@/features/room/scene";
 
@@ -14,9 +14,11 @@ export type RoomState = {
   layout: readonly Placement[];
   draft: readonly Placement[] | null;
   selectedId: RoomItemId | null;
-  startEdit: () => void;
+  saving: boolean;
+  setSaving: (saving: boolean) => void;
+  startEdit: (placements?: readonly Placement[]) => void;
   cancelEdit: () => void;
-  commitEdit: () => void;
+  commitEdit: (placements?: readonly Placement[]) => void;
   select: (id: RoomItemId | null) => void;
   moveItem: (id: RoomItemId, anchor: ScenePoint) => void;
   /** 보관함에서 꺼낸 가구를 사본에 더하고 고른다. 자리는 부르는 쪽이 scene.placeNewItem 으로 정한다 */
@@ -33,39 +35,45 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   layout: DEFAULT_LAYOUT,
   draft: null,
   selectedId: null,
-  startEdit: () => set((state) => (state.draft ? state : { draft: state.layout.map((p) => ({ ...p })), selectedId: null })),
-  cancelEdit: () => set({ draft: null, selectedId: null }),
-  commitEdit: () => {
+  saving: false,
+  setSaving: (saving) => set({ saving }),
+  startEdit: (placements) => set((state) => {
+    if (state.draft || state.saving) return state;
+    const layout = placements ? mergeLocalWallItems(placements, state.layout) : state.layout;
+    return { layout, draft: layout.map((p) => ({ ...p, anchor: { ...p.anchor } })), selectedId: null };
+  }),
+  cancelEdit: () => set((state) => state.saving ? state : { draft: null, selectedId: null }),
+  commitEdit: (placements) => {
     const { draft } = get();
     if (!draft) return;
-    set({ layout: draft, draft: null, selectedId: null });
+    set({ layout: placements ? mergeLocalWallItems(placements, draft) : draft, draft: null, selectedId: null, saving: false });
   },
-  select: (id) => set({ selectedId: id }),
+  select: (id) => set((state) => state.saving ? state : { selectedId: id }),
   hydrate: (placements) =>
     set((state) => {
       if (state.draft !== null || placements.length === 0) return state;
-      const layout = withDefaultWallItems(placements);
+      const layout = mergeLocalWallItems(placements, state.layout);
       if (samePlacements(state.layout, layout)) return state;
       return { layout };
     }),
   moveItem: (id, anchor) =>
     set((state) => {
-      if (!state.draft) return state;
+      if (!state.draft || state.saving) return state;
       return { draft: state.draft.map((p) => (p.itemId === id ? { ...p, anchor: { x: anchor.x, y: anchor.y } } : p)) };
     }),
   placeItem: (placement) =>
     set((state) => {
-      if (!state.draft || state.draft.some((p) => p.itemId === placement.itemId)) return state;
+      if (!state.draft || state.saving || state.draft.some((p) => p.itemId === placement.itemId)) return state;
       return { draft: [...state.draft, placement], selectedId: placement.itemId };
     }),
   removeItem: (id) =>
     set((state) => {
-      if (!state.draft) return state;
+      if (!state.draft || state.saving) return state;
       return { draft: state.draft.filter((p) => p.itemId !== id), selectedId: state.selectedId === id ? null : state.selectedId };
     }),
   flipItem: (id) => {
-    const { draft } = get();
-    if (!draft) return false;
+    const { draft, saving } = get();
+    if (!draft || saving) return false;
     const flipped = flipPlacement(draft, id);
     if (!flipped) return false;
     set({ draft: flipped });
@@ -76,6 +84,14 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 /** 화면이 그릴 배치: 편집 중이면 사본, 아니면 확정본 */
 export const selectPlacements = (state: RoomState): readonly Placement[] => state.draft ?? state.layout;
 export const selectIsEditing = (state: RoomState): boolean => state.draft !== null;
+
+/** 서버에 없는 벽 기능 오브젝트의 로컬 위치는 재조회 뒤에도 유지한다. */
+function mergeLocalWallItems(placements: readonly Placement[], previous: readonly Placement[]): Placement[] {
+  const present = new Set(placements.map((placement) => placement.itemId));
+  const local = previous.filter((placement) => isWallItemId(placement.itemId)
+    && placement.userFurnitureId === undefined && !present.has(placement.itemId));
+  return withDefaultWallItems([...placements, ...local]);
+}
 
 /** 셀렉터가 매번 새 배열을 만들면 무한 재렌더가 나므로, 같은 배치면 상태를 그대로 둔다 */
 function samePlacements(left: readonly Placement[], right: readonly Placement[]): boolean {
