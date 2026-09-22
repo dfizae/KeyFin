@@ -104,6 +104,10 @@ _PURCHASE_CLARIFICATIONS: dict[str, str] = {
         "현금·계좌 결제인지 카드 결제인지 알려주세요. "
         "카드라면 결제 예정일도 함께 알려주시면 정확히 반영할 수 있어요."
     ),
+    "purchase_card_payment_date_required": (
+        "카드로 결제하신다면 결제(출금) 예정일을 연-월-일 날짜로 알려주세요. "
+        "현금·계좌 결제라면 그대로 확인해 드릴게요."
+    ),
     "purchase_installment_unsupported": (
         "할부 구매는 아직 지원하지 않아요. 일시불 기준으로 다시 여쭤봐 주시면 확인해 드릴게요."
     ),
