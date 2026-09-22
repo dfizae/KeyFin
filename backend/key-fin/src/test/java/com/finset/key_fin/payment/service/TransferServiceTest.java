@@ -19,7 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.event.ApplicationEvents;
 import org.springframework.test.context.event.RecordApplicationEvents;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,12 +40,10 @@ import com.finset.key_fin.payment.event.TransferCompleted;
 import com.finset.key_fin.payment.exception.PaymentErrorCode;
 import com.finset.key_fin.payment.repository.AuditLogRepository;
 import com.finset.key_fin.payment.repository.PrepareTransferRepository;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
 @RecordApplicationEvents
-@Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/transfer-approve-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class TransferServiceTest extends SpringIntegrationTestSupport {
 
@@ -65,8 +62,6 @@ class TransferServiceTest extends SpringIntegrationTestSupport {
 	private TransferWriter transferWriter;
 	@Autowired
 	private ApplicationEvents events;
-	@MockitoBean
-	private FinanceTransferClient financeTransferClient;
 
 	@Test
 	@DisplayName("승인: 4검사 통과 → 번호 채번·APPROVED → 금융망 이체(수입→출금 계좌) → EXECUTED + EXECUTE 감사")

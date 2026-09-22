@@ -18,10 +18,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finset.key_fin.coaching.dto.FdtBootstrap;
 import com.finset.key_fin.coaching.dto.FdtSnapshot;
 import com.finset.key_fin.coaching.dto.FdtTransaction;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@Import(FixedClockConfig.class)
 @Transactional
 @Sql(scripts = "/sql/coaching-bootstrap-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class FdtBootstrapServiceTest extends SpringIntegrationTestSupport {

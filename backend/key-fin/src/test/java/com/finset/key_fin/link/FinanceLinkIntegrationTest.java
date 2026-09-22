@@ -1,6 +1,6 @@
 package com.finset.key_fin.link;
 
-import com.finset.key_fin.support.IntegrationTestSupport;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,7 +25,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-class FinanceLinkIntegrationTest extends IntegrationTestSupport {
+class FinanceLinkIntegrationTest extends SpringIntegrationTestSupport {
 
 	private static final String MEMBER_SEARCH_URL = FINANCE_BASE_URL + "/member/search";
 	private static final String ACCOUNT_LIST_URL = FINANCE_BASE_URL + "/edu/demandDeposit/inquireDemandDepositAccountList";

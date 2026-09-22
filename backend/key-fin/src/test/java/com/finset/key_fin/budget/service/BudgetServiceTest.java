@@ -15,11 +15,9 @@ import com.finset.key_fin.budget.dto.response.BudgetProposalResponse.EnvelopePro
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.budget.repository.BudgetEnvelopeRepository;
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql("/sql/budget-proposal-fixture.sql")
 class BudgetServiceTest extends SpringIntegrationTestSupport {
 

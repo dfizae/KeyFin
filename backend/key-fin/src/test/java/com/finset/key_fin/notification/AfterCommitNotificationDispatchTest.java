@@ -14,23 +14,17 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
-@TestPropertySource(properties = "fcm.enabled=true")
 class AfterCommitNotificationDispatchTest extends SpringIntegrationTestSupport {
 	private static final long USER = 71002;
 	@Autowired ApplicationEventPublisher events;
 	@Autowired JdbcClient jdbc;
 	@Autowired PlatformTransactionManager transactionManager;
-	@MockitoBean FcmSender sender;
-	@MockitoBean FirebaseApp firebaseApp;
-	@MockitoBean FirebaseMessaging firebaseMessaging;
 
 	@BeforeEach
 	void setup() {

@@ -14,7 +14,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,8 +39,6 @@ class SubscriptionSyncServiceTest extends SpringIntegrationTestSupport {
 	@Autowired
 	private FixedExpenseRepository fixedExpenseRepository;
 
-	@MockitoBean
-	private FinanceSubscriptionClient financeSubscriptionClient;
 
 	@Test
 	@DisplayName("금융망 목록을 기준으로 생성·갱신·되살림·비활성화하고 수동 항목은 건드리지 않는다")

@@ -3,14 +3,12 @@ package com.finset.key_fin.furniture.controller;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@AutoConfigureMockMvc
 class FurnitureDocumentationIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private MockMvc mvc;
 

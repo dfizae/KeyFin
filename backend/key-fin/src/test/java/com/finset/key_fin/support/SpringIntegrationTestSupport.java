@@ -1,16 +1,66 @@
 package com.finset.key_fin.support;
 
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
 
-@SpringBootTest
+import com.finset.key_fin.payment.client.FinanceCardBillingClient;
+import com.finset.key_fin.payment.client.FinanceSubscriptionClient;
+import com.finset.key_fin.payment.client.FinanceTransferClient;
+import com.finset.key_fin.global.firebase.service.FcmSender;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.messaging.FirebaseMessaging;
+
+/**
+ * 모든 통합 테스트가 한 컨텍스트를 나눠 쓴다. 클래스별 @Import·@MockitoBean·@TestPropertySource 는
+ * 컨텍스트를 새로 만들게 하므로 여기서 한 번에 올린다.
+ */
+@SpringBootTest(properties = {
+		"fcm.enabled=true",
+		"finance.api.max-attempts=3",
+		"finance.api.retry-base-delay=0ms",
+		"finance.api.retry-max-delay=0ms",
+		"finance.api.retry-time-limit=5s"
+})
+@AutoConfigureMockMvc
+@Import({FixedClockConfig.class, FinanceMockServerConfig.class})
 public abstract class SpringIntegrationTestSupport {
 
 	public static final String FINANCE_BASE_URL = "https://finance.test/finance/api/v1";
 	public static final String FINANCE_API_KEY = "integration-test-api-key";
+
+	@MockitoBean
+	protected FinanceTransferClient financeTransferClient;
+
+	@MockitoBean
+	protected FinanceCardBillingClient financeCardBillingClient;
+
+	@MockitoBean
+	protected FinanceSubscriptionClient financeSubscriptionClient;
+
+	@MockitoBean
+	protected FcmSender sender;
+
+	@MockitoBean
+	protected FirebaseApp firebaseApp;
+
+	@MockitoBean
+	protected FirebaseMessaging firebaseMessaging;
+
+	@Autowired
+	protected TestClock testClock;
+
+	@BeforeEach
+	void resetTestClock() {
+		testClock.set(FixedClockConfig.NOW);
+	}
 
 	@DynamicPropertySource
 	static void registerInfrastructure(DynamicPropertyRegistry registry) {

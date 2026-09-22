@@ -16,11 +16,9 @@ import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.CalendarItemType;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Day;
 import com.finset.key_fin.payment.dto.response.PaymentCalendarResponse.Item;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/card-billing-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class PaymentCalendarCardBillTest extends SpringIntegrationTestSupport {
 
