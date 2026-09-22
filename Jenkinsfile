@@ -112,7 +112,7 @@ pipeline {
             when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
-                    sh 'bash ./gradlew --no-daemon --max-workers=2 --build-cache --console=plain --stacktrace test --rerun'
+                    sh 'bash ./gradlew --max-workers=2 --build-cache --console=plain --stacktrace test --rerun'
                 }
             }
             post {
@@ -133,7 +133,7 @@ pipeline {
             when { expression { env.CI_RUN_BACKEND == 'true' } }
             steps {
                 dir('backend/key-fin') {
-                    sh 'bash ./gradlew --no-daemon --max-workers=2 --build-cache --console=plain --stacktrace bootJar'
+                    sh 'bash ./gradlew --max-workers=2 --build-cache --console=plain --stacktrace bootJar'
                 }
             }
             post {
