@@ -15,6 +15,7 @@ from coaching_service.chat_answers import (
     knowledge_answer,
     missing_twin_answer,
     out_of_scope_answer,
+    period_clarification_answer,
     purchase_clarification_answer,
 )
 from coaching_service.coaching import CoachingCore, coaching_writes, evidence_for
@@ -194,6 +195,10 @@ def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit
         purchase_date = reference + timedelta(days=1)
     elif purchase.date_token == "this_week":  # noqa: S105 - a calendar token, not a credential.
         purchase_date = reference
+    elif purchase.date_token == "next_week":  # noqa: S105 - a calendar token, not a credential.
+        # Mirrors ``this_week`` (which resolves to the reference day) shifted by one
+        # week, giving a concrete representative day for the coming week.
+        purchase_date = reference + timedelta(days=7)
     else:
         try:
             purchase_date = date.fromisoformat(purchase.date_token)
@@ -487,11 +492,20 @@ class Dialogue:
             route, finance = await self._route_for_turn(
                 request, session, history, parsed_goal, parsed_what_if, parsed_purchase,
             )
-            standalone = await self.standalone_answer(
-                op.owner, request, route,
-                chat_history(session, include_subject=True) if route.mode == "finance" else history,
-                finance,
-            )
+            try:
+                standalone = await self.standalone_answer(
+                    op.owner, request, route,
+                    chat_history(session, include_subject=True) if route.mode == "finance" else history,
+                    finance,
+                )
+            except ServiceError as error:
+                # A period-family clarification on the chat turn becomes the same 200
+                # needs_clarification turn as the purchase codes; a code without an
+                # agreed sentence (never a validation/chart code) keeps its 4xx contract.
+                clarification = period_clarification_answer(error.code)
+                if clarification is None:
+                    raise
+                return save_turn(session, request.question, clarification)
             if standalone is not None:
                 # Keep actual router adoption separate from answer generation and HTTP success.
                 standalone = standalone.model_copy(update={
@@ -562,13 +576,25 @@ class Dialogue:
                     request.question,
                 )
                 return save_turn(session, request.question, spending_chat_answer(identity, route, summary))
-            period = turn_period(
-                reference,
-                request.question,
-                request.period,
-                request.analysis,
-                await self._budget_start_day(op.owner),
-            )
+            budget_start_day = await self._budget_start_day(op.owner)
+            try:
+                period = turn_period(
+                    reference, request.question, request.period, request.analysis, budget_start_day,
+                )
+            except ServiceError as error:
+                clarification = period_clarification_answer(error.code)
+                if clarification is None:
+                    raise
+                if parsed_purchase is None:
+                    # A genuine period ambiguity/conflict on the chat turn becomes a 200
+                    # needs_clarification turn instead of a 503, like the purchase codes.
+                    return save_turn(session, request.question, clarification)
+                # A purchase supplies its own authoritative date token (다음주/내일/오늘/
+                # ISO), which the period parser treats as ambiguous prose. The purchase
+                # date is authoritative, so derive the review window from the request's
+                # explicit period/analysis (default horizon otherwise) without the
+                # purchase's own timing prose, rather than re-asking for a period.
+                period = turn_period(reference, "", request.period, request.analysis, budget_start_day)
             today = datetime.now(ZoneInfo("Asia/Seoul")).date()
             numeric_request = turn_numeric_request(
                 request.analysis, parsed_goal, parsed_what_if, route, period.forecast_days,

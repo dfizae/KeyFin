@@ -20,7 +20,7 @@ class ChatAnswer(Frozen):
     id: str
     answer_type: Literal[
         "finance_education", "spending_history", "personal_context", "data_request",
-        "scope_response", "purchase_review",
+        "scope_response", "purchase_review", "period_review",
     ]
     status: Literal[
         "answered", "needs_source", "needs_data", "out_of_scope", "unavailable", "needs_clarification"
@@ -136,6 +136,56 @@ def purchase_clarification_answer(code: str) -> ChatAnswer | None:
         model="not_called",
         fallback_reason=code,
         evidence=JsonDocument({"purchase": {"clarification": code}}),
+        created_at=time.time(),
+    )
+
+
+# 기간 되묻기: 대화(/messages) 턴에서 기간이 모호·충돌하거나 지원하지 않는 형식일 때
+# 503으로 떨어뜨리는 대신 구매 되묻기와 같은 방식(모델 미호출, 정상 저장되는 한 턴)으로
+# 200 needs_clarification 을 돌려준다. 예측검증 API·차트 엔드포인트의 기간 오류 코드는
+# 이 표에 없어 기존 4xx 계약을 그대로 유지한다(범위 가드). 문구는 숫자를 포함하지 않아
+# 기존 안전 가드 범위 밖이며, ``fallback_reason``·``evidence`` 에 원 코드를 남긴다.
+_PERIOD_CLARIFICATIONS: dict[str, str] = {
+    "period_clarification_required": (
+        "언제 기준인지 알려주세요. 지난달·이번 달·오늘·어제·현재까지 중에서 "
+        "말씀해 주시면 그 기간으로 확인해 드릴게요."
+    ),
+    "invalid_question_period": (
+        "언제 기준인지 알려주세요. 지난달·이번 달·오늘·어제·현재까지 중에서 "
+        "말씀해 주시면 그 기간으로 확인해 드릴게요."
+    ),
+    "period_conflict": (
+        "기간이 두 가지로 읽혀요. 한 가지 기간만 알려주시면 그 기준으로 살펴볼게요."
+    ),
+    "period_unsupported_calendar": (
+        "그 기간 형식은 아직 지원하지 않아요. 지난달·이번 달·오늘·어제·현재까지로 알려주세요."
+    ),
+    "period_not_supported_for_intent": (
+        "이 질문에는 그 기간을 적용하기 어려워요. 다른 기간으로 다시 여쭤봐 주세요."
+    ),
+}
+
+
+def period_clarification_answer(code: str) -> ChatAnswer | None:
+    """대화 턴의 기간 되묻기 코드를 200 needs_clarification 답변으로 만든다.
+
+    합의된 되묻기 문구가 있는 대화 턴 전용 코드에만 답변을 만들고, 그 밖의 코드
+    (예측검증·차트 기간 오류 등)에는 ``None`` 을 돌려 호출부가 기존 4xx 계약을 그대로
+    유지하게 한다. 구매 되묻기와 동일한 메커니즘이며 ``fallback_reason``·``evidence`` 에
+    원 코드를 남겨 앱이 어떤 기간이 필요한지 기계적으로 읽을 수 있다.
+    """
+    text = _PERIOD_CLARIFICATIONS.get(code)
+    if text is None:
+        return None
+    return ChatAnswer(
+        id=uuid4().hex,
+        answer_type="period_review",
+        status="needs_clarification",
+        text=text,
+        wording_source="engine",
+        model="not_called",
+        fallback_reason=code,
+        evidence=JsonDocument({"period": {"clarification": code}}),
         created_at=time.time(),
     )
 
