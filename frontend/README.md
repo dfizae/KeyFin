@@ -133,3 +133,7 @@ design.pen (Pencil — 확정 원천: 변수 51개 + 아트보드)
 ## 라이선스
 
 MIT (`LICENSE`). 각 외부 스킬은 해당 저장소의 라이선스를 따릅니다.
+
+## Preview 업데이트 배포
+
+실기기용 APK 최초 설치, EAS Update 배포, 환경변수와 재빌드 기준은 [Preview 배포 안내](./PREVIEW_UPDATES.md)를 참고하세요.
