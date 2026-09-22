@@ -160,7 +160,11 @@ public interface UserSettingsControllerDocs {
 			CoachPersonaUpdateRequest request
 	);
 
-	@Operation(summary = "예산 기준일 조회", description = "예산 주기의 시작일(1~28)을 조회합니다.")
+	@Operation(
+			summary = "예산 기준일 조회",
+			description = "예산 주기의 시작일(1~28)을 조회합니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "예산 기준일 조회 성공", useReturnTypeSchema = true,
 					content = @Content(mediaType = APPLICATION_JSON_VALUE,
@@ -178,7 +182,11 @@ public interface UserSettingsControllerDocs {
 	})
 	BaseResponse<BudgetSettingsResponse> getBudgetSettings(@Parameter(hidden = true) Long userId);
 
-	@Operation(summary = "예산 기준일 변경", description = "예산 주기의 시작일(1~28)을 저장합니다. 온보딩 단계용으로, 예산이 하나라도 생긴 뒤에는 변경할 수 없습니다.")
+	@Operation(
+			summary = "예산 기준일 변경",
+			description = "예산 주기의 시작일(1~28)을 저장합니다. 온보딩 단계용으로, 예산이 하나라도 생긴 뒤에는 변경할 수 없습니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "예산 기준일 변경 성공", useReturnTypeSchema = true),
 			@ApiResponse(responseCode = "400", description = "기준일 누락 또는 1~28 범위 밖 (COMMON_001, USER_011)",
