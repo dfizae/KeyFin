@@ -346,7 +346,7 @@ export type PlacedFurnitureDto = {
   positionX: number;
   positionY: number;
   layer: number;
-  /** 기본 가구 식별값(FRIDGE·SOFA·TV). 일반 가구는 null */
+  /** 기본 지급 상품 식별값(SOFA·TV·DINING_TABLE·COFFEE_TABLE). 그 외 상품은 null */
   defaultFurnitureType: string | null;
   furnitureType: FurnitureType | null;
   stickerAttached: boolean;
@@ -354,13 +354,15 @@ export type PlacedFurnitureDto = {
   canUnplace: boolean;
 };
 
-export const FURNITURE_TYPES = ["FRIDGE", "SOFA", "TV"] as const;
+export const FURNITURE_TYPES = ["SOFA", "TV", "DINING_TABLE", "COFFEE_TABLE"] as const;
 export type FurnitureType = (typeof FURNITURE_TYPES)[number];
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };
 /** type 값 목록은 미확정(frontend-spec §6 #2). until 은 시간대 없는 KST 문자열 */
 export type AvatarReaction = { type: string; until: string };
+/** removableToday는 호환용 이름이며 현재 설치된 바닥 가구에 딱지가 남아 있는지를 뜻한다. 일일 제한은 없다. */
 export type RoomStickers = { count: number; total: number; removableToday: boolean };
+export type StickerRemoval = { userFurnitureId: number; stickerAttached: boolean; stickers: RoomStickers };
 
 export type Room = {
   equipped: EquippedItem[];
@@ -371,7 +373,7 @@ export type Room = {
   checkedInToday: boolean;
   /** P1 압류 딱지. 응답에 없으면 null */
   stickers: RoomStickers | null;
-  /** P1 초과 봉투 id. 응답에 없으면 빈 배열 */
+  /** 현재 확정 예산에서 지출 > 예산인 봉투 ID. 구버전 응답에 없으면 빈 배열 */
   overEnvelopeIds: number[];
 };
 

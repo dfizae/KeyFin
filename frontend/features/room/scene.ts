@@ -179,13 +179,14 @@ export function isPlaceableOnFloor(cell: GridCell, footprint: GridFootprint): bo
 
 /**
  * 기본 배치. 칸으로 정의하고 발끝 좌표는 격자에서 파생시킨다. 목 데이터(api/mocks/furniture.ts)도 이 배치로 시작한다.
- * 가구 구성은 서버 기본 가구(백엔드 V15: 냉장고·소파·TV, 전부 FRONT_RIGHT)와 같다(2026-09-21). 서버처럼 TV 는 옛 책상 자리에 둔다.
- * 2026-09-18 세로 긴 방으로 바꾸면서 칸을 다시 골랐다 — 옛 칸은 새 격자에서 화면 밖이거나 바닥을 벗어났다.
+ * 서버 기본 가구(V24: 소파·TV·식탁·커피테이블, 전부 FRONT_RIGHT)와 좌표를 맞춘다.
+ * 기존 냉장고 기본 칸(0, 2)은 비워 두어 기존 사용자에게 식탁을 지급해도 겹치지 않는다.
  */
 export const DEFAULT_CELLS: readonly { itemId: FurnitureId; cell: GridCell }[] = [
   { itemId: "tv_default", cell: { col: 2, row: 0 } },
-  { itemId: "fridge_default", cell: { col: 0, row: 2 } },
+  { itemId: "dining_table_original", cell: { col: 0, row: 4 } },
   { itemId: "sofa_default", cell: { col: 6, row: 4 } },
+  { itemId: "coffee_table_original", cell: { col: 4, row: 6 } },
 ];
 
 /**

@@ -62,7 +62,7 @@ type RoomEditScreenProps = {
 /**
  * 방 꾸미기 화면 (홈 '꾸미기' → /room/edit). 가구·벽 오브젝트를 드래그로 옮긴다(스냅·겹침 판정은 RoomScene).
  * 방 조회와 보유 목록을 받은 뒤 편집 사본(draft)을 만든다. 완료는 전체 배치 PUT 한 번으로 저장한 뒤 확정하고, 취소(뒤로가기 포함)는 사본을 버린다.
- * 필수 가구도 편집 중에는 보관할 수 있고, 완료 시 소파·TV·냉장고 각각 1개를 서버가 검사한다. 실패하면 사본을 유지한다(useRoomEditor).
+ * 필수 가구도 편집 중에는 보관할 수 있고, 완료 시 소파·TV·식탁·커피테이블 각각 1개를 서버가 검사한다. 실패하면 사본을 유지한다(useRoomEditor).
  * 2026-09-21: 산 가구를 꺼내 놓는 보관함과, 고른 가구의 '방향 바꾸기'·'넣어 두기'를 더했다(사용자 결정). 보관함은 보유 목록에서
  * 사본에 없는 가구이고, 넣어 둔 가구는 저장할 때 설치 해제로 나간다.
  *
@@ -393,6 +393,9 @@ function StorageSheet({ stored, pending, failed, retrying, disabled, onRetry, on
           renderItem={({ item }) => <StoredTile furniture={item} disabled={disabled} onPress={onPlace} />}
         />
       )}
+      {stored.some((item) => item.stickerAttached) ? (
+        <Text className="px-6 text-caption text-card-foreground">압류 딱지는 다시 설치한 뒤 제거할 수 있어요.</Text>
+      ) : null}
     </View>
   );
 }
@@ -403,7 +406,7 @@ function StoredTile({ furniture, disabled, onPress }: { furniture: StoredFurnitu
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${furniture.name}, 방에 놓기`}
+      accessibilityLabel={`${furniture.name}${furniture.stickerAttached ? ", 압류 딱지 부착" : ""}, 방에 놓기`}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => onPress(furniture)}
@@ -415,6 +418,7 @@ function StoredTile({ furniture, disabled, onPress }: { furniture: StoredFurnitu
         ) : (
           <Image source={thumbnail} style={TRAY_SPRITE_STYLE} resizeMode="contain" accessible={false} />
         )}
+        {furniture.stickerAttached ? <Text className="absolute bottom-0 rounded bg-destructive px-1 text-caption text-white">압류</Text> : null}
       </View>
       <Text className="text-caption text-card-foreground" numberOfLines={1}>
         {furniture.name}

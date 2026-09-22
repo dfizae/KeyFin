@@ -36,6 +36,7 @@ class FdtBootstrapServiceTest extends SpringIntegrationTestSupport {
 		FdtBootstrap bootstrap = service.build(USER_ID);
 
 		assertThat(bootstrap.asOf()).isEqualTo("2026-09-10");
+		assertThat(bootstrap.budgetStartDay()).isEqualTo(1);
 		assertThat(bootstrap.transactions()).hasSize(8);
 		assertThat(bootstrap.transactions())
 				.extracting(FdtTransaction::merchant)
@@ -143,7 +144,7 @@ class FdtBootstrapServiceTest extends SpringIntegrationTestSupport {
 
 		assertThat(json).contains("\"as_of\"", "\"transaction_type\"", "\"amount_krw\"", "\"exclude_tag\"",
 				"\"merchant_id\"", "\"confirm_status\"", "\"known_bills\"", "\"opening_payable_krw\"",
-				"\"payment_delay_days\"", "\"reserve_krw\"", "\"balance_krw\"", "\"fixed_group\"");
+				"\"payment_delay_days\"", "\"reserve_krw\"", "\"balance_krw\"", "\"fixed_group\"", "\"budget_start_day\"");
 		assertThat(json).doesNotContain("adjustedAmount", "\"adjusted_amount\"");
 	}
 

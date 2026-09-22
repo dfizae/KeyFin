@@ -2,7 +2,6 @@ package com.finset.key_fin.transaction.service;
 
 import com.finset.key_fin.account.entity.Account;
 import com.finset.key_fin.account.repository.AccountRepository;
-import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
 import com.finset.key_fin.card.entity.Card;
 import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
@@ -21,7 +20,6 @@ import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.exception.UserErrorCode;
 import com.finset.key_fin.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -30,8 +28,10 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
@@ -43,7 +43,6 @@ public class TransactionSyncService {
 			ConfirmStatus.AUTO
 	);
 
-	private final ApplicationEventPublisher events;
 	private final SubcategoryQueryRepository subcategoryQueryRepository;
 	private final UserRepository userRepository;
 	private final AccountRepository accountRepository;
@@ -64,13 +63,15 @@ public class TransactionSyncService {
 		List<Transaction> newTransactions = new ArrayList<>();
 		List<Account> balanceUpdatedAccounts = new ArrayList<>();
 		Set<String> transactionNumbers = new HashSet<>();
+		Map<Long, Transaction> canceledTransactions = new LinkedHashMap<>();
+		Set<Integer> changedEnvelopeIds = new LinkedHashSet<>();
 		syncAccountTransactions(
 				user, userKey, accounts, startDate, endDate,
 				transactionNumbers, newTransactions, balanceUpdatedAccounts);
 		syncCardTransactions(
 				user, userKey, cards, startDate, endDate,
-				transactionNumbers, newTransactions);
-		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, Map.of());
+				transactionNumbers, newTransactions, canceledTransactions, changedEnvelopeIds);
+		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, canceledTransactions, changedEnvelopeIds);
 	}
 
 	public void syncAccountTransactions(
@@ -87,7 +88,7 @@ public class TransactionSyncService {
 		syncAccountTransactions(
 				user, userKey, List.of(account), startDate, endDate,
 				new HashSet<>(), newTransactions, balanceUpdatedAccounts);
-		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, Map.of());
+		syncWriter.save(user.getId(), balanceUpdatedAccounts, newTransactions, Map.of(), Set.of());
 	}
 
 	public void syncCardTransactions(
@@ -100,10 +101,12 @@ public class TransactionSyncService {
 		validateManagedCard(user, card);
 		String userKey = requireFinanceUserKey(user);
 		List<Transaction> newTransactions = new ArrayList<>();
+		Map<Long, Transaction> canceledTransactions = new LinkedHashMap<>();
+		Set<Integer> changedEnvelopeIds = new LinkedHashSet<>();
 		syncCardTransactions(
 				user, userKey, List.of(card), startDate, endDate,
-				new HashSet<>(), newTransactions);
-		syncWriter.save(user.getId(), List.of(), newTransactions, Map.of());
+				new HashSet<>(), newTransactions, canceledTransactions, changedEnvelopeIds);
+		syncWriter.save(user.getId(), List.of(), newTransactions, canceledTransactions, changedEnvelopeIds);
 	}
 
 	public void syncNewlyManagedAccountHistory(
@@ -119,11 +122,12 @@ public class TransactionSyncService {
 		List<Transaction> newTransactions = new ArrayList<>();
 		Map<Long, Transaction> reclassifiedTransactions = new LinkedHashMap<>();
 		List<Account> balanceUpdatedAccounts = new ArrayList<>();
+		Set<Integer> changedEnvelopeIds = new LinkedHashSet<>();
 
 		syncNewlyManagedAccountTransactions(
 				user, userKey, account, startDate, endDate,
-				new HashSet<>(), newTransactions, reclassifiedTransactions, balanceUpdatedAccounts);
-		syncWriter.saveHistory(user.getId(), balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
+				new HashSet<>(), newTransactions, reclassifiedTransactions, balanceUpdatedAccounts, changedEnvelopeIds);
+		syncWriter.saveHistory(user.getId(), balanceUpdatedAccounts, newTransactions, reclassifiedTransactions, changedEnvelopeIds);
 	}
 
 	private void syncAccountTransactions(
@@ -160,7 +164,8 @@ public class TransactionSyncService {
 			Set<String> transactionNumbers,
 			List<Transaction> newTransactions,
 			Map<Long, Transaction> reclassifiedTransactions,
-			List<Account> balanceUpdatedAccounts
+			List<Account> balanceUpdatedAccounts,
+			Set<Integer> changedEnvelopeIds
 	) {
 		List<FinanceAccountTransaction> financeTransactions = accountTransactionClient.findTransactions(
 				userKey, account.getFinAccountNo(), startDate, endDate);
@@ -170,7 +175,7 @@ public class TransactionSyncService {
 			}
 			Transaction transaction = classificationService.fromAccount(user, account, financeTransaction);
 			reclassifyCounterpart(
-					user.getId(), transaction, financeTransaction, reclassifiedTransactions);
+					user.getId(), transaction, financeTransaction, reclassifiedTransactions, changedEnvelopeIds);
 			newTransactions.add(transaction);
 		}
 		updateBalanceFromLatestFinanceTransaction(
@@ -184,17 +189,44 @@ public class TransactionSyncService {
 			LocalDate startDate,
 			LocalDate endDate,
 			Set<String> transactionNumbers,
-			List<Transaction> newTransactions
+			List<Transaction> newTransactions,
+			Map<Long, Transaction> canceledTransactions,
+			Set<Integer> changedEnvelopeIds
 	) {
 		for (Card card : cards) {
 			List<FinanceCardTransaction> financeTransactions = cardTransactionClient.findTransactions(
 					userKey, card.getFinCardNo(), card.getCvc(), startDate, endDate);
 			for (FinanceCardTransaction financeTransaction : financeTransactions) {
-				if (isDuplicate(user.getId(), financeTransaction.transactionUniqueNo(), transactionNumbers)) {
+				if (!transactionNumbers.add(financeTransaction.transactionUniqueNo())) {
+					continue;
+				}
+				Optional<Transaction> stored = transactionRepository.findByUserIdAndFinTransactionUniqueNo(
+						user.getId(), financeTransaction.transactionUniqueNo());
+				if (stored.isPresent()) {
+					cancelIfRevoked(user.getId(), stored.get(), financeTransaction, canceledTransactions, changedEnvelopeIds);
 					continue;
 				}
 				newTransactions.add(classificationService.fromCard(user, card, financeTransaction));
 			}
+		}
+	}
+
+	/** 금융망 취소는 같은 거래번호의 cardStatus 만 바뀌므로 이미 수집한 승인 건을 취소로 옮긴다. */
+	private void cancelIfRevoked(
+			long userId,
+			Transaction transaction,
+			FinanceCardTransaction financeTransaction,
+			Map<Long, Transaction> canceledTransactions,
+			Set<Integer> changedEnvelopeIds
+	) {
+		if (transaction.getStatus() != TransactionStatus.NORMAL
+				|| !classificationService.isCardCanceled(financeTransaction)) {
+			return;
+		}
+		transaction.cancel();
+		canceledTransactions.put(transaction.getId(), transaction);
+		if (transaction.getSubcategoryId() != null) {
+			subcategoryQueryRepository.findEnvelopeId(transaction.getSubcategoryId()).ifPresent(changedEnvelopeIds::add);
 		}
 	}
 
@@ -226,7 +258,8 @@ public class TransactionSyncService {
 			long userId,
 			Transaction transaction,
 			FinanceAccountTransaction financeTransaction,
-			Map<Long, Transaction> reclassifiedTransactions
+			Map<Long, Transaction> reclassifiedTransactions,
+			Set<Integer> changedEnvelopeIds
 	) {
 		if (transaction.getExcludeTag() != ExcludeTag.SELF_TRANSFER) {
 			return;
@@ -249,9 +282,7 @@ public class TransactionSyncService {
 					counterpartTransaction.markAsSelfTransfer();
 					reclassifiedTransactions.put(counterpartTransaction.getId(), counterpartTransaction);
 					if (before != null) {
-						subcategoryQueryRepository.findEnvelopeId(before)
-								.ifPresent(envelopeId ->
-										events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId)));
+						subcategoryQueryRepository.findEnvelopeId(before).ifPresent(changedEnvelopeIds::add);
 					}
 				});
 	}

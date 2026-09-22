@@ -2,8 +2,8 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 
 import { getFurnitures, updateFurniturePlacements, type FurnitureSlotType } from "@/features/room/api/furniture.api";
 import { getUserItems, updateItemEquipment } from "@/features/room/api/item.api";
-import { checkAttendance, getRoom } from "@/features/room/api/room.api";
-import { placedFurnitureDtos } from "@/features/room/furniture";
+import { checkAttendance, getRoom, removeSticker } from "@/features/room/api/room.api";
+import { placedFurnitureDtos, type UserFurniture } from "@/features/room/furniture";
 import { applyAvatarEquipment, type UserItem } from "@/features/room/items";
 import type { Room } from "@/features/room/model";
 import { shopKeys } from "@/features/shop/api/queries";
@@ -55,8 +55,8 @@ export function furnitureListQueryOptions(slotType?: FurnitureSlotType) {
 }
 
 /** 보유 가구 목록. 방 화면은 GET /room 의 furnitures 로 충분하고, 이 조회는 미설치 가구까지 볼 때 쓴다 */
-export function useFurnitures(slotType?: FurnitureSlotType) {
-  return useQuery(furnitureListQueryOptions(slotType));
+export function useFurnitures(slotType?: FurnitureSlotType, enabled = true) {
+  return useQuery({ ...furnitureListQueryOptions(slotType), enabled });
 }
 
 /** PUT 성공 응답을 먼저 반영한다. 조회 실패가 이미 성공한 저장을 실패로 바꾸지 않게 한다. */
@@ -74,13 +74,38 @@ export function useSavePlacements() {
       for (const slot of ["FLOOR", "WALL"] as const) {
         queryClient.setQueryData(roomKeys.furnitures(slot), owned.filter((item) => item.serverState.slotType === slot));
       }
+      const installed = owned.filter((item) => item.serverState.placementStatus === "FLOOR");
+      const count = installed.filter((item) => item.stickerAttached).length;
       queryClient.setQueryData<Room>(roomKeys.home(), (old) => old ? {
         ...old, furnitures: placedFurnitureDtos(owned),
-        stickers: old.stickers ? { ...old.stickers, count: owned.filter((item) => item.placed && item.stickerAttached).length } : null,
+        stickers: { count, total: installed.length, removableToday: count > 0 },
       } : old);
       await queryClient.invalidateQueries({ queryKey: roomKeys.home(), refetchType: "none" });
       await queryClient.fetchQuery(roomQueryOptions()).catch(() => undefined);
     },
+  });
+}
+
+export function useRemoveSticker() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: removeSticker,
+    retry: false,
+    onMutate: () => queryClient.cancelQueries({ queryKey: roomKeys.all }),
+    onSuccess: async (result) => {
+      await queryClient.cancelQueries({ queryKey: roomKeys.all });
+      queryClient.setQueryData<Room>(roomKeys.home(), (old) => old ? {
+        ...old, stickers: result.stickers,
+        furnitures: old.furnitures.map((item) => item.userFurnitureId === result.userFurnitureId
+          ? { ...item, stickerAttached: result.stickerAttached } : item),
+      } : old);
+      queryClient.setQueriesData<UserFurniture[]>({ queryKey: [...roomKeys.all, "furnitures"] }, (old) => old?.map((item) =>
+        item.userFurnitureId === result.userFurnitureId ? { ...item, stickerAttached: result.stickerAttached,
+          serverState: { ...item.serverState, stickerAttached: result.stickerAttached } } : item));
+      void queryClient.invalidateQueries({ queryKey: roomKeys.all });
+    },
+    // 다른 기기에서 제거했거나 이동한 경우도 최신 상태를 다시 받는다. 실패를 성공으로 표시하지 않는다.
+    onError: () => { void queryClient.invalidateQueries({ queryKey: roomKeys.all }); },
   });
 }
 

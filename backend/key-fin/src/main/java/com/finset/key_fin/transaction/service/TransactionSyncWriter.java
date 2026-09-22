@@ -8,6 +8,8 @@ import com.finset.key_fin.transaction.entity.TransactionStatus;
 import com.finset.key_fin.transaction.entity.TransactionType;
 import com.finset.key_fin.transaction.event.AccountWithdrawn;
 import com.finset.key_fin.transaction.event.PendingTransactionSaved;
+import com.finset.key_fin.budget.event.EnvelopeSpendingChanged;
+import com.finset.key_fin.transaction.repository.SubcategoryQueryRepository;
 import com.finset.key_fin.transaction.repository.TransactionRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.room.service.RoomStickerService;
@@ -19,9 +21,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 @Component
@@ -33,17 +37,20 @@ public class TransactionSyncWriter {
 	private final ApplicationEventPublisher events;
 	private final UserRepository userRepository;
 	private final RoomStickerService roomStickerService;
+	private final SubcategoryQueryRepository subcategoryQueryRepository;
 
 	@Transactional
 	public void save(
 			long userId,
 			List<Account> balanceUpdatedAccounts,
 			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+			Map<Long, Transaction> reclassifiedTransactions,
+			Set<Integer> changedEnvelopeIds
 	) {
 		persist(userId, balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 		publishPendingTransactionEvents(newTransactions);
 		publishAccountWithdrawnEvents(newTransactions);
+		publishEnvelopeSpendingEvents(userId, newTransactions, changedEnvelopeIds);
 	}
 
 	@Transactional
@@ -51,9 +58,11 @@ public class TransactionSyncWriter {
 			long userId,
 			List<Account> balanceUpdatedAccounts,
 			List<Transaction> newTransactions,
-			Map<Long, Transaction> reclassifiedTransactions
+			Map<Long, Transaction> reclassifiedTransactions,
+			Set<Integer> changedEnvelopeIds
 	) {
 		persist(userId, balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
+		publishEnvelopeSpendingEvents(userId, List.of(), changedEnvelopeIds);
 	}
 
 	private void persist(
@@ -86,6 +95,26 @@ public class TransactionSyncWriter {
 				events.publishEvent(new AccountWithdrawn(transaction.getUser().getId(), transaction.getAccountId()));
 			}
 		}
+	}
+
+	private void publishEnvelopeSpendingEvents(
+			long userId,
+			List<Transaction> newTransactions,
+			Set<Integer> changedEnvelopeIds
+	) {
+		Map<Integer, Optional<Integer>> envelopeBySubcategory = new HashMap<>();
+		Set<Integer> envelopeIds = new LinkedHashSet<>(changedEnvelopeIds);
+		for (Transaction transaction : newTransactions) {
+			if (transaction.getStatus() != TransactionStatus.NORMAL
+					|| transaction.getConfirmStatus() == ConfirmStatus.PENDING
+					|| transaction.getSubcategoryId() == null) {
+				continue;
+			}
+			envelopeBySubcategory
+					.computeIfAbsent(transaction.getSubcategoryId(), subcategoryQueryRepository::findEnvelopeId)
+					.ifPresent(envelopeIds::add);
+		}
+		envelopeIds.forEach(envelopeId -> events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId)));
 	}
 
 	private void publishPendingTransactionEvents(List<Transaction> newTransactions) {

@@ -18,19 +18,25 @@ class SwaggerDocumentationTest extends SpringIntegrationTestSupport {
 	private MockMvc mockMvc;
 
 	@Test
-	void documentsRoomWithoutBoard() throws Exception {
+	void documentsRoomWithCategoryOverrunsWithoutBoard() throws Exception {
 		mockMvc.perform(get("/v3/api-docs"))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties").value(aMapWithSize(5)))
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties").value(aMapWithSize(6)))
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.avatar").exists())
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.furnitures").exists())
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.coin").exists())
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.attendance").exists())
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.stickers").exists())
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.overEnvelopes.type").value("array"))
+				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.overEnvelopes.items.type").value("integer"))
 				.andExpect(jsonPath("$.components.schemas.RoomResponse.properties.board").doesNotHaveJsonPath())
 				.andExpect(jsonPath("$.components.schemas.BoardResponse").doesNotHaveJsonPath())
 				.andExpect(jsonPath("$.paths['/api/v1/room'].get.responses['200'].content['application/json'].examples['방 조회 성공'].value.data")
-						.value(aMapWithSize(5)))
+						.value(aMapWithSize(6)))
+				.andExpect(jsonPath("$.paths['/api/v1/room'].get.responses['200'].content['application/json'].examples['방 조회 성공'].value.data.overEnvelopes[0]")
+						.value(1))
+				.andExpect(jsonPath("$.paths['/api/v1/room'].get.responses['200'].content['application/json'].examples['방 조회 성공'].value.data.overEnvelopes[1]")
+						.value(4))
 				.andExpect(jsonPath("$.paths['/api/v1/room'].get.responses['200'].content['application/json'].examples['방 조회 성공'].value.data.board")
 						.doesNotHaveJsonPath());
 	}

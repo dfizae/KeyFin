@@ -112,7 +112,6 @@ public class UserFurniture {
 		this.positionX = null;
 		this.positionY = null;
 		this.layer = 0;
-		this.stickerAttached = false;
 	}
 
 	public boolean isPlaced() {
@@ -124,8 +123,8 @@ public class UserFurniture {
 	}
 
 	public void attachSticker() {
-		if (canUnplace()) {
-			throw new IllegalStateException("Only placed essential furniture can carry a sticker");
+		if (placementStatus != FurniturePlacementStatus.FLOOR) {
+			throw new IllegalStateException("Only placed floor furniture can receive a sticker");
 		}
 		stickerAttached = true;
 	}

@@ -12,6 +12,7 @@ import {
   toChatReply,
   validateChatMessage,
   type ChatReplyDto,
+  type ChatSpendingRowDto,
 } from "@/features/coaching/model";
 import { ContractMismatchError } from "@/lib/contract";
 
@@ -22,6 +23,8 @@ const replyDto: ChatReplyDto = {
   source: "llm",
   fallbackReason: null,
   answerId: "ans-1",
+  rows: [],
+  totalKrw: null,
 };
 
 describe("coaching model", () => {
@@ -63,9 +66,75 @@ describe("coaching model", () => {
     const next = appendChatTurn(EMPTY_CHAT_HISTORY, "외식 얼마 남았어?", toChatReply(replyDto));
     expect(next.hasSession).toBe(true);
     expect(next.messages).toEqual([
-      { role: "user", content: "외식 얼마 남았어?", chartId: null },
-      { role: "assistant", content: replyDto.reply, chartId: null },
+      { role: "user", content: "외식 얼마 남았어?", chartId: null, rows: [], totalKrw: null },
+      { role: "assistant", content: replyDto.reply, chartId: null, rows: [], totalKrw: null },
     ]);
+  });
+});
+
+describe("소비 조회 집계", () => {
+  const rows: ChatSpendingRowDto[] = [
+    { envelope: "외식", totalKrw: 45_000, count: 3 },
+    { envelope: "교통", totalKrw: 12_000, count: 4 },
+  ];
+
+  it("POST 집계를 원화 모델로 변환하고 다음 대화가 추가되어도 기존 집계를 보존한다", () => {
+    const reply = toChatReply({ ...replyDto, source: "engine", rows, totalKrw: 57_000 });
+    const history = appendChatTurn(EMPTY_CHAT_HISTORY, "이번 달 얼마 썼어?", reply);
+    const next = appendChatTurn(history, "금리란 뭐야?", toChatReply(replyDto));
+
+    expect(next.messages[1]).toEqual({
+      role: "assistant",
+      content: replyDto.reply,
+      chartId: null,
+      rows: [
+        { envelope: "외식", totalKrw: "45000", count: 3 },
+        { envelope: "교통", totalKrw: "12000", count: 4 },
+      ],
+      totalKrw: "57000",
+    });
+    expect(next.messages[0]).toMatchObject({ rows: [], totalKrw: null });
+    expect(next.messages[3]).toMatchObject({ rows: [], totalKrw: null });
+    expect(EMPTY_CHAT_HISTORY.messages).toEqual([]);
+  });
+
+  it("지출 없는 조회의 0원과 집계 없는 일반 답변의 null을 구분한다", () => {
+    expect(toChatReply({ ...replyDto, totalKrw: 0 })).toMatchObject({ rows: [], totalKrw: "0" });
+    expect(toChatReply(replyDto)).toMatchObject({ rows: [], totalKrw: null });
+    expect(toChatReply({ ...replyDto, rows: [{ envelope: "외식", totalKrw: 0, count: 0 }], totalKrw: 0 })).toMatchObject({
+      rows: [{ envelope: "외식", totalKrw: "0", count: 0 }],
+      totalKrw: "0",
+    });
+  });
+
+  it("집계 필드가 없는 이전 POST 응답도 본문을 보여 준다", () => {
+    const { rows: _rows, totalKrw: _totalKrw, ...legacy } = replyDto;
+    expect(toChatReply(legacy as ChatReplyDto)).toMatchObject({ reply: replyDto.reply, rows: [], totalKrw: null });
+  });
+
+  it("GET 이력은 집계 없이 변환하되 기존 chartId는 유지한다", () => {
+    const history = toChatHistory({
+      messages: [{ role: "assistant", content: "답변", chartId: MOCK_CHART_ID }],
+      expiresAt: "2026-09-23T10:00:00",
+    });
+    expect(history.messages[0]).toEqual({ role: "assistant", content: "답변", chartId: MOCK_CHART_ID, rows: [], totalKrw: null });
+  });
+
+  it.each([1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, "45000", null])("잘못된 행 금액 %p는 계약 오류로 처리한다", (amount) => {
+    expect(() => toChatReply({ ...replyDto, rows: [{ ...rows[0], totalKrw: amount as number }] })).toThrow(ContractMismatchError);
+  });
+
+  it.each([1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, "57000"])("잘못된 합계 %p는 계약 오류로 처리한다", (amount) => {
+    expect(() => toChatReply({ ...replyDto, totalKrw: amount as number })).toThrow(ContractMismatchError);
+  });
+
+  it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1, "3"])("잘못된 건수 %p는 계약 오류로 처리한다", (count) => {
+    expect(() => toChatReply({ ...replyDto, rows: [{ ...rows[0], count: count as number }] })).toThrow(ContractMismatchError);
+  });
+
+  it("배열이 아닌 집계와 봉투명이 없는 행은 계약 오류로 처리한다", () => {
+    expect(() => toChatReply({ ...replyDto, rows: {} as ChatSpendingRowDto[] })).toThrow(ContractMismatchError);
+    expect(() => toChatReply({ ...replyDto, rows: [null as unknown as ChatSpendingRowDto] })).toThrow(ContractMismatchError);
   });
 });
 
@@ -84,6 +153,24 @@ describe("coaching errors", () => {
 
 describe("coaching mocks", () => {
   beforeEach(() => resetCoachingMocks());
+
+  it("소비 조회 POST에는 집계가 있고 GET 이력에는 없다", () => {
+    const reply = sendChatMock("이번 달 얼마 썼어?");
+    expect(reply).toMatchObject({
+      kind: "CHAT",
+      source: "engine",
+      rows: [
+        { envelope: "외식", totalKrw: 45_000, count: 3 },
+        { envelope: "교통", totalKrw: 12_000, count: 4 },
+      ],
+      totalKrw: 57_000,
+    });
+    expect(chatHistoryMock().messages[1]).toEqual({ role: "assistant", content: reply.reply, chartId: null });
+  });
+
+  it.each(["소비란 뭐야?", "다음 달 괜찮아?", "주식 뭐 살까?"])("소비 조회가 아닌 '%s'에는 집계가 없다", (question) => {
+    expect(sendChatMock(question)).toMatchObject({ rows: [], totalKrw: null });
+  });
 
   it("첫 질문에 세션이 열리고 질문·답변이 이력에 쌓인다", () => {
     expect(chatHistoryMock()).toEqual({ messages: [], expiresAt: null });

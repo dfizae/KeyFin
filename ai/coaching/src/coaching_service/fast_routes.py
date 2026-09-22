@@ -62,6 +62,12 @@ _STRONG_FUTURE_MARKERS: Final[tuple[str, ...]] = (
 _FORECAST_TERMS: Final[tuple[str, ...]] = ("예측", "예상", "전망")
 _FORECAST_PATH_TERMS: Final[tuple[str, ...]] = ("경로", "흐름", "궤적", "전개", "변하는", "변화")
 _IMPLICIT_FORECAST_TERMS: Final[tuple[str, ...]] = ("얼마", "남을", "남아")
+# A future-tense spend question ("이번달 얼마 쓸까") is a spend forecast even
+# without a balance noun.  Only committed future-spend forms are listed; bare
+# "쓸" is excluded because it collides with 쓰다 (write/use) and 쓸쓸/쓸데.  A
+# future marker is still required in the branch below, so a non-financial "쓸까"
+# alone never routes here.
+_SPEND_FORECAST_TERMS: Final[tuple[str, ...]] = ("쓸까", "쓸지", "소비할", "지출할")
 _RISK_SIGNALS: Final[tuple[str, ...]] = (
     "이번달",
     "이달",
@@ -74,7 +80,10 @@ _RISK_SIGNALS: Final[tuple[str, ...]] = (
     "현금흐름",
     "필수생활비",
 )
-_RISK_OUTCOME_TERMS: Final[tuple[str, ...]] = ("부족", "모자라", "감당")
+# "모자라다" (to fall short) conjugates to 모자라/모자란/모자랄/모자랐; the bare
+# stem "모자" is deliberately excluded because it collides with 모자 (hat), whose
+# case markers (모자가/모자를/모자는) never produce these insufficiency endings.
+_RISK_OUTCOME_TERMS: Final[tuple[str, ...]] = ("부족", "모자라", "모자란", "모자랄", "모자랐", "감당")
 # A user can contrast an earlier risk-only view with the requested balance path.
 # These compacted phrases are an admission condition for the no-model forecast
 # route; other mixed risk/forecast language deliberately remains model-routed.
@@ -132,7 +141,11 @@ _RECOMPUTE_FOLLOW_UP_MARKERS: Final[tuple[str, ...]] = (
 )
 _GOAL_AMOUNT: Final = re.compile(
     r"(?<![\d,.])(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+))(?P<unit>만원|원)"
-    r"(?=$|(?:을|를|이|가|은|는|에|의|으로|까지|만|도|보다|부터|에서|에게|한테|목표|[.,?!]))"
+    # A following Hangul syllable (e.g. a verb such as "모을" in "100만원 모을 수
+    # 있어") is admitted alongside the explicit particle set so a natural goal
+    # question without a particle after the amount still yields exactly one
+    # amount. The amount count and the other goal gates below remain unchanged.
+    r"(?=$|[가-힣]|(?:을|를|이|가|은|는|에|의|으로|까지|만|도|보다|부터|에서|에게|한테|목표|[.,?!]))"
 )
 _GOAL_WORDS: Final[tuple[str, ...]] = ("목표", "모으", "모을", "저축", "달성", "만들")
 _GOAL_FEASIBILITY: Final = re.compile(
@@ -268,10 +281,29 @@ class NaturalPurchase:
 # missing or ambiguous. Reusing the same small code set as the calendar
 # parser's ``period_clarification_required`` keeps the wire contract uniform:
 # a 4xx code, not a fabricated financial answer.
-_PURCHASE_VERB: Final = re.compile(
+# Strict buy verbs: an unambiguous purchase signal on their own.
+_PURCHASE_VERB_STRICT: Final = re.compile(
     r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|"
     r"지르면|질러도|지르려고|구입하면|구입해서"
 )
+# Casual buy phrasings. Whitespace is already stripped before matching, so
+# "사고 싶어" -> "사고싶어" and "사고싶" covers both. Deliberately excluded:
+# "사자" (=lion), bare "살래"/"살라" (살다=live), and "사고파" (collides with
+# 사고팔다 buy-and-sell); "살까봐" is redundant since "살까" already matches.
+# These collide with finance/definition/goal questions ("예금 사고싶은데 뭐가
+# 좋아"), so a casual-only match needs a concrete amount or item alias before it
+# counts as a purchase (see ``natural_purchase``). "장만하" was dropped entirely:
+# "장만하다 뜻" / "집 장만" are definition/goal, not purchase.
+_PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까")
+_PURCHASE_VERB: Final = re.compile(
+    _PURCHASE_VERB_STRICT.pattern + r"|" + _PURCHASE_VERB_CASUAL.pattern
+)
+# A completed/past-tense purchase statement ("커피 3만원 샀어", "노트북 구매했어")
+# is a fresh independent turn, not a bare field answering a pending clarification.
+# ``natural_purchase`` returns ``None`` for these (it only admits a prospective
+# purchase), so they must be rejected explicitly in the bare-fragment guard below
+# or they would be force-merged into the stale pending purchase context.
+_PURCHASE_VERB_COMPLETE: Final = re.compile(r"샀|구매했|구입했|질렀")
 _PURCHASE_INSTALLMENT: Final = re.compile(r"할부")
 _PURCHASE_AMOUNT: Final = re.compile(
     r"(?<![\d,.])(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+))(?P<unit>만원|원)"
@@ -290,6 +322,8 @@ _PURCHASE_ENVELOPE_ALIASES: Final[dict[str, str]] = {
     "노트북": "기타", "랩탑": "기타", "맥북": "기타", "폰": "기타", "휴대폰": "기타",
     "스마트폰": "기타", "아이폰": "기타", "갤럭시": "기타", "태블릿": "기타", "아이패드": "기타",
     "가전": "기타", "전자제품": "기타", "카메라": "기타",
+    "닌텐도": "기타", "스위치": "기타", "게임기": "기타", "에어팟": "기타",
+    "티비": "기타", "tv": "기타", "청소기": "기타", "에어컨": "기타", "냉장고": "기타",
     "옷": "쇼핑", "신발": "쇼핑", "가방": "쇼핑", "의류": "쇼핑",
 }
 
@@ -312,6 +346,15 @@ def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clari
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
     if not normalized or _PURCHASE_VERB.search(normalized) is None:
         return None
+    if _PURCHASE_VERB_STRICT.search(normalized) is None:
+        # Only a casual verb ("사고싶"/"사볼까"/"사둘까") matched. These collide
+        # with finance/definition/goal questions, so demand a concrete purchase
+        # signal — an amount or a known item/envelope alias — before hijacking the
+        # turn into a purchase clarify. Otherwise fall through to normal routing.
+        has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
+        has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
+        if not has_amount and not has_alias:
+            return None
     if _PURCHASE_INSTALLMENT.search(normalized) is not None:
         # Multi-installment purchases need a payment schedule the FDT contract
         # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).
@@ -343,7 +386,13 @@ def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clari
             # A card purchase without its own real payment date would silently
             # treat the purchase date as the settlement date, which the vendor
             # contract explicitly forbids (see coaching_contract.py card rule).
-            return "purchase_payment_method_required"
+            # A clean single-card phrasing already named the method, so the
+            # generic "cash or card?" clarify only loops; a distinct code asks
+            # precisely for the missing settlement date instead of re-asking the
+            # method. Inferring a default settlement date is deliberately not
+            # done here (the text-only parser has no billing cycle and the vendor
+            # forbids reusing the purchase date), so this stays fail-closed.
+            return "purchase_card_payment_date_required"
         card_payment_date = payment_match.group("date") or payment_match.group("date2")
     date_token = _purchase_date_token(normalized, exclude=card_payment_date)
     if date_token is None:
@@ -377,8 +426,12 @@ def _purchase_date_token(normalized: str, *, exclude: str | None) -> str | None:
 # fixed-cost, or goal question resolves against the separately submitted
 # personal-context profile, which is optional and far less established than the
 # Twin snapshot, so it keeps the model-routed path even when the grammar itself
-# is a clean, complete lookup.
-_TWIN_BACKED_TOPICS: Final[frozenset[str]] = frozenset({"accounts", "assets", "debts", "payments"})
+# is a clean, complete lookup.  ``budget`` is included because its summary is
+# rendered directly from the ledger (``personal_service._budget_summary``,
+# ``model="not_called"``), so it is as grounded as the snapshot topics.
+_TWIN_BACKED_TOPICS: Final[frozenset[str]] = frozenset(
+    {"accounts", "assets", "debts", "payments", "budget"}
+)
 
 
 def deterministic_lookup_route(question: str) -> LookupRoute | None:
@@ -390,6 +443,12 @@ def deterministic_lookup_route(question: str) -> LookupRoute | None:
     equal to their established grammars prevents the speed path from silently
     accepting filters, comparisons, forecasts, or a broader personal request.
     """
+    # A definition-shaped question ("대출이 뭐야", "예산이 뭐야") must reach the
+    # finance-concept path, not be captured as a personal-data lookup. The lookup
+    # grammar accepts ``<alias> 뭐야``, so mirror the analysis route's guard here so
+    # both no-model paths treat 뭐/뜻/의미/무엇/... identically.
+    if _DEFINITION_LANGUAGE.search(compact(question)) is not None:
+        return None
     topic = select_personal_topic(question)
     if topic is not None and topic in _TWIN_BACKED_TOPICS:
         return "personal"
@@ -427,9 +486,20 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:
         )
         has_explicit_risk = "위험" in normalized
         risk_is_deprioritized = any(phrase in normalized for phrase in _RISK_DEPRIORITIZED_FOR_PATH)
+        # A future-tense spend question is a spend forecast on its own, without a
+        # balance/spend noun.  Beyond the future marker it also requires a
+        # money/quantity signal (얼마/돈/소비/지출) so a non-financial "쓸까"
+        # ("편지 쓸까") never routes here.
+        spend_forecast = (
+            has_future_marker
+            and any(term in normalized for term in _SPEND_FORECAST_TERMS)
+            and any(signal in normalized for signal in ("얼마", "돈", "소비", "지출"))
+        )
         if (
-            has_forecast_target
-            and (explicit_forecast or implicit_forecast or path_forecast)
+            (
+                (has_forecast_target and (explicit_forecast or implicit_forecast or path_forecast))
+                or spend_forecast
+            )
             and (not has_explicit_risk or risk_is_deprioritized)
         ):
             return "forecast"
@@ -447,6 +517,123 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:
     if _artifact_review(normalized):
         return "review"
     return None
+
+
+# A stored needs_clarification carries only the accumulated question text. A bare
+# follow-up ("30만원", "내일", "현금으로", "이번달") is merged into that text and the
+# single existing parser re-runs, so these helpers never build partial financial
+# state themselves; they only decide whether a follow-up is a bare fragment that
+# answers the pending question, or a fresh complete turn that must discard it.
+# The period tokens mirror ``spending_history._Period`` exactly.
+# The merged text is re-parsed and re-stored as the pending context each turn, so a
+# pathological chain of re-clarifying fragments could otherwise append without bound
+# and eventually exceed ``schemas.PendingClarification.question`` (4000) inside
+# ``save_turn``. Bound the merged/stored text to the same order as the per-turn input
+# cap (``TurnRequest.question`` is 2000); once the bound is reached we drop the new
+# fragment (keeping the leading question the parser needs) rather than append forever.
+_MERGED_QUESTION_MAX_CHARS: Final = 2000
+_SPENDING_PERIOD_FRAGMENT: Final = re.compile(
+    r"(?P<period>지난달|이번달|이달|오늘|어제|현재까지|지금까지|현재)"
+    r"(?:동안|까지|의|에|은|는|이야|요|로|으로)?[?!.\uff1f\u3002]*"
+)
+
+
+def _parses_to_any_route(question: str) -> bool:
+    """Whether a message independently satisfies any existing complete grammar.
+
+    A follow-up that is itself a whole purchase/lookup/analysis/goal/what-if turn
+    must never be force-merged into a stale clarification; it is handled fresh.
+    """
+    return (
+        natural_purchase(question) is not None
+        or deterministic_lookup_route(question) is not None
+        or deterministic_analysis_route(question) is not None
+        or natural_goal(question) is not None
+        or natural_what_if(question) is not None
+    )
+
+
+def is_bare_purchase_fragment(question: str) -> bool:
+    """Admit a follow-up that only supplies a missing purchase field, never a new route.
+
+    It must carry at least one purchase field (amount/date/payment/envelope) and
+    must not parse as any complete route on its own, so an unrelated question
+    ("복리가 뭐야", off-topic) is discarded rather than merged.
+    """
+    normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
+    if not normalized or _parses_to_any_route(question):
+        return False
+    if (
+        _PURCHASE_VERB.search(normalized) is not None
+        or _PURCHASE_VERB_COMPLETE.search(normalized) is not None
+    ):
+        # The follow-up carries its own (prospective or completed) purchase verb, so
+        # it is a fresh independent statement, not a bare field answering the pending
+        # question; discard the stale context and handle it fresh.
+        return False
+    has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
+    has_date = any(
+        pattern.search(normalized) is not None
+        for pattern in (
+            _PURCHASE_DATE_TOMORROW,
+            _PURCHASE_DATE_THIS_WEEK,
+            _PURCHASE_DATE_TODAY,
+            _PURCHASE_DATE_ISO,
+        )
+    )
+    has_payment = (
+        _PURCHASE_CARD.search(normalized) is not None or _PURCHASE_CASH.search(normalized) is not None
+    )
+    has_envelope = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
+    return has_amount or has_date or has_payment or has_envelope
+
+
+def spending_period_fragment(question: str) -> str | None:
+    """Return the canonical period token when the follow-up is only a bare period.
+
+    A full spending question ("이번달 소비 얼마야") is not a fragment; it fullmatch-fails
+    here and is handled fresh (it already routes on its own), so this never hijacks
+    a complete turn.
+    """
+    stripped = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
+    if not stripped or _parses_to_any_route(question):
+        return None
+    match = _SPENDING_PERIOD_FRAGMENT.fullmatch(stripped)
+    return match.group("period") if match is not None else None
+
+
+def merged_purchase_question(question_so_far: str, followup: str) -> str | None:
+    """Combine a stored purchase clarification with a bare follow-up, or None to discard."""
+    if not is_bare_purchase_fragment(followup):
+        return None
+    combined = f"{question_so_far} {followup}"
+    if len(combined) > _MERGED_QUESTION_MAX_CHARS:
+        # Bound the re-stored pending text: drop this fragment rather than append
+        # unboundedly. ``question_so_far`` is itself already bounded (a prior merged
+        # result or the validated request), so the stored state cannot grow.
+        return question_so_far
+    return combined
+
+
+def merged_spending_question(question_so_far: str, followup: str) -> str | None:
+    """Synthesize a valid spending query from a stored clarification plus a period fragment.
+
+    Prepending the period preserves any envelope/verb the original stated; when the
+    original was too bare to re-form a supported query, it falls back to the
+    all-envelope aggregate for that period so the follow-up is still answered.
+    """
+    period = spending_period_fragment(followup)
+    if period is None:
+        return None
+    combined = f"{period} {question_so_far}"
+    # Falling back to the short aggregate when the combined text would exceed the
+    # bound keeps the re-stored pending context from growing without limit across a
+    # long chain of period-fragment turns.
+    if len(combined) > _MERGED_QUESTION_MAX_CHARS:
+        return f"{period} 소비 얼마야"
+    if supports_spending_question(combined):
+        return combined
+    return f"{period} 소비 얼마야"
 
 
 def stored_coaching_followup(question: str) -> bool:

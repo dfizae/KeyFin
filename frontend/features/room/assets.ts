@@ -7,6 +7,7 @@ import type { SpriteFrames } from "@/components/ui/sprite";
 // 벽·바닥 경계선(scene.ts FLOOR_POLYGON·SURFACES)은 이 그림을 픽셀로 다시 재서 얻었다.
 // 옛 그림(floor-default.png, 327:404)은 되돌릴 때를 위해 남겨 두었고 지금은 쓰지 않는다.
 export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-tall.jpg");
+export const SEIZURE_STICKER = require("@/assets/sprites/room/seizure-sticker.png");
 export const CHARACTER_IDLE = require("@/assets/sprites/char1-idle.png");
 /** 입주 연출(PAGE-08)에서만 쓰는 환호 포즈 */
 export const CHARACTER_CELEBRATE = require("@/assets/sprites/char1-celebrate.png");

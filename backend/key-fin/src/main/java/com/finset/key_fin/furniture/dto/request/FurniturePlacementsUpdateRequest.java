@@ -18,7 +18,7 @@ import java.util.List;
 @Schema(description = "방의 최종 배치 전체. 목록에서 빠진 보유 가구는 보관 상태로 전환")
 public record FurniturePlacementsUpdateRequest(
 		@NotNull @Size(max = 100)
-		@Schema(description = "변경분이 아닌 최종 설치 가구 전체. 소파·TV·냉장고 각각 정확히 1개 필수", requiredMode = Schema.RequiredMode.REQUIRED)
+		@Schema(description = "변경분이 아닌 최종 설치 가구 전체. 소파·TV·식탁·커피테이블 각각 정확히 1개 필수", requiredMode = Schema.RequiredMode.REQUIRED)
 		List<@NotNull @Valid Placement> placements
 ) {
 	@Schema(name = "FurniturePlacementEntry", description = "최종 배치의 가구 한 개. 종류와 딱지는 서버가 판단")

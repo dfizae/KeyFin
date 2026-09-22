@@ -11,6 +11,7 @@ from fdt.util import digest
 from test_engine import fixture
 
 from coaching_service.engine import EngineAdapter
+from coaching_service.numeric_rendering import numeric_rows_for
 from coaching_service.periods import RollingDays, resolve_period
 from coaching_service.rendering import authoritative_text
 from coaching_service.schemas import JsonDocument, Receipt
@@ -436,6 +437,74 @@ def test_numeric_result_when_request_parameters_change_is_rejected(
     # Then: no forecast or goal amounts from the other request are admitted.
     assert "수치 분석 결과의 계약을 확인할 수 없어 금액·비율을 표시하지 않습니다." in text
     assert "현재 현금 400,000원" not in text
+
+
+def _numeric_receipt(engine: EngineAdapter, twin: JsonDocument, mode: str, **extra: object) -> Receipt:
+    request = JsonDocument({"mode": mode, "horizon_days": 7, "paths": 20, "seed": 42, **extra})
+    identity = engine.identity(twin)
+    period = resolve_period(date.fromisoformat(identity.as_of), RollingDays(days=7), "analysis")
+    return Receipt(
+        engine_commit="pinned-engine",
+        identity=identity,
+        request=JsonDocument({"on_date": identity.as_of, "through_date": period.forecast_end.isoformat()}),
+        result=JsonDocument({"status": "ready"}),
+        trigger="dialogue",
+        numeric_request=request,
+        numeric_result=engine.numeric(twin, request),
+        period=period,
+    )
+
+
+def test_risk_turn_exposes_per_envelope_budget_and_spend_rows_from_engine_datasets() -> None:
+    # Given: a real risk result whose snapshot carries a budget (fixture 기타=100000).
+    engine = EngineAdapter()
+    twin = engine.create(fixture("user"), "user")
+    receipt = _numeric_receipt(engine, twin, "risk")
+    # When: the row extractor reads the receipt-bound result.
+    rows = numeric_rows_for(receipt)
+    # Then: per-envelope spend and budget-risk rows are copied straight from the engine, not invented.
+    assert rows is not None
+    assert rows.mode == "risk"
+    assert len(rows.envelope_spend) == 7
+    result = receipt.numeric_result
+    assert result is not None
+    engine_budget = result.root["datasets"]["budget_risk"]
+    assert [row.envelope for row in rows.budget_risk] == [item["envelope"] for item in engine_budget]
+    assert all(0.0 <= row.p_over_budget <= 1.0 for row in rows.budget_risk)
+    assert rows.budget_risk[0].budget_krw == engine_budget[0]["budget_krw"]
+
+
+def test_what_if_turn_exposes_base_envelope_spend_but_no_fabricated_per_envelope_delta() -> None:
+    # Given: a real what-if result. The paired saving is aggregate-only in the engine,
+    # so there is no per-envelope what-if delta and no budget_risk dataset for this mode.
+    engine = EngineAdapter()
+    twin = engine.create(fixture("user"), "user")
+    receipt = _numeric_receipt(engine, twin, "what_if", scenario={"expense_multiplier": 0.9})
+    rows = numeric_rows_for(receipt)
+    assert rows is not None
+    assert rows.mode == "what_if"
+    assert len(rows.envelope_spend) == 7
+    assert rows.budget_risk == ()
+
+
+def test_forecast_and_goal_turns_carry_no_numeric_rows() -> None:
+    # The structured rows are scoped to risk and what-if turns only.
+    engine = EngineAdapter()
+    twin = engine.create(fixture("user"), "user")
+    forecast = _numeric_receipt(engine, twin, "forecast")
+    goal = _numeric_receipt(engine, twin, "goal", goal={"target_krw": 1_000_000})
+    assert numeric_rows_for(forecast) is None
+    assert numeric_rows_for(goal) is None
+
+
+def test_numeric_rows_reject_a_result_from_another_receipt() -> None:
+    # A mismatched receipt identity yields no rows, mirroring numeric_text's fail-closed gate.
+    engine = EngineAdapter()
+    twin = engine.create(fixture("user"), "user")
+    receipt = _numeric_receipt(engine, twin, "risk")
+    other = JsonDocument({"mode": "risk", "horizon_days": 7, "paths": 20, "seed": 123})
+    tampered = receipt.model_copy(update={"numeric_request": other})
+    assert numeric_rows_for(tampered) is None
 
 
 def test_real_engine_missing_cash_state_is_rendered_as_unavailable_not_invalid() -> None:

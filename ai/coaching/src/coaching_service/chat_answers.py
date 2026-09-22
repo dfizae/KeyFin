@@ -19,7 +19,8 @@ class FinanceQuestion(Frozen):
 class ChatAnswer(Frozen):
     id: str
     answer_type: Literal[
-        "finance_education", "spending_history", "personal_context", "data_request", "scope_response"
+        "finance_education", "spending_history", "personal_context", "data_request",
+        "scope_response", "purchase_review",
     ]
     status: Literal[
         "answered", "needs_source", "needs_data", "out_of_scope", "unavailable", "needs_clarification"
@@ -86,6 +87,55 @@ def out_of_scope_answer() -> ChatAnswer:
         model="not_called",
         fallback_reason="non_financial_question",
         evidence=JsonDocument({"scope": "finance_coaching"}),
+        created_at=time.time(),
+    )
+
+
+# 구매 검토 되묻기: 필수 정보가 빠졌을 때 금액을 추정하지 않고 후속 질문을
+# 200 needs_clarification 한 턴으로 돌려준다. 소비 조회의 needs_clarification과
+# 같은 방식(정상 저장되는 한 턴, 모델 미호출)으로 처리한다. 문구는 앱 계약에서
+# 합의한 그대로이며 숫자를 포함하지 않아 기존 안전 가드 범위 밖이다.
+_PURCHASE_CLARIFICATIONS: dict[str, str] = {
+    "purchase_amount_required": (
+        "얼마짜리 구매인지 금액을 알려주시면 이번 예산에 미치는 영향을 확인해 드릴게요."
+    ),
+    "purchase_envelope_required": "어떤 항목의 지출인지 알려주시면 해당 봉투 기준으로 살펴볼게요.",
+    "purchase_payment_method_required": (
+        "현금·계좌 결제인지 카드 결제인지 알려주세요. "
+        "카드라면 결제 예정일도 함께 알려주시면 정확히 반영할 수 있어요."
+    ),
+    "purchase_card_payment_date_required": (
+        "카드로 결제하신다면 결제(출금) 예정일을 연-월-일 날짜로 알려주세요. "
+        "현금·계좌 결제라면 그대로 확인해 드릴게요."
+    ),
+    "purchase_installment_unsupported": (
+        "할부 구매는 아직 지원하지 않아요. 일시불 기준으로 다시 여쭤봐 주시면 확인해 드릴게요."
+    ),
+    "purchase_date_required": (
+        "언제 구매할 예정인지 알려주세요. 오늘·내일·이번주처럼 시점을 알려주시면 그 기준으로 확인해 드릴게요."
+    ),
+}
+
+
+def purchase_clarification_answer(code: str) -> ChatAnswer | None:
+    """구매 검토 되묻기 코드를 200 needs_clarification 답변으로 만든다.
+
+    합의된 되묻기 문구가 없는 알 수 없는 코드에는 ``None`` 을
+    돌려 호출부가 기존 4xx 계약을 그대로 유지하게 한다. ``fallback_reason`` 과
+    ``evidence`` 에 원 코드를 남겨 앱이 어떤 필드가 필요한지 기계적으로 읽을 수 있다.
+    """
+    text = _PURCHASE_CLARIFICATIONS.get(code)
+    if text is None:
+        return None
+    return ChatAnswer(
+        id=uuid4().hex,
+        answer_type="purchase_review",
+        status="needs_clarification",
+        text=text,
+        wording_source="engine",
+        model="not_called",
+        fallback_reason=code,
+        evidence=JsonDocument({"purchase": {"clarification": code}}),
         created_at=time.time(),
     )
 

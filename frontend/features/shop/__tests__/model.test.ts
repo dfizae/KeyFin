@@ -263,13 +263,15 @@ describe("상점 구매 (POST /shop/purchase)", () => {
   it("목의 가구 상품은 모두 그림·분류가 있고, 기본 가구와 같은 그림은 팔지 않는다", () => {
     const furniture = shopItemsMock().filter((item) => item.itemCategory === "FURNITURE");
 
-    expect(furniture).toHaveLength(56);
+    expect(furniture).toHaveLength(54);
     expect(furniture.every((item) => shopItemSprite(item.assetKey) !== null && furnitureGroupOf(item.assetKey) !== null)).toBe(true);
     expect(furniture.map((item) => item.assetKey)).not.toEqual(expect.arrayContaining(["sofa_original"]));
     expect(furniture.map((item) => item.assetKey)).not.toEqual(expect.arrayContaining(["sofa_default"]));
+    expect(furniture.map((item) => item.assetKey)).not.toEqual(expect.arrayContaining(["dining_table_original"]));
+    expect(furniture.map((item) => item.assetKey)).not.toEqual(expect.arrayContaining(["coffee_table_original"]));
   });
 
-  it("목 상품은 백엔드 시드(V19 의상 · V20 가구)와 키·이름·부위·가격이 한 행씩 같다", () => {
+  it("목 상품은 V24 적용 후 판매 상품과 키·이름·부위·가격이 한 행씩 같다", () => {
     const seedRow = (item: ShopItemDto) => ({ assetKey: item.assetKey, name: item.name, slotType: item.slotType, price: item.price });
     const byKey = (a: { assetKey: string }, b: { assetKey: string }) => a.assetKey.localeCompare(b.assetKey);
     const mock = shopItemsMock();

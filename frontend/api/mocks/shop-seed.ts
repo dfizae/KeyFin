@@ -1,10 +1,9 @@
 /**
- * 백엔드 상품 시드의 계약 사본 (develop 66011de, 2026-09-21 대조).
+ * 백엔드 마이그레이션 V24까지 적용한 판매 상품의 계약 사본.
  * - 의상: V19__seed_avatar_outfit_sets.sql — 3종, 모두 AVATAR · UPPER_BODY
- * - 가구: V20__seed_furniture_catalog.sql — 56종, 모두 FURNITURE
+ * - 가구: V20의 56종 중 V24에서 기본 지급으로 전환한 식탁·커피테이블 오리지널을 제외한 54종
  * 목(api/mocks/shop.ts)과 앱 카탈로그(features/room/catalog.ts · outfits.ts)가 이 값과 같은지 shop 모델 테스트가 확인한다.
- * 손으로 고치지 않는다 — 백엔드가 시드를 바꾸면 SQL 에서 다시 옮긴다. 59종 모두 `is_active = FALSE` 로 등록돼 있어
- * 실서버 GET /shop 에는 판매 개시(V21) 전까지 나오지 않는다 (docs/game-items-seed-request.md §4).
+ * 백엔드 판매 구성이 바뀌면 SQL 적용 결과를 반영한다. 판매 활성화는 V21, 기본 지급 전환은 V24가 담당한다.
  */
 export type SeededItem = { assetKey: string; name: string; slotType: string; price: number };
 
@@ -16,8 +15,6 @@ export const SEEDED_OUTFITS: readonly SeededItem[] = [
 
 export const SEEDED_FURNITURE: readonly SeededItem[] = [
   { assetKey: "desk_original", name: "원목 책상 (오리지널)", slotType: "FLOOR", price: 500 },
-  { assetKey: "coffee_table_original", name: "커피 테이블 (오리지널)", slotType: "FLOOR", price: 500 },
-  { assetKey: "dining_table_original", name: "식탁 (오리지널)", slotType: "FLOOR", price: 500 },
   { assetKey: "dining_chair_original", name: "식탁 의자 (오리지널)", slotType: "FLOOR", price: 500 },
   { assetKey: "bed_original", name: "침대 (오리지널)", slotType: "FLOOR", price: 500 },
   { assetKey: "nightstand_original", name: "협탁 (오리지널)", slotType: "FLOOR", price: 500 },

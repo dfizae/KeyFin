@@ -50,10 +50,14 @@ const classifications = new Map<number, ClassifyRequest>();
 function applyClassification(dto: TransactionDto): TransactionDto {
   const classification = classifications.get(dto.id);
   if (classification === undefined) return dto;
-  if ("excludeTag" in classification) return { ...dto, confirmStatus: "CONFIRMED", excludeTag: classification.excludeTag };
+  if ("excludeTag" in classification) return { ...dto, confirmStatus: "CONFIRMED", excludeTag: classification.excludeTag,
+    envelopeId: null, subcategoryId: null, subcategoryName: null,
+    adjustedAmount: "adjustedAmount" in classification ? classification.adjustedAmount : null };
   return {
     ...dto,
     confirmStatus: "CONFIRMED",
+    excludeTag: "NONE",
+    adjustedAmount: null,
     envelopeId: Math.floor(classification.subcategoryId / 100),
     subcategoryId: classification.subcategoryId,
     subcategoryName: subcategoryName(classification.subcategoryId),
@@ -233,6 +237,30 @@ export type TransactionListMockQuery = {
   cursor?: number;
   size?: number;
 };
+
+/** 예산 목의 기본 지출에 거래 수정분만 반영한다. 이전 주기 거래는 현재 예산에 섞이지 않는다. */
+export function envelopeSpendingChangesMock(todayKey: string): Record<number, number> {
+  const month = todayKey.slice(0, 7).replace("-", "");
+  const changes: Record<number, number> = {};
+  const spending = (dto: TransactionDto): number => {
+    if (dto.status !== "NORMAL" || !["AUTO", "CONFIRMED"].includes(dto.confirmStatus) || dto.subcategoryId === null) return 0;
+    switch (dto.excludeTag) {
+      case "NONE": return dto.amount;
+      case "DUTCH": return dto.adjustedAmount ?? 0;
+      case "RESTORE": return -dto.amount;
+      default: return 0;
+    }
+  };
+  const originals = [...monthTransactions(month, todayKey).map(({ dto }) => dto), ...PENDING.filter((dto) => dto.txDate.slice(0, 7) === todayKey.slice(0, 7))];
+  for (const original of originals) {
+    if (!classifications.has(original.id)) continue;
+    const updated = applyClassification(original);
+    for (const [dto, sign] of [[original, -1], [updated, 1]] as const) {
+      if (dto.envelopeId !== null) changes[dto.envelopeId] = (changes[dto.envelopeId] ?? 0) + sign * spending(dto);
+    }
+  }
+  return changes;
+}
 
 export function transactionListMock(query: TransactionListMockQuery, todayKey: string): TransactionListDto {
   const matched = monthTransactions(query.month, todayKey)

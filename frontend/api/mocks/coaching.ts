@@ -6,9 +6,9 @@ import { getKSTParts } from "@/lib/date";
 /**
  * GET·POST /coaching/chat 목 (배포 서버 Swagger · 백엔드 CoachingChatService, 2026-09-22).
  * 서버처럼 세션을 하나 들고 있다: 첫 질문에 세션이 열려 24시간 뒤 만료 시각이 잡히고, 그 뒤 질문·답변이 이력에 쌓인다.
- * 답변은 질문에 예측·위험·다음 달·괜찮 이 들어가면 COACHING(engine 집계), 아니면 CHAT(llm) 이다.
+ * 답변은 질문에 예측·위험·다음 달·괜찮 이 들어가면 COACHING, 소비 조회는 CHAT(engine 집계), 일반 안내는 CHAT(llm) 이다.
  * 답을 못 하는 경우도 본다: 주식·코인 투자·로또 는 out_of_scope 안내 문구(template).
- * COACHING 답변에는 예산 예측 차트 id(MOCK_CHART_ID)를 붙인다 — 필드 이름·위치는 앱 제안(TBD 2026-09-22).
+ * COACHING 답변에는 예산 예측 차트 id(MOCK_CHART_ID)를, 소비 조회 답변에는 rows·totalKrw를 붙인다. GET 이력에는 집계를 넣지 않는다.
  */
 const SESSION_HOURS = 24;
 const UNAVAILABLE_MESSAGE = "코치가 잠시 자리를 비웠어요. 잠시 후 다시 시도해 주세요.";
@@ -37,6 +37,8 @@ function answer(message: string): ChatReplyDto {
       source: "template",
       fallbackReason: null,
       answerId: id,
+      rows: [],
+      totalKrw: null,
     };
   }
   if (/예측|위험|다음 달|괜찮/.test(message)) {
@@ -48,6 +50,23 @@ function answer(message: string): ChatReplyDto {
       fallbackReason: null,
       answerId: id,
       chartId: MOCK_CHART_ID,
+      rows: [],
+      totalKrw: null,
+    };
+  }
+  if (/얼마.*(?:썼|쓴|사용)|(?:소비|지출|사용)\s*(?:내역|금액)/.test(message)) {
+    return {
+      reply: "이번 달 외식에 45,000원, 교통에 12,000원을 써서 총 57,000원을 썼어요.",
+      kind: "CHAT",
+      status: "answered",
+      source: "engine",
+      fallbackReason: null,
+      answerId: id,
+      rows: [
+        { envelope: "외식", totalKrw: 45_000, count: 3 },
+        { envelope: "교통", totalKrw: 12_000, count: 4 },
+      ],
+      totalKrw: 57_000,
     };
   }
   return {
@@ -57,6 +76,8 @@ function answer(message: string): ChatReplyDto {
     source: "llm",
     fallbackReason: null,
     answerId: id,
+    rows: [],
+    totalKrw: null,
   };
 }
 

@@ -20,8 +20,9 @@ import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
 import { roomKeys, useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
+import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/components/RoomStickers";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
-import { COACH_CAT_RECT, getWallItemRect } from "@/features/room/scene";
+import { COACH_CAT_RECT, getWallItemRect, type Placement } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
@@ -75,6 +76,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   const budget = useCurrentBudget();
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
+  const [selectedSticker, setSelectedSticker] = React.useState<Placement | null>(null);
   const [box, setBox] = React.useState({ width: 0, height: 0 });
   const guide = useRoomGuide(room.isSuccess && sceneReady);
   const placements = useRoomStore(selectPlacements);
@@ -145,10 +147,12 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
           <CharacterRoom
             width={roomWidth > 0 ? roomWidth : undefined}
             viewport={roomWidth > 0 ? box : undefined}
-            locked={panel !== null}
+            locked={panel !== null || selectedSticker !== null}
             onSceneReady={markSceneReady}
             sceneObjects={(width) => (
               <>
+                <RoomStickerTargets width={width} placements={placements} furnitures={room.data.furnitures}
+                  onSelect={(placement) => { guide.finish(); setSelectedSticker(placement); }} />
                 <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
                 <HomeCoachTarget width={width} onOpen={guide.finish} />
@@ -161,8 +165,10 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
         ) : null}
       </View>
       <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
+      {selectedSticker && room.data ? <StickerRemovalDialog placement={selectedSticker} stickers={room.data.stickers}
+        onClose={() => setSelectedSticker(null)} /> : null}
       {room.isSuccess ? (
-        <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null} onMeasure={measureButton} />
+        <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null && selectedSticker === null} onMeasure={measureButton} />
       ) : null}
       {/* 안내 덮개는 방과 사이드 버튼을 모두 덮어야 해서 맨 위에 둔다 */}
       {guide.step ? (
