@@ -6,7 +6,7 @@ import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.fincoin.entity.FinCoin;
 import com.finset.key_fin.fincoin.entity.FinCoinReason;
 import com.finset.key_fin.fincoin.repository.FinCoinRepository;
-import com.finset.key_fin.support.IntegrationTestSupport;
+import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.repository.UserRepository;
 import com.jayway.jsonpath.JsonPath;
@@ -53,9 +53,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@Import(AttendanceApiIntegrationTest.TimeConfig.class)
 @Timeout(90)
-class AttendanceApiIntegrationTest extends IntegrationTestSupport {
+class AttendanceApiIntegrationTest extends SpringIntegrationTestSupport {
 
 	private static final String PATH = "/api/v1/fin-coins/attendance";
 	private static final Instant NOW = Instant.parse("2026-09-11T03:00:00Z");
@@ -70,12 +69,11 @@ class AttendanceApiIntegrationTest extends IntegrationTestSupport {
 	@Autowired private JwtProperties jwtProperties;
 	@Autowired private FinCoinService finCoinService;
 	@Autowired private PlatformTransactionManager transactionManager;
-	@Autowired private TestClock clock;
 	@Autowired private MockRestServiceServer financeServer;
 
 	@BeforeEach
 	void setUp() {
-		clock.setInstant(NOW);
+		testClock.set(NOW);
 		financeServer.reset();
 	}
 
@@ -148,11 +146,11 @@ class AttendanceApiIntegrationTest extends IntegrationTestSupport {
 	@Test
 	void resetsEligibilityAtKoreanMidnightEvenThoughClockUsesUtc() throws Exception {
 		long userId = createUser();
-		clock.setInstant(Instant.parse("2026-09-11T14:59:59Z"));
+		testClock.set(Instant.parse("2026-09-11T14:59:59Z"));
 		assertAttendance(userId, 10, 10);
 		assertAttendance(userId, 0, 10);
 
-		clock.setInstant(Instant.parse("2026-09-11T15:00:00Z"));
+		testClock.set(Instant.parse("2026-09-11T15:00:00Z"));
 		assertAttendance(userId, 10, 20);
 		assertAttendance(userId, 0, 20);
 		assertThat(coins.existsByUserIdAndGrantDateAndReasonCode(userId, TODAY, FinCoinReason.ATTEND)).isTrue();
@@ -363,27 +361,5 @@ class AttendanceApiIntegrationTest extends IntegrationTestSupport {
 		}
 	}
 
-	@TestConfiguration(proxyBeanMethods = false)
-	static class TimeConfig {
-		@Bean
-		@Primary
-		TestClock attendanceTestClock() {
-			return new TestClock(new AtomicReference<>(NOW), ZoneOffset.UTC);
-		}
-	}
 
-	static final class TestClock extends Clock {
-		private final AtomicReference<Instant> now;
-		private final ZoneId zone;
-
-		TestClock(AtomicReference<Instant> now, ZoneId zone) {
-			this.now = now;
-			this.zone = zone;
-		}
-
-		void setInstant(Instant instant) { now.set(instant); }
-		@Override public ZoneId getZone() { return zone; }
-		@Override public Clock withZone(ZoneId zone) { return new TestClock(now, zone); }
-		@Override public Instant instant() { return now.get(); }
-	}
 }

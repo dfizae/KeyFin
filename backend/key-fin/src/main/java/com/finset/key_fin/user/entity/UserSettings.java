@@ -79,6 +79,13 @@ public class UserSettings {
 		return new UserSettings(user);
 	}
 
+	public void updateBudgetAnchorDay(int budgetAnchorDay) {
+		if (budgetAnchorDay < 1 || budgetAnchorDay > 28) {
+			throw new BusinessException(UserErrorCode.INVALID_BUDGET_ANCHOR_DAY);
+		}
+		this.budgetAnchorDay = budgetAnchorDay;
+	}
+
 	public void updateTransferSettings(
 			boolean transferConsent,
 			Long transferLimitOnce,

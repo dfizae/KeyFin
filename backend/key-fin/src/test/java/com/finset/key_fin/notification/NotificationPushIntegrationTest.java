@@ -18,7 +18,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -26,23 +25,16 @@ import org.springframework.transaction.support.TransactionTemplate;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
-@TestPropertySource(properties = "fcm.enabled=true")
 class NotificationPushIntegrationTest extends SpringIntegrationTestSupport {
 	private static final long USER = 71001;
 	@Autowired NotificationService notifications;
 	@Autowired JdbcClient jdbc;
 	@Autowired PlatformTransactionManager transactionManager;
-	@MockitoBean FcmSender sender;
-	@MockitoBean FirebaseApp firebaseApp;
-	@MockitoBean FirebaseMessaging firebaseMessaging;
-	@MockitoBean Clock clock;
 
 	@BeforeEach
 	void setup() {
 		Clock fixed = Clock.fixed(Instant.parse("2026-09-18T14:00:00Z"), ZoneOffset.UTC); // KST 23:00
-		when(clock.instant()).thenReturn(fixed.instant());
-		when(clock.getZone()).thenReturn(fixed.getZone());
-		when(clock.withZone(ZoneId.of("Asia/Seoul"))).thenReturn(fixed.withZone(ZoneId.of("Asia/Seoul")));
+		testClock.set(fixed.instant());
 		cleanup();
 		jdbc.sql("INSERT INTO users(id,email,password,name) VALUES (:id,'push-policy@test.invalid','test','A')")
 				.param("id", USER).update();

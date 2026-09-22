@@ -6,25 +6,25 @@ import type { LucideIcon } from "lucide-react-native";
 
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Screen, useTopInset } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
+import { MOVING_IN_COPY, RoomWaiting, pickReturningCopy } from "@/features/room/components/RoomWaiting";
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
-import { HomeCoach } from "@/features/home/components/HomeCoach";
+import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
-import { AVATAR_SCENE } from "@/features/home/components/CoachBubble";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
-import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
+import { roomKeys, useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
-import { getWallItemRect } from "@/features/room/scene";
+import { COACH_CAT_RECT, getWallItemRect } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
+import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -43,9 +43,32 @@ const SIDE_ACTION_GAP = 8;
 /** 오류 화면은 헤더가 없으니 상태바만큼 내려 준다 */
 const ERROR_TOP_GAP = 24;
 
-function HomeScreen() {
+/**
+ * 방 대기 덮개를 아무리 길어도 이만큼만 둔다. 그림 한 장이 끝내 안 읽히면(디코딩 실패, 웹에서 Skia 를 못 받음)
+ * "다 그렸다"는 신호가 영영 오지 않아 홈이 통째로 막힌다. 넘기면 덮개를 걷고 방이 스스로 보여 주는 상태(스켈레톤)에 맡긴다.
+ */
+const SCENE_WAIT_LIMIT_MS = 10_000;
+
+type HomeScreenProps = {
+  /** 입주 연출(PAGE-08)에서 막 넘어왔다. 방을 다 그릴 때까지 입주 문구를 이어서 보여 준다 */
+  arriving?: boolean;
+};
+
+function HomeScreen({ arriving = false }: HomeScreenProps) {
   const router = useRouter();
   const room = useRoom();
+  // 방 데이터가 와도 그림(가구·바닥 스프라이트)을 읽는 데 시간이 더 걸린다. 그동안 빈 방·스켈레톤 대신 대기 화면을 덮어 둔다
+  // (사용자 요청 2026-09-21). 문구는 들어올 때 한 번 고르고, 기다리는 도중에 바뀌지 않게 상태로 잡아 둔다.
+  const [sceneReady, setSceneReady] = React.useState(false);
+  const markSceneReady = React.useCallback(() => setSceneReady(true), []);
+  React.useEffect(() => {
+    if (sceneReady) return;
+    const timer = setTimeout(markSceneReady, SCENE_WAIT_LIMIT_MS);
+    return () => clearTimeout(timer);
+  }, [sceneReady, markSceneReady]);
+  const [waitingCopy] = React.useState(() => (arriving ? MOVING_IN_COPY : pickReturningCopy()));
+  // 코인 수는 방 홈의 값이다. 코인 이력·상점에서 돌아왔을 때 옛 잔액이 남지 않게 한다
+  useRefetchStaleOnFocus(roomKeys.all);
   useRoomLayoutSync();
   const topInset = useTopInset();
   const month = currentMonthKey();
@@ -53,7 +76,7 @@ function HomeScreen() {
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
   const [box, setBox] = React.useState({ width: 0, height: 0 });
-  const guide = useRoomGuide(room.isSuccess);
+  const guide = useRoomGuide(room.isSuccess && sceneReady);
   const placements = useRoomStore(selectPlacements);
   // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
   const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
@@ -73,28 +96,21 @@ function HomeScreen() {
   // 화면은 씬(327:404)보다 세로로 길기 때문에 폭을 넘치게 키워(coverSceneWidth) 가운데를 보여 주고 좌우는 잘라 낸다.
   // 인사말은 버렸고 코인·알림만 방 위에 뜨는 사이드 버튼으로 남는다. 방이 화면을 꽉 채우니 세로 스크롤도 없다.
   const roomWidth = box.width > 0 && box.height > 0 ? coverSceneWidth(box.width, box.height) : 0;
-  // 방이 화면보다 넓으면 씬 x 0 이 화면 밖이다. 코치는 카메라를 따라가지 않는 패널이라 넘친 절반만큼 밀어 화면 안에 둔다.
-  const coachOffsetX = Math.max(0, (roomWidth - box.width) / 2);
 
   // 방 레이어는 화면 가운데에 놓이고 넘치는 만큼 잘리므로, 씬 좌표를 화면 좌표로 옮길 때 그 절반을 빼 준다.
   const roomScale = roomWidth > 0 ? getSceneScale(roomWidth) : 0;
+  const offsetX = Math.max(0, (roomWidth - box.width) / 2);
   const offsetY = roomWidth > 0 ? Math.max(0, (getCanvasSize(roomWidth).height - box.height) / 2) : 0;
   const sceneToScreen = (rect: SceneRect): SceneRect => ({
-    x: rect.x * roomScale - coachOffsetX,
+    x: rect.x * roomScale - offsetX,
     y: rect.y * roomScale - offsetY,
     width: rect.width * roomScale,
     height: rect.height * roomScale,
   });
-  // 코치는 패널 레이어에서 이미 coachOffsetX 만큼 밀어 두므로 화면 x 가 그대로 씬 x 다
-  const coachScreenRect = (): SceneRect => ({
-    x: AVATAR_SCENE.x * roomScale,
-    y: AVATAR_SCENE.y * roomScale - offsetY,
-    width: AVATAR_SCENE.size * roomScale,
-    height: AVATAR_SCENE.size * roomScale,
-  });
   const guideRect = (target: GuideTargetId): SceneRect | null => {
     if (roomScale === 0) return null;
-    if (target === "coach") return coachScreenRect();
+    // 코치는 방에 앉은 고양이라 벽 오브젝트처럼 씬 좌표에 있다
+    if (target === "coach") return sceneToScreen(COACH_CAT_RECT);
     if (target === "board" || target === "calendar") {
       const rect = getWallItemRect(placements, target);
       return rect === null ? null : sceneToScreen(rect);
@@ -115,7 +131,6 @@ function HomeScreen() {
   return (
     <Screen>
       <View className="flex-1 items-center justify-center overflow-hidden" onLayout={handleLayout} testID={HOME_ROOM_BOX_TEST_ID}>
-        {room.isPending ? <Skeleton className="h-full w-full" accessibilityLabel="불러오는 중" /> : null}
         {room.isError ? (
           <View className="w-full flex-1 px-6" style={{ paddingTop: topInset + ERROR_TOP_GAP }}>
             <EmptyState
@@ -131,20 +146,17 @@ function HomeScreen() {
             width={roomWidth > 0 ? roomWidth : undefined}
             viewport={roomWidth > 0 ? box : undefined}
             locked={panel !== null}
+            onSceneReady={markSceneReady}
             sceneObjects={(width) => (
               <>
                 <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
-              </>
-            )}
-            panels={(width) => (
-              <>
-                <HomeCoach width={width} offsetX={coachOffsetX} />
+                <HomeCoachTarget width={width} onOpen={guide.finish} />
               </>
             )}
           />
         ) : null}
-        {room.isSuccess && attendance.isSuccess && attendance.data.granted > 0 ? (
+        {room.isSuccess && sceneReady && attendance.isSuccess && attendance.data.granted > 0 ? (
           <AttendanceToast granted={attendance.data.granted} />
         ) : null}
       </View>
@@ -162,6 +174,13 @@ function HomeScreen() {
           onNext={guide.next}
           onSkip={guide.finish}
         />
+      ) : null}
+      {/* 방 대기 덮개. 방은 밑에서 계속 그림을 읽고 있어야 하므로 방을 치우지 않고 위에 덮는다 — 사이드 버튼까지 가려야 해서 맨 위다.
+          오류일 때는 걷는다(다시 시도 버튼이 보여야 한다). */}
+      {!sceneReady && !room.isError ? (
+        <View className="absolute inset-0">
+          <RoomWaiting copy={waitingCopy} />
+        </View>
       ) : null}
     </Screen>
   );

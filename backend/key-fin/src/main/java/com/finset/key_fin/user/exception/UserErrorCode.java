@@ -17,7 +17,9 @@ public enum UserErrorCode implements ErrorCode {
 	USER_SETTINGS_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_006", "사용자 설정을 찾을 수 없습니다."),
 	PASSWORD_MISMATCH(HttpStatus.UNAUTHORIZED, "USER_007", "현재 비밀번호가 올바르지 않습니다."),
 	USER_PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_008", "사용자 프로필을 찾을 수 없습니다."),
-	INVALID_QUIET_HOURS(HttpStatus.BAD_REQUEST, "USER_009", "방해금지 시작 시각과 종료 시각을 올바르게 입력해 주세요.");
+	INVALID_QUIET_HOURS(HttpStatus.BAD_REQUEST, "USER_009", "방해금지 시작 시각과 종료 시각을 올바르게 입력해 주세요."),
+	BUDGET_ANCHOR_LOCKED(HttpStatus.CONFLICT, "USER_010", "예산이 시작된 뒤에는 기준일을 바꿀 수 없어요."),
+	INVALID_BUDGET_ANCHOR_DAY(HttpStatus.BAD_REQUEST, "USER_011", "예산 기준일은 1일부터 28일 사이여야 합니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;

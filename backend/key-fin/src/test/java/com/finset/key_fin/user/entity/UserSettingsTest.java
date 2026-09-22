@@ -25,6 +25,30 @@ class UserSettingsTest {
 	}
 
 	@Test
+	void updatesBudgetAnchorDayWithinRange() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+
+		settings.updateBudgetAnchorDay(25);
+
+		assertThat(settings.getBudgetAnchorDay()).isEqualTo(25);
+	}
+
+	@Test
+	void rejectsBudgetAnchorDayOutsideRange() {
+		UserSettings settings = UserSettings.create(
+				User.create("kim@ssafy.io", "encoded-password", "김싸피"));
+
+		for (int day : new int[]{0, 29}) {
+			assertThatThrownBy(() -> settings.updateBudgetAnchorDay(day))
+					.isInstanceOfSatisfying(BusinessException.class,
+							exception -> assertThat(exception.getErrorCode())
+									.isEqualTo(UserErrorCode.INVALID_BUDGET_ANCHOR_DAY));
+		}
+		assertThat(settings.getBudgetAnchorDay()).isEqualTo(1);
+	}
+
+	@Test
 	void updatesTransferSettings() {
 		UserSettings settings = UserSettings.create(
 				User.create("kim@ssafy.io", "encoded-password", "김싸피"));

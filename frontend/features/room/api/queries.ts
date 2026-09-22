@@ -1,9 +1,9 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getFurnitures, updateFurniturePlacement, type FurnitureSlotType } from "@/features/room/api/furniture.api";
+import { getFurnitures, updateFurniturePlacements, type FurnitureSlotType } from "@/features/room/api/furniture.api";
 import { getUserItems, updateItemEquipment } from "@/features/room/api/item.api";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
-import type { PlacementSave } from "@/features/room/furniture";
+import { placedFurnitureDtos } from "@/features/room/furniture";
 import { applyAvatarEquipment, type UserItem } from "@/features/room/items";
 import type { Room } from "@/features/room/model";
 import { shopKeys } from "@/features/shop/api/queries";
@@ -11,7 +11,7 @@ import { shopKeys } from "@/features/shop/api/queries";
 export const roomKeys = {
   all: ["room"] as const,
   home: () => [...roomKeys.all, "home"] as const,
-  /** 보유 가구. 배치를 저장하면 방 홈과 함께 무효화한다 */
+  /** 보유 가구. 배치를 저장하면 전체 성공 응답으로 교체한다 */
   furnitures: (slotType?: FurnitureSlotType) => [...roomKeys.all, "furnitures", slotType ?? "all"] as const,
   /** 보유 아바타 아이템(옷장). 갈아입으면 방 홈의 착장도 함께 무효화한다 */
   items: () => [...roomKeys.all, "items"] as const,
@@ -59,20 +59,28 @@ export function useFurnitures(slotType?: FurnitureSlotType) {
   return useQuery(furnitureListQueryOptions(slotType));
 }
 
-/**
- * 방 꾸미기 완료 저장. 가구 한 개씩 PATCH 하는 계약이라 옮긴 것만 차례로 보낸다.
- * 중간에 실패하면 거기서 멈추고 오류를 올린다 — 이미 보낸 것은 서버에 남고, 요청이 멱등이라 다시 눌러도 안전하다.
- */
+/** PUT 성공 응답을 먼저 반영한다. 조회 실패가 이미 성공한 저장을 실패로 바꾸지 않게 한다. */
 export function useSavePlacements() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (saves: PlacementSave[]) => {
-      for (const save of saves) {
-        await updateFurniturePlacement(save.userFurnitureId, save.request);
-      }
-      return saves.length;
+    mutationFn: updateFurniturePlacements,
+    retry: false,
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: roomKeys.all });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: roomKeys.all }),
+    onSuccess: async (owned) => {
+      await queryClient.cancelQueries({ queryKey: roomKeys.all });
+      queryClient.setQueryData(roomKeys.furnitures(), owned);
+      for (const slot of ["FLOOR", "WALL"] as const) {
+        queryClient.setQueryData(roomKeys.furnitures(slot), owned.filter((item) => item.serverState.slotType === slot));
+      }
+      queryClient.setQueryData<Room>(roomKeys.home(), (old) => old ? {
+        ...old, furnitures: placedFurnitureDtos(owned),
+        stickers: old.stickers ? { ...old.stickers, count: owned.filter((item) => item.placed && item.stickerAttached).length } : null,
+      } : old);
+      await queryClient.invalidateQueries({ queryKey: roomKeys.home(), refetchType: "none" });
+      await queryClient.fetchQuery(roomQueryOptions()).catch(() => undefined);
+    },
   });
 }
 

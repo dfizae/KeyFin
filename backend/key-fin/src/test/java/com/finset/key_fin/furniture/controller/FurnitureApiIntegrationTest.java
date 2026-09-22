@@ -2,13 +2,14 @@ package com.finset.key_fin.furniture.controller;
 
 import com.finset.key_fin.auth.jwt.JwtTokenProvider;
 import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
+import com.finset.key_fin.furniture.service.DefaultFurnitureService;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
@@ -24,7 +25,6 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@AutoConfigureMockMvc
 @Sql(scripts = {"/sql/furniture-cleanup.sql", "/sql/furniture-fixture.sql"}, config = @SqlConfig(encoding = "UTF-8"))
 @Sql(scripts = "/sql/furniture-cleanup.sql", executionPhase = Sql.ExecutionPhase.AFTER_TEST_METHOD)
 class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
@@ -32,6 +32,12 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private JwtTokenProvider tokens;
 	@Autowired private JdbcClient jdbc;
 	@Autowired private UserFurnitureRepository furnitures;
+	@Autowired private DefaultFurnitureService defaults;
+
+	@BeforeEach
+	void provideRequiredFurniture() {
+		defaults.provision(88001);
+	}
 
 	private MockHttpServletRequestBuilder auth(MockHttpServletRequestBuilder request, long userId) {
 		return request.header("Authorization", "Bearer " + tokens.generateAccessToken(userId));
@@ -44,14 +50,14 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 	@Test
 	void listsOnlyOwnedFurnitureSortedIncludingInactiveAndUnplaced() throws Exception {
 		mvc.perform(auth(get("/api/v1/furnitures").param("userId", "88002"), 88001))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88201, 88202, 88203)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88202, 88203)))
 				.andExpect(jsonPath("$.data[0].placed").value(true))
 				.andExpect(jsonPath("$.data[2].placed").value(false))
 				.andExpect(jsonPath("$.data[2].assetKey").value("desk_old"))
 				.andExpect(jsonPath("$.data[2].placementStatus").value(nullValue()))
 				.andExpect(jsonPath("$.data[2].positionX").value(nullValue()));
 		mvc.perform(auth(get("/api/v1/furnitures").param("slotType", "FLOOR"), 88001))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88201, 88203)));
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data[?(@.defaultFurnitureType == null)].userFurnitureId", contains(88201, 88203)));
 		mvc.perform(auth(get("/api/v1/furnitures").param("slotType", "WALL"), 88001))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.data[*].userFurnitureId", contains(88202)));
 		mvc.perform(auth(get("/api/v1/furnitures"), 88003)).andExpect(status().isOk()).andExpect(jsonPath("$.data").isEmpty());
@@ -95,10 +101,19 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 	@ParameterizedTest
 	@ValueSource(strings = {"LEFT_WALL", "RIGHT_WALL"})
 	void supportsBothWallSurfacesAndCoordinateBoundaries(String surface) throws Exception {
-		String body = PLACEMENT_JSON.replace("FLOOR", surface).replace("165.123", "0").replace("280.456", "404.000");
+		String body = PLACEMENT_JSON.replace("FLOOR", surface).replace("165.123", "0").replace("280.456", "586.000");
 		mvc.perform(auth(change(88202, body), 88001)).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.placementStatus").value(surface));
-		assertThat(furnitures.findById(88202L).orElseThrow().getPositionY()).isEqualByComparingTo("404");
+		assertThat(furnitures.findById(88202L).orElseThrow().getPositionY()).isEqualByComparingTo("586");
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"404.001", "500.000", "586.000"})
+	void persistsFloorPlacementBeyondPreviousYLimit(String positionY) throws Exception {
+		String body = PLACEMENT_JSON.replace("280.456", positionY);
+		mvc.perform(auth(change(88201, body), 88001)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.positionY").value(Double.parseDouble(positionY)));
+		assertThat(furnitures.findById(88201L).orElseThrow().getPositionY()).isEqualByComparingTo(positionY);
 	}
 
 	@ParameterizedTest
@@ -112,12 +127,15 @@ class FurnitureApiIntegrationTest extends SpringIntegrationTestSupport {
 
 	@Test
 	void beanValidationRunsInFullApplicationAndDoesNotMutateDatabase() throws Exception {
+		var beforeY = furnitures.findById(88201L).orElseThrow().getPositionY();
 		for (String body : List.of("{\"placed\":true}", "{\"placed\":false,\"layer\":0}",
-				PLACEMENT_JSON.replace("165.123", "327.001"), PLACEMENT_JSON.replace("280.456", "1.1234"))) {
+				PLACEMENT_JSON.replace("165.123", "327.001"), PLACEMENT_JSON.replace("280.456", "586.001"),
+				PLACEMENT_JSON.replace("280.456", "1.1234"))) {
 			mvc.perform(auth(change(88201, body), 88001)).andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.code").value("COMMON_001"));
 		}
 		assertThat(furnitures.findById(88201L).orElseThrow().getPositionX()).isEqualByComparingTo("165.123");
+		assertThat(furnitures.findById(88201L).orElseThrow().getPositionY()).isEqualByComparingTo(beforeY);
 	}
 
 	@ParameterizedTest

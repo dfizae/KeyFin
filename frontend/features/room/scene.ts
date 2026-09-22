@@ -396,6 +396,23 @@ export function getWalkBlockers(placements: readonly Placement[]): ScenePolygon[
 /** 캐릭터 정지 이미지의 씬 단위 크기(char1-idle.png 496×756 비율) */
 export const CHARACTER_SIZE: SceneSize = { width: 72, height: 110 };
 
+/** 코치 고양이(AI 챗봇) 그림의 씬 단위 크기. coach-cat.png 는 512×512 정사각이다 */
+export const COACH_CAT_SIZE: SceneSize = { width: 60, height: 60 };
+/**
+ * 코치 고양이 발끝 자리 — 바닥 왼쪽 앞. 기본 가구(냉장고·TV 는 위쪽, 소파는 오른쪽)와 캐릭터 출발점(164,505)을 비껴 있고,
+ * 홈이 방을 화면보다 넓게 그릴 때 잘리는 좌우 폭(약 8%, 27 단위) 안쪽이다. 방 꾸미기에서 옮기는 대상이 아니다(2026-09-22).
+ */
+export const COACH_CAT_ANCHOR: ScenePoint = { x: 78, y: 552 };
+/** 코치 고양이 그림이 놓이는 씬 사각형. 홈의 탭 영역·말풍선·첫 진입 안내가 같은 값을 쓴다 */
+export const COACH_CAT_RECT: SceneRect = getSpriteRect(COACH_CAT_ANCHOR, COACH_CAT_SIZE);
+/** 캐릭터가 고양이를 밟고 지나가지 않게 막는 발자국. 발끝 둘레의 작은 사각형이다 */
+export const COACH_CAT_FOOTPRINT: ScenePolygon = [
+  { x: COACH_CAT_ANCHOR.x - 24, y: COACH_CAT_ANCHOR.y - 16 },
+  { x: COACH_CAT_ANCHOR.x + 24, y: COACH_CAT_ANCHOR.y - 16 },
+  { x: COACH_CAT_ANCHOR.x + 24, y: COACH_CAT_ANCHOR.y + 6 },
+  { x: COACH_CAT_ANCHOR.x - 24, y: COACH_CAT_ANCHOR.y + 6 },
+];
+
 /** 캐릭터 이동 파라미터. 시트 없이 정지 이미지 + 코드 모션으로 "움직이는 느낌"만 낸다. */
 export const CHARACTER_MOTION = {
   /** 서 있는 자리. 방 가로 정중앙이며 가구 발자국과 겹치지 않는다(2026-09-18 새 방에 맞춰 소파 앞으로 내렸다). */

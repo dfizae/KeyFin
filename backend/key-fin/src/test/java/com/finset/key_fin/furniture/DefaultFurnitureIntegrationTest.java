@@ -13,22 +13,27 @@ import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import com.finset.key_fin.user.entity.User;
 import com.finset.key_fin.user.repository.UserRepository;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.SQLException;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@AutoConfigureMockMvc
 @Transactional
 class DefaultFurnitureIntegrationTest extends SpringIntegrationTestSupport {
 
@@ -131,6 +136,37 @@ class DefaultFurnitureIntegrationTest extends SpringIntegrationTestSupport {
 			mvc.perform(authenticated(post("/api/v1/shop/purchase").contentType(APPLICATION_JSON)
 					.content("{\"itemId\":" + furniture.itemId() + "}"), userId)).andExpect(status().isNotFound());
 		}
+	}
+
+	@ParameterizedTest(name = "{0}")
+	@MethodSource("invalidFurnitureUpdates")
+	void databaseRejectsInvalidFurnitureCatalogChanges(String scenario, String sql, String constraint) {
+		assertThatThrownBy(() -> jdbc.sql(sql).update())
+				.isInstanceOf(DataAccessException.class)
+				.rootCause().isInstanceOfSatisfying(SQLException.class, exception -> {
+					assertThat(exception.getErrorCode()).isEqualTo(3819);
+					assertThat(exception.getMessage()).contains(constraint);
+				});
+	}
+
+	private static Stream<Arguments> invalidFurnitureUpdates() {
+		return Stream.of(
+				Arguments.of("기본 가구 판매 활성화 거절",
+						"UPDATE items SET is_active = TRUE WHERE default_furniture_type = 'TV'",
+						"chk_default_furniture"),
+				Arguments.of("기본 가구 유형 NULL 거절",
+						"UPDATE items SET furniture_type = NULL WHERE asset_key = 'sofa_default'",
+						"chk_default_furniture_type_match"),
+				Arguments.of("기본 가구 유형 불일치 거절",
+						"UPDATE items SET furniture_type = 'TV' WHERE asset_key = 'sofa_default'",
+						"chk_default_furniture_type_match"),
+				Arguments.of("벽 가구의 필수 가구 유형 지정 거절",
+						"UPDATE items SET furniture_type = 'SOFA' WHERE asset_key = 'decor_round_mirror'",
+						"chk_furniture_type"),
+				Arguments.of("허용되지 않은 가구 유형 거절",
+						"UPDATE items SET furniture_type = 'OTHER' WHERE asset_key = 'desk_original'",
+						"chk_furniture_type")
+		);
 	}
 
 	private long signup() {

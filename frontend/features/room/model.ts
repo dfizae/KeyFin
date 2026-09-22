@@ -334,7 +334,7 @@ export type RoomDto = {
 
 /**
  * 설치된 가구 한 개. 좌표는 ScenePoint 와 같은 축이다 (3단계).
- * defaultFurnitureType·canUnplace 는 백엔드 V15(2026-09-18, 기본 가구 지급)에서 생겼다 — 기본 가구(FRIDGE·SOFA·TV)는 치울 수 없다.
+ * canUnplace는 단독 해제 가능 여부다. 필수 가구도 전체 배치를 저장할 때 같은 종류로 교체할 수 있다.
  */
 export type PlacedFurnitureDto = {
   userFurnitureId: number;
@@ -348,9 +348,14 @@ export type PlacedFurnitureDto = {
   layer: number;
   /** 기본 가구 식별값(FRIDGE·SOFA·TV). 일반 가구는 null */
   defaultFurnitureType: string | null;
-  /** 설치 해제 가능 여부. 기본 가구는 false */
+  furnitureType: FurnitureType | null;
+  stickerAttached: boolean;
+  /** 단독 해제 가능 여부. 설치된 필수 가구는 false */
   canUnplace: boolean;
 };
+
+export const FURNITURE_TYPES = ["FRIDGE", "SOFA", "TV"] as const;
+export type FurnitureType = (typeof FURNITURE_TYPES)[number];
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };
 /** type 값 목록은 미확정(frontend-spec §6 #2). until 은 시간대 없는 KST 문자열 */

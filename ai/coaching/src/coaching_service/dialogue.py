@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 import anyio
 
+from coaching_service.chart_contract import budget_period
 from coaching_service.chat_answers import (
     ChatAnswer,
     FinanceQuestion,
@@ -42,11 +43,14 @@ from coaching_service.knowledge_retrieval import is_followup
 from coaching_service.llm_contract import ChatMessage, EvidenceInput, FinanceWording, Routing
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
+from coaching_service.periods import ResolvedPeriod
 from coaching_service.personal_contract import PersonalContext
 from coaching_service.personal_service import CONTEXT_KEY, personal_answer
 from coaching_service.repository import Mutation, document, write
 from coaching_service.schemas import (
     AnswerReference,
+    ChartHint,
+    ChartPurchaseHint,
     Coaching,
     JsonDocument,
     Message,
@@ -99,6 +103,50 @@ def turn_numeric_request(
             {"mode": route.mode, "horizon_days": horizon_days, "paths": 100, "seed": 42}
         )
     return None
+
+
+def chart_purchase_hint(change: JsonDocument, period: ResolvedPeriod) -> ChartPurchaseHint | None:
+    """확정된 구매 change에서 차트 힌트를 만든다. 예산 월·미래 조건을 못 채우면 None.
+
+    앱이 이 힌트를 그대로 차트 요청의 ``purchase`` 로 보내면 422 없이 겹쳐 그리도록
+    기준일 이후·예산 월(``period_start`` 로 파생한 예산 주기) 안에 드는 구매만 싣는다.
+    """
+    envelope = change.root.get("envelope")
+    amount = change.root.get("amount_krw")
+    on_date_raw = change.root.get("date")
+    if not (isinstance(envelope, str) and isinstance(amount, int) and isinstance(on_date_raw, str)):
+        return None
+    try:
+        on_date = date.fromisoformat(on_date_raw)
+        window = budget_period(period.budget_month_start, period.reference_date)
+    except (ValueError, ServiceError):
+        return None
+    if not window.as_of < on_date <= window.horizon_end:
+        return None
+    return ChartPurchaseHint(envelope=envelope, amount_krw=amount, on_date=on_date)
+
+
+def forecast_chart_hint(
+    numeric_request: JsonDocument | None,
+    parsed_purchase: NaturalPurchase | None,
+    period: ResolvedPeriod,
+    question: str,
+    purchase: ChartPurchaseHint | None = None,
+) -> ChartHint | None:
+    """예측·구매검토 대화에만 같은 예산 월의 차트 요청 본문을 힌트로 덧붙인다.
+
+    두 번째 시뮬레이션이나 차트 쓰기 없이 대화가 이미 사용한 기준일·기간에서
+    파생한다. ``period_start`` 는 기준일이 속한 예산 월의 1일이라 그 기준일을
+    포함하는 유효한 예산 주기다. 기준일이 속한 예산 월에 남은 예측일이 없으면
+    (기준일이 월말 경계) 차트가 가리킬 미래 구간이 없어 힌트를 만들지 않는다.
+    구매검토 대화에서 확정한 예정 구매(``purchase``)가 있으면 함께 싣는다.
+    """
+    is_forecast = numeric_request is not None and numeric_request.root.get("mode") == "forecast"
+    if not (is_forecast or parsed_purchase is not None):
+        return None
+    if period.budget_forecast_end <= period.reference_date:
+        return None
+    return ChartHint(period_start=period.budget_month_start, question=question, purchase=purchase)
 
 
 def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit fail-closed payment boundary.
@@ -401,6 +449,8 @@ class Dialogue:
                             "spending": summary.model_dump(mode="json"),
                         }
                     ),
+                    rows=summary.rows,
+                    total_krw=summary.total_krw,
                     created_at=time.time(),
                 )
                 return save_turn(session, request.question, answer)
@@ -409,6 +459,7 @@ class Dialogue:
             numeric_request = turn_numeric_request(
                 request.analysis, parsed_goal, parsed_what_if, route, period.forecast_days,
             )
+            purchase_hint: ChartPurchaseHint | None = None
             if numeric_request is not None:
                 receipt = await self.core.numeric_receipt(
                     twin, identity, numeric_request, period, replay=reference != today
@@ -416,7 +467,9 @@ class Dialogue:
             else:
                 changes: tuple[JsonDocument, ...] = ()
                 if parsed_purchase is not None:
-                    changes = (resolve_purchase_change(parsed_purchase, twin, reference),)
+                    change = resolve_purchase_change(parsed_purchase, twin, reference)
+                    changes = (change,)
+                    purchase_hint = chart_purchase_hint(change, period)
                 receipt = await self.core.receipt(
                     twin,
                     ReviewRequest(
@@ -449,6 +502,13 @@ class Dialogue:
             evidence = bounded_evidence(receipt, request.question, history)
             coaching = await self.core.compose(
                 receipt, evidence, tone=await self._effective_tone(op.owner, request)
+            )
+            coaching = coaching.model_copy(
+                update={
+                    "chart_hint": forecast_chart_hint(
+                        numeric_request, parsed_purchase, period, request.question, purchase_hint
+                    )
+                }
             )
             return save_turn(session, request.question, coaching)
 

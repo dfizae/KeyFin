@@ -6,7 +6,9 @@ import com.finset.key_fin.auth.service.AuthService;
 import com.finset.key_fin.budget.dto.request.BudgetConfirmRequest;
 import com.finset.key_fin.budget.service.BudgetService;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementUpdateRequest;
-import com.finset.key_fin.furniture.entity.DefaultFurnitureType;
+import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest;
+import com.finset.key_fin.furniture.dto.request.FurniturePlacementsUpdateRequest.Placement;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.furniture.service.DefaultFurnitureService;
@@ -29,7 +31,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
@@ -56,13 +57,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.hamcrest.Matchers.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@AutoConfigureMockMvc
-@Import(RoomStickersIntegrationTest.TimeConfig.class)
 @Timeout(90)
 class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	private static final Instant NOW = Instant.parse("2026-09-18T03:00:00Z");
@@ -80,14 +78,13 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private PlatformTransactionManager transactionManager;
 	@Autowired private MockMvc mvc;
 	@Autowired private JwtTokenProvider tokens;
-	@Autowired private TestClock clock;
 	private final List<Long> testUsers = new ArrayList<>();
 	private final List<Long> testItems = new ArrayList<>();
 	private long userId;
 
 	@BeforeEach
 	void setUp() {
-		clock.set(NOW);
+		testClock.set(NOW);
 		userId = createUser();
 	}
 
@@ -107,16 +104,11 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void signupProvisionsThreeDefaultsAndRoomDoesNotCreateBudgetOrAttendance() throws Exception {
+	void signupStartsWithoutStickersAndRoomDoesNotCreateBudgetOrAttendance() throws Exception {
 		long signedUp = authService.signup(new SignupRequest(UUID.randomUUID() + "@room.test", "Passw0rd!", "방테스터")).userId();
 		testUsers.add(signedUp);
 		var supplied = furnitureService.getFurnitures(signedUp, null);
-		assertThat(supplied).hasSize(3).allSatisfy(f -> {
-			assertThat(f.placed()).isTrue();
-			assertThat(f.canUnplace()).isFalse();
-			assertThat(f.stickerAttached()).isFalse();
-		});
-		assertThat(supplied).extracting(f -> f.defaultFurnitureType()).containsExactlyInAnyOrder(DefaultFurnitureType.values());
+		assertThat(supplied).hasSize(3).allSatisfy(f -> assertThat(f.stickerAttached()).isFalse());
 		mvc.perform(auth(get("/api/v1/room"), signedUp)).andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.coin.balance").value(0))
 				.andExpect(jsonPath("$.data.attendance.checkedToday").value(false))
@@ -125,23 +117,6 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.data.stickers.removableToday").value(false));
 		assertThat(countFor("budgets", signedUp)).isZero();
 		assertThat(countFor("fin_coin", signedUp)).isZero();
-		for (var furniture : supplied) {
-			mvc.perform(auth(get("/api/v1/shop"), signedUp)).andExpect(status().isOk())
-					.andExpect(jsonPath("$.data[*].itemId", not(hasItem(furniture.itemId().intValue()))));
-			mvc.perform(auth(post("/api/v1/shop/purchase").contentType(APPLICATION_JSON)
-					.content("{\"itemId\":" + furniture.itemId() + "}"), signedUp)).andExpect(status().isNotFound());
-		}
-	}
-
-	@Test
-	void provisioningIsIdempotentAndPreservesMovedFurniture() {
-		defaults.provision(userId);
-		long sofa = target("SOFA");
-		furnitureService.updatePlacement(userId, sofa, moved());
-		defaults.provision(userId);
-		assertThat(countFor("user_furnitures", userId)).isEqualTo(3);
-		assertThat(rooms.getRoom(userId).furnitures().stream().filter(f -> f.userFurnitureId() == sofa).findFirst().orElseThrow().positionX())
-				.isEqualByComparingTo("100.123");
 	}
 
 	@Test
@@ -195,9 +170,9 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
 		transactions.classifyTransaction(userId, tx, new TransactionClassificationRequest(101, null, null));
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
-		clock.set(NOW.plusSeconds(86400));
+		testClock.set(NOW.plusSeconds(86400));
 		stickers.remove(userId, target("SOFA"));
-		clock.set(NOW.plusSeconds(172800));
+		testClock.set(NOW.plusSeconds(172800));
 		stickers.remove(userId, target("TV"));
 		assertThat(rooms.getRoom(userId).stickers().count()).isZero();
 		assertThat(rooms.getRoom(userId).stickers().removableToday()).isFalse();
@@ -209,7 +184,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
 		stickers.remove(userId, target("FRIDGE"));
-		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
 		long next = budget("202610", "PROPOSED", 1000);
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
 		stickers.remove(userId, target("SOFA"));
@@ -241,10 +216,10 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		budget("202609", "CONFIRMED", 1000);
 		spend("2026-09-18", 2000, "CONFIRMED", 101);
 		rooms.getRoom(userId);
-		clock.set(Instant.parse("2026-09-18T14:59:59Z"));
+		testClock.set(Instant.parse("2026-09-18T14:59:59Z"));
 		stickers.remove(userId, target("FRIDGE"));
 		assertBusinessCode(() -> stickers.remove(userId, target("SOFA")), "ROOM_002");
-		clock.set(Instant.parse("2026-09-18T15:00:00Z"));
+		testClock.set(Instant.parse("2026-09-18T15:00:00Z"));
 		assertThat(stickers.remove(userId, target("SOFA")).stickers().count()).isEqualTo(1);
 		assertBusinessCode(() -> stickers.remove(userId, target("TV")), "ROOM_002");
 	}
@@ -293,6 +268,34 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
+	void replacementReceivesFutureBudgetStickersWithoutReinstallingStarter() {
+		budget("202609", "CONFIRMED", 1000);
+		spend("2026-09-18", 2000, "CONFIRMED", 101);
+		rooms.getRoom(userId);
+		long oldSofa = target("SOFA");
+		jdbc.sql("INSERT INTO user_furnitures (user_id, item_id) SELECT :user, id FROM items WHERE asset_key = 'sofa_black'")
+				.param("user", userId).update();
+		long newSofa = jdbc.sql("SELECT uf.id FROM user_furnitures uf JOIN items i ON i.id = uf.item_id WHERE uf.user_id = :user AND i.asset_key = 'sofa_black'")
+				.param("user", userId).query(Long.class).single();
+		var request = new FurniturePlacementsUpdateRequest(furnitureService.getPlacedFurnitures(userId).stream()
+				.map(f -> new Placement(f.furnitureType() == FurnitureType.SOFA ? newSofa : f.userFurnitureId(),
+						f.placementStatus(), f.placementDirection(), f.positionX(), f.positionY(), f.layer())).toList());
+		furnitureService.updatePlacements(userId, request);
+		assertThat(stickers.remove(userId, newSofa).stickers().count()).isEqualTo(2);
+		furnitureService.updatePlacements(userId, request);
+		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(2);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		budget("202610", "CONFIRMED", 1000);
+		spend("2026-10-01", 2000, "CONFIRMED", 101);
+		var next = rooms.getRoom(userId);
+		assertThat(next.stickers().count()).isEqualTo(3);
+		assertThat(next.furnitures()).extracting(f -> f.userFurnitureId()).contains(newSofa).doesNotContain(oldSofa);
+		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(2);
+		assertThat(jdbc.sql("SELECT sticker_attached FROM user_furnitures WHERE id = :id").param("id", oldSofa).query(Boolean.class).single()).isFalse();
+	}
+
+	@Test
 	void classificationAndSyncWriterApplyOverrunBeforeRoomIsRead() {
 		budget("202609", "CONFIRMED", 1000);
 		long tx = spend("2026-09-18", 2000, "PENDING", null);
@@ -300,7 +303,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(attachedCount()).isEqualTo(3);
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 		// A separate period exercises the sync writer with a detached, newly classified transaction.
-		clock.set(Instant.parse("2026-10-01T03:00:00Z"));
+		testClock.set(Instant.parse("2026-10-01T03:00:00Z"));
 		budget("202610", "CONFIRMED", 1000);
 		long nextTx = spend("2026-10-01", 2000, "PENDING", null);
 		var changed = transactionRepository.findById(nextTx).orElseThrow();
@@ -368,7 +371,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(room.coin().balance()).isEqualTo(7);
 		assertThat(room.attendance().checkedToday()).isTrue();
 		assertThat(countFor("fin_coin", userId)).isEqualTo(2);
-		clock.set(Instant.parse("2026-09-18T15:00:00Z"));
+		testClock.set(Instant.parse("2026-09-18T15:00:00Z"));
 		assertThat(rooms.getRoom(userId).attendance().checkedToday()).isFalse();
 	}
 
@@ -465,18 +468,5 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		} finally { start.countDown(); }
 	}
 
-	@TestConfiguration(proxyBeanMethods = false)
-	static class TimeConfig {
-		@Bean @Primary TestClock stickerClock() { return new TestClock(new AtomicReference<>(NOW), ZoneOffset.UTC); }
-	}
 
-	static final class TestClock extends Clock {
-		private final AtomicReference<Instant> instant;
-		private final ZoneId zone;
-		TestClock(AtomicReference<Instant> instant, ZoneId zone) { this.instant = instant; this.zone = zone; }
-		void set(Instant value) { instant.set(value); }
-		@Override public ZoneId getZone() { return zone; }
-		@Override public Clock withZone(ZoneId zone) { return new TestClock(instant, zone); }
-		@Override public Instant instant() { return instant.get(); }
-	}
 }

@@ -1,4 +1,5 @@
 import { useRouter } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import { Archive, ChevronUp, CircleAlert, FlipHorizontal2, Sofa } from "lucide-react-native";
 import * as React from "react";
 import { FlatList, Image, Pressable, View, type LayoutChangeEvent } from "react-native";
@@ -9,11 +10,9 @@ import { Icon } from "@/components/ui/icon";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { useFurnitures, useRoom, useSavePlacements } from "@/features/room/api/queries";
 import { roomItemName, roomItemThumbnail, isWallItemId } from "@/features/room/catalog";
 import { RoomView } from "@/features/room/components/RoomView";
 import {
-  changedPlacements,
   storeAwayBlock,
   storedFurnitures,
   type StoreAwayBlock,
@@ -31,13 +30,12 @@ import {
 } from "@/features/room/model";
 import { placeNewItem, placementView, type Placement } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
-import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
+import { useRoomEditor } from "@/features/room/useRoomEditor";
 import { cn } from "@/lib/utils";
 
 export const EDIT_TITLE = "방 꾸미기";
 export const EDIT_HINT = "가구를 끌어서 옮기세요. 누르면 방향을 바꾸거나 넣어 둘 수 있어요";
 export const EDIT_ROOM_LABEL = "편집 중인 방";
-export const EDIT_SAVE_ERROR = "자리를 저장하지 못했어요. 연결 상태를 확인한 뒤 다시 눌러 주세요.";
 export const STORAGE_TITLE = "보관함";
 /** 상점에서 가구를 사고 넘어왔다는 표시(/room/edit?from=shop). 방금 산 가구를 놓으러 온 것이라 보관함을 펴 둔 채로 연다 */
 export const EDIT_FROM_SHOP = "shop";
@@ -46,9 +44,10 @@ const NO_ROOM_NOTICE = "놓을 빈자리가 없어요. 다른 가구를 옮기�
 const NO_TURN_NOTICE = "돌릴 자리가 없어요. 주변을 비운 뒤 다시 눌러 주세요.";
 const STORE_AWAY_BLOCK_TEXT: Record<StoreAwayBlock, string> = {
   WALL_OBJECT: "예산 보드·출금 캘린더는 옮기기만 할 수 있어요.",
-  DEFAULT_FURNITURE: "기본 가구는 넣어 둘 수 없어요.",
+  UNKNOWN_FURNITURE: "보유 정보를 확인할 수 없는 가구예요.",
 };
 const HOME_ROUTE = "/";
+const LOAD_ERROR = "방 정보를 불러오지 못했어요.";
 /** 보관함 타일 그림. 64pt 타일 안의 4px 스케일 밖 크기라 style 로 준다(상점 타일과 같은 방식) */
 const TRAY_SPRITE_STYLE = { width: 48, height: 48 } as const;
 const TRAY_COLUMNS = 4;
@@ -62,10 +61,10 @@ type RoomEditScreenProps = {
 
 /**
  * 방 꾸미기 화면 (홈 '꾸미기' → /room/edit). 가구·벽 오브젝트를 드래그로 옮긴다(스냅·겹침 판정은 RoomScene).
- * 들어오면 편집 사본(draft)을 만들고, 완료는 바뀐 가구만 서버에 저장한 뒤 확정, 취소(뒤로가기 포함)는 버린 뒤 홈으로 돌아간다.
- * 2026-09-21: 산 가구를 꺼내 놓는 보관함과, 고른 가구의 '방향 바꾸기'·'넣어 두기'를 더했다(사용자 결정). 보관함은 GET /furnitures 에서
- * 사본에 없는 보유 가구이고, 넣어 둔 가구는 저장할 때 설치 해제로 나간다.
- * 저장은 가구 한 개씩 PATCH /furnitures/{userFurnitureId} 다(일괄 엔드포인트 없음). 실패하면 사본을 그대로 두고 다시 누를 수 있게 한다.
+ * 방 조회와 보유 목록을 받은 뒤 편집 사본(draft)을 만든다. 완료는 전체 배치 PUT 한 번으로 저장한 뒤 확정하고, 취소(뒤로가기 포함)는 사본을 버린다.
+ * 필수 가구도 편집 중에는 보관할 수 있고, 완료 시 소파·TV·냉장고 각각 1개를 서버가 검사한다. 실패하면 사본을 유지한다(useRoomEditor).
+ * 2026-09-21: 산 가구를 꺼내 놓는 보관함과, 고른 가구의 '방향 바꾸기'·'넣어 두기'를 더했다(사용자 결정). 보관함은 보유 목록에서
+ * 사본에 없는 가구이고, 넣어 둔 가구는 저장할 때 설치 해제로 나간다.
  *
  * 배치(2026-09-21 사용자 결정): **방을 최대한 크게 쓴다.** 전에는 방 아래에 안내·선택 동작·보관함·취소/완료가 세로로 쌓여
  * 방이 남는 자리에 줄어들어 들어갔고, 방이 작을수록 반 칸 격자에 맞춰 끄는 조작이 어려웠다.
@@ -74,22 +73,19 @@ type RoomEditScreenProps = {
  * - 보관함은 하단 손잡이 한 줄로 접어 두고 누르면 시트로 올라온다. 가구를 고르면 시트를 내려 놓인 자리를 바로 보여 준다.
  *   시트는 끌지 않고 눌러서만 여닫는다 — 방 캔버스의 가구 드래그와 제스처가 부딪히지 않게
  * - 방은 cover 가 아니라 contain 으로 맞춘다. 잘리는 바닥이 생기면 그 칸에는 가구를 놓을 수 없다
+ * - 방·목록 조회가 실패하면 방 아래 한 줄에서 다시 시도한다(보관함 시트를 열지 않아도 보이게)
  * 카메라는 드래그와 겹치지 않게 1배로 잠근다. Pencil PAGE-10 방 꾸미기 (HTF8Q, 2026-09-15) 와 배치가 달라졌다 — Pencil 미대조.
  */
 function RoomEditScreen({ openStorage = false }: RoomEditScreenProps) {
   const router = useRouter();
-  const room = useRoom();
-  const furnitures = useFurnitures();
-  useRoomLayoutSync();
+  const editor = useRoomEditor();
+  usePreventRemove(editor.saving, () => {});
   const placements = useRoomStore(selectPlacements);
   const selectedId = useRoomStore((s) => s.selectedId);
-  const startEdit = useRoomStore((s) => s.startEdit);
   const cancelEdit = useRoomStore((s) => s.cancelEdit);
-  const commitEdit = useRoomStore((s) => s.commitEdit);
   const placeItem = useRoomStore((s) => s.placeItem);
   const removeItem = useRoomStore((s) => s.removeItem);
   const flipItem = useRoomStore((s) => s.flipItem);
-  const save = useSavePlacements();
   const [roomArea, setRoomArea] = React.useState({ width: 0, height: 0 });
   const [notice, setNotice] = React.useState<string | null>(null);
   const [storageOpen, setStorageOpen] = React.useState(openStorage);
@@ -101,45 +97,35 @@ function RoomEditScreen({ openStorage = false }: RoomEditScreenProps) {
 
   const roomWidth = roomArea.width > 0 && roomArea.height > 0 ? containSceneWidth(roomArea.width, roomArea.height) : 0;
   const selected = selectedId === null ? null : (placements.find((placement) => placement.itemId === selectedId) ?? null);
-  const stored = storedFurnitures(furnitures.data ?? [], placements);
-
-  // 서버 배치를 받은 뒤에 사본을 뜬다 — 먼저 뜨면 기본 배치를 편집하게 되어 저장할 대상이 없다.
-  // 화면을 어떤 경로로 떠나든(뒤로 제스처·탭 이동) 남은 사본은 버린다. 완료 뒤에는 사본이 이미 없어 아무 일도 없다.
+  const stored = storedFurnitures(editor.owned ?? [], placements);
+  // 저장 중이거나 아직 방·목록을 못 받았으면 편집 조작을 막는다
+  const busy = editor.saving || !editor.ready;
+  const leftAfterSave = React.useRef(false);
+  // 저장 잠금이 해제되어 내비게이션 차단도 풀린 렌더에서만 이동한다.
   React.useEffect(() => {
-    if (room.isPending) return;
-    startEdit();
-    return () => cancelEdit();
-  }, [room.isPending, startEdit, cancelEdit]);
+    if (!editor.completed || leftAfterSave.current) return;
+    leftAfterSave.current = true;
+    if (router.canGoBack()) router.back();
+    else router.replace(HOME_ROUTE);
+  }, [editor.completed, router]);
 
   const leave = () => {
     if (router.canGoBack()) router.back();
     else router.replace(HOME_ROUTE);
   };
   const cancel = () => {
+    if (useRoomStore.getState().saving) return;
     cancelEdit();
     leave();
   };
   const done = () => {
-    if (save.isPending) return;
-    // 드래그는 매 프레임 스토어를 고치므로 누를 때의 값을 직접 읽는다(구독한 값은 한 렌더 뒤처질 수 있다).
-    const { layout, draft } = useRoomStore.getState();
-    const saves = changedPlacements(layout, draft ?? layout);
-    if (saves.length === 0) {
-      commitEdit();
-      leave();
-      return;
-    }
-    save.mutate(saves, {
-      onSuccess: () => {
-        commitEdit();
-        leave();
-      },
-    });
+    setNotice(null);
+    void editor.submit();
   };
 
   const placeFromStorage = (furniture: StoredFurniture) => {
     const { draft } = useRoomStore.getState();
-    if (!draft) return;
+    if (!draft || useRoomStore.getState().saving) return;
     // 놓였든 빈자리가 없든 시트를 내린다 — 놓인 가구도, 빈자리가 없다는 안내도 시트 뒤의 방에 보인다.
     setStorageOpen(false);
     const placement = placeNewItem(draft, furniture.itemId, furniture.userFurnitureId);
@@ -156,13 +142,15 @@ function RoomEditScreen({ openStorage = false }: RoomEditScreenProps) {
   };
   const storeSelected = () => {
     if (selectedId === null) return;
+    const selected = useRoomStore.getState().draft?.find((item) => item.itemId === selectedId);
+    if (!selected || storeAwayBlock(selected, editor.owned ?? undefined) !== null) return;
     setNotice(null);
     removeItem(selectedId);
   };
 
-  // 안내 한 줄. 저장 실패 > 방금 동작의 안내 > (아무것도 안 골랐을 때) 사용법 순으로 하나만 보여 준다.
-  const status: StatusLine | null = save.isError
-    ? { text: EDIT_SAVE_ERROR, tone: "error" }
+  // 안내 한 줄. 저장 실패(서버 문구) > 방금 동작의 안내 > (아무것도 안 골랐을 때) 사용법 순으로 하나만 보여 준다.
+  const status: StatusLine | null = editor.error !== null
+    ? { text: editor.error, tone: "error" }
     : notice !== null
       ? { text: notice, tone: "notice" }
       : selected === null
@@ -180,19 +168,25 @@ function RoomEditScreen({ openStorage = false }: RoomEditScreenProps) {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="편집 완료"
-            accessibilityState={{ disabled: save.isPending, busy: save.isPending }}
+            accessibilityState={{ disabled: busy, busy: editor.saving }}
             hitSlop={10}
-            disabled={save.isPending}
+            disabled={busy}
             onPress={done}
           >
-            <Text className={cn("text-label", save.isPending ? "text-card-foreground" : "text-primary")}>
-              {save.isPending ? "저장하는 중" : "완료"}
+            <Text className={cn("text-label", busy ? "text-card-foreground" : "text-primary")}>
+              {editor.saving ? "저장하는 중" : "완료"}
             </Text>
           </Pressable>
         }
       />
       {/* 남은 영역 안에 방 전체가 들어가게 맞춘다(contain). 바닥이 잘리면 그 칸에는 가구를 놓을 수 없다 */}
-      <View className="flex-1 items-center justify-center" onLayout={handleRoomAreaLayout} testID={EDIT_ROOM_AREA_TEST_ID}>
+      <View
+        className="flex-1 items-center justify-center"
+        collapsable={false}
+        onLayout={handleRoomAreaLayout}
+        pointerEvents={busy ? "none" : "auto"}
+        testID={EDIT_ROOM_AREA_TEST_ID}
+      >
         <RoomView
           accessibilityLabel={EDIT_ROOM_LABEL}
           locked
@@ -201,9 +195,9 @@ function RoomEditScreen({ openStorage = false }: RoomEditScreenProps) {
             selected === null ? null : (
               <SelectionBubble
                 selected={selected}
-                owned={furnitures.data}
+                owned={editor.owned ?? undefined}
                 canvasWidth={width}
-                disabled={save.isPending}
+                disabled={busy}
                 onFlip={flipSelected}
                 onStoreAway={storeSelected}
               />
@@ -212,19 +206,16 @@ function RoomEditScreen({ openStorage = false }: RoomEditScreenProps) {
         />
         {status === null ? null : <StatusPill status={status} />}
       </View>
-      <StorageHandle
-        count={furnitures.isPending || furnitures.isError ? null : stored.length}
-        disabled={save.isPending}
-        onPress={() => setStorageOpen(true)}
-      />
+      {editor.loadError ? <LoadErrorRow onRetry={editor.retry} /> : null}
+      <StorageHandle count={editor.ready ? stored.length : null} disabled={editor.saving} onPress={() => setStorageOpen(true)} />
       <BottomSheet visible={storageOpen} onClose={() => setStorageOpen(false)} closeLabel="보관함 닫기">
         <StorageSheet
           stored={stored}
-          pending={furnitures.isPending}
-          failed={furnitures.isError}
-          retrying={furnitures.isFetching}
-          disabled={save.isPending}
-          onRetry={() => furnitures.refetch()}
+          pending={!editor.ready && !editor.loadError}
+          failed={editor.loadError}
+          retrying={!editor.ready && !editor.loadError}
+          disabled={busy}
+          onRetry={editor.retry}
           onPlace={placeFromStorage}
         />
       </BottomSheet>
@@ -259,7 +250,8 @@ type SelectionBubbleProps = {
 };
 
 // 방에서 고른 것 하나에 대한 동작을 그 가구 옆에 띄운다. 벽 기능 오브젝트는 돌리지도 넣어 두지도 않고,
-// 기본 가구는 넣어 두지 못한다 — 막힌 이유를 글로 적는다. 자리는 가구 아래가 기본이고 넘치면 위로 올린다(model.placeBubble).
+// 보유 정보를 모르는 가구는 넣어 두지 못한다 — 막힌 이유를 글로 적는다. 필수 가구는 넣어 둘 수 있고 개수는 저장할 때 서버가 검사한다.
+// 자리는 가구 아래가 기본이고 넘치면 위로 올린다(model.placeBubble).
 function SelectionBubble({ selected, owned, canvasWidth, disabled, onFlip, onStoreAway }: SelectionBubbleProps) {
   const [size, setSize] = React.useState<SceneSize | null>(null);
   const name = owned?.find((furniture) => furniture.userFurnitureId === selected.userFurnitureId)?.name ?? roomItemName(selected.itemId);
@@ -309,6 +301,19 @@ function SelectionBubble({ selected, owned, canvasWidth, disabled, onFlip, onSto
         </Button>
       </View>
       {block === null ? null : <Text className="px-1 text-caption text-card-foreground">{STORE_AWAY_BLOCK_TEXT[block]}</Text>}
+    </View>
+  );
+}
+
+// 방·보유 목록 조회 실패. 보관함 시트를 열지 않아도 다시 시도할 수 있게 방 아래 한 줄로 둔다
+function LoadErrorRow({ onRetry }: { onRetry: () => void }) {
+  return (
+    <View className="flex-row items-center gap-2 px-6 pt-2" accessibilityLiveRegion="polite">
+      <Icon as={CircleAlert} size={16} className="text-destructive" />
+      <Text className="flex-1 text-caption text-destructive">{LOAD_ERROR}</Text>
+      <Button variant="ghost" size="sm" className="h-button-md sm:h-button-md" onPress={onRetry}>
+        <Text>다시 시도</Text>
+      </Button>
     </View>
   );
 }

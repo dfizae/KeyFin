@@ -14,11 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse;
 import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.EnvelopeBoard;
 import com.finset.key_fin.budget.repository.BudgetRepository;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql({"/sql/budget-confirm-fixture.sql", "/sql/budget-current-fixture.sql"})
 class BudgetCurrentTest extends SpringIntegrationTestSupport {
 

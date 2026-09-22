@@ -13,7 +13,7 @@ public class FinanceMockServerConfig {
 	@Bean
 	@Qualifier("financeMockBuilder")
 	RestClient.Builder financeMockBuilder() {
-		return RestClient.builder().baseUrl(IntegrationTestSupport.FINANCE_BASE_URL);
+		return RestClient.builder().baseUrl(SpringIntegrationTestSupport.FINANCE_BASE_URL);
 	}
 
 	@Bean

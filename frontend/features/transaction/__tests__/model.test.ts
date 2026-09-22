@@ -17,10 +17,12 @@ import {
   parseTransactionFilter,
   parseTransactionId,
   reclassifyBlockedReason,
+  resolvePendingFocus,
   suggestedForBulk,
   toBulkClassifyResult,
   toClassifyResult,
   toDutchRequest,
+  toFocusTransactionId,
   toSuggestedBulkRequest,
   toPendingTransactions,
   toSubcategories,
@@ -225,6 +227,7 @@ describe("거래 상세 표시 (txTypeLabel · confirmStatusLabel · transaction
 
   it("거래 종류와 분류 상태를 화면 문구로 바꾸고 모르는 상태는 자리를 비운다", () => {
     expect(txTypeLabel(card)).toBe("카드 결제");
+    expect(txTypeLabel(toTransaction({ ...pendingTransactionsMock().items[0], txType: "CARD_BILL" }))).toBe("카드대금");
     expect(txTypeLabel({ ...card, txType: "UNKNOWN" })).toBe("기타");
     expect(confirmStatusLabel(card)).toBe("확인 필요");
     expect(confirmStatusLabel({ ...card, confirmStatus: "AUTO" })).toBe("자동 분류");
@@ -240,6 +243,36 @@ describe("거래 상세 표시 (txTypeLabel · confirmStatusLabel · transaction
     expect(reclassifyBlockedReason(card)).toBeNull();
     expect(reclassifyBlockedReason({ ...card, txType: "DEPOSIT" })).toContain("입금");
     expect(reclassifyBlockedReason({ ...card, status: "CANCELED" })).toContain("취소");
+  });
+});
+
+describe("알림에서 온 거래 찾기 (resolvePendingFocus · toFocusTransactionId)", () => {
+  const items = toPendingTransactions(pendingTransactionsMock()).items;
+
+  it("받은 목록에 있으면 그 거래를 돌려준다 — 분류 창을 바로 연다", () => {
+    const focus = resolvePendingFocus(items, 502, true);
+    expect(focus.state).toBe("found");
+    expect(focus.state === "found" ? focus.transaction.id : null).toBe(502);
+  });
+
+  it("받은 쪽에 없고 더 받을 쪽이 있으면 계속 찾는다", () => {
+    expect(resolvePendingFocus(items, 9999, true)).toEqual({ state: "searching" });
+  });
+
+  it("끝까지 받았는데 없으면 이미 정리한 거래다", () => {
+    expect(resolvePendingFocus(items, 9999, false)).toEqual({ state: "gone" });
+    expect(resolvePendingFocus([], 501, false)).toEqual({ state: "gone" });
+  });
+
+  it("라우트 파라미터는 양의 정수 모양일 때만 거래 id 로 본다", () => {
+    expect(toFocusTransactionId("501")).toBe(501);
+    expect(toFocusTransactionId("0")).toBeNull();
+    expect(toFocusTransactionId("-3")).toBeNull();
+    expect(toFocusTransactionId("12abc")).toBeNull();
+    expect(toFocusTransactionId("../my/settings")).toBeNull();
+    expect(toFocusTransactionId("99999999999999999999")).toBeNull();
+    expect(toFocusTransactionId(undefined)).toBeNull();
+    expect(toFocusTransactionId(["501"])).toBeNull();
   });
 });
 

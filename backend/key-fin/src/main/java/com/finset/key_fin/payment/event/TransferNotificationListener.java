@@ -2,6 +2,8 @@ package com.finset.key_fin.payment.event;
 
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import com.finset.key_fin.payment.service.TransferNotificationService;
@@ -16,6 +18,7 @@ public class TransferNotificationListener {
 
 	private final TransferNotificationService transferNotificationService;
 
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void on(TransferProposed event) {
 		try {
@@ -26,6 +29,7 @@ public class TransferNotificationListener {
 		}
 	}
 
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void on(TransferCompleted event) {
 		try {

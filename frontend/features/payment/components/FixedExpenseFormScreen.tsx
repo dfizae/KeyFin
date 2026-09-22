@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { CalendarClock, Check, CircleAlert, Lock, Trash2, WifiOff } from "lucide-react-native";
 import { useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 
 import { AmountInput } from "@/components/ui/amount-input";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { EmptyState } from "@/components/ui/empty-state";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
@@ -155,7 +156,7 @@ function FixedExpenseEditor({ editId, initial, onDone }: FixedExpenseEditorProps
 
   return (
     <Screen>
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView className="flex-1">
       <ScreenHeader title={isEdit ? "고정지출 수정" : "고정지출 등록"} onBack={onDone} />
 
       <ScreenScrollView contentContainerClassName="gap-6 px-6 pb-8" keyboardShouldPersistTaps="handled">

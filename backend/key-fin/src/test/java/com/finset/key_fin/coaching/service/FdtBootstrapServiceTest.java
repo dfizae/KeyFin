@@ -18,10 +18,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.finset.key_fin.coaching.dto.FdtBootstrap;
 import com.finset.key_fin.coaching.dto.FdtSnapshot;
 import com.finset.key_fin.coaching.dto.FdtTransaction;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
-@Import(FixedClockConfig.class)
 @Transactional
 @Sql(scripts = "/sql/coaching-bootstrap-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class FdtBootstrapServiceTest extends SpringIntegrationTestSupport {
@@ -34,14 +32,17 @@ class FdtBootstrapServiceTest extends SpringIntegrationTestSupport {
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
-	void 원장에서_CARRYOVER를_빼고_나머지를_모두_보낸다() {
+	void 원장에서_CARRYOVER와_본인_계좌_이동을_빼고_나머지를_모두_보낸다() {
 		FdtBootstrap bootstrap = service.build(USER_ID);
 
 		assertThat(bootstrap.asOf()).isEqualTo("2026-09-10");
-		assertThat(bootstrap.transactions()).hasSize(9);
+		assertThat(bootstrap.transactions()).hasSize(8);
 		assertThat(bootstrap.transactions())
 				.extracting(FdtTransaction::merchant)
 				.doesNotContain("초기 잔액 설정(시딩)");
+		assertThat(bootstrap.transactions())
+				.extracting(FdtTransaction::excludeTag)
+				.doesNotContain("SELF_TRANSFER");
 	}
 
 	@Test
@@ -49,7 +50,7 @@ class FdtBootstrapServiceTest extends SpringIntegrationTestSupport {
 		Map<String, FdtTransaction> byId = byTransactionId(service.build(USER_ID));
 
 		assertThat(byId.get("9754").transactionType()).isEqualTo("TRANSFER_OUT");
-		assertThat(byId.get("9755").transactionType()).isEqualTo("TRANSFER");
+		assertThat(byId).doesNotContainKey("9755");
 		assertThat(byId.get("9756").transactionType()).isEqualTo("DEPOSIT");
 		assertThat(byId.get("9756").excludeTag()).isEqualTo("NONE");
 		assertThat(byId.get("9752").amountKrw()).isEqualTo(100_000L);

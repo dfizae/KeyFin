@@ -89,14 +89,22 @@ const COIN_ROUTE = "/coin";
 
 const POSITIVE_ID = /^[1-9]\d*$/;
 
+/** 미확정 정리 화면에서 이 거래의 분류 창을 바로 열어 달라는 주소 (PendingCleanupScreen focusId) */
+function pendingFocusHref(transactionId: string): string {
+  return `${PENDING_CLEANUP_ROUTE}?focus=${transactionId}`;
+}
+
 function positiveIdOf(refId: string | null): string | null {
   return refId !== null && POSITIVE_ID.test(refId) ? refId : null;
 }
 
 /**
- * 알림을 눌렀을 때 갈 화면 (docs/frontend-spec.md §3 푸시 딥링크 매핑). refId 를 쓰는 건 이체 요청(이체 id, FR-PAY-03)과 예산 알림(봉투 id)뿐이다.
- * refId 가 없거나 id 모양이 아니면 그 종류의 목록 화면으로 보낸다(규칙 50: 파라미터는 믿지 않는다).
- * 코칭 대화(PAGE-31)가 아직 없어 COACHING 은 홈(코치 말풍선)으로 간다. 모르는 종류는 갈 곳이 없다(null).
+ * 알림을 눌렀을 때 갈 화면 (docs/frontend-spec.md §3 푸시 딥링크 매핑). refId 의 뜻은 종류마다 다르다 — 백엔드 발송 코드 대조(develop 392ca77, 2026-09-21):
+ * - COACHING: "새로 정리할 거래가 있어요"(TransactionNotificationService) — refId 는 **거래 id** 다. 미확정 정리 화면으로 보내 그 거래의 분류 창을 연다.
+ *   거래 상세로 바로 보내지 않는 이유: 단건 조회 API 가 없어 캐시에 없는 거래는 "찾을 수 없어요"가 된다. refId 가 없으면 홈(코치 말풍선)
+ * - BUDGET_ALERT: 봉투 id · TRANSFER_REQUEST: 이체 id(★ '승인 필요' 알림만 서버가 받는 계좌 id 를 넣는다 — 백엔드에 수정 요청, api-contract NOTIFICATION)
+ * - WARNING: 계좌 id 지만 쓰지 않고 결제 캘린더로 간다 · CLEANUP: 없음
+ * refId 가 없거나 id 모양이 아니면 그 종류의 목록 화면으로 보낸다(규칙 50: 파라미터는 믿지 않는다). 모르는 종류는 갈 곳이 없다(null).
  */
 export function notificationHref(notification: Pick<InboxNotification, "type" | "refId">): string | null {
   const id = positiveIdOf(notification.refId);
@@ -110,7 +118,7 @@ export function notificationHref(notification: Pick<InboxNotification, "type" | 
     case "WARNING":
       return PAYMENT_CALENDAR_ROUTE;
     case "COACHING":
-      return HOME_ROUTE;
+      return id === null ? HOME_ROUTE : pendingFocusHref(id);
     case "UNKNOWN":
       return null;
   }
@@ -161,11 +169,16 @@ export function toPushDeviceRequest(token: unknown): PushDeviceRequest | null {
   return typeof token === "string" && FCM_TOKEN.test(token) ? { token, platform: PUSH_PLATFORM } : null;
 }
 
-/* ───────────── FCM data 메시지 규약 (Notion 「FCM data 메시지 규약」 — 발송 코드가 없어 코드 대조는 못 했다, api-contract NOTIFICATION) ───────────── */
+/* ───────────── FCM data 메시지 규약 ─────────────
+ * 백엔드 발송 코드 대조(NotificationPushListener, develop 392ca77, 2026-09-21): 서버가 실제로 보내는 data 는
+ *   { notificationId, type, requiresAction, refId? } 이고 type 은 **알림함과 같은 5종**(COACHING·BUDGET_ALERT·TRANSFER_REQUEST·CLEANUP·WARNING),
+ *   대상 id 는 종류와 무관하게 **refId 하나**다. Notion 「FCM data 메시지 규약」의 9종·종류별 id 필드(transferId 등)는 아직 구현되지 않았다.
+ * 앱은 둘 다 읽는다 — 지금 서버(refId·WARNING)로 동작하고, 서버가 Notion 규약으로 옮겨 가도 그대로 동작하게.
+ */
 
 /**
- * 푸시 data.type 9종. 알림함 type(5종)과 이름이 다르다 — 미납 경고가 알림함은 WARNING, 푸시는 PAYMENT_RISK 이고
- * CLASSIFY_QUESTION·REACTION·NEW_LINK_FOUND·COIN_GRANTED 는 푸시에만 있다.
+ * 푸시 data.type. Notion 규약 9종 + 지금 서버가 실제로 보내는 WARNING(미납 경고 — Notion 규약에서는 PAYMENT_RISK).
+ * CLASSIFY_QUESTION·REACTION·NEW_LINK_FOUND·COIN_GRANTED 는 Notion 규약에만 있고 아직 서버가 보내지 않는다.
  */
 export const PUSH_DATA_TYPES = [
   "CLASSIFY_QUESTION",
@@ -176,6 +189,7 @@ export const PUSH_DATA_TYPES = [
   "CLEANUP",
   "NEW_LINK_FOUND",
   "PAYMENT_RISK",
+  "WARNING",
   "COIN_GRANTED",
 ] as const;
 
@@ -197,42 +211,60 @@ export function shouldShowPushBanner(type: PushDataType): boolean {
   return type !== "REACTION" && type !== "COIN_GRANTED";
 }
 
-/** 푸시 data 의 id 값. 서버가 Map<string,string> 으로 보내므로 문자열 양수 id 일 때만 쓴다 (규칙 50: 딥링크 값은 믿지 않는다) */
-function pushIdOf(data: unknown, field: string): string | null {
+/**
+ * 푸시 data 의 대상 id. 서버가 Map<string,string> 으로 보내므로 문자열 양수 id 일 때만 쓴다 (규칙 50: 딥링크 값은 믿지 않는다).
+ * Notion 규약의 종류별 필드(transferId 등)를 먼저 보고, 없으면 지금 서버가 보내는 refId 를 쓴다.
+ * refId 의 뜻이 그 종류에서 한 가지로 정해져 있을 때만 `refIdIsTarget` 을 켠다.
+ */
+function pushIdOf(data: unknown, field: string, refIdIsTarget: boolean): string | null {
   if (typeof data !== "object" || data === null) return null;
-  const raw = (data as Record<string, unknown>)[field];
-  return typeof raw === "string" && POSITIVE_ID.test(raw) ? raw : null;
+  const record = data as Record<string, unknown>;
+  const candidates = refIdIsTarget ? [record[field], record.refId] : [record[field]];
+  for (const raw of candidates) {
+    if (typeof raw === "string" && POSITIVE_ID.test(raw)) return raw;
+  }
+  return null;
 }
 
 /**
  * 푸시를 탭했을 때 갈 화면 (FR-NTF-01, docs/frontend-spec.md §3). 알림함의 notificationHref 와 종류 이름·id 필드가 달라 따로 둔다 —
  * 미납 경고가 푸시는 PAYMENT_RISK 이고, 푸시에만 있는 4종(CLASSIFY_QUESTION·REACTION·NEW_LINK_FOUND·COIN_GRANTED)의 진입 화면은 2026-09-20 사용자 결정이다.
  * id 가 없거나 모양이 아니면 그 종류의 목록 화면으로 보내고, 모르는 종류는 갈 곳이 없어 앱만 열린다(null).
- * PAYMENT_RISK 는 fixedExpenseId 가 와도 알림함 WARNING 과 같은 캘린더로 보내 도착지를 하나로 둔다.
+ * PAYMENT_RISK·WARNING 은 id 가 와도 알림함 WARNING 과 같은 캘린더로 보내 도착지를 하나로 둔다.
+ * 분류할 거래가 있다는 푸시(지금 서버는 COACHING + refId=거래 id, Notion 규약은 CLASSIFY_QUESTION + transactionId)는
+ * 알림함과 같이 미확정 정리 화면에서 그 거래의 분류 창을 연다 — 거래 상세는 단건 조회 API 가 없어 캐시에 없으면 못 연다
+ * (2026-09-21, 2026-09-20 의 '거래 상세로' 결정을 바꿈).
  */
 export function pushNotificationHref(data: unknown): string | null {
   switch (toPushDataType(data)) {
     case "TRANSFER_REQUEST": {
-      const id = pushIdOf(data, "transferId");
+      // 이체만은 refId 를 믿지 않는다. 서버가 '승인 필요' 알림에는 이체 id 가 아니라 **받는 계좌 id** 를 넣어서(TransferProposed 이벤트에
+      // 이체 id 가 없다, develop 392ca77) 그 값으로 승인 화면을 열면 없는 이체이거나 우연히 번호가 같은 다른 이체가 열린다.
+      // 돈이 움직이는 화면이라 틀린 대상을 여느니 캘린더로 보낸다 (규칙 80). 백엔드가 refId 를 이체 id 로 통일하면 true 로 바꾼다.
+      const id = pushIdOf(data, "transferId", false);
       return id === null ? PAYMENT_CALENDAR_ROUTE : `${TRANSFER_ROUTE}/${id}`;
     }
     case "BUDGET_ALERT": {
-      const id = pushIdOf(data, "envelopeId");
+      const id = pushIdOf(data, "envelopeId", true);
       return id === null ? BUDGET_ROUTE : `${BUDGET_ROUTE}/${id}`;
     }
     case "CLASSIFY_QUESTION": {
-      const id = pushIdOf(data, "transactionId");
-      return id === null ? PENDING_CLEANUP_ROUTE : `${TRANSACTION_ROUTE}/${id}`;
+      const id = pushIdOf(data, "transactionId", true);
+      return id === null ? PENDING_CLEANUP_ROUTE : pendingFocusHref(id);
     }
     case "CLEANUP":
       return PENDING_CLEANUP_ROUTE;
     case "PAYMENT_RISK":
+    case "WARNING":
       return PAYMENT_CALENDAR_ROUTE;
     case "NEW_LINK_FOUND":
       return LINKS_ROUTE;
     case "COIN_GRANTED":
       return COIN_ROUTE;
-    case "COACHING":
+    case "COACHING": {
+      const id = pushIdOf(data, "transactionId", true);
+      return id === null ? HOME_ROUTE : pendingFocusHref(id);
+    }
     case "REACTION":
       return HOME_ROUTE;
     case "UNKNOWN":

@@ -63,13 +63,14 @@ class FdtTransactionMapperTest {
 	}
 
 	@Test
-	void 본인_계좌_이동은_TRANSFER로_보낸다() {
-		Transaction transaction = accountTransaction(TransactionType.TRANSFER, ExcludeTag.SELF_TRANSFER);
+	void 본인_계좌_이동은_원장에서_제외한다() {
+		Transaction selfTransfer = accountTransaction(TransactionType.TRANSFER, ExcludeTag.SELF_TRANSFER);
+		Transaction outgoing = accountTransaction(TransactionType.TRANSFER, ExcludeTag.NONE);
 
-		FdtTransaction result = mapper.map(transaction);
+		List<FdtTransaction> result = mapper.map(List.of(selfTransfer, outgoing));
 
-		assertThat(result.transactionType()).isEqualTo("TRANSFER");
-		assertThat(result.excludeTag()).isEqualTo("SELF_TRANSFER");
+		assertThat(result).hasSize(1);
+		assertThat(result.get(0).transactionType()).isEqualTo("TRANSFER_OUT");
 	}
 
 	@Test
@@ -104,22 +105,23 @@ class FdtTransactionMapperTest {
 	}
 
 	@Test
-	void BUDGET_EXCLUDED는_INTERNAL_TRANSFER로_보낸다() {
+	void BUDGET_EXCLUDED는_유형을_바꾸지_않고_태그_그대로_보낸다() {
 		Transaction transaction = accountTransaction(TransactionType.WITHDRAW, ExcludeTag.BUDGET_EXCLUDED);
 
 		FdtTransaction result = mapper.map(transaction);
 
-		assertThat(result.excludeTag()).isEqualTo("INTERNAL_TRANSFER");
+		assertThat(result.transactionType()).isEqualTo("WITHDRAW");
+		assertThat(result.excludeTag()).isEqualTo("BUDGET_EXCLUDED");
 	}
 
 	/** 엔진이 받지 않는 값을 보내면 원장 적재가 통째로 거부된다. 태그가 늘어나면 여기서 걸린다. */
 	@Test
 	void 모든_태그가_엔진_enum_안의_값으로_나간다() {
 		List<String> engineEnum = List.of("NONE", "INTERNAL_TRANSFER", "SELF_TRANSFER", "DUTCH",
-				"EMERGENCY", "CARRYOVER");
+				"EMERGENCY", "CARRYOVER", "BUDGET_EXCLUDED");
 
 		for (ExcludeTag tag : ExcludeTag.values()) {
-			if (tag == ExcludeTag.CARRYOVER) {
+			if (tag == ExcludeTag.CARRYOVER || tag == ExcludeTag.SELF_TRANSFER) {
 				continue; // 원장에서 제외되어 전송되지 않는다
 			}
 			Transaction transaction = accountTransaction(
@@ -143,6 +145,24 @@ class FdtTransactionMapperTest {
 
 		assertThat(result).hasSize(1);
 		assertThat(result.get(0).transactionType()).isEqualTo("WITHDRAW");
+	}
+
+	@Test
+	void 카드대금_출금은_CARD_SETTLEMENT로_계좌만_실어_보낸다() {
+		Transaction transaction = Transaction.collectCardBill(
+				user(), 1L, 7L, "202609210003", "카드대금 출금", 1_300L,
+				LocalDate.of(2026, 9, 21), LocalTime.of(16, 0, 4)
+		);
+		ReflectionTestUtils.setField(transaction, "id", 300L);
+
+		FdtTransaction result = mapper.map(transaction);
+
+		assertThat(result.transactionType()).isEqualTo("CARD_SETTLEMENT");
+		assertThat(result.accountId()).isEqualTo("1");
+		assertThat(result.cardId()).isEmpty();
+		assertThat(result.merchantId()).isEmpty();
+		assertThat(result.confirmStatus()).isEqualTo("CONFIRMED");
+		assertThat(result.excludeTag()).isEqualTo("NONE");
 	}
 
 	@Test

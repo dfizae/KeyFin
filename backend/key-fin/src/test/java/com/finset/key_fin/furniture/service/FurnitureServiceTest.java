@@ -3,6 +3,7 @@ package com.finset.key_fin.furniture.service;
 import com.finset.key_fin.furniture.dto.request.FurniturePlacementUpdateRequest;
 import com.finset.key_fin.furniture.dto.response.UserFurnitureResponse;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
+import com.finset.key_fin.furniture.entity.FurnitureType;
 import com.finset.key_fin.furniture.exception.FurnitureErrorCode;
 import com.finset.key_fin.furniture.repository.UserFurnitureRepository;
 import com.finset.key_fin.global.exception.BusinessException;
@@ -18,6 +19,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Arrays;
 
 import static com.finset.key_fin.furniture.FurnitureFixtures.*;
 import static com.finset.key_fin.item.entity.ItemSlotType.*;
@@ -58,6 +60,12 @@ class FurnitureServiceTest {
 
 	@Test
 	void changesInactiveOwnedFurnitureAfterLockingUserAndReturnsOnlyTarget() {
+		var required = Arrays.stream(FurnitureType.values()).map(type -> {
+			var furniture = owned(1000 + type.ordinal(), FLOOR);
+			ReflectionTestUtils.setField(furniture.getItem(), "furnitureType", type);
+			return furniture;
+		}).toList();
+		when(furnitures.findByUserIdAndPlacementStatusIsNotNullOrderByIdAsc(1L)).thenReturn(required);
 		var target = owned(3, FLOOR);
 		ReflectionTestUtils.setField(target.getItem(), "active", false);
 		when(furnitures.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(target));

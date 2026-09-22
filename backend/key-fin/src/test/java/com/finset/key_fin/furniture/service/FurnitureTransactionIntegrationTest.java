@@ -6,6 +6,7 @@ import com.finset.key_fin.furniture.entity.FurniturePlacementDirection;
 import com.finset.key_fin.furniture.entity.FurniturePlacementStatus;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -31,6 +32,12 @@ class FurnitureTransactionIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired private FurnitureService service;
 	@Autowired private JdbcClient jdbc;
 	@Autowired private PlatformTransactionManager transactions;
+	@Autowired private DefaultFurnitureService defaults;
+
+	@BeforeEach
+	void provideRequiredFurniture() {
+		defaults.provision(88001);
+	}
 
 	@Test
 	void databaseRejectsPartialPlacementAndOutOfSceneCoordinates() {
@@ -40,6 +47,12 @@ class FurnitureTransactionIntegrationTest extends SpringIntegrationTestSupport {
 		assertThatThrownBy(() -> jdbc.sql("UPDATE user_furnitures SET position_x = 327.001 WHERE id = 88201").update())
 				.isInstanceOf(DataAccessException.class).hasMessageContaining("chk_uf_position_x")
 				.rootCause().isInstanceOfSatisfying(SQLException.class, e -> assertThat(e.getErrorCode()).isEqualTo(3819));
+		for (String positionY : new String[]{"-0.001", "586.001"}) {
+			assertThatThrownBy(() -> jdbc.sql("UPDATE user_furnitures SET position_y = :positionY WHERE id = 88201")
+					.param("positionY", new BigDecimal(positionY)).update())
+					.isInstanceOf(DataAccessException.class).hasMessageContaining("chk_uf_position_y")
+					.rootCause().isInstanceOfSatisfying(SQLException.class, e -> assertThat(e.getErrorCode()).isEqualTo(3819));
+		}
 	}
 
 	@Test

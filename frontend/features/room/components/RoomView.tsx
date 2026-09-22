@@ -6,6 +6,7 @@ import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { RoomCameraProvider, useRoomCameraControl } from "@/features/room/camera";
 import type { SceneSize } from "@/features/room/model";
 import { RoomSceneLoader } from "@/features/room/components/RoomSceneLoader";
+import { SceneReadyProvider } from "@/features/room/sceneReady";
 import { selectIsEditing, useRoomStore } from "@/features/room/store";
 
 export const ROOM_VIEW_TEST_ID = "room-view";
@@ -28,6 +29,8 @@ type RoomViewProps = {
   width?: number;
   /** 실제로 보이는 영역(pt). 방이 화면보다 넓을 때 1배 드래그 범위를 정하는 데 쓴다 */
   viewport?: SceneSize;
+  /** 방 그림을 다 읽어 방을 처음 보여 줄 수 있게 됐을 때 부른다. 홈이 대기 화면을 걷는 데 쓰며 참조가 안정적이어야 한다 */
+  onSceneReady?: () => void;
 };
 
 /**
@@ -35,7 +38,16 @@ type RoomViewProps = {
  * 핀치·드래그로 씬을 확대·이동하며, 편집 모드에서는 오브젝트 드래그와 겹치지 않도록 카메라를 잠근다.
  * 편집 진입 버튼·취소·완료는 여기 없다 — 홈은 RoomEditorOverlay, 편집 화면은 자기 헤더·하단 버튼이 맡는다(2026-09-15).
  */
-function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, onZoomedChange, width: fixedWidth, viewport }: RoomViewProps) {
+function RoomView({
+  accessibilityLabel,
+  sceneObjects,
+  panels,
+  locked = false,
+  onZoomedChange,
+  width: fixedWidth,
+  viewport,
+  onSceneReady,
+}: RoomViewProps) {
   const [measuredWidth, setMeasuredWidth] = React.useState(0);
   const width = fixedWidth ?? measuredWidth;
   const isEditing = useRoomStore(selectIsEditing);
@@ -59,7 +71,9 @@ function RoomView({ accessibilityLabel, sceneObjects, panels, locked = false, on
       >
         <RoomCameraProvider value={camera}>
           <View accessible accessibilityRole="image" accessibilityLabel={accessibilityLabel}>
-            <RoomSceneLoader />
+            <SceneReadyProvider value={onSceneReady ?? null}>
+              <RoomSceneLoader />
+            </SceneReadyProvider>
           </View>
         </RoomCameraProvider>
         {sceneObjects && width > 0 ? (

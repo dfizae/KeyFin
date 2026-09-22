@@ -22,7 +22,7 @@ public class PendingTransactionNotificationScheduler {
 	private final Clock clock;
 	private final AtomicBoolean running = new AtomicBoolean(false);
 
-	@Scheduled(cron = "${transaction.notification.cleanup-cron:0 0 21 * * *}", zone = "Asia/Seoul")
+	@Scheduled(cron = "${transaction.notification.cleanup-cron}", zone = "Asia/Seoul")
 	public void notifyDailyCleanup() {
 		if (!running.compareAndSet(false, true)) {
 			log.warn("미분류 거래 정리 알림 건너뜀 — 이전 실행 진행 중");
