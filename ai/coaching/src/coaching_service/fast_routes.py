@@ -268,9 +268,22 @@ class NaturalPurchase:
 # missing or ambiguous. Reusing the same small code set as the calendar
 # parser's ``period_clarification_required`` keeps the wire contract uniform:
 # a 4xx code, not a fabricated financial answer.
-_PURCHASE_VERB: Final = re.compile(
+# Strict buy verbs: an unambiguous purchase signal on their own.
+_PURCHASE_VERB_STRICT: Final = re.compile(
     r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|"
     r"지르면|질러도|지르려고|구입하면|구입해서"
+)
+# Casual buy phrasings. Whitespace is already stripped before matching, so
+# "사고 싶어" -> "사고싶어" and "사고싶" covers both. Deliberately excluded:
+# "사자" (=lion), bare "살래"/"살라" (살다=live), and "사고파" (collides with
+# 사고팔다 buy-and-sell); "살까봐" is redundant since "살까" already matches.
+# These collide with finance/definition/goal questions ("예금 사고싶은데 뭐가
+# 좋아"), so a casual-only match needs a concrete amount or item alias before it
+# counts as a purchase (see ``natural_purchase``). "장만하" was dropped entirely:
+# "장만하다 뜻" / "집 장만" are definition/goal, not purchase.
+_PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까")
+_PURCHASE_VERB: Final = re.compile(
+    _PURCHASE_VERB_STRICT.pattern + r"|" + _PURCHASE_VERB_CASUAL.pattern
 )
 _PURCHASE_INSTALLMENT: Final = re.compile(r"할부")
 _PURCHASE_AMOUNT: Final = re.compile(
@@ -290,6 +303,8 @@ _PURCHASE_ENVELOPE_ALIASES: Final[dict[str, str]] = {
     "노트북": "기타", "랩탑": "기타", "맥북": "기타", "폰": "기타", "휴대폰": "기타",
     "스마트폰": "기타", "아이폰": "기타", "갤럭시": "기타", "태블릿": "기타", "아이패드": "기타",
     "가전": "기타", "전자제품": "기타", "카메라": "기타",
+    "닌텐도": "기타", "스위치": "기타", "게임기": "기타", "에어팟": "기타",
+    "티비": "기타", "tv": "기타", "청소기": "기타", "에어컨": "기타", "냉장고": "기타",
     "옷": "쇼핑", "신발": "쇼핑", "가방": "쇼핑", "의류": "쇼핑",
 }
 
@@ -312,6 +327,15 @@ def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clari
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
     if not normalized or _PURCHASE_VERB.search(normalized) is None:
         return None
+    if _PURCHASE_VERB_STRICT.search(normalized) is None:
+        # Only a casual verb ("사고싶"/"사볼까"/"사둘까") matched. These collide
+        # with finance/definition/goal questions, so demand a concrete purchase
+        # signal — an amount or a known item/envelope alias — before hijacking the
+        # turn into a purchase clarify. Otherwise fall through to normal routing.
+        has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
+        has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
+        if not has_amount and not has_alias:
+            return None
     if _PURCHASE_INSTALLMENT.search(normalized) is not None:
         # Multi-installment purchases need a payment schedule the FDT contract
         # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).

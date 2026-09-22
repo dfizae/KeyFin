@@ -16,7 +16,7 @@ import pytest
 from test_api import TOKEN, TestModel, setup
 from test_engine import fixture
 
-from coaching_service.fast_routes import natural_purchase
+from coaching_service.fast_routes import NaturalPurchase, natural_purchase
 from coaching_service.llm_contract import EvidenceInput, Routing
 from coaching_service.numeric_rendering import _PURCHASE_OK, _PURCHASE_RISK, purchase_verdict_text
 from coaching_service.schemas import Bootstrap, JsonDocument, Receipt, Session, TwinIdentity
@@ -75,6 +75,95 @@ async def _bootstrap(client: httpx2.AsyncClient, twin: Bootstrap) -> str:
 
 def test_price_only_question_is_not_a_purchase_route() -> None:
     assert natural_purchase("아이폰 가격이 얼마야?") is None
+
+
+# --- casual purchase phrasings are now recognized as purchase intent (DO a) ---
+
+
+def test_casual_buy_phrasing_is_recognized_as_purchase_missing_amount() -> None:
+    # "사고싶어" must no longer fall through to off-topic: it is a purchase with a
+    # missing amount, so it clarifies rather than returning None.
+    assert natural_purchase("닌텐도 스위치 사고싶어") == "purchase_amount_required"
+
+
+def test_casual_buy_phrasing_variants_are_recognized() -> None:
+    # Casual verbs are recognized only alongside a concrete purchase signal (here
+    # an item alias). "장만하" was removed entirely (collides with 장만하다 뜻 / 집 장만).
+    for question in ("에어팟 사볼까", "청소기 사둘까", "냉장고 사고싶어"):
+        assert natural_purchase(question) == "purchase_amount_required", question
+
+
+def test_casual_buy_with_all_fields_parses_to_full_natural_purchase() -> None:
+    parsed = natural_purchase("40만원짜리 닌텐도 스위치 이번주에 현금으로 사도 될까")
+    assert isinstance(parsed, NaturalPurchase)
+    assert parsed.amount_krw == 400_000
+    assert parsed.envelope == "기타"
+    assert parsed.date_token == "this_week"
+    assert parsed.payment_hint == "cash"
+
+
+def test_given_casual_cash_question_recognized_but_missing_amount() -> None:
+    # The exact casual phrasing from the task: recognized as a purchase (verb
+    # "사도"), missing only its amount, so it clarifies instead of guessing.
+    assert natural_purchase("닌텐도 스위치 이번주에 현금으로 사도 될까") == "purchase_amount_required"
+
+
+# --- new consumer-item aliases resolve to an envelope (DO c) ---
+
+
+def test_new_item_aliases_resolve_to_envelope() -> None:
+    for item, envelope in (
+        ("닌텐도", "기타"),
+        ("스위치", "기타"),
+        ("게임기", "기타"),
+        ("에어팟", "기타"),
+        ("티비", "기타"),
+        ("tv", "기타"),
+        ("청소기", "기타"),
+        ("에어컨", "기타"),
+        ("냉장고", "기타"),
+    ):
+        parsed = natural_purchase(f"50만원짜리 {item} 이번주에 현금으로 사도 될까")
+        assert isinstance(parsed, NaturalPurchase), item
+        assert parsed.envelope == envelope, item
+
+
+# --- FALSE-POSITIVE guard: non-purchase sentences must stay non-purchase (DO a) ---
+
+
+def test_added_verbs_do_not_create_false_positive_purchases() -> None:
+    assert natural_purchase("동물원에서 사자 봤어") is None  # 사자 = lion, not 사다
+    assert natural_purchase("여기서 며칠 살래") is None  # 살다 = live, not buy
+    assert natural_purchase("복리가 뭐야") is None
+    assert natural_purchase("이번달 소비 얼마야") is None
+
+
+def test_casual_verb_without_concrete_signal_does_not_hijack_finance_routing() -> None:
+    # Regression: casual buy verbs (사고싶/사볼까/사둘까) with no amount and no item
+    # alias must fall through to finance/definition/goal routing, not emit a
+    # purchase clarify. "장만하" is gone entirely.
+    assert natural_purchase("예금 사고싶은데 뭐가 좋아") is None  # finance concept
+    assert natural_purchase("장만하다 뜻이 뭐야") is None  # definition
+    assert natural_purchase("집 장만하려면 얼마 모아야 해") is None  # goal/concept
+    assert natural_purchase("이거 사고싶다는 생각만 했어") is None  # no amount, no item
+
+
+def test_casual_verb_with_concrete_signal_is_recognized() -> None:
+    # An item alias is enough of a concrete signal to admit the casual verb.
+    assert natural_purchase("닌텐도 스위치 사고싶어") == "purchase_amount_required"
+    # A full casual purchase parses through to NaturalPurchase (or the next
+    # missing-field code); here every field is present, so it is a full purchase.
+    parsed = natural_purchase("닌텐도 스위치 30만원 이번주에 현금으로 사고싶어")
+    assert isinstance(parsed, (NaturalPurchase, str))
+    if isinstance(parsed, NaturalPurchase):
+        assert parsed.amount_krw == 300_000
+        assert parsed.envelope == "기타"
+
+
+def test_already_covered_buy_edge_stays_sane() -> None:
+    # "사서" is a pre-existing verb form; behavior is unchanged: it is a purchase
+    # with a missing amount, so it clarifies (it must not crash or become None).
+    assert natural_purchase("책을 사서 읽었어") == "purchase_amount_required"
 
 
 # --- (a) a clear single-payment purchase reaches the review route deterministically ---
