@@ -60,7 +60,7 @@ export function useNotificationSettings() {
 /**
  * 토글·시간을 바꾸는 즉시 저장한다(설정 화면의 이체 한도와 달리 저장 버튼이 없다).
  * 서버에 부분 수정이 없어 화면이 들고 있는 설정 전체를 보내고, 누른 것이 바로 움직이도록 캐시를 먼저 바꾼 뒤
- * 실패하면 되돌린다 (규칙 10). 응답이 곧 새 설정이라 성공하면 그 값으로 맞춘다.
+ * 실패하면 되돌린다 (규칙 10). PUT 은 본문 없이 200 만 주므로 성공한 값은 보낸 값 그대로 두고, 끝나면 서버 값을 다시 받아 맞춘다.
  */
 export function useUpdateNotificationSettings() {
   const queryClient = useQueryClient();
@@ -78,7 +78,7 @@ export function useUpdateNotificationSettings() {
     onError: (_error, _next, context) => {
       if (context?.previous !== undefined) queryClient.setQueryData(queryKey, context.previous);
     },
-    onSuccess: (saved) => queryClient.setQueryData<NotificationSettings>(queryKey, saved),
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
   });
 }
 
@@ -95,7 +95,7 @@ export function useCoachPersona() {
   return useQuery({ ...coachPersonaQueryOptions(), enabled: authStatus === "authenticated" });
 }
 
-/** 고르는 즉시 저장한다. 알림 설정과 같은 방식으로 캐시를 먼저 바꾸고 실패하면 되돌린다 */
+/** 고르는 즉시 저장한다. 알림 설정과 같은 방식으로 캐시를 먼저 바꾸고 실패하면 되돌린다. PUT 본문이 없어 성공 값은 고른 값이다 */
 export function useUpdateCoachPersona() {
   const queryClient = useQueryClient();
   const queryKey = settingsKeys.coach();
@@ -112,6 +112,6 @@ export function useUpdateCoachPersona() {
     onError: (_error, _persona, context) => {
       if (context?.previous !== undefined) queryClient.setQueryData(queryKey, context.previous);
     },
-    onSuccess: (saved) => queryClient.setQueryData<CoachPersona>(queryKey, saved),
+    onSettled: () => queryClient.invalidateQueries({ queryKey }),
   });
 }
