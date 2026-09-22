@@ -1,10 +1,13 @@
 import { ApiError } from "@/api/error";
-import { chatHistoryMock, resetCoachingMocks, sendChatMock, setCoachingUnavailableMock } from "@/api/mocks/coaching";
-import { chatErrorMessage, isCoachUnavailable } from "@/features/coaching/errors";
+import { chartHtmlMock, chatHistoryMock, resetCoachingMocks, sendChatMock, setCoachingUnavailableMock } from "@/api/mocks/coaching";
+import { MOCK_CHART_ID } from "@/api/mocks/coaching-chart";
+import { chartErrorMessage, chatErrorMessage, isChartNotFoundError, isCoachUnavailable } from "@/features/coaching/errors";
 import {
   appendChatTurn,
   CHAT_MESSAGE_MAX_LENGTH,
   EMPTY_CHAT_HISTORY,
+  parseChartId,
+  toChartHtml,
   toChatHistory,
   toChatReply,
   validateChatMessage,
@@ -23,7 +26,7 @@ const replyDto: ChatReplyDto = {
 
 describe("coaching model", () => {
   it("답변 DTO 를 화면 모델로 바꾸고 answered 만 실제 답변으로 본다", () => {
-    expect(toChatReply(replyDto)).toEqual({ ...replyDto, isAnswered: true });
+    expect(toChatReply(replyDto)).toEqual({ ...replyDto, isAnswered: true, chartId: null });
     const declined = toChatReply({ ...replyDto, kind: "COACHING", status: "needs_data", source: "template" });
     expect(declined.isAnswered).toBe(false);
     expect(declined.kind).toBe("COACHING");
@@ -60,8 +63,8 @@ describe("coaching model", () => {
     const next = appendChatTurn(EMPTY_CHAT_HISTORY, "외식 얼마 남았어?", toChatReply(replyDto));
     expect(next.hasSession).toBe(true);
     expect(next.messages).toEqual([
-      { role: "user", content: "외식 얼마 남았어?" },
-      { role: "assistant", content: replyDto.reply },
+      { role: "user", content: "외식 얼마 남았어?", chartId: null },
+      { role: "assistant", content: replyDto.reply, chartId: null },
     ]);
   });
 });
@@ -90,7 +93,7 @@ describe("coaching mocks", () => {
     expect(history.expiresAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
     expect(history.messages).toEqual([
       { role: "user", content: "다음 달 괜찮아?" },
-      { role: "assistant", content: reply.reply },
+      { role: "assistant", content: reply.reply, chartId: MOCK_CHART_ID },
     ]);
   });
 
@@ -99,5 +102,53 @@ describe("coaching mocks", () => {
     setCoachingUnavailableMock(true);
     expect(() => sendChatMock("외식 얼마 남았어?")).toThrow(ApiError);
     expect(() => chatHistoryMock()).toThrow(ApiError);
+  });
+});
+
+describe("예산 예측 차트(HTML 중계, 경로 TBD)", () => {
+  afterEach(() => resetCoachingMocks());
+
+  it("라우트 파라미터는 URL 안전 글자 64자까지만 차트 id 로 본다", () => {
+    expect(parseChartId(MOCK_CHART_ID)).toBe(MOCK_CHART_ID);
+    expect(parseChartId([MOCK_CHART_ID, "other"])).toBe(MOCK_CHART_ID);
+    expect(parseChartId(undefined)).toBeNull();
+    expect(parseChartId("")).toBeNull();
+    expect(parseChartId("../etc")).toBeNull();
+    expect(parseChartId("a".repeat(65))).toBeNull();
+  });
+
+  it("HTML 문서만 받고, 빈 문자열·JSON 은 계약 불일치다", () => {
+    const html = chartHtmlMock(MOCK_CHART_ID);
+    expect(toChartHtml(html)).toBe(html);
+    expect(() => toChartHtml("")).toThrow(ContractMismatchError);
+    expect(() => toChartHtml('{"chart":{}}')).toThrow(ContractMismatchError);
+    expect(() => toChartHtml(null)).toThrow(ContractMismatchError);
+  });
+
+  it("답변·이력의 chartId 는 모양이 맞을 때만 남고, 목의 COACHING 답변에는 차트가 딸린다", () => {
+    expect(toChatReply({ ...replyDto, chartId: MOCK_CHART_ID }).chartId).toBe(MOCK_CHART_ID);
+    expect(toChatReply({ ...replyDto, chartId: "../x" }).chartId).toBeNull();
+    expect(toChatReply(replyDto).chartId).toBeNull();
+    const coaching = toChatReply(sendChatMock("다음 달 괜찮아?"));
+    expect(coaching.kind).toBe("COACHING");
+    expect(coaching.chartId).toBe(MOCK_CHART_ID);
+    const history = toChatHistory(chatHistoryMock());
+    expect(history.messages.map((m) => m.chartId)).toEqual([null, MOCK_CHART_ID]);
+    const appended = appendChatTurn(EMPTY_CHAT_HISTORY, "q", coaching);
+    expect(appended.messages[1]?.chartId).toBe(MOCK_CHART_ID);
+  });
+
+  it("모르는 id 는 404 로 못 찾음이고, 코칭 서버 부재는 대화와 같은 문구다", () => {
+    let notFound: unknown;
+    try {
+      chartHtmlMock("0000");
+    } catch (error) {
+      notFound = error;
+    }
+    expect(notFound).toBeInstanceOf(ApiError);
+    expect(isChartNotFoundError(notFound)).toBe(true);
+    expect(isChartNotFoundError(new ApiError(503, "AI_001", ""))).toBe(false);
+    expect(chartErrorMessage(new ApiError(503, "AI_001", "x"))).toBe(chatErrorMessage(new ApiError(503, "AI_001", "x")));
+    expect(chartErrorMessage(new Error("boom"))).toBe("차트를 불러오지 못했어요. 다시 시도해 주세요.");
   });
 });

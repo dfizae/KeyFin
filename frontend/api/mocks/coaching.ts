@@ -1,4 +1,5 @@
-import { ApiError } from "@/api/error";
+import { ApiError, UNKNOWN_ERROR_CODE } from "@/api/error";
+import { MOCK_CHART_HTML, MOCK_CHART_ID } from "@/api/mocks/coaching-chart";
 import type { ChatHistoryDto, ChatMessageDto, ChatReplyDto } from "@/features/coaching/model";
 import { getKSTParts } from "@/lib/date";
 
@@ -7,6 +8,7 @@ import { getKSTParts } from "@/lib/date";
  * 서버처럼 세션을 하나 들고 있다: 첫 질문에 세션이 열려 24시간 뒤 만료 시각이 잡히고, 그 뒤 질문·답변이 이력에 쌓인다.
  * 답변은 질문에 예측·위험·다음 달·괜찮 이 들어가면 COACHING(engine 집계), 아니면 CHAT(llm) 이다.
  * 답을 못 하는 경우도 본다: 주식·코인 투자·로또 는 out_of_scope 안내 문구(template).
+ * COACHING 답변에는 예산 예측 차트 id(MOCK_CHART_ID)를 붙인다 — 필드 이름·위치는 앱 제안(TBD 2026-09-22).
  */
 const SESSION_HOURS = 24;
 const UNAVAILABLE_MESSAGE = "코치가 잠시 자리를 비웠어요. 잠시 후 다시 시도해 주세요.";
@@ -45,6 +47,7 @@ function answer(message: string): ChatReplyDto {
       source: "engine",
       fallbackReason: null,
       answerId: id,
+      chartId: MOCK_CHART_ID,
     };
   }
   return {
@@ -70,8 +73,18 @@ export function sendChatMock(message: string): ChatReplyDto {
     session = { messages: [], expiresAt: kstLocalDateTime(new Date(Date.now() + SESSION_HOURS * 60 * 60 * 1000)) };
   }
   const reply = answer(message);
-  session.messages.push({ role: "user", content: message }, { role: "assistant", content: reply.reply });
+  session.messages.push({ role: "user", content: message }, { role: "assistant", content: reply.reply, chartId: reply.chartId ?? null });
   return reply;
+}
+
+/**
+ * GET /coaching/charts/{chartId}/html 목 — 중계 경로·오류 코드는 백엔드 미확정(TBD, 2026-09-22).
+ * 목 id 하나만 있고 나머지는 404 로 본다(AI 서버는 다른 소유자의 차트도 404 다). 못 찾음 판정은 code 가 아니라 status 로 한다.
+ */
+export function chartHtmlMock(chartId: string): string {
+  if (unavailable) throw new ApiError(503, "AI_001", UNAVAILABLE_MESSAGE);
+  if (chartId !== MOCK_CHART_ID) throw new ApiError(404, UNKNOWN_ERROR_CODE, "차트를 찾을 수 없습니다.");
+  return MOCK_CHART_HTML;
 }
 
 /** 코칭 서버가 자리를 비운 상황(503 AI_001)을 흉내 낸다 */

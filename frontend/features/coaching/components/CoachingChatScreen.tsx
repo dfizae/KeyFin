@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { MessageCircle, SendHorizontal, WifiOff } from "lucide-react-native";
+import { ChartLine, MessageCircle, SendHorizontal, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { FlatList, Image, Pressable, View } from "react-native";
 
@@ -22,6 +22,8 @@ import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
 const CLEANUP_ROUTE = "/transaction/pending";
+const CHART_ROUTE = "/coaching/chart";
+export const CHART_LINK_LABEL = "예산 예측 차트 보기";
 export const COACH_TITLE = "코치";
 export const CHAT_INPUT_LABEL = "코치에게 물어보기";
 export const SEND_LABEL = "보내기";
@@ -59,6 +61,7 @@ type ChatRow =
  * 홈 코치에 있던 '미확정 결제 n건 정리' 링크(2026-09-13 사용자 결정)는 여기 상단으로 옮겼다.
  * Pencil 미대조(시안 없음). 내 질문만 오른쪽 `bg-primary` 말풍선이고, 코치 답변은 말풍선 없이 고양이 얼굴 아래 바탕에 그대로 적는다
  * (2026-09-22 사용자 요청 — 처음엔 얼굴 옆 bg-card 말풍선이었는데 폰 폭에서 글이 세로로 길게 늘어졌다).
+ * 답변에 예산 예측 차트가 딸리면(chartId, 계약 TBD) 글 아래 '차트 보기' 버튼이 PAGE-31B 로 간다 — 차트 HTML 은 한 페이지라 말풍선에 넣지 않는다.
  */
 function CoachingChatScreen() {
   const router = useRouter();
@@ -86,7 +89,7 @@ function CoachingChatScreen() {
     const list: ChatRow[] = messages.map((message, index) => ({ key: `m-${index}`, kind: "message", message }));
     // 보낸 질문은 답이 올 때까지(성공 시 캐시에 붙는다) 여기서만 보인다. 실패하면 질문 아래에 다시 시도를 둔다.
     if (send.isPending || send.isError) {
-      list.push({ key: "q-pending", kind: "message", message: { role: "user", content: send.variables ?? "" } });
+      list.push({ key: "q-pending", kind: "message", message: { role: "user", content: send.variables ?? "", chartId: null } });
       list.push(send.isPending ? { key: "thinking", kind: "thinking" } : { key: "error", kind: "error", message: chatErrorMessage(send.error) });
     }
     return list;
@@ -115,7 +118,9 @@ function CoachingChatScreen() {
             data={rows}
             keyExtractor={(row) => row.key}
             contentContainerClassName="gap-3 px-6 pb-4"
-            renderItem={({ item }) => <ChatRowView row={item} onRetry={retry} />}
+            renderItem={({ item }) => (
+              <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+            )}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
@@ -160,7 +165,9 @@ function CoachingChatScreen() {
   );
 }
 
-function ChatRowView({ row, onRetry }: { row: ChatRow; onRetry: () => void }) {
+type ChatRowViewProps = { row: ChatRow; onRetry: () => void; onOpenChart: (chartId: string) => void };
+
+function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
   if (row.kind === "thinking") {
     return (
       <CoachReply>
@@ -185,6 +192,7 @@ function ChatRowView({ row, onRetry }: { row: ChatRow; onRetry: () => void }) {
     );
   }
   const { message } = row;
+  const { chartId } = message;
   if (message.role === "user") {
     return (
       <View className="self-end rounded-2xl bg-primary px-4 py-3" style={BUBBLE_MAX_STYLE} accessibilityRole="text">
@@ -199,6 +207,20 @@ function ChatRowView({ row, onRetry }: { row: ChatRow; onRetry: () => void }) {
       <Text className="text-label text-foreground" style={CHAT_TEXT_STYLE}>
         {message.content}
       </Text>
+      {chartId === null ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={CHART_LINK_LABEL}
+          hitSlop={6}
+          onPress={() => onOpenChart(chartId)}
+          className="flex-row items-center gap-1.5 self-start rounded-lg bg-accent px-3.5 py-2 active:opacity-80"
+        >
+          <Icon as={ChartLine} size={16} className="text-primary" />
+          <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
+            {CHART_LINK_LABEL}
+          </Text>
+        </Pressable>
+      )}
     </CoachReply>
   );
 }

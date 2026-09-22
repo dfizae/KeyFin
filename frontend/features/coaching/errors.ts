@@ -22,3 +22,16 @@ export function chatErrorMessage(error: unknown): string {
 export function isCoachUnavailable(error: unknown): boolean {
   return isApiError(error) && error.code === COACH_UNAVAILABLE_CODE;
 }
+
+export const CHART_ERROR_MESSAGE = "차트를 불러오지 못했어요. 다시 시도해 주세요.";
+
+/** 차트 HTML(GET /coaching/charts/{chartId}/html) 실패 문구. 코칭 서버 부재(AI_001)는 대화와 같은 문구다 */
+export function chartErrorMessage(error: unknown): string {
+  if (!isApiError(error)) return CHART_ERROR_MESSAGE;
+  return CHAT_MESSAGES[error.code] ?? (error.message !== "" ? error.message : CHART_ERROR_MESSAGE);
+}
+
+/** 없거나 다른 계정의 차트(AI 서버는 둘 다 404). 오류 code 는 백엔드 미확정이라 status 로 본다(TBD 2026-09-22) */
+export function isChartNotFoundError(error: unknown): boolean {
+  return isApiError(error) && error.status === 404;
+}

@@ -1,7 +1,8 @@
 import { api, isMocked } from "@/api/client";
-import { chatHistoryMock, sendChatMock } from "@/api/mocks/coaching";
+import { chartHtmlMock, chatHistoryMock, sendChatMock } from "@/api/mocks/coaching";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
+  toChartHtml,
   toChatHistory,
   toChatReply,
   type ChatHistory,
@@ -30,4 +31,19 @@ export async function sendChatMessage(message: string): Promise<ChatReply> {
   const body: ChatRequestDto = { message };
   const { data } = await api.post<ChatReplyDto>("/coaching/chat", body);
   return toChatReply(data);
+}
+
+/**
+ * GET /coaching/charts/{chartId}/html — 예산 예측 차트를 자기완결 HTML 로 받는다(AI 서버 `/v1/charts/{id}/html` 을 백엔드가 중계).
+ * 경로·오류 코드는 백엔드 미확정(TBD, 2026-09-22 — HTML 로 받기로 한 팀 결정만 확정). 응답이 JSON 봉투가 아니라 문서라
+ * text 로 받고, 인터셉터의 unwrapEnvelope 는 문자열을 그대로 돌려준다. 오류: 404(없거나 다른 계정) · 503 AI_001.
+ */
+export async function getChartHtml(chartId: string, signal?: AbortSignal): Promise<string> {
+  if (isMocked("coaching")) return toChartHtml(await withMockLatency(chartHtmlMock(chartId), signal));
+  const { data } = await api.get<string>(`/coaching/charts/${encodeURIComponent(chartId)}/html`, {
+    signal,
+    responseType: "text",
+    headers: { Accept: "text/html" },
+  });
+  return toChartHtml(data);
 }
