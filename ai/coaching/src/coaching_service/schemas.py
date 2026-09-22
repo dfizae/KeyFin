@@ -105,6 +105,34 @@ class Receipt(Frozen):
     period: ResolvedPeriod | None = None
 
 
+class ChartPurchaseHint(Frozen):
+    """구매검토 대화가 차트 요청에 실을 예정 구매. 봉투·금액·날짜만 전달한다.
+
+    ``POST /v1/charts/budget-forecast`` 본문의 ``purchase`` 블록과 같은 모양이라
+    앱이 그대로 보내면 구매 전/후 누적선을 겹쳐 그린다. 계좌·카드는 담지 않는다.
+    """
+
+    envelope: str = Field(min_length=1, max_length=40)
+    amount_krw: Annotated[int, Field(ge=1)]
+    on_date: DateOnly
+
+
+class ChartHint(Frozen):
+    """예측·구매검토 대화가 안내하는 budget-forecast 차트 요청 본문.
+
+    앱이 시각화를 원할 때 그대로 ``POST /v1/charts/budget-forecast`` 로 보내면
+    이 대화와 같은 예산 월의 차트를 얻는다. 별도 시뮬레이션이나 차트 저장을 하지
+    않으며, ``period_start`` 는 대화 기준일이 속한 예산 월의 1일이라 그 기준일을
+    포함하는 유효한 예산 주기다. ``purchase`` 는 구매검토 대화에서 예정 구매가
+    기준일 이후·예산 월 안에 있을 때만 채우고, 그 외에는 ``None`` 을 유지한다.
+    """
+
+    endpoint: Literal["/v1/charts/budget-forecast"] = "/v1/charts/budget-forecast"
+    period_start: DateOnly
+    question: str | None = None
+    purchase: ChartPurchaseHint | None = None
+
+
 class Coaching(Frozen):
     id: str
     text: str
@@ -113,6 +141,8 @@ class Coaching(Frozen):
     fallback_reason: str | None
     receipt: Receipt
     created_at: float
+    # 예측·구매검토 대화에서만 채우는 선택적 힌트. 다른 대화는 None을 유지한다.
+    chart_hint: ChartHint | None = None
 
 
 class EventResult(Frozen):

@@ -17,7 +17,11 @@
 
 **메시지 응답이 이제 두 형식입니다.** 클라이언트가 모든 응답에 `receipt`가 있다고 가정하면 수정해야 합니다. `answer_type`이 있으면 `ChatAnswer`, `receipt`가 있으면 기존 `Coaching`으로 처리합니다. 기존 코칭·차트의 응답 필드는 유지했습니다. 최신 스키마는 실행 중인 `/docs`와 `routes.py`, `chat_answers.py`에 있습니다.
 
+예측 대화(`Coaching`)는 선택적 `chart_hint`를 함께 반환할 수 있습니다. `mode=forecast` 예측이나 구매 검토 대화처럼 예산 차트가 의미 있는 경우에만 채워지며, 그 밖의 대화는 `chart_hint=null`입니다. 값이 있으면 `{"endpoint":"/v1/charts/budget-forecast", "period_start", "question", "purchase"}` 형태로, 이 대화와 같은 예산 월의 차트를 얻기 위해 앱이 그대로 [`POST /v1/charts/budget-forecast`](charts.md)로 보낼 본문입니다. `period_start`는 대화 기준일이 속한 예산 월의 1일이라 그 기준일을 포함하는 유효한 예산 주기입니다. `purchase`는 구매 what-if 차트를 위한 자리로 현재는 항상 `null`입니다. 서버는 힌트를 만들 때 두 번째 시뮬레이션이나 차트 저장을 하지 않으므로, 시각화가 필요할 때만 앱이 한 번 더 호출합니다. 엔드포인트는 그대로 분리되어 있습니다.
+
 `ChatAnswer`는 `id`, `answer_type`, `status`, `text`, `wording_source`, `model`, `fallback_reason`, `evidence`, `created_at`을 반환합니다.
+
+소비 조회(`answer_type=spending_history`) 응답은 봉투별 합계를 1급 필드로도 제공합니다. `rows`는 `{"envelope", "total_krw", "count"}` 배열이고 `total_krw`는 집계 총액입니다. 같은 값은 이전과 동일하게 `evidence.spending.rows`·`evidence.spending.total_krw`에도 그대로 남아 있어 기존 클라이언트는 영향을 받지 않습니다. 집계가 없는 상태(`needs_data`·`needs_clarification`)와 다른 모든 `answer_type`은 `rows=[]`, `total_krw=null`을 유지합니다. 앱은 `rows`로 봉투별 표를, `text`로 사람 문장을 그립니다.
 
 새로 저장되는 assistant 메시지는 `response: {"kind":"chat" 또는 "coaching", "id":"원본 답변 ID"}`도 보존합니다. `chat`은 `/v1/answers/{id}`, `coaching`은 `/v1/coaching/{id}`로 조회해 재접속 후에도 출처·자료 상태·예측 기간을 복원합니다. 참조와 원본 답변은 같은 트랜잭션에 저장되며 각 GET은 같은 소유자 검사에 따릅니다. 사용자 메시지의 참조는 허용하지 않습니다. 이전 버전에 저장한 메시지는 `response=null`이며 본문에서 원본 ID를 추측하지 않습니다.
 
