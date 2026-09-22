@@ -40,7 +40,8 @@ public interface RoomControllerDocs {
 					content = @Content(
 							mediaType = APPLICATION_JSON_VALUE,
 							examples = @ExampleObject(
-									name = "방 조회 성공 (가구 목록 축약, 바닥 가구 7개 설치)",
+									name = "방 조회 성공",
+									description = "가구 목록은 축약했으며 바닥 가구 7개가 설치된 예시입니다.",
 									value = """
 											{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{
 											 "avatar":{"equipped":[{"userItemId":101,"slotType":"HEAD","itemId":1,"assetKey":"hat_blue"}],"reaction":null},
