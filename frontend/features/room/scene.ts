@@ -88,18 +88,6 @@ function withDirection(placement: Placement, direction: PlacementDirection): Pla
   return next;
 }
 
-/**
- * 바닥 다각형. floor-tall.jpg 에서 바닥(나뭇결)이 시작되는 y 를 열마다 훑어 최소자승으로 피팅한 값이다(2026-09-18).
- * 왼쪽 벽 (0,371)→코너 (164,286)→오른쪽 벽 (327,371), 아래는 화면 끝. 바닥을 다시 만들면 같이 갱신한다.
- * 이 그림은 코너가 정중앙이라 좌우가 대칭이다(옛 그림은 코너가 왼쪽 41%).
- */
-export const FLOOR_POLYGON: ScenePolygon = [
-  { x: 0, y: 371 },
-  { x: 164, y: 286 },
-  { x: 327, y: 371 },
-  { x: 327, y: 586 },
-  { x: 0, y: 586 },
-];
 
 /**
  * 배치 격자를 얹는 세 면. 벽·바닥 경계선은 floor-tall.jpg 를 픽셀로 재서 얻었다(2026-09-18).
@@ -148,6 +136,27 @@ export const SURFACES: Record<Surface, SurfaceDef> = {
     rows: 4,
   },
 };
+
+/** 코너에서 벽선(바닥 격자의 뒤쪽 두 변)을 따라 x 가 주어진 값이 되는 점 */
+function wallLinePoint(corner: ScenePoint, along: ScenePoint, x: number): ScenePoint {
+  return { x, y: corner.y + ((x - corner.x) * (along.y - corner.y)) / (along.x - corner.x) };
+}
+
+/**
+ * 바닥 다각형. 걸레받이선은 floor-tall.jpg 를 픽셀로 재서 피팅한 값이고(2026-09-18) 코너 (164,286)·화면 아래는 화면 끝이다.
+ * 이 그림은 코너가 정중앙이라 좌우가 대칭이다(옛 그림은 코너가 왼쪽 41%). 바닥을 다시 만들면 SURFACES.FLOOR 와 같이 갱신한다.
+ *
+ * 벽 쪽 두 변은 손으로 반올림한 (0,371)·(327,371) 이 아니라 **바닥 격자(SURFACES.FLOOR.quad)의 뒤쪽 두 변을 화면 끝까지 연장**한 점이다
+ * (2026-09-22 사용자 보고). 반올림한 값은 격자 벽선보다 기울기가 0.6% 가팔라, 벽에 붙인 칸의 뒤쪽 모서리가 코너에서 멀어질수록
+ * 다각형 밖으로 나갔다 — 냉장고를 오른쪽 벽 3번째 타일에 붙이면 0.5pt 차이로 거부됐다. 같은 선을 쓰면 벽에 붙은 칸은 어디든 경계 위다.
+ */
+export const FLOOR_POLYGON: ScenePolygon = [
+  wallLinePoint(SURFACES.FLOOR.quad[0], SURFACES.FLOOR.quad[3], 0),
+  SURFACES.FLOOR.quad[0],
+  wallLinePoint(SURFACES.FLOOR.quad[0], SURFACES.FLOOR.quad[1], SCENE_WIDTH),
+  { x: SCENE_WIDTH, y: SCENE_HEIGHT },
+  { x: 0, y: SCENE_HEIGHT },
+];
 
 /** 경계 위의 점은 다각형 판정에서 안팎이 갈리므로 꼭짓점을 발자국 안쪽으로 이만큼 당겨서 본다. */
 const EDGE_INSET = 0.02;

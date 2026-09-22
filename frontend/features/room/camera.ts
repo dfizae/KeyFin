@@ -75,6 +75,11 @@ type UseRoomCameraControlOptions = {
  * 방 씬의 카메라와 제스처. 핀치는 두 손가락 중심을 고정한 채 1~2배로 확대하고 더블탭은 1배로 되돌린다.
  * 드래그는 ① 확대했을 때, 또는 ② 1배인데도 캔버스가 화면을 넘칠 때(홈의 cover 맞춤) 켠다 — 넘친 좌우를 볼 방법이 그것뿐이다.
  * 캔버스가 화면에 딱 맞는 화면(방 꾸미기)에서는 전과 같이 확대해야만 드래그된다.
+ *
+ * 드래그는 시작점 기준 누적(translation)이 아니라 **직전 프레임 대비 변화량(changeX·changeY)** 으로 옮긴다(2026-09-22 사용자 보고).
+ * 핀치와 드래그가 동시에 살아 있어(두 손가락은 둘 다 만족한다) 누적 방식이면 드래그가 매 프레임 "핀치 전 위치 + 손가락 이동" 으로
+ * 카메라를 덮어써, 핀치가 초점을 지키려고 옮겨 둔 이동값이 사라졌다. 홈에서는 그 결과 ty 가 0 근처(캔버스 위쪽 = 천장)에 묶여
+ * 확대할수록 천장만 보이고 바닥으로 내려가지 못했다. 변화량을 지금 카메라에 더하면 두 제스처가 서로를 지우지 않는다.
  */
 export function useRoomCameraControl({ width, locked, onZoomedChange, viewport }: UseRoomCameraControlOptions) {
   const scale = useSharedValue(MIN_ZOOM);
@@ -83,8 +88,6 @@ export function useRoomCameraControl({ width, locked, onZoomedChange, viewport }
   const camera = React.useMemo<RoomCamera>(() => ({ scale, tx, ty }), [scale, tx, ty]);
 
   const startScale = useSharedValue(MIN_ZOOM);
-  const startTx = useSharedValue(0);
-  const startTy = useSharedValue(0);
 
   const [zoomed, setZoomed] = React.useState(false);
   const handleZoomedChange = React.useCallback(
@@ -143,12 +146,10 @@ export function useRoomCameraControl({ width, locked, onZoomedChange, viewport }
       .averageTouches(true)
       .onStart(() => {
         stopCamera(camera);
-        startTx.value = camera.tx.value;
-        startTy.value = camera.ty.value;
       })
-      .onUpdate((event) => {
+      .onChange((event) => {
         const next = clampCamera(
-          { scale: camera.scale.value, tx: startTx.value + event.translationX, ty: startTy.value + event.translationY },
+          { scale: camera.scale.value, tx: camera.tx.value + event.changeX, ty: camera.ty.value + event.changeY },
           canvas,
           view
         );
@@ -173,7 +174,7 @@ export function useRoomCameraControl({ width, locked, onZoomedChange, viewport }
       });
 
     return Gesture.Exclusive(doubleTap, Gesture.Simultaneous(pinch, pan));
-  }, [locked, width, zoomed, viewportWidth, viewportHeight, camera, startScale, startTx, startTy]);
+  }, [locked, width, zoomed, viewportWidth, viewportHeight, camera, startScale]);
 
   return { camera, gesture, zoomed };
 }
