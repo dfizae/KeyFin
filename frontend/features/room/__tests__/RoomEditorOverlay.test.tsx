@@ -117,13 +117,13 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa_default")!.anchor);
   });
 
-  it("변경이 없어도 완료는 최종 3종을 한 번에 보낸다", async () => {
+  it("변경이 없어도 완료는 최종 4종을 한 번에 보낸다", async () => {
     const save = jest.spyOn(furnitureApi, "updateFurniturePlacements");
     await renderEditing();
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save.mock.calls[0][0].placements).toHaveLength(3);
+    expect(save.mock.calls[0][0].placements).toHaveLength(4);
   });
 
   it("기본 소파를 보관하고 구매 소파를 꺼내 전체 배치를 저장한다", async () => {
@@ -180,8 +180,8 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     });
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
-    expect(save.mock.calls[0][0].placements).toHaveLength(3);
-    expect(client.getQueryData<UserFurniture[]>(roomKeys.furnitures())).toHaveLength(7);
+    expect(save.mock.calls[0][0].placements).toHaveLength(4);
+    expect(client.getQueryData<UserFurniture[]>(roomKeys.furnitures())).toHaveLength(8);
   });
 
   it("화면에 없는 설치 가구를 보존하고 응답 목록을 캐시에 반영한다", async () => {
@@ -203,7 +203,7 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     });
     expect(furnitureListMock().find((item) => item.userFurnitureId === 900)).toEqual(hidden);
     expect(client.getQueryData<UserFurniture[]>(roomKeys.furnitures())).toEqual(toUserFurnitures(furnitureListMock()));
-    expect(client.getQueryData<Room>(roomKeys.home())!.furnitures).toHaveLength(4);
+    expect(client.getQueryData<Room>(roomKeys.home())!.furnitures).toHaveLength(5);
   });
 
   it("저장 후 방 재조회 실패에도 성공 응답과 로컬 보드 위치를 유지한다", async () => {

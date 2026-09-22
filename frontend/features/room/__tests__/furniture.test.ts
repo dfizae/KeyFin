@@ -132,6 +132,20 @@ describe("withDefaultWallItems — 서버에 없는 벽 오브젝트를 기본 �
 });
 
 describe("toPlacementRequest — 씬 배치를 저장 요청으로", () => {
+  it("기본 4종의 좌표가 서버 신규 지급 좌표와 같고 자동 보정으로 움직이지 않는다", () => {
+    const positions = {
+      sofa_default: [198.125, 443.250], tv_default: [190.625, 334.688],
+      dining_table_original: [64.604, 362.438], coffee_table_original: [127.417, 429.875],
+    } as const;
+    for (const [itemId, [positionX, positionY]] of Object.entries(positions)) {
+      const placement = DEFAULT_LAYOUT.find((item) => item.itemId === itemId)!;
+      expect(toPlacementRequest(placement)).toMatchObject({ positionX, positionY, placementDirection: "FRONT_RIGHT" });
+      const [settled] = toPlacements([{ ...sofa, assetKey: itemId, positionX, positionY }]);
+      expect(settled.anchor.x).toBeCloseTo(positionX, 3);
+      expect(settled.anchor.y).toBeCloseTo(positionY, 3);
+    }
+  });
+
   it("면·방향·좌표를 채우고 좌표는 소수 3자리로 다듬는다", () => {
     const placement: Placement = { itemId: "sofa_default", userFurnitureId: 204, anchor: { x: 164.87512, y: 226 } };
 

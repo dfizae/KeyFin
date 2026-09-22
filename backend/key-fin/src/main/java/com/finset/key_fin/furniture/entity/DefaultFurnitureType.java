@@ -4,9 +4,11 @@ import java.math.BigDecimal;
 
 public enum DefaultFurnitureType {
 
-	FRIDGE("280.438", "217.813"),
-	SOFA("164.875", "226.000"),
-	TV("172.719", "176.094");
+	// Match frontend DEFAULT_CELLS / cellAnchor, rounded to the API's three decimal places.
+	SOFA("198.125", "443.250"),
+	TV("190.625", "334.688"),
+	DINING_TABLE("64.604", "362.438"),
+	COFFEE_TABLE("127.417", "429.875");
 
 	private final BigDecimal initialX;
 	private final BigDecimal initialY;

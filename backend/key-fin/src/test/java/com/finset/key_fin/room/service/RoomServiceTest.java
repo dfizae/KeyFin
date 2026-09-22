@@ -51,7 +51,7 @@ class RoomServiceTest {
 		when(coin.getBalanceAfter()).thenReturn(37);
 		when(coins.findFirstByUserIdOrderByIdDesc(1L)).thenReturn(Optional.of(coin));
 		when(coins.existsByUserIdAndGrantDateAndReasonCode(1L, LocalDate.of(2026, 9, 19), FinCoinReason.ATTEND)).thenReturn(true);
-		when(stickers.synchronize(1L)).thenReturn(new StickerStatusResponse(2, 3, false));
+		when(stickers.synchronize(1L)).thenReturn(new StickerStatusResponse(2, 4, false));
 		var result = service.getRoom(1L);
 		assertThat(result.coin().balance()).isEqualTo(37);
 		assertThat(result.attendance().checkedToday()).isTrue();

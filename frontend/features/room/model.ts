@@ -330,7 +330,7 @@ export type PlacedFurnitureDto = {
   positionX: number;
   positionY: number;
   layer: number;
-  /** 기본 가구 식별값(FRIDGE·SOFA·TV). 일반 가구는 null */
+  /** 기본 지급 상품 식별값(SOFA·TV·DINING_TABLE·COFFEE_TABLE). 그 외 상품은 null */
   defaultFurnitureType: string | null;
   furnitureType: FurnitureType | null;
   stickerAttached: boolean;
@@ -338,7 +338,7 @@ export type PlacedFurnitureDto = {
   canUnplace: boolean;
 };
 
-export const FURNITURE_TYPES = ["FRIDGE", "SOFA", "TV"] as const;
+export const FURNITURE_TYPES = ["SOFA", "TV", "DINING_TABLE", "COFFEE_TABLE"] as const;
 export type FurnitureType = (typeof FURNITURE_TYPES)[number];
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };

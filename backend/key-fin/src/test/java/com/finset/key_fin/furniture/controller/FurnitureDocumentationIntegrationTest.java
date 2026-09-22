@@ -37,7 +37,7 @@ class FurnitureDocumentationIntegrationTest extends SpringIntegrationTestSupport
 						"userFurnitureId", "itemId", "name", "slotType", "assetKey", "placed", "placementStatus", "placementDirection", "positionX", "positionY", "layer",
 						"defaultFurnitureType", "furnitureType", "stickerAttached", "canUnplace")))
 				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties", aMapWithSize(13)))
-				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties.furnitureType.enum", containsInAnyOrder("FRIDGE", "SOFA", "TV")))
+				.andExpect(jsonPath("$.components.schemas.PlacedFurnitureResponse.properties.furnitureType.enum", containsInAnyOrder("SOFA", "TV", "DINING_TABLE", "COFFEE_TABLE")))
 				.andExpect(jsonPath("$.paths['/api/v1/furnitures/placements'].put.requestBody.required").value(true))
 				.andExpect(jsonPath("$.paths['/api/v1/furnitures/placements'].put.security[0].bearerAuth").exists())
 				.andExpect(jsonPath("$.paths['/api/v1/furnitures/placements'].put.responses['409']").exists())

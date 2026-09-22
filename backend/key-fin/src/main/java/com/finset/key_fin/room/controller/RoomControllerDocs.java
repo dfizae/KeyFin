@@ -27,7 +27,7 @@ public interface RoomControllerDocs {
 					+ "미장착 부위는 모바일에서 기본 에셋을 표시합니다. furnitures는 실제 설치된 가구를 보유 가구 ID "
 					+ "오름차순으로 반환하며 미설치 가구는 제외합니다. 코인은 최신 원장의 잔액이며 원장이 없으면 0입니다. "
 					+ "출석은 한국 시간 기준 오늘 ATTEND 원장의 존재 여부이며, 조회 시 출석 보상을 지급하지 않습니다. "
-					+ "현재 확정 예산 초과를 동기화해 설치된 필수 가구 3종의 딱지 상태를 반환합니다. "
+					+ "현재 확정 예산 초과를 동기화해 설치된 필수 가구 4종의 딱지 상태를 반환합니다. "
 					+ "필수 가구는 단독 해제할 수 없으며 일괄 배치 저장으로 같은 종류의 구매 가구와 교체할 수 있습니다. avatar.reaction은 현재 null입니다.",
 			security = @SecurityRequirement(name = "bearerAuth")
 	)
@@ -46,7 +46,7 @@ public interface RoomControllerDocs {
 											 "furnitures":[{"userFurnitureId":201,"itemId":4,"slotType":"FLOOR","assetKey":"sofa_default",
 											 "placementStatus":"FLOOR","placementDirection":"FRONT_RIGHT","positionX":164.875,"positionY":226.000,"layer":0,
 											 "defaultFurnitureType":"SOFA","furnitureType":"SOFA","stickerAttached":false,"canUnplace":false}],
-											 "coin":{"balance":0},"attendance":{"checkedToday":false},"stickers":{"count":0,"total":3,"removableToday":false}}}
+											 "coin":{"balance":0},"attendance":{"checkedToday":false},"stickers":{"count":0,"total":4,"removableToday":false}}}
 											"""
 							)
 					)
@@ -77,7 +77,7 @@ public interface RoomControllerDocs {
 			@ApiResponse(responseCode = "200", description = "제거 성공", useReturnTypeSchema = true,
 					content = @Content(mediaType = APPLICATION_JSON_VALUE, examples = @ExampleObject(value = """
 							{"success":true,"code":"SUCCESS","message":"요청이 성공했습니다.","data":{
-							"userFurnitureId":123,"stickerAttached":false,"stickers":{"count":2,"total":3,"removableToday":false}}}
+							"userFurnitureId":123,"stickerAttached":false,"stickers":{"count":3,"total":4,"removableToday":false}}}
 							"""))),
 			@ApiResponse(responseCode = "400", description = "입력 오류 (COMMON_001/COMMON_002), 설치된 필수 가구가 아님 (ROOM_001)",
 					content = @Content(schema = @Schema(implementation = BaseResponse.class))),
