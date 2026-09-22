@@ -14,7 +14,15 @@ public record CoachingSessionView(
 	@JsonIgnoreProperties(ignoreUnknown = true)
 	public record Message(
 			@JsonProperty("role") String role,
-			@JsonProperty("content") String content
+			@JsonProperty("content") String content,
+			@JsonProperty("response") AnswerReference response
+	) {
+	}
+
+	@JsonIgnoreProperties(ignoreUnknown = true)
+	public record AnswerReference(
+			@JsonProperty("kind") String kind,
+			@JsonProperty("id") String id
 	) {
 	}
 }

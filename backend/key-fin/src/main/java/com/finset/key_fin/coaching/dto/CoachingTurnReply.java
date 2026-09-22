@@ -1,5 +1,6 @@
 package com.finset.key_fin.coaching.dto;
 
+import java.util.List;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -14,7 +15,10 @@ public record CoachingTurnReply(
 		@JsonProperty("text") String text,
 		@JsonProperty("wording_source") String wordingSource,
 		@JsonProperty("fallback_reason") String fallbackReason,
-		@JsonProperty("receipt") Map<String, Object> receipt
+		@JsonProperty("receipt") Map<String, Object> receipt,
+		@JsonProperty("chart_hint") ChartHint chartHint,
+		@JsonProperty("rows") List<SpendingRow> rows,
+		@JsonProperty("total_krw") Long totalKrw
 ) {
 	public boolean isCoaching() {
 		return answerType == null && receipt != null;

@@ -7,7 +7,7 @@ public record ChatHistoryResponse(
 		List<Entry> messages,
 		LocalDateTime expiresAt
 ) {
-	public record Entry(String role, String content) {
+	public record Entry(String role, String content, String chartId) {
 	}
 
 	public static ChatHistoryResponse empty() {

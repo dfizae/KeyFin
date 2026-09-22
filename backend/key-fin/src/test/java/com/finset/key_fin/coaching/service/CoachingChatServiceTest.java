@@ -5,12 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -25,9 +27,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
+import com.finset.key_fin.coaching.client.CoachingChartClient;
 import com.finset.key_fin.coaching.client.CoachingChatClient;
 import com.finset.key_fin.coaching.client.CoachingTwinClient;
 import com.finset.key_fin.coaching.dto.ChatHistoryResponse;
+import com.finset.key_fin.coaching.dto.ChartCreated;
+import com.finset.key_fin.coaching.dto.ChartHint;
+import com.finset.key_fin.coaching.dto.SpendingRow;
 import com.finset.key_fin.coaching.dto.ChatReply;
 import com.finset.key_fin.coaching.dto.CoachingSessionView;
 import com.finset.key_fin.coaching.dto.CoachingTurnReply;
@@ -47,6 +53,8 @@ class CoachingChatServiceTest {
 	private final CoachingSessionRepository sessionRepository = mock(CoachingSessionRepository.class);
 	private final CoachingChatClient chatClient = mock(CoachingChatClient.class);
 	private final CoachingTwinClient twinClient = mock(CoachingTwinClient.class);
+	private final CoachingChartClient chartClient = mock(CoachingChartClient.class);
+	private final CoachingChartStore chartStore = mock(CoachingChartStore.class);
 	private final FdtBootstrapService bootstrapService = mock(FdtBootstrapService.class);
 	private final FdtBootstrap bootstrap = mock(FdtBootstrap.class);
 
@@ -54,7 +62,7 @@ class CoachingChatServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new CoachingChatService(sessionRepository, chatClient, twinClient, bootstrapService,
+		service = new CoachingChatService(sessionRepository, chatClient, twinClient, chartClient, chartStore, bootstrapService,
 				Clock.fixed(NOW, SEOUL));
 		given(bootstrapService.build(USER_ID)).willReturn(bootstrap);
 		given(sessionRepository.save(any(CoachingSession.class))).willAnswer(inv -> inv.getArgument(0));
@@ -161,16 +169,101 @@ class CoachingChatServiceTest {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
 		given(chatClient.getSession(USER_ID, "sess-live"))
 				.willReturn(new CoachingSessionView("sess-live", NEW_EXPIRES, List.of(
-						new CoachingSessionView.Message("user", "복리가 뭐야?"),
-						new CoachingSessionView.Message("assistant", "이자에 이자가 붙어요."))))
+						new CoachingSessionView.Message("user", "복리가 뭐야?", null),
+						new CoachingSessionView.Message("assistant", "이자에 이자가 붙어요.",
+								new CoachingSessionView.AnswerReference("chat", "ans-9")))))
 				.willThrow(clientError(HttpStatus.GONE));
 
 		ChatHistoryResponse history = service.history(USER_ID);
 		assertThat(history.messages()).extracting(ChatHistoryResponse.Entry::content)
 				.containsExactly("복리가 뭐야?", "이자에 이자가 붙어요.");
 		assertThat(history.expiresAt()).isEqualTo(LocalDateTime.ofInstant(NOW.plusSeconds(86400), SEOUL));
+		assertThat(history.messages()).extracting(ChatHistoryResponse.Entry::chartId).containsExactly(null, null);
 
 		assertThat(service.history(USER_ID).messages()).isEmpty();
+	}
+
+	@Test
+	void chart_hint가_있으면_답변_id_멱등키로_차트를_만들고_세션_만료까지_기억한다() {
+		CoachingSession live = session("sess-live", 3600);
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(live));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "이번 달 예산 어때?")).willReturn(coachingWithChart());
+		given(chartClient.create(eq(USER_ID), any(ChartHint.class), eq("chart-coach-2")))
+				.willReturn(new ChartCreated("8f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f"));
+
+		ChatReply reply = service.chat(USER_ID, "이번 달 예산 어때?");
+
+		assertThat(reply.kind()).isEqualTo(ChatReply.Kind.COACHING);
+		assertThat(reply.chartId()).isEqualTo("8f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f");
+		assertThat(reply.rows()).isEmpty();
+		verify(chartStore).save(USER_ID, "coach-2", "8f1c2d3e4a5b6c7d8e9f0a1b2c3d4e5f", Duration.ofSeconds(3600));
+	}
+
+	@Test
+	void chart_hint가_없으면_차트를_만들지_않고_chartId는_null이다() {
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "질문")).willReturn(coaching());
+
+		assertThat(service.chat(USER_ID, "질문").chartId()).isNull();
+		verify(chartClient, never()).create(anyLong(), any(), anyString());
+		verify(chartStore, never()).save(anyLong(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void 차트_생성이_실패해도_답변은_그대로_내려가고_chartId만_null이다() {
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "이번 달 예산 어때?")).willReturn(coachingWithChart());
+		given(chartClient.create(eq(USER_ID), any(ChartHint.class), anyString()))
+				.willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
+
+		ChatReply reply = service.chat(USER_ID, "이번 달 예산 어때?");
+
+		assertThat(reply.reply()).isEqualTo("예측 답변");
+		assertThat(reply.chartId()).isNull();
+		verify(chartStore, never()).save(anyLong(), anyString(), anyString(), any());
+	}
+
+	@Test
+	void 소비_조회_답변의_rows와_totalKrw를_camelCase로_통과시킨다() {
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "이번 달 얼마 썼어?")).willReturn(
+				new CoachingTurnReply("ans-5", "spending_history", "answered", "외식 45,000원", "engine", null, null, null,
+						List.of(new SpendingRow("외식", 45_000L, 3)), 45_000L));
+
+		ChatReply reply = service.chat(USER_ID, "이번 달 얼마 썼어?");
+
+		assertThat(reply.rows()).containsExactly(new ChatReply.Row("외식", 45_000L, 3));
+		assertThat(reply.totalKrw()).isEqualTo(45_000L);
+		assertThat(reply.chartId()).isNull();
+	}
+
+	@Test
+	void 이력의_assistant_메시지는_기억해_둔_차트_id를_붙인다() {
+		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
+		given(chatClient.getSession(USER_ID, "sess-live"))
+				.willReturn(new CoachingSessionView("sess-live", NEW_EXPIRES, List.of(
+						new CoachingSessionView.Message("user", "이번 달 예산 어때?", null),
+						new CoachingSessionView.Message("assistant", "예측 답변",
+								new CoachingSessionView.AnswerReference("coaching", "coach-2")))));
+		given(chartStore.find(USER_ID, "coach-2")).willReturn(Optional.of("8f1c2d3e"));
+
+		assertThat(service.history(USER_ID).messages()).extracting(ChatHistoryResponse.Entry::chartId)
+				.containsExactly(null, "8f1c2d3e");
+	}
+
+	@Test
+	void 차트_HTML은_404면_AI_002_그_외_장애는_AI_001이다() {
+		given(chartClient.html(USER_ID, "missing")).willThrow(clientError(HttpStatus.NOT_FOUND));
+		given(chartClient.html(USER_ID, "down")).willThrow(new ResourceAccessException("timeout"));
+		given(chartClient.html(USER_ID, "ok")).willReturn("<!doctype html>");
+
+		assertThatThrownBy(() -> service.chartHtml(USER_ID, "missing"))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.CHART_NOT_FOUND);
+		assertThatThrownBy(() -> service.chartHtml(USER_ID, "down"))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_UNAVAILABLE);
+		assertThat(service.chartHtml(USER_ID, "ok")).isEqualTo("<!doctype html>");
 	}
 
 	private static CoachingSession session(String sessionId, long secondsFromNow) {
@@ -179,12 +272,17 @@ class CoachingChatServiceTest {
 	}
 
 	private static CoachingTurnReply chatAnswer(String status, String source) {
-		return new CoachingTurnReply("ans-1", "finance_education", status, "답변", source, null, null);
+		return new CoachingTurnReply("ans-1", "finance_education", status, "답변", source, null, null, null, null, null);
 	}
 
 	private static CoachingTurnReply coaching() {
 		return new CoachingTurnReply("coach-1", null, null, "예측 답변", "llm", null,
-				Map.of("trigger", "forecast"));
+				Map.of("trigger", "forecast"), null, null, null);
+	}
+
+	private static CoachingTurnReply coachingWithChart() {
+		return new CoachingTurnReply("coach-2", null, null, "예측 답변", "llm", null,
+				Map.of("trigger", "forecast"), new ChartHint("2026-09-01", "이번 달 예산 어때?", null), null, null);
 	}
 
 	private static HttpClientErrorException clientError(HttpStatus status) {
