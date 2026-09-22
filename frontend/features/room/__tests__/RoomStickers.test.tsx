@@ -23,7 +23,7 @@ beforeEach(() => {
   applyBudgetStickersMock("202609");
   onClose.mockReset();
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false, gcTime: Infinity } } });
-  client.setQueryData(roomKeys.home(), toRoom({ ...roomMock, furnitures: placedFurnitureMock(), stickers: { count: 4, total: 4, removableToday: true } }));
+  client.setQueryData(roomKeys.home(), toRoom({ ...roomMock, furnitures: placedFurnitureMock(), stickers: { count: 4, total: 4, removableToday: true }, overEnvelopes: [1, 4] }));
   client.setQueryData(roomKeys.furnitures(), toUserFurnitures(furnitureListMock()));
   client.setQueryData(roomKeys.furnitures("FLOOR"), toUserFurnitures(furnitureListMock("FLOOR")));
 });
@@ -57,6 +57,7 @@ it("제거 중 중복 클릭을 막고 성공 응답으로 홈과 보유 목록 
   await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
   const room = client.getQueryData<Room>(roomKeys.home())!;
   expect(room.stickers).toEqual({ count: 3, total: 4, removableToday: true });
+  expect(room.overEnvelopeIds).toEqual([1, 4]);
   expect(room.furnitures.find((item) => item.userFurnitureId === target)?.stickerAttached).toBe(false);
   for (const key of [roomKeys.furnitures(), roomKeys.furnitures("FLOOR")]) {
     const owned = client.getQueryData<UserFurniture[]>(key)!;

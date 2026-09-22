@@ -27,6 +27,8 @@ public interface RoomControllerDocs {
 					+ "미장착 부위는 모바일에서 기본 에셋을 표시합니다. furnitures는 실제 설치된 가구를 보유 가구 ID "
 					+ "오름차순으로 반환하며 미설치 가구는 제외합니다. 코인은 최신 원장의 잔액이며 원장이 없으면 0입니다. "
 					+ "출석은 한국 시간 기준 오늘 ATTEND 원장의 존재 여부이며, 조회 시 출석 보상을 지급하지 않습니다. "
+					+ "overEnvelopes는 현재 확정 예산에서 지출이 예산액보다 큰 봉투 ID 목록입니다. 예산 미생성·미확정이면 빈 목록이며 예산을 생성하지 않습니다. "
+					+ "환불·재분류·주기 변경은 최신 집계에 반영되며, 지출과 예산이 같으면 초과가 아닙니다. 모바일은 1번 식탁과 4번 커피테이블에 효과를 표시합니다. "
 					+ "예산 기간의 최초 초과 처리 시 설치된 모든 바닥 가구에 딱지를 붙입니다. 이후 추가 설치한 가구에는 해당 기간에 붙이지 않습니다. "
 					+ "stickers.total은 현재 설치된 바닥 가구 수, count는 그중 딱지가 붙은 수입니다. 보관한 일반 가구의 딱지는 유지되지만 집계에서 제외합니다. "
 					+ "필수 가구는 단독 해제할 수 없으며 일괄 배치 저장으로 같은 종류의 구매 가구와 교체할 수 있습니다. avatar.reaction은 현재 null입니다.",
@@ -48,7 +50,7 @@ public interface RoomControllerDocs {
 											 "furnitures":[{"userFurnitureId":201,"itemId":4,"slotType":"FLOOR","assetKey":"sofa_default",
 											 "placementStatus":"FLOOR","placementDirection":"FRONT_RIGHT","positionX":164.875,"positionY":226.000,"layer":0,
 											 "defaultFurnitureType":"SOFA","furnitureType":"SOFA","stickerAttached":false,"canUnplace":false}],
-											 "coin":{"balance":0},"attendance":{"checkedToday":false},"stickers":{"count":0,"total":7,"removableToday":false}}}
+											 "coin":{"balance":0},"attendance":{"checkedToday":false},"stickers":{"count":0,"total":7,"removableToday":false},"overEnvelopes":[1,4]}}
 											"""
 							)
 					)

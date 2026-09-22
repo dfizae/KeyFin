@@ -1,4 +1,5 @@
 import { ApiError } from "@/api/error";
+import { envelopeSpendingChangesMock } from "@/api/mocks/transaction";
 import type {
   BudgetDto,
   BudgetEmergencyDto,
@@ -60,13 +61,15 @@ function emergencyState(): BudgetEmergencyDto {
 
 /** 확정 예산 응답 예시(노션 예산·잔액 조회 CONFIRMED). amounts 가 없으면 제안액을 그대로 확정한 것으로 본다 */
 export function budgetConfirmedMock(todayKey: string, amounts?: Record<number, number>): BudgetDto {
-  const envelopes: BudgetEnvelopeDto[] = ENVELOPES.map(({ envelopeId, name, proposedAmount, spent }) => {
+  const changes = envelopeSpendingChangesMock(todayKey);
+  const envelopes: BudgetEnvelopeDto[] = ENVELOPES.map(({ envelopeId, name, proposedAmount, spent: initialSpent }) => {
+    const spent = initialSpent + (changes[envelopeId] ?? 0);
     const confirmed = amounts?.[envelopeId] ?? proposedAmount;
     const remaining = confirmed - spent;
     return { envelopeId, name, proposedAmount: null, confirmedAmount: confirmed, spent, remaining, remainingRate: rateOf(remaining, confirmed) };
   });
   const confirmed = envelopes.reduce((sum, envelope) => sum + (envelope.confirmedAmount ?? 0), 0);
-  const spent = ENVELOPES.reduce((sum, envelope) => sum + envelope.spent, 0);
+  const spent = envelopes.reduce((sum, envelope) => sum + (envelope.spent ?? 0), 0);
   return {
     budgetId: MOCK_BUDGET_ID,
     ...mockPeriod(todayKey),
@@ -117,29 +120,39 @@ export function budgetProposalMock(month: string): BudgetProposalDto {
  * 앱이 도는 동안만 유지되는 이번 주기 예산. 서버처럼 움직인다:
  * 제안은 주기당 한 번(두 번째는 409 BUDGET_001), 조회는 없으면 제안을 만들어 PROPOSED, 확정은 한 번(두 번째는 409 BUDGET_003).
  */
-let currentBudget: { status: "PROPOSED" | "CONFIRMED"; amounts?: Record<number, number> } | null = null;
+let currentBudget: { month: string; status: "PROPOSED" | "CONFIRMED"; amounts?: Record<number, number> } | null = null;
 
 export function createProposalMock(month: string): BudgetProposalDto {
-  if (currentBudget !== null) throw new ApiError(409, "BUDGET_001", "해당 월의 예산이 이미 존재합니다.");
-  currentBudget = { status: "PROPOSED" };
+  if (currentBudget?.month === month) throw new ApiError(409, "BUDGET_001", "해당 월의 예산이 이미 존재합니다.");
+  currentBudget = { month, status: "PROPOSED" };
   return budgetProposalMock(month);
 }
 
 export function currentBudgetMock(todayKey: string = currentDateKey()): BudgetDto {
-  if (currentBudget === null) currentBudget = { status: "PROPOSED" };
+  const month = mockPeriod(todayKey).month;
+  if (currentBudget?.month !== month) currentBudget = { month, status: "PROPOSED" };
   return currentBudget.status === "CONFIRMED" ? budgetConfirmedMock(todayKey, currentBudget.amounts) : budgetProposedMock(todayKey);
 }
 
 export function confirmBudgetMock(budgetId: number, request: ConfirmBudgetRequest, todayKey: string = currentDateKey()): ConfirmBudgetResponseDto {
-  if (budgetId !== MOCK_BUDGET_ID || currentBudget === null) throw new ApiError(404, "BUDGET_002", "예산을 찾을 수 없습니다.");
+  const month = mockPeriod(todayKey).month;
+  if (budgetId !== MOCK_BUDGET_ID || currentBudget?.month !== month) throw new ApiError(404, "BUDGET_002", "예산을 찾을 수 없습니다.");
   if (currentBudget.status === "CONFIRMED") throw new ApiError(409, "BUDGET_003", "이미 확정된 예산은 변경할 수 없습니다.");
-  currentBudget = { status: "CONFIRMED", amounts: Object.fromEntries(request.envelopes.map((e) => [e.envelopeId, e.amount])) };
+  currentBudget = { month, status: "CONFIRMED", amounts: Object.fromEntries(request.envelopes.map((e) => [e.envelopeId, e.amount])) };
   return { budgetId, month: mockPeriod(todayKey).month, status: "CONFIRMED" };
 }
 
 /** 온보딩을 마친 사용자로 시작할 때: 이번 주기 예산이 제안액 그대로 확정된 상태 */
-export function seedConfirmedBudgetMock(): void {
-  currentBudget = { status: "CONFIRMED" };
+export function seedConfirmedBudgetMock(todayKey: string = currentDateKey()): void {
+  currentBudget = { month: mockPeriod(todayKey).month, status: "CONFIRMED" };
+}
+
+/** GET /room은 예산을 만들지 않으며 현재 확정 예산의 실제 초과만 반환한다. */
+export function overEnvelopeIdsMock(todayKey: string = currentDateKey()): number[] {
+  if (currentBudget?.status !== "CONFIRMED" || currentBudget.month !== mockPeriod(todayKey).month) return [];
+  return budgetConfirmedMock(todayKey, currentBudget.amounts).envelopes
+    .filter((envelope) => envelope.confirmedAmount !== null && envelope.spent !== null && envelope.spent > envelope.confirmedAmount)
+    .map((envelope) => envelope.envelopeId);
 }
 
 /** 테스트·개발 재시작용 */

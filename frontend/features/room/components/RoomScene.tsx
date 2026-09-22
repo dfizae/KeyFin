@@ -7,7 +7,6 @@ import {
   MipmapMode,
   Path,
   Skia,
-  useImage,
   type SkImage,
 } from "@shopify/react-native-skia";
 import { useColorScheme } from "nativewind";
@@ -20,6 +19,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CHARACTER_IDLE, COACH_CAT, ROOM_FLOOR, SEIZURE_STICKER } from "@/features/room/assets";
 import { useFurnitures, useRoom } from "@/features/room/api/queries";
 import { stickerGeometry, stickerPlacements } from "@/features/room/stickers";
+import { penaltyGeometry, PENALTY_SPRITES, type PenaltyGeometry } from "@/features/room/penalties";
+import { loadSceneImage } from "@/features/room/sceneImages";
 import { readCamera, useRoomCamera } from "@/features/room/camera";
 import { FURNITURE, WALL_ITEMS, isWallItemId, type RoomItemId } from "@/features/room/catalog";
 import {
@@ -104,14 +105,17 @@ function sceneFurnitureSprites(placements: readonly Placement[], editing: boolea
 
 /**
  * 스프라이트 한 장을 불러 위로 넘기기만 한다(그리지 않는다).
- * `useImage` 는 부르는 곳마다 따로 읽어들이므로(캐시가 없다) 이 로더를 계속 띄워 둔 채
+ * Skia는 부르는 곳마다 따로 읽어들이므로(캐시가 없다) 이 로더를 계속 띄워 둔 채
  * 읽어 온 이미지를 그리는 쪽에 넘긴다 — 그리는 쪽에서 다시 부르면 처음부터 다시 읽어 또 하나씩 튀어나온다.
  */
 function SpriteLoader({ source, onLoad }: { source: number; onLoad: (source: number, image: SkImage) => void }) {
-  const image = useImage(source);
   React.useEffect(() => {
-    if (image) onLoad(source, image);
-  }, [image, onLoad, source]);
+    let mounted = true;
+    void loadSceneImage(source).then((image) => {
+      if (mounted && image) onLoad(source, image);
+    });
+    return () => { mounted = false; };
+  }, [onLoad, source]);
   return null;
 }
 
@@ -149,13 +153,14 @@ type PlacedItem = {
   item: PlacementView;
   surface: Surface;
   sticker: ReturnType<typeof stickerGeometry>;
+  penalty: PenaltyGeometry | null;
 };
 
-function toPlaced(placement: Placement, stickerAttached: boolean): PlacedItem {
+function toPlaced(placement: Placement, stickerAttached: boolean, overEnvelopeIds: readonly number[]): PlacedItem {
   const { itemId, anchor } = placement;
   const fixedWall = isWallItemId(itemId) ? WALL_ITEMS[itemId].surface : undefined;
   return { id: itemId, anchor, layer: placement.layer ?? 0, item: placementView(placement), surface: placement.surface ?? fixedWall ?? "FLOOR",
-    sticker: stickerAttached ? stickerGeometry(placement) : null };
+    sticker: stickerAttached ? stickerGeometry(placement) : null, penalty: penaltyGeometry(placement, overEnvelopeIds) };
 }
 
 /**
@@ -193,7 +198,8 @@ function RoomScene({ width }: RoomSceneProps) {
 
   const furnitureSprites = React.useMemo(() => sceneFurnitureSprites(placements, isEditing), [placements, isEditing]);
   const requiredSprites = React.useMemo(() => [...BASE_SPRITES, ...furnitureSprites.current], [furnitureSprites]);
-  const optionalSprites = React.useMemo(() => [...outfitSprites, ...furnitureSprites.turned], [outfitSprites, furnitureSprites]);
+  // 페널티 로드 실패·지연은 방의 ready 조건에 영향을 주지 않는다.
+  const optionalSprites = React.useMemo(() => [...outfitSprites, ...furnitureSprites.turned, ...PENALTY_SPRITES], [outfitSprites, furnitureSprites]);
   const { images, loaders, ready } = useSceneImages(requiredSprites, optionalSprites);
   // 한 번 보여 준 방은 다시 스켈레톤으로 돌리지 않는다 — 보관함에서 새 가구를 꺼내면 그 그림만 읽히는 동안 잠깐 비어 있다.
   const [revealed, setRevealed] = React.useState(false);
@@ -207,8 +213,11 @@ function RoomScene({ width }: RoomSceneProps) {
   const placed = React.useMemo(() => {
     const source = isEditing && owned.data ? owned.data.map((item) => item.serverState) : room.data?.furnitures ?? [];
     const stamped = new Set(stickerPlacements(placements, source, isEditing));
-    return placements.map((placement) => toPlaced(placement, stamped.has(placement)));
-  }, [placements, isEditing, owned.data, room.data?.furnitures]);
+    return placements.map((placement) => {
+      const installed = isEditing || source.some((item) => item.assetKey === placement.itemId && item.placementStatus === "FLOOR");
+      return toPlaced(placement, stamped.has(placement), installed ? room.data?.overEnvelopeIds ?? [] : []);
+    });
+  }, [placements, isEditing, owned.data, room.data?.furnitures, room.data?.overEnvelopeIds]);
   const wallItems = React.useMemo(() => placed.filter((p) => p.surface !== "FLOOR"), [placed]);
   const rugs = React.useMemo(() => placed.filter((p) => p.surface === "FLOOR" && p.item.flat), [placed]);
   const sorted = React.useMemo<readonly PlacedItem[]>(
@@ -483,6 +492,7 @@ function ItemSprite({ placed, scale, highlighted = false, ringColor, images }: I
         </Group>
       ) : null}
       <SkiaImage image={image} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />
+      <PenaltySprite geometry={placed.penalty} scale={scale} images={images} />
       <StickerSprite geometry={placed.sticker} scale={scale} image={images.get(SEIZURE_STICKER)} />
     </>
   );
@@ -499,6 +509,12 @@ type DraggingSpriteProps = {
   blockedColor: string;
   images: SceneImages;
 };
+
+function PenaltySprite({ geometry, scale, images }: { geometry: PenaltyGeometry | null; scale: number; images: SceneImages }) {
+  const image = geometry ? images.get(geometry.sprite) : undefined;
+  if (!geometry || !image) return null;
+  return <SkiaImage image={image} {...sceneRectToCanvas(geometry.rect, scale)} fit="fill" sampling={SPRITE_SAMPLING} />;
+}
 
 function StickerSprite({ geometry, scale, image }: { geometry: ReturnType<typeof stickerGeometry>; scale: number; image: SkImage | undefined }) {
   if (!geometry || !image) return null;
@@ -549,6 +565,9 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
         opacity={spriteOpacity}
       />
       <Group transform={ringTransform} opacity={spriteOpacity}>
+        <PenaltySprite geometry={placed.penalty ? { ...placed.penalty, rect: { ...placed.penalty.rect,
+          x: placed.penalty.rect.x - placed.anchor.x, y: placed.penalty.rect.y - placed.anchor.y } } : null}
+          scale={scale} images={images} />
         <StickerSprite geometry={placed.sticker ? { ...placed.sticker, rect: { ...placed.sticker.rect,
           x: placed.sticker.rect.x - placed.anchor.x, y: placed.sticker.rect.y - placed.anchor.y } } : null}
           scale={scale} image={images.get(SEIZURE_STICKER)} />
