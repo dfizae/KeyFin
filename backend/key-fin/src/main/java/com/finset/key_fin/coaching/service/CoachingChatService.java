@@ -1,6 +1,7 @@
 package com.finset.key_fin.coaching.service;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 
@@ -11,6 +12,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
+import com.finset.key_fin.coaching.client.CoachingChartClient;
 import com.finset.key_fin.coaching.client.CoachingChatClient;
 import com.finset.key_fin.coaching.client.CoachingTwinClient;
 import com.finset.key_fin.coaching.dto.ChatHistoryResponse;
@@ -34,20 +36,38 @@ public class CoachingChatService {
 	private final CoachingSessionRepository sessionRepository;
 	private final CoachingChatClient chatClient;
 	private final CoachingTwinClient twinClient;
+	private final CoachingChartClient chartClient;
+	private final CoachingChartStore chartStore;
 	private final FdtBootstrapService bootstrapService;
 	private final Clock clock;
 
 	public ChatReply chat(long userId, String message) {
 		pushTwin(userId);
 		CoachingSession session = activeSession(userId);
+		CoachingTurnReply turn;
 		try {
-			return ChatReply.from(send(userId, session, message));
+			turn = send(userId, session, message);
 		} catch (HttpClientErrorException e) {
 			if (!isSessionClosed(e)) {
 				throw unavailable(e);
 			}
 			log.info("코칭 세션 종료로 재생성: userId={}, status={}", userId, e.getStatusCode());
-			return ChatReply.from(send(userId, renew(userId, session), message));
+			session = renew(userId, session);
+			turn = send(userId, session, message);
+		}
+		return ChatReply.from(turn, createChart(userId, session, turn));
+	}
+
+	public String chartHtml(long userId, String chartId) {
+		try {
+			return chartClient.html(userId, chartId);
+		} catch (HttpClientErrorException e) {
+			if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
+				throw new BusinessException(CoachingErrorCode.CHART_NOT_FOUND, e);
+			}
+			throw unavailable(e);
+		} catch (HttpServerErrorException | ResourceAccessException e) {
+			throw unavailable(e);
 		}
 	}
 
@@ -57,7 +77,7 @@ public class CoachingChatService {
 				.filter(session -> !session.isExpired(now))
 				.map(session -> {
 					try {
-						return toHistory(chatClient.getSession(userId, session.getSessionId()));
+						return toHistory(userId, chatClient.getSession(userId, session.getSessionId()));
 					} catch (HttpClientErrorException e) {
 						if (isSessionClosed(e) || e.getStatusCode() == HttpStatus.NOT_FOUND) {
 							return ChatHistoryResponse.empty();
@@ -103,6 +123,22 @@ public class CoachingChatService {
 		}
 	}
 
+	/** 차트는 답변의 부속물이라 실패해도 답변은 그대로 내려준다. 멱등키를 답변 id 로 고정해 재시도가 같은 차트를 받는다. */
+	private String createChart(long userId, CoachingSession session, CoachingTurnReply turn) {
+		if (turn.chartHint() == null) {
+			return null;
+		}
+		try {
+			String chartId = chartClient.create(userId, turn.chartHint(), "chart-" + turn.id()).id();
+			chartStore.save(userId, turn.id(), chartId,
+					Duration.between(LocalDateTime.now(clock), session.getExpiresAt()));
+			return chartId;
+		} catch (RuntimeException e) {
+			log.warn("차트 생성 실패 — 답변만 전달: userId={}, answerId={}, cause={}", userId, turn.id(), e.toString());
+			return null;
+		}
+	}
+
 	private CoachingTurnReply send(long userId, CoachingSession session, String message) {
 		try {
 			return chatClient.sendMessage(userId, session.getSessionId(), message);
@@ -111,12 +147,24 @@ public class CoachingChatService {
 		}
 	}
 
-	private ChatHistoryResponse toHistory(CoachingSessionView view) {
+	private ChatHistoryResponse toHistory(long userId, CoachingSessionView view) {
 		return new ChatHistoryResponse(
 				view.messages().stream()
-						.map(m -> new ChatHistoryResponse.Entry(m.role(), m.content()))
+						.map(m -> new ChatHistoryResponse.Entry(m.role(), m.content(), chartIdOf(userId, m)))
 						.toList(),
 				toLocal(view.expiresAt()));
+	}
+
+	private String chartIdOf(long userId, CoachingSessionView.Message message) {
+		if (message.response() == null || message.response().id() == null) {
+			return null;
+		}
+		try {
+			return chartStore.find(userId, message.response().id()).orElse(null);
+		} catch (RuntimeException e) {
+			log.warn("차트 id 조회 실패 — 이력만 전달: userId={}, answerId={}, cause={}", userId, message.response().id(), e.toString());
+			return null;
+		}
 	}
 
 	private LocalDateTime toLocal(double epochSeconds) {
