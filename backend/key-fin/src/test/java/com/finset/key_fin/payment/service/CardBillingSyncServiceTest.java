@@ -15,7 +15,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Import;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +23,9 @@ import com.finset.key_fin.payment.dto.response.FinanceBillingStatement;
 import com.finset.key_fin.payment.entity.CardBilling;
 import com.finset.key_fin.payment.repository.CardBillingRepository;
 import com.finset.key_fin.payment.service.CardBillingSyncService.SyncResult;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/card-billing-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class CardBillingSyncServiceTest extends SpringIntegrationTestSupport {
 
@@ -42,8 +39,6 @@ class CardBillingSyncServiceTest extends SpringIntegrationTestSupport {
 	private CardBillingSyncService cardBillingSyncService;
 	@Autowired
 	private CardBillingRepository cardBillingRepository;
-	@MockitoBean
-	private FinanceCardBillingClient financeCardBillingClient;
 
 	@Test
 	@DisplayName("관리 카드만 청구서 업서트(기존 행 갱신 · 신규 저장), 미관리 카드는 호출하지 않음")

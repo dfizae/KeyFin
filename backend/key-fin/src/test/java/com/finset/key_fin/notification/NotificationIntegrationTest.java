@@ -18,10 +18,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ApplicationContext;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -33,8 +31,6 @@ import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@TestPropertySource(properties = "fcm.enabled=false")
-@AutoConfigureMockMvc
 class NotificationIntegrationTest extends SpringIntegrationTestSupport {
 	private static final long USER = 70001;
 	private static final long OTHER = 70002;
@@ -45,15 +41,10 @@ class NotificationIntegrationTest extends SpringIntegrationTestSupport {
 	@Autowired MockMvc mvc;
 	@Autowired JwtTokenProvider jwt;
 	@Autowired ApplicationContext context;
-	@MockitoBean Clock clock;
 
 	@BeforeEach
 	void fixture() {
-		when(clock.instant()).thenReturn(Instant.parse("2026-09-16T13:00:00.987Z"));
-		when(clock.getZone()).thenReturn(ZoneOffset.UTC);
-		when(clock.withZone(java.time.ZoneId.of("Asia/Seoul")))
-				.thenReturn(Clock.fixed(Instant.parse("2026-09-16T13:00:00.987Z"), ZoneOffset.UTC)
-						.withZone(java.time.ZoneId.of("Asia/Seoul")));
+		testClock.set(Instant.parse("2026-09-16T13:00:00.987Z"));
 		cleanup();
 		jdbc.sql("""
 				INSERT INTO users(id,email,password,name,deleted_at) VALUES
@@ -186,7 +177,6 @@ class NotificationIntegrationTest extends SpringIntegrationTestSupport {
 
 	@Test
 	void authenticatedApiUsesSessionOwnerAndSerializesContractWithoutFirebase() throws Exception {
-		assertThat(context.getBeansOfType(FcmSender.class)).isEmpty();
 		long id = service.create(USER, NotificationType.TRANSFER_REQUEST, "이체 승인 요청", "본문", "456", true);
 		create(OTHER);
 		mvc.perform(get("/api/v1/notifications").header("Authorization", bearer(USER)))

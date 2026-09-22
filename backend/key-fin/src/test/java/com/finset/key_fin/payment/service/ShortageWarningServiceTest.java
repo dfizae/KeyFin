@@ -15,11 +15,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql(scripts = "/sql/transfer-proposal-fixture.sql", config = @SqlConfig(encoding = "UTF-8"))
 class ShortageWarningServiceTest extends SpringIntegrationTestSupport {
 

@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import com.finset.key_fin.global.exception.BusinessException;
@@ -45,8 +44,6 @@ class TransferApproveConcurrencyTest extends SpringIntegrationTestSupport {
 	private PrepareTransferRepository prepareTransferRepository;
 	@Autowired
 	private AuditLogRepository auditLogRepository;
-	@MockitoBean
-	private FinanceTransferClient financeTransferClient;
 
 	@Test
 	@DisplayName("같은 제안을 동시에 두 번 승인하면 이체는 1회, 하나는 EXECUTED·하나는 409, 감사는 EXECUTE 1건")

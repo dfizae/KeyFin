@@ -15,11 +15,9 @@ import com.finset.key_fin.budget.dto.response.BudgetCurrentResponse.Emergency;
 import com.finset.key_fin.budget.dto.response.EmergencyFundResponse;
 import com.finset.key_fin.budget.exception.BudgetErrorCode;
 import com.finset.key_fin.global.exception.BusinessException;
-import com.finset.key_fin.support.FixedClockConfig;
 import com.finset.key_fin.support.SpringIntegrationTestSupport;
 
 @Transactional
-@Import(FixedClockConfig.class)
 @Sql({"/sql/budget-confirm-fixture.sql", "/sql/budget-current-fixture.sql"})
 class BudgetEmergencyTest extends SpringIntegrationTestSupport {
 
