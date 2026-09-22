@@ -10,8 +10,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.ResourceAccessException;
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import com.finset.key_fin.coaching.client.CoachingChartClient;
 import com.finset.key_fin.coaching.client.CoachingChatClient;
 import com.finset.key_fin.coaching.client.CoachingTwinClient;
@@ -33,6 +36,8 @@ import lombok.extern.slf4j.Slf4j;
 @ConditionalOnProperty(prefix = "coaching.api", name = "token")
 public class CoachingChatService {
 
+	private static final Pattern ERROR_CODE = Pattern.compile("\"error\"\\s*:\\s*\"([A-Za-z0-9_.-]+)\"");
+
 	private final CoachingSessionRepository sessionRepository;
 	private final CoachingChatClient chatClient;
 	private final CoachingTwinClient twinClient;
@@ -49,7 +54,7 @@ public class CoachingChatService {
 			turn = send(userId, session, message);
 		} catch (HttpClientErrorException e) {
 			if (!isSessionClosed(e)) {
-				throw unavailable(e);
+				throw rejected(e);
 			}
 			log.info("코칭 세션 종료로 재생성: userId={}, status={}", userId, e.getStatusCode());
 			session = renew(userId, session);
@@ -65,7 +70,7 @@ public class CoachingChatService {
 			if (e.getStatusCode() == HttpStatus.NOT_FOUND) {
 				throw new BusinessException(CoachingErrorCode.CHART_NOT_FOUND, e);
 			}
-			throw unavailable(e);
+			throw rejected(e);
 		} catch (HttpServerErrorException | ResourceAccessException e) {
 			throw unavailable(e);
 		}
@@ -134,7 +139,8 @@ public class CoachingChatService {
 					Duration.between(LocalDateTime.now(clock), session.getExpiresAt()));
 			return chartId;
 		} catch (RuntimeException e) {
-			log.warn("차트 생성 실패 — 답변만 전달: userId={}, answerId={}, cause={}", userId, turn.id(), e.toString());
+			log.warn("차트 생성 실패 — 답변만 전달: userId={}, answerId={}, code={}, cause={}",
+					userId, turn.id(), rejectionCode(e), e.toString());
 			return null;
 		}
 	}
@@ -175,7 +181,24 @@ public class CoachingChatService {
 		return e.getStatusCode() == HttpStatus.GONE || e.getStatusCode() == HttpStatus.CONFLICT;
 	}
 
+	/** 코칭 서버가 살아 있는데 요청을 거절한 4xx. 본문은 {"error": code} 한 단어라 그대로 남긴다. */
+	private static BusinessException rejected(HttpClientErrorException cause) {
+		log.warn("코칭 서버 거절: status={}, code={}", cause.getStatusCode().value(), rejectionCode(cause));
+		return new BusinessException(CoachingErrorCode.COACHING_REJECTED, cause);
+	}
+
 	private static BusinessException unavailable(Exception cause) {
+		if (cause instanceof HttpStatusCodeException http) {
+			log.warn("코칭 서버 응답 실패: status={}, code={}", http.getStatusCode().value(), rejectionCode(http));
+		}
 		return new BusinessException(CoachingErrorCode.COACHING_UNAVAILABLE, cause);
+	}
+
+	private static String rejectionCode(Exception cause) {
+		if (!(cause instanceof HttpStatusCodeException http)) {
+			return null;
+		}
+		Matcher matcher = ERROR_CODE.matcher(http.getResponseBodyAsString());
+		return matcher.find() ? matcher.group(1) : null;
 	}
 }

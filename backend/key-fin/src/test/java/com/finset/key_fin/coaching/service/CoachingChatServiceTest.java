@@ -11,6 +11,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -129,14 +130,15 @@ class CoachingChatServiceTest {
 	}
 
 	@Test
-	void 그_외_4xx와_연결_실패는_AI_001이다() {
+	void 세션_외_4xx_거절은_AI_003_연결_실패는_AI_001이다() {
 		given(sessionRepository.findByUserId(USER_ID)).willReturn(Optional.of(session("sess-live", 60)));
-		given(chatClient.sendMessage(USER_ID, "sess-live", "a")).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
+		given(chatClient.sendMessage(USER_ID, "sess-live", "a"))
+				.willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY, "{\"error\":\"period_clarification_required\"}"));
 		given(chatClient.sendMessage(USER_ID, "sess-live", "b")).willThrow(new ResourceAccessException("timeout"));
 
 		assertThatThrownBy(() -> service.chat(USER_ID, "a"))
 				.isInstanceOf(BusinessException.class)
-				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_UNAVAILABLE);
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_REJECTED);
 		assertThatThrownBy(() -> service.chat(USER_ID, "b"))
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_UNAVAILABLE);
@@ -253,14 +255,18 @@ class CoachingChatServiceTest {
 	}
 
 	@Test
-	void 차트_HTML은_404면_AI_002_그_외_장애는_AI_001이다() {
+	void 차트_HTML은_404면_AI_002_그_외_4xx는_AI_003_장애는_AI_001이다() {
 		given(chartClient.html(USER_ID, "missing")).willThrow(clientError(HttpStatus.NOT_FOUND));
+		given(chartClient.html(USER_ID, "bad")).willThrow(clientError(HttpStatus.UNPROCESSABLE_ENTITY));
 		given(chartClient.html(USER_ID, "down")).willThrow(new ResourceAccessException("timeout"));
 		given(chartClient.html(USER_ID, "ok")).willReturn("<!doctype html>");
 
 		assertThatThrownBy(() -> service.chartHtml(USER_ID, "missing"))
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.CHART_NOT_FOUND);
+		assertThatThrownBy(() -> service.chartHtml(USER_ID, "bad"))
+				.isInstanceOf(BusinessException.class)
+				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_REJECTED);
 		assertThatThrownBy(() -> service.chartHtml(USER_ID, "down"))
 				.isInstanceOf(BusinessException.class)
 				.extracting(e -> ((BusinessException) e).getErrorCode()).isEqualTo(CoachingErrorCode.COACHING_UNAVAILABLE);
@@ -308,6 +314,11 @@ class CoachingChatServiceTest {
 	}
 
 	private static HttpClientErrorException clientError(HttpStatus status) {
-		return HttpClientErrorException.create(status, status.getReasonPhrase(), HttpHeaders.EMPTY, new byte[0], null);
+		return clientError(status, "");
+	}
+
+	private static HttpClientErrorException clientError(HttpStatus status, String body) {
+		return HttpClientErrorException.create(status, status.getReasonPhrase(), HttpHeaders.EMPTY,
+				body.getBytes(StandardCharsets.UTF_8), StandardCharsets.UTF_8);
 	}
 }
