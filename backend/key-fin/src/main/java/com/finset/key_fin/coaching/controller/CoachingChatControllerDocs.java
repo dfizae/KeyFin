@@ -33,6 +33,7 @@ public interface CoachingChatControllerDocs {
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "답변"),
 			@ApiResponse(responseCode = "400", description = "message가 비었거나 2000자 초과"),
+			@ApiResponse(responseCode = "422", description = "AI_003 코칭 서버가 질문을 처리하지 못함(되묻기 대상 아닌 거절)"),
 			@ApiResponse(responseCode = "503", description = "AI_001 코칭 서버 응답 없음")
 	})
 	BaseResponse<ChatReply> chat(Long userId, ChatRequest request);
@@ -57,6 +58,7 @@ public interface CoachingChatControllerDocs {
 	@ApiResponses({
 			@ApiResponse(responseCode = "200", description = "차트 HTML 문서", content = @Content(mediaType = "text/html")),
 			@ApiResponse(responseCode = "404", description = "AI_002 차트 없음"),
+			@ApiResponse(responseCode = "422", description = "AI_003 코칭 서버가 요청을 거절"),
 			@ApiResponse(responseCode = "503", description = "AI_001 코칭 서버 응답 없음")
 	})
 	ResponseEntity<String> chartHtml(Long userId, String chartId);
