@@ -24,7 +24,7 @@ export async function getChatHistory(signal?: AbortSignal): Promise<ChatHistory>
 
 /**
  * POST /coaching/chat — 코치에게 질문 한 턴. 세션은 서버가 잇는다(24시간·20회, 만료되면 새 세션).
- * 오류: 400 COMMON_001(비었거나 2000자 초과) · 503 AI_001. 돈이 움직이지 않으므로 화면에서 다시 시도해도 된다.
+ * 오류: 400 COMMON_001(비었거나 2000자 초과) · 422 AI_003(코칭 서버가 질문을 거절 — 다시 보내도 같다) · 503 AI_001. 돈이 움직이지 않으므로 화면에서 다시 시도해도 된다.
  */
 export async function sendChatMessage(message: string): Promise<ChatReply> {
   if (isMocked("coaching")) return toChatReply(await withMockLatency(sendChatMock(message)));
@@ -35,8 +35,8 @@ export async function sendChatMessage(message: string): Promise<ChatReply> {
 
 /**
  * GET /coaching/charts/{chartId}/html — 예산 예측 차트를 자기완결 HTML 로 받는다(AI 서버 `/v1/charts/{id}/html` 을 백엔드가 중계).
- * 경로·오류 코드는 백엔드 미확정(TBD, 2026-09-22 — HTML 로 받기로 한 팀 결정만 확정). 응답이 JSON 봉투가 아니라 문서라
- * text 로 받고, 인터셉터의 unwrapEnvelope 는 문자열을 그대로 돌려준다. 오류: 404(없거나 다른 계정) · 503 AI_001.
+ * 경로·오류 코드는 백엔드 develop 으로 확정(2026-09-23). 응답이 JSON 봉투가 아니라 문서라
+ * text 로 받고, 인터셉터의 unwrapEnvelope 는 문자열을 그대로 돌려준다. 오류: 404 AI_002(없거나 다른 계정) · 422 AI_003 · 503 AI_001.
  */
 export async function getChartHtml(chartId: string, signal?: AbortSignal): Promise<string> {
   if (isMocked("coaching")) return toChartHtml(await withMockLatency(chartHtmlMock(chartId), signal));

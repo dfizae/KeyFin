@@ -12,8 +12,9 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useChatHistory, useSendChatMessage } from "@/features/coaching/api/queries";
+import { CoachingNumericTable } from "@/features/coaching/components/CoachingNumericTable";
 import { CoachingSpendingTable } from "@/features/coaching/components/CoachingSpendingTable";
-import { chatErrorMessage } from "@/features/coaching/errors";
+import { chatErrorMessage, isCoachRejected } from "@/features/coaching/errors";
 import { CHAT_MESSAGE_MAX_LENGTH, validateChatMessage, type ChatMessage } from "@/features/coaching/model";
 import { COACH_CAT } from "@/features/room/assets";
 import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
@@ -52,7 +53,8 @@ export function cleanupLinkLabel(pendingCount: number, pendingMore = false): str
 type ChatRow =
   | { key: string; kind: "message"; message: ChatMessage }
   | { key: "thinking"; kind: "thinking" }
-  | { key: "error"; kind: "error"; message: string };
+  /** retryable=false 는 코칭 서버가 그 질문을 거절한 것(AI_003) — 같은 질문을 다시 보내지 않고 입력창에서 다르게 묻는다 */
+  | { key: "error"; kind: "error"; message: string; retryable: boolean };
 
 /**
  * PAGE-31 코칭 대화 (FR-AI-04, P1). 홈의 코치 고양이를 누르면 들어온다(2026-09-22 사용자 요청 — 그 전까지는 임시 "?" 말풍선).
@@ -62,7 +64,7 @@ type ChatRow =
  * 홈 코치에 있던 '미확정 결제 n건 정리' 링크(2026-09-13 사용자 결정)는 여기 상단으로 옮겼다.
  * Pencil 미대조(시안 없음). 내 질문만 오른쪽 `bg-primary` 말풍선이고, 코치 답변은 말풍선 없이 고양이 얼굴 아래 바탕에 그대로 적는다
  * (2026-09-22 사용자 요청 — 처음엔 얼굴 옆 bg-card 말풍선이었는데 폰 폭에서 글이 세로로 길게 늘어졌다).
- * 소비 조회 집계(rows·totalKrw)는 답변 아래 표로 보여 준다. GET 이력에는 집계가 없어 재조회 후에는 본문·차트만 남는다.
+ * 소비 조회 집계(rows·totalKrw)와 위험·가정 표 데이터(numericRows)는 답변 아래 표로 보여 준다. GET 이력에는 둘 다 없어 재조회 후에는 본문·차트만 남는다.
  * 답변에 예산 예측 차트가 딸리면(chartId) 글 아래 '차트 보기' 버튼이 PAGE-31B 로 간다 — 차트 HTML 은 한 페이지라 말풍선에 넣지 않는다.
  */
 function CoachingChatScreen() {
@@ -94,9 +96,13 @@ function CoachingChatScreen() {
       list.push({
         key: "q-pending",
         kind: "message",
-        message: { role: "user", content: send.variables ?? "", chartId: null, rows: [], totalKrw: null },
+        message: { role: "user", content: send.variables ?? "", chartId: null, rows: [], totalKrw: null, numericRows: null },
       });
-      list.push(send.isPending ? { key: "thinking", kind: "thinking" } : { key: "error", kind: "error", message: chatErrorMessage(send.error) });
+      list.push(
+        send.isPending
+          ? { key: "thinking", kind: "thinking" }
+          : { key: "error", kind: "error", message: chatErrorMessage(send.error), retryable: !isCoachRejected(send.error) }
+      );
     }
     return list;
   }, [history.data, send.isPending, send.isError, send.variables, send.error]);
@@ -189,11 +195,13 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
         <Text className="text-label text-destructive" style={CHAT_TEXT_STYLE} accessibilityLiveRegion="polite">
           {row.message}
         </Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="다시 시도" hitSlop={6} onPress={onRetry} className="self-start">
-          <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
-            다시 시도
-          </Text>
-        </Pressable>
+        {row.retryable ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="다시 시도" hitSlop={6} onPress={onRetry} className="self-start">
+            <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
+              다시 시도
+            </Text>
+          </Pressable>
+        ) : null}
       </CoachReply>
     );
   }
@@ -214,6 +222,7 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
         {message.content}
       </Text>
       <CoachingSpendingTable rows={message.rows} totalKrw={message.totalKrw} />
+      <CoachingNumericTable numericRows={message.numericRows} />
       {chartId === null ? null : (
         <Pressable
           accessibilityRole="button"

@@ -35,6 +35,34 @@ export type ChatRequestDto = { message: string };
 export type ChatSpendingRowDto = { envelope: string; totalKrw: number; count: number };
 export type ChatSpendingRow = { envelope: string; totalKrw: KRW; count: number };
 
+/**
+ * 위험(risk)·가정(what_if) 코칭 답변의 봉투별 구조화 행 (ai/coaching/docs/chat.md `numeric_rows` · 백엔드 ChatReply.NumericRows, 2026-09-23 대조).
+ * 엔진이 이미 계산한 값을 서버가 그대로 노출하므로 앱도 그대로 표로 그린다. 그 외 답변과 GET 이력은 null 이다.
+ */
+export const NUMERIC_ROWS_MODES = ["risk", "what_if"] as const;
+export type NumericRowsMode = (typeof NUMERIC_ROWS_MODES)[number] | "UNKNOWN";
+
+export type ChatEnvelopeSpendRowDto = { envelope: string; p10Krw: number; p50Krw: number; p90Krw: number };
+export type ChatBudgetRiskRowDto = {
+  envelope: string;
+  budgetKrw: number;
+  observedUsedKrw: number;
+  projectedUsedP50Krw: number;
+  /** 0~1 확률 */
+  pOverBudget: number;
+};
+export type ChatNumericRowsDto = {
+  mode: string | null;
+  /** 두 모드 모두. 봉투별 예측 소비 분위수. 근거가 없으면 빈 배열(백엔드는 null 도 빈 배열로 내린다) */
+  envelopeSpend: ChatEnvelopeSpendRowDto[] | null;
+  /** 위험 답변에서 스냅샷에 봉투 예산이 있을 때만. 없으면 빈 배열 */
+  budgetRisk: ChatBudgetRiskRowDto[] | null;
+};
+
+export type ChatEnvelopeSpendRow = { envelope: string; p10Krw: KRW; p50Krw: KRW; p90Krw: KRW };
+export type ChatBudgetRiskRow = { envelope: string; budgetKrw: KRW; observedUsedKrw: KRW; projectedUsedP50Krw: KRW; pOverBudget: number };
+export type ChatNumericRows = { mode: NumericRowsMode; envelopeSpend: ChatEnvelopeSpendRow[]; budgetRisk: ChatBudgetRiskRow[] };
+
 export type ChatReplyDto = {
   reply: string;
   kind: string;
@@ -47,9 +75,11 @@ export type ChatReplyDto = {
   /** 소비 조회 답변의 봉투별 집계. 그 외 답변은 빈 배열·null */
   rows: ChatSpendingRowDto[];
   totalKrw: number | null;
+  /** 위험·가정 답변의 봉투별 표 데이터. 그 외 답변은 null (이 필드가 없던 응답은 undefined) */
+  numericRows?: ChatNumericRowsDto | null;
 };
 
-/** GET 이력에는 소비 집계(rows·totalKrw)가 포함되지 않는다 */
+/** GET 이력에는 소비 집계(rows·totalKrw)와 표 데이터(numericRows)가 포함되지 않는다 */
 export type ChatMessageDto = { role: string; content: string; chartId?: string | null };
 
 export type ChatHistoryDto = {
@@ -71,6 +101,7 @@ export type ChatReply = {
   chartId: string | null;
   rows: ChatSpendingRow[];
   totalKrw: KRW | null;
+  numericRows: ChatNumericRows | null;
 };
 
 export type ChatMessage = {
@@ -79,6 +110,7 @@ export type ChatMessage = {
   chartId: string | null;
   rows: ChatSpendingRow[];
   totalKrw: KRW | null;
+  numericRows: ChatNumericRows | null;
 };
 
 export type ChatHistory = {
@@ -106,6 +138,44 @@ function toSpendingRow(dto: ChatSpendingRowDto): ChatSpendingRow {
   return { envelope: dto.envelope, totalKrw: won(dto.totalKrw, "rows.totalKrw"), count: dto.count };
 }
 
+function toEnvelopeSpendRow(dto: ChatEnvelopeSpendRowDto): ChatEnvelopeSpendRow {
+  if (typeof dto?.envelope !== "string") throw new ContractMismatchError("numericRows.envelopeSpend.envelope");
+  return {
+    envelope: dto.envelope,
+    p10Krw: won(dto.p10Krw, "numericRows.envelopeSpend.p10Krw"),
+    p50Krw: won(dto.p50Krw, "numericRows.envelopeSpend.p50Krw"),
+    p90Krw: won(dto.p90Krw, "numericRows.envelopeSpend.p90Krw"),
+  };
+}
+
+function toBudgetRiskRow(dto: ChatBudgetRiskRowDto): ChatBudgetRiskRow {
+  if (typeof dto?.envelope !== "string") throw new ContractMismatchError("numericRows.budgetRisk.envelope");
+  const p = dto.pOverBudget;
+  if (typeof p !== "number" || !Number.isFinite(p) || p < 0 || p > 1) throw new ContractMismatchError("numericRows.budgetRisk.pOverBudget");
+  return {
+    envelope: dto.envelope,
+    budgetKrw: won(dto.budgetKrw, "numericRows.budgetRisk.budgetKrw"),
+    observedUsedKrw: won(dto.observedUsedKrw, "numericRows.budgetRisk.observedUsedKrw"),
+    projectedUsedP50Krw: won(dto.projectedUsedP50Krw, "numericRows.budgetRisk.projectedUsedP50Krw"),
+    pOverBudget: p,
+  };
+}
+
+/** 위험·가정 답변의 표 데이터. 없으면(null·필드 없음) null 이고, 행 목록이 null 이면 빈 배열로 본다 */
+export function toNumericRows(dto: ChatNumericRowsDto | null | undefined): ChatNumericRows | null {
+  if (dto === null || dto === undefined) return null;
+  if (typeof dto !== "object") throw new ContractMismatchError("numericRows");
+  const envelopeSpend = dto.envelopeSpend ?? [];
+  const budgetRisk = dto.budgetRisk ?? [];
+  if (!Array.isArray(envelopeSpend)) throw new ContractMismatchError("numericRows.envelopeSpend");
+  if (!Array.isArray(budgetRisk)) throw new ContractMismatchError("numericRows.budgetRisk");
+  return {
+    mode: toUnion(NUMERIC_ROWS_MODES, dto.mode),
+    envelopeSpend: envelopeSpend.map(toEnvelopeSpendRow),
+    budgetRisk: budgetRisk.map(toBudgetRiskRow),
+  };
+}
+
 export function toChatReply(dto: ChatReplyDto): ChatReply {
   if (typeof dto.reply !== "string") throw new ContractMismatchError("reply");
   const rows = dto.rows ?? [];
@@ -122,6 +192,7 @@ export function toChatReply(dto: ChatReplyDto): ChatReply {
     chartId: parseChartId(dto.chartId ?? undefined),
     rows: rows.map(toSpendingRow),
     totalKrw: dto.totalKrw == null ? null : won(dto.totalKrw, "totalKrw"),
+    numericRows: toNumericRows(dto.numericRows),
   };
 }
 
@@ -133,6 +204,7 @@ export function toChatMessage(dto: ChatMessageDto): ChatMessage {
     chartId: parseChartId(dto.chartId ?? undefined),
     rows: [],
     totalKrw: null,
+    numericRows: null,
   };
 }
 
@@ -159,23 +231,23 @@ export function validateChatMessage(raw: string): ChatMessageValidation {
 /**
  * 답변을 받은 뒤 이력 캐시에 질문·답변 한 턴을 붙인다 — 이력을 다시 받지 않아도 화면이 이어진다.
  * 세션 만료 시각은 서버만 알아서(만료 뒤 첫 질문이면 새 세션) 그대로 두고, 세션이 없던 상태였으면 있는 것으로 본다.
- * 소비 집계는 POST 응답을 캐시에 보관하는 동안만 표시한다. GET 이력으로 재조회하면 집계는 없다.
+ * 소비 집계·표 데이터는 POST 응답을 캐시에 보관하는 동안만 표시한다. GET 이력으로 재조회하면 둘 다 없다.
  */
 export function appendChatTurn(history: ChatHistory, question: string, reply: ChatReply): ChatHistory {
   return {
     ...history,
     messages: [
       ...history.messages,
-      { role: "user", content: question, chartId: null, rows: [], totalKrw: null },
-      { role: "assistant", content: reply.reply, chartId: reply.chartId, rows: reply.rows, totalKrw: reply.totalKrw },
+      { role: "user", content: question, chartId: null, rows: [], totalKrw: null, numericRows: null },
+      { role: "assistant", content: reply.reply, chartId: reply.chartId, rows: reply.rows, totalKrw: reply.totalKrw, numericRows: reply.numericRows },
     ],
     hasSession: true,
   };
 }
 
 /**
- * 예산 예측 차트 (AI 서버 `POST /v1/charts/budget-forecast` 결과를 백엔드가 HTML 로 중계하기로 함 — 2026-09-22 팀 결정).
- * 중계 경로·답변에 붙는 차트 필드는 백엔드 미확정(TBD). 앱은 차트 id 로 HTML 문자열을 받아 WebView 에 그린다.
+ * 예산 예측 차트 (AI 서버 `POST /v1/charts/budget-forecast` 결과를 백엔드가 HTML 로 중계 — 2026-09-22 팀 결정, 2026-09-23 백엔드 확정).
+ * 답변·이력의 chartId 로 `GET /coaching/charts/{chartId}/html` 을 받아 WebView 에 그린다.
  */
 
 /** AI 서버 차트 id 는 uuid4().hex(32자)지만 백엔드가 감쌀 수 있어 URL 에 안전한 글자 64자까지 받는다 */
