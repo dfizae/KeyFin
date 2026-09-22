@@ -42,7 +42,11 @@ class CoachingChatClientTest {
 			{"id":"coach-3","text":"이번 달 말 잔액은 12만 원 남을 것 같아요.","wording_source":"llm","model":"qwen",
 			 "fallback_reason":null,"receipt":{"engine_commit":"abc","trigger":"forecast"},"created_at":1789000200.0,
 			 "chart_hint":{"endpoint":"/v1/charts/budget-forecast","period_start":"2026-09-01","question":"월말 잔액 예측해줘",
-			               "purchase":{"envelope":"취미·여가","amount_krw":300000,"on_date":"2026-09-28"}}}
+			               "purchase":{"envelope":"취미·여가","amount_krw":300000,"on_date":"2026-09-28"}},
+			 "numeric_rows":{"mode":"what_if",
+			                 "envelope_spend":[{"envelope":"외식","p10_krw":100000,"p50_krw":150000,"p90_krw":240000}],
+			                 "budget_risk":[{"envelope":"외식","budget_krw":297000,"observed_used_krw":63800,
+			                                 "projected_used_p50_krw":213800,"p_over_budget":0.12}]}}
 			""";
 
 	private MockRestServiceServer server;
@@ -122,6 +126,9 @@ class CoachingChatClientTest {
 		assertThat(reply.chartHint().purchase().amountKrw()).isEqualTo(300_000L);
 		assertThat(reply.chartHint().purchase().onDate()).isEqualTo("2026-09-28");
 		assertThat(reply.rows()).isNull();
+		assertThat(reply.numericRows().mode()).isEqualTo("what_if");
+		assertThat(reply.numericRows().envelopeSpend().get(0).p90Krw()).isEqualTo(240_000L);
+		assertThat(reply.numericRows().budgetRisk().get(0).pOverBudget()).isEqualTo(0.12);
 		server.verify();
 	}
 }

@@ -18,7 +18,8 @@ public record CoachingTurnReply(
 		@JsonProperty("receipt") Map<String, Object> receipt,
 		@JsonProperty("chart_hint") ChartHint chartHint,
 		@JsonProperty("rows") List<SpendingRow> rows,
-		@JsonProperty("total_krw") Long totalKrw
+		@JsonProperty("total_krw") Long totalKrw,
+		@JsonProperty("numeric_rows") CoachingNumericRows numericRows
 ) {
 	public boolean isCoaching() {
 		return answerType == null && receipt != null;
