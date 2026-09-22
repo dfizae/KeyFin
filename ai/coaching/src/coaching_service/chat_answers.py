@@ -9,6 +9,7 @@ from pydantic import Field
 from coaching_service.finance_knowledge import reference_document, selected_finance_wording
 from coaching_service.llm_contract import FinanceWording, Routing, Wording
 from coaching_service.schemas import Frozen, JsonDocument
+from coaching_service.spending_history import SpendingRow
 
 
 class FinanceQuestion(Frozen):
@@ -29,6 +30,10 @@ class ChatAnswer(Frozen):
     fallback_reason: str | None = None
     evidence: JsonDocument
     created_at: float
+    # 소비 조회(spending_history) 응답에서만 채우는 1급 필드. 나머지 answer_type은
+    # 기본값을 유지해 값이 없으며, 같은 데이터는 evidence.spending에도 그대로 남는다.
+    rows: tuple[SpendingRow, ...] = ()
+    total_krw: int | None = None
 
 
 def knowledge_answer(wording: Wording) -> ChatAnswer:
