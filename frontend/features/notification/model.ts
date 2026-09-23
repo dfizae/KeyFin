@@ -271,3 +271,16 @@ export function pushNotificationHref(data: unknown): string | null {
       return null;
   }
 }
+
+/** 고양이 말풍선에 한 번에 담을 최대 글자 수. 넘치면 말줄임표로 줄인다 */
+const PUSH_SPEECH_MAX = 80;
+
+/**
+ * 포그라운드 푸시를 코치 고양이 말풍선 문장으로 바꾼다 (사용자 요청 2026-09-23). 본문이 있으면 본문, 없으면 제목.
+ * 둘 다 비었으면 말할 것이 없다(null). 밖에서 온 값이라 앞뒤 공백을 떼고 길이를 자른다 (규칙 50).
+ */
+export function pushSpeechText(text: { title: string | null; body: string | null }): string | null {
+  const picked = [text.body, text.title].map((part) => part?.trim() ?? "").find((part) => part !== "");
+  if (picked === undefined) return null;
+  return picked.length > PUSH_SPEECH_MAX ? `${picked.slice(0, PUSH_SPEECH_MAX - 1)}…` : picked;
+}

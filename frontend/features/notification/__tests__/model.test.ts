@@ -17,6 +17,7 @@ import {
   notificationHref,
   notificationTimeLabel,
   pushNotificationHref,
+  pushSpeechText,
   shouldShowPushBanner,
   toInboxNotification,
   toNotificationPage,
@@ -276,5 +277,24 @@ describe("푸시 탭 딥링크 (frontend-spec §3 · 푸시 전용 4종은 2026-
     expect(pushNotificationHref({ type: "REACTION", reactionType: "HAPPY" })).toBe("/");
     expect(pushNotificationHref({ type: "REFUND" })).toBeNull();
     expect(pushNotificationHref(null)).toBeNull();
+  });
+});
+
+describe("pushSpeechText (코치 고양이 말풍선)", () => {
+  it("본문이 있으면 본문, 없으면 제목을 쓴다", () => {
+    expect(pushSpeechText({ title: "월세 결제 준비", body: "내일 월세 550,000원이 나가요." })).toBe("내일 월세 550,000원이 나가요.");
+    expect(pushSpeechText({ title: "월세 결제 준비", body: null })).toBe("월세 결제 준비");
+    expect(pushSpeechText({ title: "  제목  ", body: "   " })).toBe("제목");
+  });
+
+  it("둘 다 비었으면 말하지 않는다", () => {
+    expect(pushSpeechText({ title: null, body: null })).toBeNull();
+    expect(pushSpeechText({ title: "", body: " " })).toBeNull();
+  });
+
+  it("너무 긴 문장은 80자로 줄이고 말줄임표를 붙인다", () => {
+    const text = pushSpeechText({ title: null, body: "가".repeat(100) });
+    expect(text).toHaveLength(80);
+    expect(text?.endsWith("…")).toBe(true);
   });
 });
