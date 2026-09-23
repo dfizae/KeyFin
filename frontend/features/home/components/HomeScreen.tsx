@@ -249,7 +249,8 @@ function HomeSideActions({
           icon={Store}
           label="상점"
           hint="상점을 엽니다"
-          iconClassName="text-primary"
+          faceClassName="bg-primary"
+          iconClassName="text-primary-foreground"
           route={SHOP_ROUTE}
           guideId="shop"
           onMeasure={onMeasure}
@@ -258,7 +259,8 @@ function HomeSideActions({
           icon={Shirt}
           label="옷장"
           hint="캐릭터 옷을 갈아입습니다"
-          iconClassName="text-positive"
+          faceClassName="bg-positive"
+          iconClassName="text-positive-foreground"
           route={WARDROBE_ROUTE}
           guideId="wardrobe"
           onMeasure={onMeasure}
@@ -272,25 +274,34 @@ function HomeSideActions({
 
 const COIN_HISTORY_ROUTE = "/coin";
 
-// Pencil CoinBadge (DsQOx): bg-accent 알약 · 노란 원 + 숫자. 누르면 코인 이력(PAGE-30)으로 간다.
-// 방 그림 위에 떠 있어 그림자로 면을 띄우고, 알림 버튼과 같은 40pt 높이로 맞췄다 (2026-09-18).
+/**
+ * 방 위에 떠 있는 버튼의 게임 UI 톤 (사용자 요청 2026-09-23 "게임 화면 톤으로").
+ * 앱 화면과 같은 연보라 원이면 방 위에서 앱 UI 로 보여, 색 면 + 흰 테두리 + 아래쪽 음영으로 입체 버튼처럼 만든다.
+ * 누르면 아래 음영이 얇아져 눌려 들어간 것처럼 보인다. 색은 버튼마다 다른 시맨틱 토큰이고 음영·테두리는 고정 토큰 white·black 이다.
+ */
+const GAME_BUTTON_CLASS =
+  "h-12 w-12 items-center justify-center rounded-lg border-2 border-b-4 border-white border-b-black/20 shadow-md shadow-black/20 active:border-b-2";
+/** 게임 톤 아이콘은 선을 조금 굵게 그린다 */
+const GAME_ICON_STROKE = 2.5;
+
+// Pencil CoinBadge (DsQOx) 를 게임 톤으로 바꿨다(2026-09-23): 반투명 검정 알약 + 흰 테두리 금화 + 흰 숫자. 누르면 코인 이력(PAGE-30)으로 간다.
 function CoinBadge({ balance }: { balance: number }) {
   const router = useRouter();
   const text = formatKRW(String(balance), { unit: false });
 
   return (
     <Pressable
-      className="h-10 flex-row items-center gap-1.5 rounded-full bg-accent px-3 shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
+      className="h-11 flex-row items-center gap-2 rounded-full border-2 border-white/40 bg-black/40 pl-1 pr-4 active:opacity-80"
       accessibilityRole="button"
       accessibilityLabel={`코인 ${text}개`}
       accessibilityHint="코인 이력을 엽니다"
       hitSlop={8}
       onPress={() => router.push(COIN_HISTORY_ROUTE)}
     >
-      <View className="h-5 w-5 items-center justify-center rounded-full bg-warning" accessible={false}>
-        <Icon as={Coins} size={12} className="text-foreground" />
+      <View className="h-8 w-8 items-center justify-center rounded-full border-2 border-white bg-warning" accessible={false}>
+        <Icon as={Coins} size={16} strokeWidth={GAME_ICON_STROKE} className="text-warning-foreground" />
       </View>
-      <Text className="text-label tabular-nums text-foreground">{text}</Text>
+      <Text className="text-h3 tabular-nums text-white">{text}</Text>
     </Pressable>
   );
 }
@@ -304,7 +315,9 @@ type RoomActionButtonProps = {
   /** 스크린리더가 읽는 이름 */
   label: string;
   hint: string;
-  /** 아이콘 색. 봉투처럼 버튼마다 다른 색을 줘 한눈에 갈린다 (사용자 요청 2026-09-20) */
+  /** 버튼 면 색. 봉투처럼 버튼마다 다른 색을 줘 한눈에 갈린다 (사용자 요청 2026-09-20, 면 색은 2026-09-23 게임 톤) */
+  faceClassName: string;
+  /** 면 색 위에 올라가는 아이콘 색(그 면 색의 -foreground) */
   iconClassName: string;
   route: string;
   /** 첫 진입 안내가 가리킬 대상 id */
@@ -312,9 +325,9 @@ type RoomActionButtonProps = {
   onMeasure: (id: GuideTargetId, rect: SceneRect) => void;
 };
 
-// Pencil NotificationBtn (q6hfgQ): 40pt 원형 bg-accent + lucide 아이콘. 알림·상점·옷장이 같은 모양이라 함께 쓴다.
+// Pencil NotificationBtn (q6hfgQ) 을 게임 톤으로 바꿨다(2026-09-23, GAME_BUTTON_CLASS). 알림·상점·옷장이 같은 모양이라 함께 쓴다.
 // 첫 진입 안내가 이 버튼들도 가리키므로 그려진 자리를 창 기준으로 재서 올려 보낸다 — 씬 좌표가 없는 화면 레이어라 계산으로는 못 구한다.
-function RoomActionButton({ icon, label, hint, iconClassName, route, guideId, onMeasure }: RoomActionButtonProps) {
+function RoomActionButton({ icon, label, hint, faceClassName, iconClassName, route, guideId, onMeasure }: RoomActionButtonProps) {
   const router = useRouter();
   const ref = React.useRef<View>(null);
   const measure = React.useCallback(() => {
@@ -329,17 +342,17 @@ function RoomActionButton({ icon, label, hint, iconClassName, route, guideId, on
       accessibilityLabel={label}
       accessibilityHint={hint}
       hitSlop={8}
-      className="h-10 w-10 items-center justify-center rounded-full bg-accent shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
+      className={cn(GAME_BUTTON_CLASS, faceClassName)}
       onPress={() => router.push(route)}
     >
-      <Icon as={icon} size={20} className={iconClassName} />
+      <Icon as={icon} size={22} strokeWidth={GAME_ICON_STROKE} className={iconClassName} />
     </Pressable>
   );
 }
 
 /**
  * 홈 안내 다시 보기 (사용자 요청 2026-09-23). 첫 진입 안내는 한 번 보면 다시 뜨지 않아, 사이드 버튼 줄 맨 아래에 "?" 로 다시 여는 길을 둔다.
- * 모양은 알림·상점·옷장과 같은 40pt 원형이다. 안내가 가리키는 대상은 아니라 자리를 재지 않는다.
+ * 모양은 알림·상점·옷장과 같은 게임 톤 버튼이다. 안내가 가리키는 대상은 아니라 자리를 재지 않는다.
  */
 export const HOME_HELP_LABEL = "홈 안내 다시 보기";
 
@@ -350,10 +363,10 @@ function HelpButton({ onPress }: { onPress: () => void }) {
       accessibilityLabel={HOME_HELP_LABEL}
       accessibilityHint="홈 화면 사용법을 처음부터 다시 보여 줍니다"
       hitSlop={8}
-      className="h-10 w-10 items-center justify-center rounded-full bg-accent shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
+      className={cn(GAME_BUTTON_CLASS, "bg-highlight")}
       onPress={onPress}
     >
-      <Icon as={CircleQuestionMark} size={20} className="text-card-foreground" />
+      <Icon as={CircleQuestionMark} size={22} strokeWidth={GAME_ICON_STROKE} className="text-highlight-foreground" />
     </Pressable>
   );
 }
@@ -365,7 +378,8 @@ function NotificationButton({ onMeasure }: { onMeasure: (id: GuideTargetId, rect
       icon={Bell}
       label="알림"
       hint="알림함을 엽니다"
-      iconClassName="text-info"
+      faceClassName="bg-info"
+      iconClassName="text-info-foreground"
       route={NOTIFICATION_ROUTE}
       guideId="notification"
       onMeasure={onMeasure}
