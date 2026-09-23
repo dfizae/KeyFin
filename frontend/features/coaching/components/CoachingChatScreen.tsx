@@ -121,9 +121,11 @@ function CoachingChatScreen() {
             ref={listRef}
             data={rows}
             keyExtractor={(row) => row.key}
-            contentContainerClassName="gap-3 px-6 pb-4"
-            renderItem={({ item }) => (
-              <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+            contentContainerClassName="px-6 pb-4"
+            renderItem={({ item, index }) => (
+              <View className={rowSpacingClass(item, index)}>
+                <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+              </View>
             )}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             keyboardShouldPersistTaps="handled"
@@ -169,6 +171,16 @@ function CoachingChatScreen() {
   );
 }
 
+/**
+ * 질문·답변 한 쌍은 붙이고(12) 새 질문이 시작되는 곳만 넓게(40) 띄워 대화가 묻고 답한 단위로 끊겨 보이게 한다(사용자 요청 2026-09-23).
+ * 목록 전체 gap 으로는 쌍 안팎을 구분할 수 없어 줄마다 위 여백으로 준다.
+ */
+function rowSpacingClass(row: ChatRow, index: number): string {
+  if (index === 0) return "";
+  const isQuestion = row.kind === "message" && row.message.role === "user";
+  return isQuestion ? "pt-10" : "pt-3";
+}
+
 type ChatRowViewProps = { row: ChatRow; onRetry: () => void; onOpenChart: (chartId: string) => void };
 
 function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
@@ -208,8 +220,9 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
       </View>
     );
   }
+  const hasTable = message.rows.length > 0 || message.totalKrw !== null || message.numericRows !== null;
   return (
-    <CoachReply>
+    <CoachReply wide={hasTable}>
       <Text className="text-body text-foreground">
         {message.content}
       </Text>
@@ -235,11 +248,20 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
 }
 
 /** 코치(고양이) 답변 — 고양이 얼굴 아래에 말풍선 카드 없이 바탕에 그대로 적는다(2026-09-22 사용자 요청). 카드가 없으니 폭 제한도 없다 */
-function CoachReply({ children }: { children: React.ReactNode }) {
+// 코치 답변도 내 질문처럼 말풍선으로 감싼다(사용자 요청 2026-09-23). 흰 카드 면 + 그림자이고 고양이 쪽 위 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다.
+// 표가 붙은 답변(wide)은 85% 폭이면 금액 열이 두 줄로 꺾여 화면 폭 가득 쓴다.
+function CoachReply({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
   return (
     <View className="gap-1.5">
       <Image source={COACH_CAT} style={AVATAR_STYLE} resizeMode="contain" accessible={false} />
-      <View className="gap-2" accessibilityRole="text">
+      <View
+        className={cn(
+          "gap-2 rounded-2xl rounded-tl-sm bg-card px-4 py-3 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none",
+          wide ? "self-stretch" : "self-start"
+        )}
+        style={wide ? undefined : BUBBLE_MAX_STYLE}
+        accessibilityRole="text"
+      >
         {children}
       </View>
     </View>
