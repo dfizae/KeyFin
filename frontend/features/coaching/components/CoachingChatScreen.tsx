@@ -18,6 +18,7 @@ import { CoachingNumericTable } from "@/features/coaching/components/CoachingNum
 import { CoachingSpendingTable } from "@/features/coaching/components/CoachingSpendingTable";
 import { chatErrorMessage, isCoachRejected } from "@/features/coaching/errors";
 import { CHAT_MESSAGE_MAX_LENGTH, validateChatMessage, type ChatMessage } from "@/features/coaching/model";
+import { useCoachingChatScroll } from "@/features/coaching/useCoachingChatScroll";
 import { COACH_CAT } from "@/features/room/assets";
 import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 import { formatDateTime, parseKSTLocalDateTime } from "@/lib/date";
@@ -45,9 +46,11 @@ export function cleanupLinkLabel(pendingCount: number, pendingMore = false): str
 /** 목록 한 줄. 서버 이력과, 보내는 중인 질문·기다리는 답변을 같은 모양으로 그린다 */
 type ChatRow =
   | { key: string; kind: "message"; message: ChatMessage }
-  | { key: "thinking"; kind: "thinking" }
+  | { key: string; kind: "thinking" }
   /** retryable=false 는 코칭 서버가 그 질문을 거절한 것(AI_003) — 같은 질문을 다시 보내지 않고 입력창에서 다르게 묻는다 */
-  | { key: "error"; kind: "error"; message: string; retryable: boolean };
+  | { key: string; kind: "error"; message: string; retryable: boolean };
+
+type PendingTurn = { questionIndex: number; question: string; attempt: number };
 
 /**
  * PAGE-31 코칭 대화 (FR-AI-04, P1). 홈의 코치 고양이를 누르면 들어온다(2026-09-22 사용자 요청 — 그 전까지는 임시 "?" 말풍선).
@@ -66,45 +69,67 @@ function CoachingChatScreen() {
   const send = useSendChatMessage();
   const pending = usePendingTransactions();
   const [draft, setDraft] = React.useState("");
+  const [turn, setTurn] = React.useState<PendingTurn | null>(null);
+  const nextAttempt = React.useRef(0);
   const listRef = React.useRef<FlatList<ChatRow>>(null);
+
+  // 캐시 갱신이 mutation 성공 알림보다 먼저 와도 질문과 대기 행을 중복 표시하지 않는다.
+  const turnCommitted = turn !== null
+    && history.data?.messages[turn.questionIndex]?.role === "user"
+    && history.data.messages[turn.questionIndex].content === turn.question
+    && history.data.messages[turn.questionIndex + 1]?.role === "assistant";
+  const waitingForReply = turn !== null && send.isPending && !turnCommitted;
+  const scrollRequestId = turn?.attempt ?? 0;
+  const chatScroll = useCoachingChatScroll(listRef, scrollRequestId, history.isSuccess && (turn === null || waitingForReply));
 
   const pendingCount = flattenPending(pending.data).length;
   const validation = validateChatMessage(draft);
-  const canSend = validation.ok && !send.isPending;
+  const canSend = history.isSuccess && validation.ok && !send.isPending;
 
   const submit = () => {
-    if (!validation.ok || send.isPending) return;
-    send.mutate(validation.message, { onSuccess: () => setDraft("") });
+    if (!history.isSuccess || !validation.ok || send.isPending) return;
+    setTurn({ questionIndex: history.data.messages.length, question: validation.message, attempt: ++nextAttempt.current });
+    send.mutate(validation.message, { onSuccess: () => setDraft(""), onSettled: chatScroll.cancel });
   };
   const retry = () => {
-    if (send.variables === undefined || send.isPending) return;
-    send.mutate(send.variables);
+    if (turn === null || send.isPending) return;
+    setTurn({ ...turn, attempt: ++nextAttempt.current });
+    send.mutate(turn.question, { onSuccess: () => setDraft(""), onSettled: chatScroll.cancel });
   };
 
   const rows = React.useMemo<ChatRow[]>(() => {
     const messages = history.data?.messages ?? [];
     const list: ChatRow[] = messages.map((message, index) => ({ key: `m-${index}`, kind: "message", message }));
     // 보낸 질문은 답이 올 때까지(성공 시 캐시에 붙는다) 여기서만 보인다. 실패하면 질문 아래에 다시 시도를 둔다.
-    if (send.isPending || send.isError) {
+    if (turn !== null && !turnCommitted && (send.isPending || send.isError)) {
       list.push({
-        key: "q-pending",
+        key: `m-${turn.questionIndex}`,
         kind: "message",
-        message: { role: "user", content: send.variables ?? "", chartId: null, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] },
+        message: { role: "user", content: turn.question, chartId: null, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] },
       });
       list.push(
         send.isPending
-          ? { key: "thinking", kind: "thinking" }
-          : { key: "error", kind: "error", message: chatErrorMessage(send.error), retryable: !isCoachRejected(send.error) }
+          ? { key: `m-${turn.questionIndex + 1}`, kind: "thinking" }
+          : { key: `m-${turn.questionIndex + 1}`, kind: "error", message: chatErrorMessage(send.error), retryable: !isCoachRejected(send.error) }
       );
     }
     return list;
-  }, [history.data, send.isPending, send.isError, send.variables, send.error]);
+  }, [history.data, send.isPending, send.isError, send.error, turn, turnCommitted]);
 
   const expiresAt = history.data?.expiresAt ?? null;
+  const goBack = () => {
+    chatScroll.cancel();
+    if (router.canGoBack()) router.back();
+    else router.replace(HOME_ROUTE);
+  };
+  const openChart = (chartId: string) => {
+    chatScroll.cancel();
+    router.push(`${CHART_ROUTE}/${chartId}`);
+  };
 
   return (
     <Screen>
-      <ScreenHeader title={COACH_TITLE} onBack={() => (router.canGoBack() ? router.back() : router.replace(HOME_ROUTE))} />
+      <ScreenHeader title={COACH_TITLE} onBack={goBack} />
       <KeyboardAvoidingView className="flex-1">
         {history.isPending ? (
           <ChatSkeleton />
@@ -119,16 +144,20 @@ function CoachingChatScreen() {
           </View>
         ) : (
           <ScreenFlatList
+            testID="coaching-chat-list"
             ref={listRef}
             data={rows}
             keyExtractor={(row) => row.key}
             contentContainerClassName="px-6 pb-4"
             renderItem={({ item, index }) => (
               <View className={rowSpacingClass(item, index)}>
-                <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+                <ChatRowView row={item} onRetry={retry} onOpenChart={openChart} />
               </View>
             )}
-            onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={chatScroll.onContentSizeChange}
+            onLayout={chatScroll.onLayout}
+            onScrollBeginDrag={chatScroll.cancel}
+            ListFooterComponent={<View key={scrollRequestId} onLayout={chatScroll.onRequestLayout} />}
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
               <View className="gap-3 pb-1">
