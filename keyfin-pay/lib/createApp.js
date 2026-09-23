@@ -11,6 +11,13 @@ const MERCHANT_SQL =
   'SELECT MIN(m.fin_merchant_id) AS fin_merchant_id, m.name, s.name AS subcategory_name '
   + 'FROM merchants m JOIN subcategories s ON m.subcategory_id = s.id '
   + 'GROUP BY m.name, s.name ORDER BY s.name, m.name';
+// 원장이 아는 금융망 가맹점 ID 전부 — 중복 등록으로 걸러진 ID도 원장에는 있으니 미분류가 아니다
+const KNOWN_ID_SQL = 'SELECT fin_merchant_id FROM merchants';
+
+// 금융망에는 있지만 원장 merchants 에 없는 가맹점. 여기서 결제하면 백엔드가 세분류를 못 찾아 미분류 거래로 두고
+// 앱이 사용자에게 어느 카테고리인지 묻는다.
+export const UNCATEGORIZED = '미분류';
+const FIN_MERCHANT_TTL_MS = 60_000; // 콘솔에서 새로 등록한 가맹점이 1분 안에 목록에 뜨도록
 
 export function createApp({ finBaseUrl, finApiKey, db, fetchImpl = fetch }) {
   const FIN = String(finBaseUrl || '').replace(/\/$/, '');
@@ -30,6 +37,7 @@ export function createApp({ finBaseUrl, finApiKey, db, fetchImpl = fetch }) {
     subHistory: `${FIN}/edu/creditCard/inquireSubscriptionHistory`,
   };
   const MEMBER_SEARCH = `${FIN}/member/search`;
+  const MERCHANT_LIST = `${FIN}/edu/creditCard/inquireMerchantList`;
 
   const app = express();
   app.use(express.json());
@@ -64,21 +72,64 @@ export function createApp({ finBaseUrl, finApiKey, db, fetchImpl = fetch }) {
     }
   });
 
-  let merchantCache = null; // ponytail: 프로세스 캐시 — 가맹점 추가가 잦아지면 TTL 부여
-  app.get('/api/merchants', async (req, res) => {
-    try {
-      if (!merchantCache) {
-        const [rows] = await db.query(MERCHANT_SQL);
-        merchantCache = rows.map((r) => ({
+  let ledgerCache = null; // ponytail: 프로세스 캐시 — 원장 가맹점 추가가 잦아지면 TTL 부여
+  async function loadLedger() {
+    if (!ledgerCache) {
+      const [[rows], [known]] = await Promise.all([db.query(MERCHANT_SQL), db.query(KNOWN_ID_SQL)]);
+      ledgerCache = {
+        merchants: rows.map((r) => ({
           finMerchantId: r.fin_merchant_id,
           name: r.name,
           subcategoryName: r.subcategory_name,
-        }));
-      }
-      res.json(merchantCache);
-    } catch (err) {
-      fail(res, 500, 'DB 조회 실패: ' + String(err?.message || err));
+        })),
+        ids: new Set(known.map((r) => String(r.fin_merchant_id))),
+        names: new Set(rows.map((r) => r.name)),
+      };
     }
+    return ledgerCache;
+  }
+
+  let finMerchantCache = null; // { at, rows }
+  async function loadFinMerchants() {
+    if (finMerchantCache && Date.now() - finMerchantCache.at < FIN_MERCHANT_TTL_MS) return finMerchantCache.rows;
+    const { data } = await callFin(MERCHANT_LIST, {});
+    const code = data?.Header?.responseCode;
+    if (code !== 'H0000' || !Array.isArray(data?.REC)) {
+      throw new Error(data?.Header?.responseMessage || data?.responseMessage || `가맹점 조회 응답 이상(${code ?? '코드 없음'})`);
+    }
+    finMerchantCache = { at: Date.now(), rows: data.REC };
+    return data.REC;
+  }
+
+  function uncategorizedOf(finRows, ledger) {
+    const byName = new Map();
+    for (const r of finRows) {
+      const id = Number(r.merchantId);
+      const name = String(r.merchantName ?? '').trim();
+      // 이름이 원장 가맹점과 같으면 중복 등록 잔재라 목록에서 같은 가게가 두 번 보이지 않게 뺀다
+      if (!Number.isFinite(id) || !name || ledger.ids.has(String(id)) || ledger.names.has(name)) continue;
+      const prev = byName.get(name);
+      if (!prev || id < prev.finMerchantId) byName.set(name, { finMerchantId: id, name, subcategoryName: UNCATEGORIZED, uncategorized: true });
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }
+
+  app.get('/api/merchants', async (req, res) => {
+    let ledger;
+    try {
+      ledger = await loadLedger();
+    } catch (err) {
+      return fail(res, 500, 'DB 조회 실패: ' + String(err?.message || err));
+    }
+    let extra = [];
+    try {
+      extra = uncategorizedOf(await loadFinMerchants(), ledger);
+    } catch (err) {
+      // 미분류 목록은 부가 기능 — 금융망이 실패해도 원장 가맹점으로는 결제할 수 있게 둔다
+      console.warn('금융망 가맹점 조회 실패:', err?.message || err);
+      res.set('X-Uncategorized', 'unavailable');
+    }
+    res.json([...ledger.merchants, ...extra]);
   });
 
   app.post('/api/fin/:action', async (req, res) => {

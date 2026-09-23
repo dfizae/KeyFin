@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from './createApp.js';
 import { buildFinBody } from './finHeader.js';
 
-function startServer({ finResult, rows } = {}) {
+function startServer({ finResult, rows, known, merchantList } = {}) {
   const calls = [];
   const app = createApp({
     finBaseUrl: 'https://fin.example/api/v1',
@@ -11,11 +11,16 @@ function startServer({ finResult, rows } = {}) {
     db: {
       query: async (sql) => {
         calls.push(sql);
-        return [rows ?? [{ fin_merchant_id: 40779, name: '강남PC존', subcategory_name: '게임·콘텐츠' }]];
+        const ledger = rows ?? [{ fin_merchant_id: 40779, name: '강남PC존', subcategory_name: '게임·콘텐츠' }];
+        return [/^SELECT fin_merchant_id FROM/.test(sql) ? (known ?? ledger) : ledger];
       },
     },
     fetchImpl: async (url, init) => {
       calls.push({ url, body: JSON.parse(init.body) });
+      if (merchantList && url.endsWith('/inquireMerchantList')) {
+        if (merchantList instanceof Error) throw merchantList;
+        return { json: async () => merchantList };
+      }
       return { json: async () => finResult ?? { userKey: 'UK-1', userName: 'tester', userId: 'a@b.c' } };
     },
   });
@@ -87,16 +92,65 @@ test('POST /api/login surfaces API errors as a message', async () => {
   server.close();
 });
 
-test('GET /api/merchants maps join rows and caches the query', async () => {
-  const { server, calls, port } = await startServer();
+const sqlCalls = (calls) => calls.filter((c) => typeof c === 'string');
+const finOk = (REC) => ({ Header: { responseCode: 'H0000' }, REC });
+
+test('GET /api/merchants maps join rows and caches the ledger query', async () => {
+  const { server, calls, port } = await startServer({ merchantList: finOk([]) });
   const first = await (await fetch(`http://localhost:${port}/api/merchants`)).json();
   await (await fetch(`http://localhost:${port}/api/merchants`)).json();
   assert.deepEqual(first, [{ finMerchantId: 40779, name: '강남PC존', subcategoryName: '게임·콘텐츠' }]);
-  const sql = calls.find((c) => typeof c === 'string');
+  const sql = sqlCalls(calls)[0];
   assert.match(sql, /MIN\(m\.fin_merchant_id\)/); // 중복 가맹점은 먼저 등록된 ID 하나만
   assert.match(sql, /GROUP BY m\.name, s\.name/);
-  assert.equal(calls.filter((c) => typeof c === 'string').length, 1); // 두 번째 요청은 캐시
+  assert.equal(sqlCalls(calls).length, 2); // 목록 + 원장 ID 한 번씩, 두 번째 요청은 캐시
+  assert.equal(calls.filter((c) => c.url?.endsWith('/inquireMerchantList')).length, 1); // 금융망 목록도 TTL 캐시
   server.close();
+});
+
+test('GET /api/merchants appends finance merchants missing from the ledger as 미분류', async () => {
+  const { server, calls, port } = await startServer({
+    rows: [{ fin_merchant_id: 40779, name: '강남PC존', subcategory_name: '게임·콘텐츠' }],
+    known: [{ fin_merchant_id: 40779 }, { fin_merchant_id: 40780 }],
+    merchantList: finOk([
+      { merchantId: 40779, merchantName: '강남PC존', categoryName: '여가' }, // 원장에 있음
+      { merchantId: 40780, merchantName: '강남PC존', categoryName: '여가' }, // 원장이 아는 중복 ID
+      { merchantId: 40999, merchantName: '강남PC존', categoryName: '여가' }, // 원장 가맹점과 같은 이름
+      { merchantId: 41002, merchantName: '동네 꽃집', categoryName: '생활' },
+      { merchantId: 41001, merchantName: '동네 꽃집', categoryName: '생활' }, // 이름 중복은 작은 ID
+      { merchantId: 41003, merchantName: ' 구름 문구 ', categoryName: '생활' },
+      { merchantId: 41004, merchantName: '', categoryName: '생활' },
+    ]),
+  });
+  const list = await (await fetch(`http://localhost:${port}/api/merchants`)).json();
+  assert.deepEqual(list.slice(1), [
+    { finMerchantId: 41003, name: '구름 문구', subcategoryName: '미분류', uncategorized: true },
+    { finMerchantId: 41001, name: '동네 꽃집', subcategoryName: '미분류', uncategorized: true },
+  ]);
+  const finCall = calls.find((c) => c.url?.endsWith('/inquireMerchantList'));
+  assert.equal(finCall.url, 'https://fin.example/api/v1/edu/creditCard/inquireMerchantList');
+  assert.equal(finCall.body.Header.apiName, 'inquireMerchantList');
+  assert.equal(finCall.body.Header.userKey, undefined); // 가맹점 목록은 앱 키만으로 조회
+  server.close();
+});
+
+test('GET /api/merchants still serves the ledger when the finance merchant list fails', async () => {
+  for (const merchantList of [new Error('network down'), { Header: { responseCode: 'E0001', responseMessage: '오류' } }]) {
+    const { server, calls, port } = await startServer({ merchantList });
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      const res = await fetch(`http://localhost:${port}/api/merchants`);
+      assert.equal(res.status, 200);
+      assert.equal(res.headers.get('x-uncategorized'), 'unavailable');
+      assert.deepEqual(await res.json(), [{ finMerchantId: 40779, name: '강남PC존', subcategoryName: '게임·콘텐츠' }]);
+      await fetch(`http://localhost:${port}/api/merchants`);
+      assert.equal(calls.filter((c) => c.url?.endsWith('/inquireMerchantList')).length, 2); // 실패는 캐시하지 않는다
+    } finally {
+      console.warn = warn;
+      server.close();
+    }
+  }
 });
 
 test('POST /api/fin/:action builds the header and rejects unknown actions', async () => {

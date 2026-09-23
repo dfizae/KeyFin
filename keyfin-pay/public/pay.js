@@ -5,6 +5,10 @@ initTopbar('/pay.html');
 let merchants = [];
 let cats = [];
 let cards = null; // null = 불러오는 중, [] = 카드 없음
+// 원장 DB에 없는 금융망 가맹점 — 여기서 결제하면 원장이 세분류를 못 찾아 KeyFin 앱이 카테고리를 묻는다
+const UNCAT = '미분류';
+const UNCAT_NOTE = '<p class="grp-note">원장에 없는 가맹점이에요. 여기서 결제하면 KeyFin 앱이 어느 카테고리인지 물어봐요.</p>';
+let uncatDown = false; // 서버가 금융망 가맹점 목록을 못 받아 온 경우
 const S = { cat: '전체', q: '', merchant: null, amount: '', card: 0, busy: false };
 const mobile = () => matchMedia('(max-width:900px)').matches;
 
@@ -32,7 +36,7 @@ function renderCats() {
   for (const [c, n] of items) {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = 'cat' + (c === '전체' ? ' all' : '') + (c === S.cat ? ' on' : '');
+    b.className = 'cat' + (c === '전체' ? ' all' : '') + (c === UNCAT ? ' uncat' : '') + (c === S.cat ? ' on' : '');
     b.setAttribute('aria-pressed', c === S.cat);
     b.innerHTML = `<span>${esc(c)}</span><em>${n}</em>`;
     b.onclick = () => { S.cat = c; S.q = ''; $('q').value = ''; renderCats(); renderList(); $('list').scrollTop = 0; };
@@ -74,7 +78,9 @@ function renderList() {
   if (!pool.length) {
     list.innerHTML = q
       ? `<div class="empty">'${esc(q)}'에 맞는 가맹점이 없어요<small>초성이나 업종 이름으로 다시 찾아보세요</small></div>`
-      : '<div class="empty">등록된 가맹점이 없어요</div>';
+      : S.cat !== UNCAT ? '<div class="empty">등록된 가맹점이 없어요</div>'
+        : uncatDown ? '<div class="empty">금융망 가맹점 목록을 불러오지 못했어요<small>원장에 있는 가맹점으로는 그대로 결제할 수 있어요</small></div>'
+          : '<div class="empty">원장에 없는 가맹점이 아직 없어요<small>금융망 콘솔에 새 가맹점을 등록하면 1분 안에 여기에 나타나요</small></div>';
     return;
   }
   let groups;
@@ -89,8 +95,9 @@ function renderList() {
     });
     groups = [...map].map(([h, ms]) => [h, ms, false]);
   } else groups = [[S.cat, pool, false]];
-  list.innerHTML = groups.filter((g) => g[1].length)
-    .map(([t, ms, sub]) => `<div class="grp"><h3>${esc(t)}<em>${ms.length}</em></h3><div class="rows">${ms.map((m) => rowHtml(m, sub)).join('')}</div></div>`)
+  // 미분류를 초성으로 나눠 보여 줄 때는 설명을 목록 맨 위에 한 번만 둔다
+  list.innerHTML = (S.cat === UNCAT && !q && groups[0]?.[0] !== UNCAT ? UNCAT_NOTE : '') + groups.filter((g) => g[1].length)
+    .map(([t, ms, sub]) => `<div class="grp"><h3>${esc(t)}<em>${ms.length}</em></h3>${t === UNCAT ? UNCAT_NOTE : ''}<div class="rows">${ms.map((m) => rowHtml(m, sub)).join('')}</div></div>`)
     .join('');
 }
 const byId = (id) => merchants.find((m) => String(m.finMerchantId) === String(id));
@@ -185,7 +192,9 @@ function renderTicket() {
   const a = num(S.amount);
   $('t-nm').textContent = m ? m.name : '가맹점을 고르세요';
   $('t-nm').classList.toggle('ph', !m);
-  $('t-meta').innerHTML = m ? `${esc(m.subcategoryName)} · 가맹점 <i>${esc(m.finMerchantId)}</i>` : '목록이나 최근 결제에서 고르면 여기에 찍혀요';
+  $('t-meta').innerHTML = m ? `${esc(m.subcategoryName)} · 가맹점 <i>${esc(m.finMerchantId)}</i>`
+    + (m.uncategorized ? '<span class="ask">결제 후 KeyFin 앱에서 카테고리를 물어봐요</span>' : '')
+    : '목록이나 최근 결제에서 고르면 여기에 찍혀요';
   $('t-num').textContent = fmt(a);
   $('t-num').classList.toggle('zero', !a);
   const note = $('t-note');
@@ -249,7 +258,7 @@ function showReceipt(rec, m, c, amount) {
   const cardNo = String(c.cardNo);
   const lines = [
     ['가맹점', rec.merchantName || m.name],
-    ['업종', rec.categoryName || m.subcategoryName],
+    ['업종', m.uncategorized ? UNCAT : rec.categoryName || m.subcategoryName],
     ['카드', c.cardName],
     ['카드번호', `${cardNo.slice(0, 4)}-****-****-${cardNo.slice(-4)}`, true],
     ['거래번호', no, true],
@@ -258,6 +267,7 @@ function showReceipt(rec, m, c, amount) {
   $('r-total').innerHTML = `${fmt(rec.paymentBalance ?? amount)}<small>원</small>`;
   drawBar(no.replace(/\D/g, '') || '0');
   $('r-no').textContent = no;
+  $('r-thanks').textContent = m.uncategorized ? '결제 내역에 남았어요. 카테고리는 KeyFin 앱에서 골라 주세요' : '결제 내역에도 바로 남았어요';
   $('entry').hidden = true;
   $('receipt').hidden = false;
   const paper = $('paper');
@@ -344,15 +354,18 @@ async function init() {
   renderTicket();
   const cardsReady = loadCards(); // 가맹점과 동시에 — 계산대를 열기 전까지만 준비되면 된다
   try {
-    const res = await (await fetch('/api/merchants')).json();
-    if (!Array.isArray(res)) throw new Error(res?.message || '가맹점 로드 실패');
-    merchants = res;
+    const res = await fetch('/api/merchants');
+    const data = await res.json();
+    if (!Array.isArray(data)) throw new Error(data?.message || '가맹점 로드 실패');
+    merchants = data;
+    uncatDown = res.headers.get('X-Uncategorized') === 'unavailable';
   } catch (err) {
     showError('가맹점 목록 로드 실패: ' + (err?.message || err));
     $('list').innerHTML = '';
     return;
   }
-  cats = [...new Set(merchants.map((m) => m.subcategoryName))];
+  // 미분류는 비어 있어도 항상 맨 끝에 둔다 — 콘솔에 새 가맹점을 등록하면 채워진다
+  cats = [...new Set(merchants.filter((m) => !m.uncategorized).map((m) => m.subcategoryName)), UNCAT];
   renderCats();
   renderList();
   await cardsReady;

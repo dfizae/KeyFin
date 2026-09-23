@@ -360,3 +360,10 @@ html,body{overflow-x:clip}  /* 화면 밖에서 대기하는 계산대가 가로
 .cat{transition:background .15s,color .15s}
 .list{margin-left:-16px;padding-left:16px}
 #register:focus{outline:none}
+
+/* 미분류: 원장에 없는 금융망 가맹점. 전체처럼 색인 끝에 한 칸 띄워 따로 둔다 */
+.cat.uncat{margin-top:8px}
+.grp-note{margin:0 0 10px;font-size:15px;line-height:22px;color:var(--mute)}
+.list > .grp-note{margin-bottom:18px}
+.t-merch .meta .ask{display:block;margin-top:2px;color:var(--paper-ink);font-weight:600}
+@media (max-width:900px){ .cat.uncat{margin:0} }
