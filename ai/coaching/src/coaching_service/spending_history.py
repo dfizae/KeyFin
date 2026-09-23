@@ -25,6 +25,21 @@ _QUERY: Final = re.compile(
     r"|얼마(?:야|인가요|예요|지)|알려(?:줘|주세요)|보여(?:줘|주세요)|확인해(?:줘|주세요))"
     r"[?!.\uff1f\u3002]*"
 )
+# "교통비 이번달 얼마 썼어"처럼 봉투가 기간보다 먼저 오면 기간을 앞으로 옮겨 같은 문법에 태운다.
+_ENVELOPE_FIRST: Final = re.compile(
+    rf"(?P<envelope>{_ENVELOPE_PATTERN})(?P<box>봉투)?(?:은|는|의)?"
+    r"(?P<period>지난달|이번달|이달|오늘|어제|현재까지|지금까지|현재)(?P<rest>.*)"
+)
+
+
+def _canonical(question: str) -> str:
+    compact = re.sub(r"\s+", "", question)
+    found = _ENVELOPE_FIRST.fullmatch(compact)
+    if found is None:
+        return compact
+    return found["period"] + found["envelope"] + (found["box"] or "") + found["rest"]
+
+
 # 채팅 말풍선에 붙는 한 문장짜리 정직성 문구. 전체 근거·범위는 아래 _COVERAGE가
 # coverage_caveat 구조화 필드로 그대로 보존해 앱이 작은 글씨·툴팁으로 노출할 수 있다.
 _COVERAGE_SHORT: Final = "연결된 확정 거래 기준이라 월 전체·전 계좌 합계와 다를 수 있어요."
@@ -75,7 +90,7 @@ def supports_spending_question(question: str) -> bool:
     remains the single parser that decides the calculation scope and can still
     return ``needs_data`` when the connected ledger cannot prove an amount.
     """
-    return _QUERY.fullmatch(re.sub(r"\s+", "", question)) is not None
+    return _QUERY.fullmatch(_canonical(question)) is not None
 
 
 def _bounds(reference: date, period: _Period, observed: tuple[date, ...]) -> tuple[date | None, date]:
@@ -107,7 +122,7 @@ def spending_answer(
     금액이다. 제삼자 TRANSFER_OUT 소비는 포함될 수 있으므로 거래의 원 타입을
     이체라는 이유로 일괄 제외하지 않는다. 반환값은 완전한 원장 범위를 보장하지 않는다.
     """
-    query = _QUERY.fullmatch(re.sub(r"\s+", "", question))
+    query = _QUERY.fullmatch(_canonical(question))
     if query is None:
         return SpendingSummary(
             status="needs_clarification",

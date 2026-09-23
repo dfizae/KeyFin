@@ -228,7 +228,9 @@ def test_one_call_finance_selection_rejects_personal_history_and_forecast_reques
     ("다음 달 잔액이 부족할까?", "risk"),
     ("내 소비 습관을 점검해줘", "review"),
     ("내 지출을 분석해줘", "review"),
-    ("예산 위험 알려줘", None),
+    # 라이브 2026-09-23: 모델이 "예산 위험해?"를 매번 일반 리뷰로 보내 위험 수치가 빠졌다.
+    # 개인 코칭에서 "예산 위험"은 사용자 자신의 예산이므로 결정적 risk 로 보낸다.
+    ("예산 위험 알려줘", "risk"),
     ("이번 달 지출은 얼마야?", None),
     ("다음 달 예산 부족을 막는 방법은 뭐야?", None),
     ("유동성 위험이 뭐야?", None),

@@ -38,11 +38,17 @@ def authoritative_text(receipt: Receipt) -> str:
         else receipt.result
     )
     action = result.root.get("next_action")
-    if isinstance(action, dict):
+    # "keep_and_review" only says no new cut is advised plus a safety disclaimer;
+    # actionable next steps (payment account, earmark, cap, ...) are still shown.
+    shown_action = False
+    if isinstance(action, dict) and action.get("kind") not in _SILENT_ACTIONS:
         title, detail = action.get("title"), action.get("detail")
         if isinstance(title, str) and isinstance(detail, str):
             pieces.append(title + ". " + detail)
-    pieces.extend(user_warnings(result))
+            shown_action = True
+    # An actionable step can quote path counts or quantiles, so the conditional-model
+    # caveat stays whenever such a step is printed.
+    pieces.extend(user_warnings(result, keep_model_caveat=shown_action))
     if not pieces:
         pieces.append("현재 자료로 확인할 수 있는 코칭 근거가 부족합니다. 거래·잔액 정보를 확인해 주세요.")
     return "\n".join(pieces)
@@ -62,6 +68,10 @@ def envelope_balance_table(receipt: Receipt) -> tuple[Envelope, ...]:
     their sentences.
     """
     if receipt.payment is not None or receipt.historical is not None:
+        return ()
+    # A numeric turn's text never lists balances (nor explains a table), and its
+    # per-envelope figures already ship in ``numeric_rows``; no balance table there.
+    if receipt.numeric_result is not None:
         return ()
     if len(receipt.current_envelopes) < 2:
         return ()
@@ -292,12 +302,25 @@ def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str |
     return None
 
 
-def user_warnings(result: JsonDocument) -> list[str]:
+# Boilerplate caveats the engine attaches to every review regardless of the user's
+# data; they repeated on each answer without telling the user anything new.
+_BOILERPLATE_WARNINGS: Final = frozenset({"CONDITIONAL_MODEL", "EXISTING_CARD_SCHEDULE_APPROXIMATION"})
+_SILENT_ACTIONS: Final = frozenset({"keep_and_review"})
+
+
+def user_warnings(result: JsonDocument, *, keep_model_caveat: bool = True) -> list[str]:
     pieces: list[str] = []
     warnings = result.root.get("warnings")
     if isinstance(warnings, list):
         for warning in warnings:
-            if isinstance(warning, dict) and warning.get("severity") == "user":
+            if (
+                isinstance(warning, dict)
+                and warning.get("severity") == "user"
+                and not (
+                    warning.get("code") in _BOILERPLATE_WARNINGS
+                    and not (keep_model_caveat and warning.get("code") == "CONDITIONAL_MODEL")
+                )
+            ):
                 detail = warning.get("detail")
                 if isinstance(detail, str):
                     pieces.append(detail)

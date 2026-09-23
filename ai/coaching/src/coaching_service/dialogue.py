@@ -1,8 +1,9 @@
 """Owner-bound sessions with engine tools and durable, idempotent turns."""
 
+import re
 import time
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, assert_never
+from typing import TYPE_CHECKING, Final, assert_never
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -43,7 +44,7 @@ from coaching_service.finance_knowledge import (
     selected_finance_wording,
 )
 from coaching_service.history import historical_context
-from coaching_service.knowledge_retrieval import is_followup
+from coaching_service.knowledge_retrieval import compact, is_followup
 from coaching_service.llm_contract import ChatMessage, EvidenceInput, FinanceWording, Routing
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
@@ -155,6 +156,16 @@ def forecast_chart_hint(
     if period.budget_forecast_end <= period.reference_date:
         return None
     return ChartHint(period_start=period.budget_month_start, question=question, purchase=purchase)
+
+
+# Any money/finance word. Only used to tell an off-topic question that happened to
+# contain a period word ("오늘") from a finance question with an ambiguous period.
+_FINANCE_SIGNAL: Final = re.compile(
+    r"돈|원|얼마|소비|지출|예산|잔액|잔고|결제|카드|계좌|통장|현금|저축|적금|예금|이자|대출|빚|부채|자산"
+    r"|수입|소득|월급|급여|용돈|봉투|구매|샀|살까|사도|쓴|썼|쓸|비용|요금|가격|청구|할부|투자|주식|보험|세금"
+    r"|환율|금리|펀드|연금|위험|예측|전망|목표|모으|절약|아끼|줄이|코칭|가계|재정|금융"
+    r"|외식|식비|교통|쇼핑|편의점|마트|잡화|의료|취미|여가|생활비|장보|구독|결제일|출금"
+)
 
 
 def _select_cash_account(accounts: "list[JsonValue]") -> "dict[str, JsonValue] | None":
@@ -637,6 +648,11 @@ class Dialogue:
                 if clarification is None:
                     raise
                 if parsed_purchase is None:
+                    if _FINANCE_SIGNAL.search(compact(request.question)) is None:
+                        # A question with no money word at all ("오늘 날씨 어때") that the
+                        # model routed to a finance mode only trips the period parser on
+                        # "오늘"; asking it for a period is wrong, so treat it as off-topic.
+                        return save_turn(session, request.question, out_of_scope_answer())
                     # A genuine period ambiguity/conflict on the chat turn becomes a 200
                     # needs_clarification turn instead of a 503, like the purchase codes.
                     return save_turn(session, request.question, clarification)

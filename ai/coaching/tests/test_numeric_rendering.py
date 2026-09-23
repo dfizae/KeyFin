@@ -427,6 +427,57 @@ def test_payment_and_single_envelope_turns_keep_balance_sentences() -> None:
     assert envelope_balance_table(single) == ()
 
 
+def test_review_text_drops_engine_boilerplate_but_keeps_actionable_steps() -> None:
+    # Live 2026-09-23: every review repeated "새로운 감축을 권하지 않습니다… 안전 보장은
+    # 아닙니다", "경로 수와 분위수는…", "기존 소비의 미래 카드 청구는…" regardless of data.
+    raw = receipt_for("forecast", {}).model_dump(mode="json")
+    raw["numeric_result"] = None
+    raw["numeric_request"] = None
+    raw["result"] = {
+        "status": "ready",
+        "next_action": {
+            "kind": "keep_and_review",
+            "title": "이번 점검에서는 새로운 감축을 권하지 않습니다",
+            "detail": "안전 보장은 아닙니다.",
+        },
+        "warnings": [
+            {"code": "CONDITIONAL_MODEL", "severity": "user", "detail": "경로 수와 분위수는 계산입니다."},
+            {
+                "code": "EXISTING_CARD_SCHEDULE_APPROXIMATION",
+                "severity": "user",
+                "detail": "카드 청구 단순화.",
+            },
+            {"code": "ASSUMED_SNAPSHOT", "severity": "user", "detail": "데모 가정이 포함되어 있습니다."},
+        ],
+    }
+    text = authoritative_text(Receipt.model_validate(raw))
+    assert "새로운 감축" not in text
+    assert "경로 수와 분위수" not in text
+    assert "카드 청구 단순화" not in text
+    # A data-specific caveat still reaches the user.
+    assert "데모 가정이 포함되어 있습니다." in text
+
+    raw["result"]["next_action"] = {
+        "kind": "prepare_payment_account",
+        "title": "결제 계좌를 준비하세요",
+        "detail": "예정 결제 전에 잔액을 옮겨 두세요.",
+    }
+    actionable = authoritative_text(Receipt.model_validate(raw))
+    assert "결제 계좌를 준비하세요. 예정 결제 전에 잔액을 옮겨 두세요." in actionable
+    # Review D4: an actionable step may quote path counts, so its caveat stays.
+    assert "경로 수와 분위수는 계산입니다." in actionable
+    assert "카드 청구 단순화" not in actionable
+
+
+def test_numeric_turn_carries_no_balance_table() -> None:
+    raw = receipt_for("forecast", {}).model_dump(mode="json")
+    raw["current_envelopes"] = [
+        {"envelope": "외식", "balance_krw": 1},
+        {"envelope": "기타", "balance_krw": 2},
+    ]
+    assert envelope_balance_table(Receipt.model_validate(raw)) == ()
+
+
 def _risk_with_accounts(total_cash: float, rows: list[JsonObject]) -> Receipt:
     base = receipt_for(
         "risk",
