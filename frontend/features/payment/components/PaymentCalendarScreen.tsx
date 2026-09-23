@@ -201,9 +201,12 @@ type EntryCardProps = {
   onOpenTransfer: (transfer: Transfer) => void;
 };
 
+const CARD_SURFACE = "rounded-lg bg-card shadow shadow-black/10 dark:border dark:border-border dark:shadow-none";
+
 // 흰 배경에서 그림자만으로는 구분이 안 돼 자산 탭 계좌 항목처럼 연보라 면으로 둔다. 아이콘 타일은 그 위의 흰 원.
 // 이체 제안이 있는 부족 항목은 뱃지가 셰브런 달린 버튼이 되고 아래에 한 줄 안내가 붙는다 (Pencil PAGE-24 · 이체 제안 cSTvK, 2026-09-16).
-// 그때 카드는 접근성 컨테이너에서 빠져(accessible=false) 카드 본체와 뱃지가 각각 읽히고 눌린다.
+// 그때는 카드 본문 버튼과 뱃지 버튼을 형제로 둔다 — 버튼 안에 버튼을 넣으면 웹에서 <button> 이 중첩돼 React 가 경고한다(2026-09-23).
+// 뱃지 줄 앞에 아이콘 폭만큼 빈 칸을 둬 뱃지가 이름 아래에 맞춰 보이게 한다.
 function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps) {
   const openable = canOpenEntry(entry) || canOpenCardBilling(entry);
   const hint = entryHint(entry);
@@ -212,13 +215,12 @@ function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps)
   const badge = preparationLabel(entry.preparation);
   const prepared = entry.preparation?.status === "PREPARED";
   const note = ENTRY_NOTES[entry.type] ?? null;
-  const linked = transfer !== null && badge !== null;
-  const label = [`${name} ${amount}`, note, linked ? null : badge].filter((part) => part !== null).join(", ");
+  const linkedTransfer = badge !== null ? transfer : null;
+  const label = [`${name} ${amount}`, note, linkedTransfer ? null : badge].filter((part) => part !== null).join(", ");
 
-  return (
+  const body = (
     <Pressable
-      className="flex-row items-center gap-3 rounded-lg bg-card p-4 active:opacity-70 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
-      accessible={!linked}
+      className={cn("flex-row items-center gap-3 p-4 active:opacity-70", linkedTransfer ? "pb-2" : CARD_SURFACE)}
       accessibilityRole={openable ? "button" : undefined}
       accessibilityLabel={label}
       accessibilityHint={hint}
@@ -232,21 +234,9 @@ function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps)
         <Text className="text-h3 text-foreground" numberOfLines={1}>
           {name}
         </Text>
-        {badge === null && note === null ? null : (
+        {(linkedTransfer ? null : badge) === null && note === null ? null : (
           <View className="flex-row flex-wrap items-center gap-2">
-            {badge === null ? null : linked ? (
-              <Pressable
-                className="flex-row items-center gap-0.5 rounded-sm bg-destructive-muted py-0.5 pl-1.5 pr-1 active:opacity-70"
-                accessibilityRole="button"
-                accessibilityLabel={`${badge}, 이체 제안 보기`}
-                accessibilityHint="결제 전에 부족한 금액을 옮기는 화면을 엽니다"
-                hitSlop={6}
-                onPress={() => onOpenTransfer(transfer)}
-              >
-                <Text className="text-caption tabular-nums text-destructive">{badge}</Text>
-                <Icon as={ChevronRight} size={14} className="text-destructive" />
-              </Pressable>
-            ) : (
+            {badge === null || linkedTransfer ? null : (
               <View className={cn("rounded-sm px-1.5 py-0.5", prepared ? "bg-positive-muted" : "bg-destructive-muted")}>
                 <Text className={cn("text-caption tabular-nums", prepared ? "text-positive" : "text-destructive")}>{badge}</Text>
               </View>
@@ -254,13 +244,37 @@ function EntryCard({ entry, transfer, onPress, onOpenTransfer }: EntryCardProps)
             {note === null ? null : <Text className="text-caption text-card-foreground">{note}</Text>}
           </View>
         )}
-        {linked ? <Text className="text-caption text-card-foreground">{TRANSFER_NOTE}</Text> : null}
       </View>
       <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
         {amount}
       </Text>
       {openable ? <Icon as={ChevronRight} size={18} className="text-card-foreground" /> : null}
     </Pressable>
+  );
+
+  if (!linkedTransfer || badge === null) return body;
+
+  return (
+    <View className={CARD_SURFACE}>
+      {body}
+      <View className="flex-row gap-3 px-4 pb-4">
+        <View className="w-10" />
+        <View className="flex-1 items-start gap-1">
+          <Pressable
+            className="flex-row items-center gap-0.5 rounded-sm bg-destructive-muted py-0.5 pl-1.5 pr-1 active:opacity-70"
+            accessibilityRole="button"
+            accessibilityLabel={`${badge}, 이체 제안 보기`}
+            accessibilityHint="결제 전에 부족한 금액을 옮기는 화면을 엽니다"
+            hitSlop={6}
+            onPress={() => onOpenTransfer(linkedTransfer)}
+          >
+            <Text className="text-caption tabular-nums text-destructive">{badge}</Text>
+            <Icon as={ChevronRight} size={14} className="text-destructive" />
+          </Pressable>
+          <Text className="text-caption text-card-foreground">{TRANSFER_NOTE}</Text>
+        </View>
+      </View>
+    </View>
   );
 }
 
