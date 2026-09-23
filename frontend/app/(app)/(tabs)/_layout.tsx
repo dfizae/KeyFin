@@ -6,7 +6,7 @@ import { selectOnboardingDone, selectTermsAgreed, useAuthStore } from "@/feature
 import { useFinanceStatus } from "@/features/link/api/queries";
 import { usePushPermissionPrompt } from "@/features/notification/api/queries";
 
-// Pencil 홈 BottomTabBar (NaYk9): 홈 · 자산 · 예산 · 리포트 · 마이
+// Pencil 홈 BottomTabBar (NaYk9): 홈 · 자산 · 예산 · 마이 — 리포트 탭은 구현하지 않기로 해 뺐다(사용자 결정 2026-09-23)
 export default function TabsLayout() {
   const termsAgreed = useAuthStore(selectTermsAgreed);
   const onboardingDone = useAuthStore(selectOnboardingDone);
@@ -29,7 +29,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: "홈" }} />
       <Tabs.Screen name="assets" options={{ title: "자산" }} />
       <Tabs.Screen name="budget" options={{ title: "예산" }} />
-      <Tabs.Screen name="report" options={{ title: "리포트" }} />
       <Tabs.Screen name="my" options={{ title: "마이" }} />
     </Tabs>
   );

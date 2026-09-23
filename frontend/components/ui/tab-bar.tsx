@@ -1,5 +1,5 @@
 import type { Tabs } from "expo-router";
-import { Calculator, ChartColumn, House, User, Wallet, type LucideIcon } from "lucide-react-native";
+import { Calculator, House, User, Wallet, type LucideIcon } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from "react-native-reanimated";
@@ -17,7 +17,6 @@ const TAB_ICONS: Record<string, LucideIcon> = {
   index: House,
   assets: Wallet,
   budget: Calculator,
-  report: ChartColumn,
   my: User,
 };
 
