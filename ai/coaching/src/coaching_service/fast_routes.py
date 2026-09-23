@@ -69,8 +69,6 @@ _IMPLICIT_FORECAST_TERMS: Final[tuple[str, ...]] = ("얼마", "남을", "남아"
 # alone never routes here.
 _SPEND_FORECAST_TERMS: Final[tuple[str, ...]] = ("쓸까", "쓸지", "소비할", "지출할")
 _RISK_SIGNALS: Final[tuple[str, ...]] = (
-    # "예산 위험해?"처럼 기간 없이 예산 자체의 위험을 묻는 문장(라이브 2026-09-23 모델 오분류).
-    "예산",
     "이번달",
     "이달",
     "월말",
@@ -81,6 +79,15 @@ _RISK_SIGNALS: Final[tuple[str, ...]] = (
     "지출",
     "현금흐름",
     "필수생활비",
+)
+# "예산 위험해?" names neither a period nor a balance noun, so the broad risk
+# signals miss it and the model sent it to a generic review (live 2026-09-23). Only
+# this exact short question is admitted; anything with an amount, a purchase, a
+# plan, a how-to or another subject keeps its existing route.
+_BUDGET_RISK_QUESTION: Final = re.compile(
+    r"(?:내|제|나의|저의)?(?:이번달|이달)?예산(?:이|은|는)?(?:지금)?"
+    r"위험(?:해|한가|할까|한지|하니|해요|한가요|할까요|하지않아|하진않아)?"
+    r"(?:알려줘|알려주세요|봐줘|확인해줘|확인해주세요)?[?!.\uff1f]*"
 )
 # "모자라다" (to fall short) conjugates to 모자라/모자란/모자랄/모자랐; the bare
 # stem "모자" is deliberately excluded because it collides with 모자 (hat), whose
@@ -516,7 +523,7 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:
         ):
             return "forecast"
         risk_outcome = has_explicit_risk or any(term in normalized for term in _RISK_OUTCOME_TERMS)
-        if (
+        if _BUDGET_RISK_QUESTION.fullmatch(normalized) is not None or (
             risk_outcome
             and any(signal in normalized for signal in _RISK_SIGNALS)
             and (has_explicit_risk or has_future_marker)

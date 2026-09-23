@@ -85,3 +85,34 @@ async def test_finance_question_with_ambiguous_period_still_asks_for_the_period(
         "needs_clarification",
         "period_clarification_required",
     )
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        # Review D1: a purchase must keep the purchase review, never a purchase-less risk run.
+        "내일 노트북 200만원 사면 예산 위험해?",
+        # Review D2: general, how-to, plan and other-subject budget questions stay model-routed.
+        "예산 초과하면 위험한가요?",
+        "예산을 위험하지 않게 짜려면 어떻게 해?",
+        "국가 예산 적자 위험해?",
+        "예산 없이 사는 거 위험할까?",
+        "예산 관리 앱 쓰는 거 위험해?",
+        "예산 위험 알림 끄는 법",
+        "여행 예산 100만원인데 위험해?",
+        "예산을 늘리면 위험이 줄어?",
+    ],
+)
+def test_budget_risk_shortcut_admits_only_the_bare_question(question: str) -> None:
+    assert deterministic_analysis_route(question) is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "question",
+    ["내일 외식해도 될까?", "주말에 쇼핑 가도 괜찮을까?", "다음주 교통비 괜찮아?", "올해 생활비 괜찮을까?"],
+)
+async def test_everyday_spending_words_count_as_finance(tmp_path: Path, question: str) -> None:
+    # Review D3: these are finance questions with an unresolved period, not off-topic.
+    answer = await _ask(tmp_path, question)
+    assert answer["status"] != "out_of_scope", answer
