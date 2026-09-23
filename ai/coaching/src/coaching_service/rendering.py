@@ -64,6 +64,14 @@ def historical_text(receipt: Receipt) -> list[str]:
             )
         elif past.transaction_status == "not_found":
             pieces.append("현재 자료에서 원 거래를 찾을 수 없어 거래 상태를 확인할 수 없습니다.")
+    # A fresh numeric turn (what-if/risk/forecast/goal/optimize) answers its own
+    # question from ``numeric_result`` and ships per-envelope figures separately in
+    # ``numeric_rows``. Prepending every envelope's ledger balance there only buries
+    # the actual answer under unrelated lines, so the balance list is kept for the
+    # contexts where current balance *is* the point: payment/lookup turns and
+    # follow-ups about a stored coaching (``historical``).
+    if receipt.numeric_result is not None and past is None:
+        return pieces
     pieces.extend(
         f"현재 수신 이벤트까지 반영한 {envelope.envelope} 봉투 장부 잔액은 {envelope.balance_krw:,}원입니다."
         for envelope in receipt.current_envelopes
