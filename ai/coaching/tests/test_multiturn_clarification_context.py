@@ -20,7 +20,10 @@ from test_purchase_what_if import card_fixture
 from coaching_service.dialogue import merged_clarification_question
 from coaching_service.fast_routes import (
     _MERGED_QUESTION_MAX_CHARS,
+    NaturalPurchase,
     is_bare_purchase_fragment,
+    merged_purchase_question,
+    natural_purchase,
     spending_period_fragment,
 )
 from coaching_service.llm_contract import EvidenceInput, Routing
@@ -89,6 +92,30 @@ def test_purchase_amount_fragment_merges_but_concept_and_offtopic_do_not() -> No
     assert merged_clarification_question(pending, "저녁 뭐 먹을까") is None
     assert merged_clarification_question(pending, "노트북 100만원 오늘 살까") is None
     assert merged_clarification_question(pending, "이번달 소비 얼마야") is None
+
+
+def test_payment_method_answer_overrides_stale_conflicting_token() -> None:
+    # A pending clarification that stored BOTH a cash and a card token ("현금결제
+    # 신용카드로") must be resolvable: the user's single-method answer overrides the
+    # conflicting stale token instead of appending forever (the reported loop where
+    # "현금·계좌 결제인지 카드 결제인지" repeats no matter what the user answers).
+    stale = "노트북 30만원 현금결제 신용카드로 이번주에 사도될까"
+    assert natural_purchase(stale) == "purchase_payment_method_required"
+    # Answering "현금" drops the stale card token and resolves to a cash purchase.
+    cash_merge = merged_purchase_question(stale, "현금으로")
+    assert cash_merge is not None
+    cash_result = natural_purchase(cash_merge)
+    assert isinstance(cash_result, NaturalPurchase)
+    assert cash_result.payment_hint == "cash"
+    # Answering "신용카드" drops the stale cash token; it no longer re-asks the method,
+    # it advances to the distinct card settlement-date question.
+    assert natural_purchase(merged_purchase_question(stale, "신용카드")) == (
+        "purchase_card_payment_date_required"
+    )
+    # A contradictory answer (both methods) is not a choice, so it still asks.
+    assert natural_purchase(merged_purchase_question(stale, "현금 신용카드")) == (
+        "purchase_payment_method_required"
+    )
 
 
 def test_distinct_past_tense_purchase_is_not_merged() -> None:
