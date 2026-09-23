@@ -360,7 +360,7 @@ def _short_account_sentence(result: NumericResult, dataset: str, *, total_cash_o
     if total_cash_ok:
         return [
             "모든 계좌를 합친 현금은 부족해지지 않아요. 다만 " + sentence
-            + " 결제 전에 다른 계좌에서 옮겨 두면 막을 수 있어요."
+            + " **결제 전에 다른 계좌에서 옮겨 두면 막을 수 있어요.**"
         ]
     return [sentence]
 

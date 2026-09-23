@@ -49,6 +49,7 @@ from coaching_service.llm_contract import ChatMessage, EvidenceInput, FinanceWor
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
 from coaching_service.periods import ResolvedPeriod
+from coaching_service.persona import strip_bold
 from coaching_service.personal_contract import PersonalContext
 from coaching_service.personal_service import CONTEXT_KEY, personal_answer
 from coaching_service.repository import Mutation, document, write
@@ -321,7 +322,8 @@ def chat_history(session: Session, *, include_subject: bool = False) -> tuple[Ch
             messages = (subject, *messages[-2:])
     return tuple(
         ChatMessage(
-            role=row.role, content=row.content[:800] + (" [이력 일부 생략]" if len(row.content) > 800 else "")
+            role=row.role,
+            content=strip_bold(row.content)[:800] + (" [이력 일부 생략]" if len(row.content) > 800 else ""),
         )
         for row in messages
     )

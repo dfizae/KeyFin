@@ -115,19 +115,19 @@ def historical_text(receipt: Receipt) -> list[str]:
 
 
 _OVER_BUDGET_ENCOURAGING: Final = (
-    "{env} 지출이 예산을 넘고 있어요. 이번 기간 {env} 소비를 조금 줄여보면 좋아요."
+    "{env} 지출이 예산을 넘고 있어요. **이번 기간 {env} 소비를 조금 줄여보면 좋아요.**"
 )
-_OVER_BUDGET_DIRECT: Final = "{env} 예산을 초과했어요. {env} 소비를 줄이세요."
-_NEAR_LIMIT_ENCOURAGING: Final = "{env} 예산이 거의 다 찼어요. 남은 기간 지출을 조절해 보세요."
-_NEAR_LIMIT_DIRECT: Final = "{env} 예산이 얼마 남지 않았어요. {env} 지출을 줄이세요."
-_SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루는 편이 좋아요."
-_SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. 큰 지출은 미루세요."
+_OVER_BUDGET_DIRECT: Final = "{env} 예산을 초과했어요. **{env} 소비를 줄이세요.**"
+_NEAR_LIMIT_ENCOURAGING: Final = "{env} 예산이 거의 다 찼어요. **남은 기간 지출을 조절해 보세요.**"
+_NEAR_LIMIT_DIRECT: Final = "{env} 예산이 얼마 남지 않았어요. **{env} 지출을 줄이세요.**"
+_SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요. **큰 지출은 미루는 편이 좋아요.**"
+_SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. **큰 지출은 미루세요.**"
 _SHORTFALL_MARKER: Final = "부족 예측 있음."
 _NEAR_LIMIT_MAX_PERCENT: Final = 10
 _HEALTHY_ENCOURAGING: Final = (
-    "{env} 예산에 여유가 있어요. 남는 만큼은 저축이나 비상금으로 옮겨 두면 좋아요."
+    "{env} 예산에 여유가 있어요. **남는 만큼은 저축이나 비상금으로 옮겨 두면 좋아요.**"
 )
-_HEALTHY_DIRECT: Final = "{env} 예산에 여유가 있어요. 남는 만큼은 저축으로 옮겨 두세요."
+_HEALTHY_DIRECT: Final = "{env} 예산에 여유가 있어요. **남는 만큼은 저축으로 옮겨 두세요.**"
 _HEALTHY_MIN_PERCENT: Final = 80
 _OBSERVED_BUDGET_BASIS: Final = "approved_snapshot_budget_minus_observed_budgeted_spending"
 

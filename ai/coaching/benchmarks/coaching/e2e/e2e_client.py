@@ -13,6 +13,7 @@ from coaching_service.engine import ENGINE_COMMIT, EngineAdapter
 from coaching_service.evidence import bounded_evidence, operation_evidence
 from coaching_service.llm_contract import EvidenceInput, Operation
 from coaching_service.numeric_rendering import purchase_verdict_text
+from coaching_service.persona import strip_bold
 from coaching_service.rendering import authoritative_text, deterministic_advice
 from coaching_service.schemas import Coaching, JsonDocument, Receipt
 from coaching_service.settings import Client
@@ -120,7 +121,7 @@ class ScenarioIO:
             deterministic_pieces.append(advice)
         self.check(
             "authoritative_text_preserved",
-            coaching.text.startswith("\n".join(deterministic_pieces) + "\n\n"),
+            coaching.text.startswith(strip_bold("\n".join(deterministic_pieces)) + "\n\n"),
         )
         self.check("engine_commit_exact", receipt.engine_commit == ENGINE_COMMIT)
         twin = await self.request("GET", "/v1/twin")
