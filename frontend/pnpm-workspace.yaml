@@ -13,3 +13,6 @@ minimumReleaseAgeExclude:
 # NativeWind babel이 주입하는 react-native-css-interop/jsx-runtime을 Metro가 앱 파일에서 해석할 수 있도록 루트에 노출한다
 publicHoistPattern:
   - react-native-css-interop
+
+# Keep native dependency paths identical on Windows and EAS Linux for runtime fingerprints.
+virtualStoreDirMaxLength: 60
