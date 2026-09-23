@@ -7,7 +7,7 @@ import { budgetHealth, usedBarPercent, type BudgetEnvelope, type BudgetHealth, t
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-// Pencil home/p0 (EWfx2) BudgetCard (sMRC0): bg-primary · radius 20 · padding 20 · gap 16 · 진행 바 8pt · 봉투 7종 사용률 세로 막대.
+// Pencil home/p0 (EWfx2) BudgetCard (sMRC0): bg-primary · radius 20 · padding 20 · gap 16 · 진행 바 8pt(→ 24pt, 2026-09-23 사용자 요청으로 두 번 키움) · 봉투 7종 사용률 세로 막대.
 // good 문구 "좋아요!" 는 Pencil, warning/over 문구는 임시. (TBD)
 const HEALTH_STYLE: Record<BudgetHealth, { label: string; textClassName: string; barClassName: string }> = {
   good: { label: "좋아요!", textClassName: "text-positive", barClassName: "bg-positive" },
@@ -43,7 +43,7 @@ function BudgetCard({ total, envelopes, period, onSelectEnvelope }: BudgetCardPr
         </Text>
       </View>
       <View
-        className="h-2 w-full overflow-hidden rounded-full bg-accent"
+        className="h-6 w-full overflow-hidden rounded-full bg-accent"
         accessible
         accessibilityRole="progressbar"
         accessibilityLabel="예산 사용률"
