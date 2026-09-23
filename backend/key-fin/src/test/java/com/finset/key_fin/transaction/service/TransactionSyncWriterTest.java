@@ -22,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -70,7 +71,7 @@ class TransactionSyncWriterTest {
 				List.of(account),
 				List.of(newTransaction),
 				Map.of(10L, reclassifiedTransaction),
-				Set.of()
+				Map.of()
 		);
 
 		verify(transactionRepository).saveAll(List.of(reclassifiedTransaction, newTransaction));
@@ -85,7 +86,7 @@ class TransactionSyncWriterTest {
 		Transaction first = pendingCardTransaction(user, 10L, "메가커피 역삼점", 4_500L);
 		Transaction second = pendingCardTransaction(user, 11L, "김밥천국", 9_000L);
 
-		syncWriter.save(1L, List.of(), List.of(first, second), Map.of(), Set.of());
+		syncWriter.save(1L, List.of(), List.of(first, second), Map.of(), Map.of());
 
 		verify(events).publishEvent(new PendingTransactionSaved(1L, 10L, "메가커피 역삼점", 4_500L));
 		verify(events).publishEvent(new PendingTransactionSaved(1L, 11L, "김밥천국", 9_000L));
@@ -95,7 +96,7 @@ class TransactionSyncWriterTest {
 	void 과거_이력_적재에는_즉시_알림_이벤트를_발행하지_않는다() {
 		Transaction transaction = mock(Transaction.class);
 
-		syncWriter.saveHistory(1L, List.of(), List.of(transaction), Map.of(), Set.of());
+		syncWriter.saveHistory(1L, List.of(), List.of(transaction), Map.of(), Map.of());
 
 		verify(transactionRepository).saveAll(List.of(transaction));
 		verify(events, never()).publishEvent(any());
@@ -120,7 +121,7 @@ class TransactionSyncWriterTest {
 		given(transaction.getStatus()).willReturn(TransactionStatus.NORMAL);
 		given(transaction.getTransactionType()).willReturn(TransactionType.DEPOSIT);
 
-		syncWriter.save(1L, List.of(), List.of(transaction), Map.of(), Set.of());
+		syncWriter.save(1L, List.of(), List.of(transaction), Map.of(), Map.of());
 
 		verify(events, never()).publishEvent(any());
 	}
@@ -135,7 +136,7 @@ class TransactionSyncWriterTest {
 		given(first.getUser()).willReturn(user);
 		given(third.getUser()).willReturn(user);
 
-		syncWriter.save(1L, List.of(), List.of(first, second, third), Map.of(), Set.of());
+		syncWriter.save(1L, List.of(), List.of(first, second, third), Map.of(), Map.of());
 
 		verify(events, times(1)).publishEvent(new AccountWithdrawn(1L, 20L));
 		verify(events, times(1)).publishEvent(new AccountWithdrawn(1L, 21L));
@@ -149,7 +150,7 @@ class TransactionSyncWriterTest {
 		given(deposit.getStatus()).willReturn(TransactionStatus.NORMAL);
 		given(deposit.getTransactionType()).willReturn(TransactionType.DEPOSIT);
 
-		syncWriter.save(1L, List.of(), List.of(card, deposit), Map.of(), Set.of());
+		syncWriter.save(1L, List.of(), List.of(card, deposit), Map.of(), Map.of());
 
 		verify(events, never()).publishEvent(any(AccountWithdrawn.class));
 	}
@@ -163,7 +164,7 @@ class TransactionSyncWriterTest {
 		given(subcategories.findEnvelopeId(103)).willReturn(Optional.of(1));
 		given(subcategories.findEnvelopeId(602)).willReturn(Optional.of(6));
 
-		syncWriter.save(1L, List.of(), List.of(first, second, other), Map.of(), Set.of());
+		syncWriter.save(1L, List.of(), List.of(first, second, other), Map.of(), Map.of());
 
 		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 1));
 		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 6));
@@ -178,7 +179,7 @@ class TransactionSyncWriterTest {
 		Transaction canceled = mock(Transaction.class);
 		given(canceled.getStatus()).willReturn(TransactionStatus.CANCELED);
 
-		syncWriter.save(1L, List.of(), List.of(pending, canceled), Map.of(), Set.of());
+		syncWriter.save(1L, List.of(), List.of(pending, canceled), Map.of(), Map.of());
 
 		verify(events, never()).publishEvent(any(EnvelopeSpendingChanged.class));
 		verify(subcategories, never()).findEnvelopeId(any(Integer.class));
@@ -189,10 +190,10 @@ class TransactionSyncWriterTest {
 		Transaction auto = autoClassifiedCardTransaction(101);
 		given(subcategories.findEnvelopeId(101)).willReturn(Optional.of(1));
 
-		syncWriter.save(1L, List.of(), List.of(auto), Map.of(), Set.of(1, 4));
+		syncWriter.save(1L, List.of(), List.of(auto), Map.of(), Map.of(4, 12_000L));
 
-		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 1));
-		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 4));
+		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 1, null));
+		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 4, 12_000L));
 		verify(events, times(2)).publishEvent(any(EnvelopeSpendingChanged.class));
 	}
 
@@ -200,9 +201,9 @@ class TransactionSyncWriterTest {
 	void 과거_이력_적재는_전달받은_봉투만_발행한다() {
 		Transaction transaction = mock(Transaction.class);
 
-		syncWriter.saveHistory(1L, List.of(), List.of(transaction), Map.of(), Set.of(4));
+		syncWriter.saveHistory(1L, List.of(), List.of(transaction), Map.of(), Collections.singletonMap(4, null));
 
-		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 4));
+		verify(events).publishEvent(new EnvelopeSpendingChanged(1L, 4, null));
 		verifyNoMoreInteractions(events);
 		verify(subcategories, never()).findEnvelopeId(any(Integer.class));
 	}

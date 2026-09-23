@@ -22,7 +22,7 @@ public class BudgetAlertListener {
 	@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
 	public void on(EnvelopeSpendingChanged event) {
 		try {
-			budgetNotificationService.evaluate(event.userId(), event.envelopeId());
+			budgetNotificationService.evaluate(event.userId(), event.envelopeId(), event.restoredKrw());
 		} catch (RuntimeException e) {
 			log.warn("예산 구간 알림 평가 실패: userId={}, envelopeId={}, cause={}",
 					event.userId(), event.envelopeId(), e.toString());

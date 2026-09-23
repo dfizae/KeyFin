@@ -62,7 +62,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.empty());
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		verify(alertStateRepository).save(any(BudgetAlertState.class));
 		verify(notifications).create(eq(USER_ID), eq(NotificationType.BUDGET_ALERT),
@@ -75,7 +75,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.empty());
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		verify(notifications).create(eq(USER_ID), eq(NotificationType.BUDGET_ALERT),
 				eq("외식 봉투가 8% 남았어요"), eq("남은 금액 8,000원"), eq("1"), eq(false));
@@ -87,7 +87,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.of(state(BudgetAlertLevel.REMAINING_20)));
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
 	}
@@ -99,7 +99,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.of(state));
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		assertThat(state.getLastAlertLevel()).isEqualTo(BudgetAlertLevel.REMAINING_50);
 		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
@@ -112,7 +112,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.of(state));
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		assertThat(state.getLastAlertLevel()).isEqualTo(BudgetAlertLevel.REMAINING_5);
 		verify(notifications).create(eq(USER_ID), eq(NotificationType.BUDGET_ALERT),
@@ -125,7 +125,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.of(state(BudgetAlertLevel.REMAINING_5)));
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		verify(notifications).create(eq(USER_ID), eq(NotificationType.BUDGET_ALERT),
 				eq("외식 봉투를 초과했어요"), eq("12,000원 초과했어요"), eq("1"), eq(true));
@@ -136,7 +136,7 @@ class BudgetNotificationServiceTest {
 		given(envelopeBalanceService.getMonthlyBalances(USER_ID, MONTH))
 				.willReturn(List.of(new EnvelopeBalance(ENVELOPE_ID, "외식", null, 50_000L)));
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
 	}
@@ -147,7 +147,7 @@ class BudgetNotificationServiceTest {
 		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
 				.willReturn(Optional.empty());
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
 		verify(alertStateRepository, never()).save(any());
 		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
@@ -157,8 +157,36 @@ class BudgetNotificationServiceTest {
 	void 현재_주기_예산이_없으면_평가하지_않는다() {
 		given(budgetRepository.findByUserIdAndBudgetMonth(USER_ID, MONTH)).willReturn(Optional.empty());
 
-		service.evaluate(USER_ID, ENVELOPE_ID);
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
 
+		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
+	}
+
+	@Test
+	void 취소로_단계가_좋아지면_복구_알림을_보낸다() {
+		balance(100_000L, 60_000L);
+		BudgetAlertState state = state(BudgetAlertLevel.EXCEEDED);
+		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
+				.willReturn(Optional.of(state));
+
+		service.evaluate(USER_ID, ENVELOPE_ID, 12_000L);
+
+		assertThat(state.getLastAlertLevel()).isEqualTo(BudgetAlertLevel.REMAINING_50);
+		verify(notifications).create(eq(USER_ID), eq(NotificationType.BUDGET_ALERT),
+				eq("결제가 취소돼 외식 봉투가 돌아왔어요"), eq("12,000원이 복구돼 남은 금액 40,000원이에요"),
+				eq("1"), eq(false));
+	}
+
+	@Test
+	void 취소여도_단계가_그대로면_알리지_않는다() {
+		balance(100_000L, 60_000L);
+		BudgetAlertState state = state(BudgetAlertLevel.REMAINING_50);
+		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
+				.willReturn(Optional.of(state));
+
+		service.evaluate(USER_ID, ENVELOPE_ID, 3_000L);
+
+		assertThat(state.getLastAlertLevel()).isEqualTo(BudgetAlertLevel.REMAINING_50);
 		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
 	}
 

@@ -34,7 +34,7 @@ public class BudgetNotificationService {
 	private final Clock clock;
 
 	@Transactional
-	public void evaluate(long userId, int envelopeId) {
+	public void evaluate(long userId, int envelopeId, Long restoredKrw) {
 		String month = BudgetPeriod.current(LocalDate.now(clock), anchorDayOf(userId)).month();
 		Optional<Budget> budget = budgetRepository.findByUserIdAndBudgetMonth(userId, month);
 		if (budget.isEmpty()) {
@@ -51,11 +51,11 @@ public class BudgetNotificationService {
 		if (current == null) {
 			return;
 		}
-		apply(budget.get().getId(), envelopeId, current, balance, userId);
+		apply(budget.get().getId(), envelopeId, current, balance, userId, restoredKrw);
 	}
 
 	private void apply(long budgetId, int envelopeId, BudgetAlertLevel current,
-			EnvelopeBalance balance, long userId) {
+			EnvelopeBalance balance, long userId, Long restoredKrw) {
 		BudgetAlertState state = alertStateRepository.findByBudgetIdAndEnvelopeId(budgetId, envelopeId)
 				.orElse(null);
 		if (state == null) {
@@ -73,6 +73,8 @@ public class BudgetNotificationService {
 		state.moveTo(current);
 		if (worse) {
 			notify(userId, envelopeId, current, balance);
+		} else if (restoredKrw != null) {
+			notifyRecovery(userId, envelopeId, balance, restoredKrw);
 		}
 	}
 
@@ -86,6 +88,14 @@ public class BudgetNotificationService {
 				: "남은 금액 %,d원".formatted(remaining);
 		notificationService.create(userId, NotificationType.BUDGET_ALERT, title, body,
 				String.valueOf(envelopeId), level.requiresAction());
+	}
+
+	/** 결제 취소로 단계가 좋아졌을 때만 보낸다. 그 밖의 회복은 단계만 낮춘다(FR-BGT-05). */
+	private void notifyRecovery(long userId, int envelopeId, EnvelopeBalance balance, long restoredKrw) {
+		notificationService.create(userId, NotificationType.BUDGET_ALERT,
+				"결제가 취소돼 %s 봉투가 돌아왔어요".formatted(balance.envelopeName()),
+				"%,d원이 복구돼 남은 금액 %,d원이에요".formatted(restoredKrw, balance.remaining()),
+				String.valueOf(envelopeId), false);
 	}
 
 	private static long rate(EnvelopeBalance balance) {
