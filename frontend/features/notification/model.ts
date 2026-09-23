@@ -48,11 +48,14 @@ function toNotificationType(raw: string): NotificationType {
 export function toInboxNotification(dto: NotificationItemDto): InboxNotification {
   if (!Number.isSafeInteger(dto.id) || dto.id <= 0) throw new ContractMismatchError("items.id");
   if (!KST_LOCAL_DATE_TIME.test(dto.createdAt)) throw new ContractMismatchError("items.createdAt");
+  const type = toNotificationType(dto.type);
+  // 예산 잔액 알림은 앱 표기로 바꿔 보여 준다 (0원이면 "딱 다 썼어요", 초과는 한마디 — 2026-09-23 사용자 결정)
+  const copy = type === "BUDGET_ALERT" ? budgetAlertCopy(dto.title, dto.body ?? null) : { title: dto.title, body: dto.body ?? null };
   return {
     id: dto.id,
-    type: toNotificationType(dto.type),
-    title: dto.title,
-    body: dto.body ?? null,
+    type,
+    title: copy.title,
+    body: copy.body,
     refId: dto.refId ?? null,
     requiresAction: dto.requiresAction,
     isRead: dto.isRead,
@@ -276,11 +279,40 @@ export function pushNotificationHref(data: unknown): string | null {
 const PUSH_SPEECH_MAX = 80;
 
 /**
- * 포그라운드 푸시를 코치 고양이 말풍선 문장으로 바꾼다 (사용자 요청 2026-09-23). 본문이 있으면 본문, 없으면 제목.
+ * 포그라운드 푸시를 코치 고양이 말풍선 문장으로 바꾼다 (사용자 요청 2026-09-23).
+ * 예산 잔액 알림은 앱 표기(budgetAlertCopy)로 바꿔 "제목." 다음 줄에 본문을 둔다. 그 밖의 알림은 본문이 있으면 본문, 없으면 제목.
  * 둘 다 비었으면 말할 것이 없다(null). 밖에서 온 값이라 앞뒤 공백을 떼고 길이를 자른다 (규칙 50).
  */
-export function pushSpeechText(text: { title: string | null; body: string | null }): string | null {
-  const picked = [text.body, text.title].map((part) => part?.trim() ?? "").find((part) => part !== "");
-  if (picked === undefined) return null;
+export function pushSpeechText(type: PushDataType, text: { title: string | null; body: string | null }): string | null {
+  const title = text.title?.trim() ?? "";
+  const body = text.body?.trim() ?? "";
+  const picked = type === "BUDGET_ALERT" && title !== "" ? budgetAlertSpeech(title, body === "" ? null : body) : body || title;
+  if (picked === "") return null;
   return picked.length > PUSH_SPEECH_MAX ? `${picked.slice(0, PUSH_SPEECH_MAX - 1)}…` : picked;
+}
+
+function budgetAlertSpeech(title: string, body: string | null): string {
+  const copy = budgetAlertCopy(title, body);
+  const sentence = copy.title.endsWith(".") ? copy.title : `${copy.title}.`;
+  return copy.body === null ? sentence : `${sentence}\n${copy.body}`;
+}
+
+const BUDGET_REMAINING_TITLE = /^(.+?) 봉투가 \d+% 남았어요\.?$/;
+const BUDGET_EXCEEDED_TITLE = /봉투를 초과했어요\.?$/;
+const ZERO_REMAINING_BODY = /^남은 금액 0원/;
+
+/**
+ * 예산 잔액 알림(BUDGET_ALERT)을 앱 표기로 바꾼다 (사용자 결정 2026-09-23). 서버 문구(BudgetNotificationService)를 받아 고친다.
+ * - 잔액이 정확히 0원: "○○ 봉투를 딱 다 썼어요" 한마디. 잔여율은 내림이라 0% 로 와도 돈이 남았을 수 있어 금액으로 판단한다.
+ * - 초과: "○○ 봉투를 초과했어요" 한마디(금액 줄은 뺀다).
+ * - 50·20·5% 단계: 제목과 "남은 금액 N원" 본문을 그대로 둔다.
+ * 모르는 모양(결제 취소 복구 알림 등)은 그대로 둔다. 서버 문구가 바뀌면 이 함수도 같이 고쳐야 한다.
+ */
+export function budgetAlertCopy(title: string, body: string | null): { title: string; body: string | null } {
+  const remaining = BUDGET_REMAINING_TITLE.exec(title);
+  if (remaining !== null && body !== null && ZERO_REMAINING_BODY.test(body)) {
+    return { title: `${remaining[1]} 봉투를 딱 다 썼어요`, body: null };
+  }
+  if (BUDGET_EXCEEDED_TITLE.test(title)) return { title, body: null };
+  return { title, body };
 }

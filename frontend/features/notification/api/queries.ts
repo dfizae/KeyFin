@@ -193,7 +193,7 @@ export function usePushForegroundDisplay(enabled: boolean) {
         const keys: QueryKey[] = [notificationKeys.all, ...affectedQueryKeys(type)];
         for (const queryKey of keys) queryClient.invalidateQueries({ queryKey });
         // 배너로 띄우는 알림이면 홈의 코치 고양이도 말풍선으로 한 번 알린다 (사용자 요청 2026-09-23)
-        const speech = pushSpeechText(text);
+        const speech = pushSpeechText(type, text);
         if (shouldShowPushBanner(type) && speech !== null) useCoachSpeechStore.getState().announce(speech);
       });
       if (!active) {
