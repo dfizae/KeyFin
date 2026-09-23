@@ -4,12 +4,14 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Optional;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.finset.key_fin.budget.entity.Budget;
 import com.finset.key_fin.budget.entity.BudgetAlertLevel;
 import com.finset.key_fin.budget.entity.BudgetAlertState;
+import com.finset.key_fin.budget.event.BudgetAlertCreated;
 import com.finset.key_fin.budget.repository.BudgetAlertStateRepository;
 import com.finset.key_fin.budget.repository.BudgetRepository;
 import com.finset.key_fin.budget.service.EnvelopeBalanceService.EnvelopeBalance;
@@ -31,6 +33,7 @@ public class BudgetNotificationService {
 	private final UserSettingsRepository userSettingsRepository;
 	private final EnvelopeBalanceService envelopeBalanceService;
 	private final NotificationService notificationService;
+	private final ApplicationEventPublisher events;
 	private final Clock clock;
 
 	@Transactional
@@ -86,8 +89,9 @@ public class BudgetNotificationService {
 		String body = level == BudgetAlertLevel.EXCEEDED
 				? "%,d원 초과했어요".formatted(-remaining)
 				: "남은 금액 %,d원".formatted(remaining);
-		notificationService.create(userId, NotificationType.BUDGET_ALERT, title, body,
+		long notificationId = notificationService.create(userId, NotificationType.BUDGET_ALERT, title, body,
 				String.valueOf(envelopeId), level.requiresAction());
+		events.publishEvent(new BudgetAlertCreated(userId, envelopeId, balance.envelopeName(), notificationId, level));
 	}
 
 	/** 결제 취소로 단계가 좋아졌을 때만 보낸다. 그 밖의 회복은 단계만 낮춘다(FR-BGT-05). */

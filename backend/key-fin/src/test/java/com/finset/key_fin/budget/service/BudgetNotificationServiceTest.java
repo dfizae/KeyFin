@@ -19,11 +19,13 @@ import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.finset.key_fin.budget.entity.Budget;
 import com.finset.key_fin.budget.entity.BudgetAlertLevel;
 import com.finset.key_fin.budget.entity.BudgetAlertState;
+import com.finset.key_fin.budget.event.BudgetAlertCreated;
 import com.finset.key_fin.budget.repository.BudgetAlertStateRepository;
 import com.finset.key_fin.budget.repository.BudgetRepository;
 import com.finset.key_fin.budget.service.EnvelopeBalanceService.EnvelopeBalance;
@@ -44,13 +46,14 @@ class BudgetNotificationServiceTest {
 	private final UserSettingsRepository userSettingsRepository = mock(UserSettingsRepository.class);
 	private final EnvelopeBalanceService envelopeBalanceService = mock(EnvelopeBalanceService.class);
 	private final NotificationService notifications = mock(NotificationService.class);
+	private final ApplicationEventPublisher events = mock(ApplicationEventPublisher.class);
 
 	private BudgetNotificationService service;
 
 	@BeforeEach
 	void setUp() {
 		service = new BudgetNotificationService(budgetRepository, alertStateRepository,
-				userSettingsRepository, envelopeBalanceService, notifications,
+				userSettingsRepository, envelopeBalanceService, notifications, events,
 				Clock.fixed(Instant.parse("2026-09-10T03:00:00Z"), ZoneId.of("Asia/Seoul")));
 		given(userSettingsRepository.findById(USER_ID)).willReturn(Optional.empty());
 		given(budgetRepository.findByUserIdAndBudgetMonth(USER_ID, MONTH)).willReturn(Optional.of(budget()));
@@ -188,6 +191,29 @@ class BudgetNotificationServiceTest {
 
 		assertThat(state.getLastAlertLevel()).isEqualTo(BudgetAlertLevel.REMAINING_50);
 		verify(notifications, never()).create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean());
+	}
+
+	@Test
+	void 구간이_나빠져_알림을_만들면_알림_id와_함께_BudgetAlertCreated를_발행한다() {
+		balance(100_000L, 82_000L);
+		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
+				.willReturn(Optional.of(state(BudgetAlertLevel.REMAINING_50)));
+		given(notifications.create(anyLong(), any(), anyString(), anyString(), any(), anyBoolean())).willReturn(77L);
+
+		service.evaluate(USER_ID, ENVELOPE_ID, null);
+
+		verify(events).publishEvent(new BudgetAlertCreated(USER_ID, ENVELOPE_ID, "외식", 77L, BudgetAlertLevel.REMAINING_20));
+	}
+
+	@Test
+	void 취소_복구_알림에는_BudgetAlertCreated를_발행하지_않는다() {
+		balance(100_000L, 60_000L);
+		given(alertStateRepository.findByBudgetIdAndEnvelopeId(BUDGET_ID, ENVELOPE_ID))
+				.willReturn(Optional.of(state(BudgetAlertLevel.EXCEEDED)));
+
+		service.evaluate(USER_ID, ENVELOPE_ID, 12_000L);
+
+		verify(events, never()).publishEvent(any(BudgetAlertCreated.class));
 	}
 
 	private void balance(long confirmed, long spent) {
