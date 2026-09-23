@@ -169,6 +169,11 @@ _WHAT_IF_GENERIC_EXPENSE: Final = re.compile(r"(?:변동)?(?:소비|지출)")
 _WHAT_IF_ENVELOPE_ALIASES: Final[dict[str, str]] = {
     "외식비": "외식",
     "외식": "외식",
+    # The engine's mapping.py folds the everyday word 식비 into the 외식 envelope,
+    # so accept it as an alias here too (all three collapse to the same envelope,
+    # keeping the single-envelope guard satisfied even when 식비 is a substring
+    # of 외식비).
+    "식비": "외식",
     "교통비": "교통비",
     "의료·건강": "의료·건강",
     "의료건강": "의료·건강",

@@ -285,6 +285,8 @@ def test_natural_goal_rejects_ambiguous_or_advisory_language(question: str) -> N
 
 @pytest.mark.parametrize(("question", "scenario"), [
     ("이번 달 외식비를 20% 줄이면 어떻게 될까?", {"expense_reductions": {"외식": 0.2}}),
+    # 일상어 "식비"도 엔진 매핑(식비→외식)대로 외식 봉투 절감으로 접힌다.
+    ("이번 달 식비를 20% 줄이면 어떻게 될까?", {"expense_reductions": {"외식": 0.2}}),
     ("다음 달 변동 지출을 10% 줄이면 잔액이 어떻게 달라져?", {"expense_multiplier": 0.9}),
 ])
 def test_natural_what_if_requires_one_explicit_variable_expense_branch(

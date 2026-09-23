@@ -8,7 +8,8 @@ from typing import Final, Literal, assert_never
 from coaching_service.chart_projection import ENVELOPES
 from coaching_service.schemas import Frozen, TransactionView
 
-_ENVELOPE_PATTERN: Final = "|".join(re.escape(name) for name in (*ENVELOPES, "외식비"))
+# 엔진 mapping.py 는 일상어 "외식비"·"식비"를 모두 "외식" 봉투로 접는다.
+_ENVELOPE_PATTERN: Final = "|".join(re.escape(name) for name in (*ENVELOPES, "외식비", "식비"))
 # 부분 키워드 일치는 가맹점·현금·제외 조건을 지워 전체 합계로 바꿀 수 있다.
 # 지원하는 문장 전체가 맞아야 집계하며, 나머지는 명확한 조건을 다시 요청한다.
 _QUERY: Final = re.compile(
@@ -140,7 +141,7 @@ def spending_answer(
             text="중복 거래 또는 소비 반영값의 불일치가 있어 원장 확인이 필요합니다.",
         )
     envelope = query.group("envelope")
-    envelope = "외식" if envelope == "외식비" else envelope
+    envelope = "외식" if envelope in ("외식비", "식비") else envelope
     matched = tuple(
         row
         for day, row in dated
