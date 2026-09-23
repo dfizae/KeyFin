@@ -11,6 +11,9 @@ type HomeCoachTargetProps = {
   width: number;
   /** 눌러서 이동하기 직전에 부른다(첫 진입 안내를 끝내는 데 쓴다) */
   onOpen?: () => void;
+  /** 머리 위 말풍선 문구. 없으면 null */
+  speech?: string | null;
+  onSpeechPress?: () => void;
 };
 
 /**
@@ -18,14 +21,22 @@ type HomeCoachTargetProps = {
  * 미확정 결제가 있으면 귀 옆에 점을 달아 정리할 것이 있음을 알린다. 정리 링크 자체는 대화 화면 상단에 있다.
  * 미확정 조회 실패는 점만 빼고 조용히 넘긴다 — 홈의 다른 영역을 막지 않는다.
  */
-function HomeCoachTarget({ width, onOpen }: HomeCoachTargetProps) {
+function HomeCoachTarget({ width, onOpen, speech = null, onSpeechPress }: HomeCoachTargetProps) {
   const router = useRouter();
   const pending = usePendingTransactions();
   const open = () => {
     onOpen?.();
     router.push(COACHING_CHAT_ROUTE);
   };
-  return <CoachTarget width={width} hasPending={flattenPending(pending.data).length > 0} onPress={open} />;
+  return (
+    <CoachTarget
+      width={width}
+      hasPending={flattenPending(pending.data).length > 0}
+      speech={speech}
+      onSpeechPress={onSpeechPress}
+      onPress={open}
+    />
+  );
 }
 
 export { HomeCoachTarget };
