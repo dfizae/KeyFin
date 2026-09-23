@@ -297,8 +297,8 @@ class NaturalPurchase:
 # a 4xx code, not a fabricated financial answer.
 # Strict buy verbs: an unambiguous purchase signal on their own.
 _PURCHASE_VERB_STRICT: Final = re.compile(
-    r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|"
-    r"지르면|질러도|지르려고|구입하면|구입해서"
+    r"사면|사도|살까|사려고|사려는|사려해|사서|구매하면|구매하려고|구매하려는|구매해도|구매해서|"
+    r"지르면|질러도|지르려고|지르려는|구입하면|구입하려고|구입하려는|구입해서"
 )
 # Casual buy phrasings. Whitespace is already stripped before matching, so
 # "사고 싶어" -> "사고싶어" and "사고싶" covers both. Deliberately excluded:
@@ -308,7 +308,8 @@ _PURCHASE_VERB_STRICT: Final = re.compile(
 # 좋아"), so a casual-only match needs a concrete amount or item alias before it
 # counts as a purchase (see ``natural_purchase``). "장만하" was dropped entirely:
 # "장만하다 뜻" / "집 장만" are definition/goal, not purchase.
-_PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까")
+# Future-tense "살건데/살거야/살예정" also collide with 살다 (=live), so they stay casual.
+_PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까|살건데|살거야|살거예요|살예정|살생각")
 _PURCHASE_VERB: Final = re.compile(
     _PURCHASE_VERB_STRICT.pattern + r"|" + _PURCHASE_VERB_CASUAL.pattern
 )
