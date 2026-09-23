@@ -396,6 +396,37 @@ def test_numeric_forecast_is_labeled_separately_from_history_and_current_balance
     assert "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원" in text
 
 
+def test_fresh_numeric_turn_leads_with_its_answer_not_every_envelope_balance() -> None:
+    # A fresh forecast/what-if/risk question must answer itself first. Dumping all
+    # seven envelope ledger balances ahead of the result buried the answer so the
+    # chat looked like it ignored the asked period/scenario (live 2026-09-23).
+    base = receipt_for(
+        "forecast",
+        {
+            "expected_expense_krw": metric(21_000, "KRW"),
+            "total_expense_p10_krw": metric(10_000, "KRW"),
+            "total_expense_p50_krw": metric(20_000, "KRW"),
+            "total_expense_p90_krw": metric(30_000, "KRW"),
+            "terminal_cash_p10_krw": metric(350_000, "KRW"),
+            "terminal_cash_p50_krw": metric(400_000, "KRW"),
+            "terminal_cash_p90_krw": metric(450_000, "KRW"),
+            "terminal_resource_change_p10_krw": metric(5_000, "KRW"),
+            "terminal_resource_change_p50_krw": metric(15_000, "KRW"),
+            "terminal_resource_change_p90_krw": metric(25_000, "KRW"),
+        },
+    )
+    raw = base.model_dump(mode="json")
+    raw["current_envelopes"] = [
+        {"envelope": "외식", "balance_krw": 343_700},
+        {"envelope": "기타", "balance_krw": 50_000},
+    ]
+
+    text = authoritative_text(Receipt.model_validate(raw))
+
+    assert "장부 잔액" not in text
+    assert "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원" in text
+
+
 @pytest.mark.parametrize(
     ("original", "changed"),
     [
