@@ -35,6 +35,10 @@ export type ChatRequestDto = { message: string };
 export type ChatSpendingRowDto = { envelope: string; totalKrw: number; count: number };
 export type ChatSpendingRow = { envelope: string; totalKrw: KRW; count: number };
 
+/** 봉투가 둘 이상인 대화 답변의 봉투별 장부 잔액 표(서버 envelopeBalances). 본문에는 표 설명 한 줄만 있다. */
+export type ChatEnvelopeBalanceDto = { envelope: string; balanceKrw: number };
+export type ChatEnvelopeBalance = { envelope: string; balanceKrw: KRW };
+
 /**
  * 위험(risk)·가정(what_if) 코칭 답변의 봉투별 구조화 행 (ai/coaching/docs/chat.md `numeric_rows` · 백엔드 ChatReply.NumericRows, 2026-09-23 대조).
  * 엔진이 이미 계산한 값을 서버가 그대로 노출하므로 앱도 그대로 표로 그린다. 그 외 답변과 GET 이력은 null 이다.
@@ -77,6 +81,8 @@ export type ChatReplyDto = {
   totalKrw: number | null;
   /** 위험·가정 답변의 봉투별 표 데이터. 그 외 답변은 null (이 필드가 없던 응답은 undefined) */
   numericRows?: ChatNumericRowsDto | null;
+  /** 봉투별 장부 잔액 표. 그 외 답변은 빈 배열 (이 필드가 없던 응답은 undefined) */
+  envelopeBalances?: ChatEnvelopeBalanceDto[] | null;
 };
 
 /** GET 이력에는 소비 집계(rows·totalKrw)와 표 데이터(numericRows)가 포함되지 않는다 */
@@ -102,6 +108,7 @@ export type ChatReply = {
   rows: ChatSpendingRow[];
   totalKrw: KRW | null;
   numericRows: ChatNumericRows | null;
+  envelopeBalances: ChatEnvelopeBalance[];
 };
 
 export type ChatMessage = {
@@ -111,6 +118,7 @@ export type ChatMessage = {
   rows: ChatSpendingRow[];
   totalKrw: KRW | null;
   numericRows: ChatNumericRows | null;
+  envelopeBalances: ChatEnvelopeBalance[];
 };
 
 export type ChatHistory = {
@@ -136,6 +144,11 @@ function toSpendingRow(dto: ChatSpendingRowDto): ChatSpendingRow {
   if (typeof dto?.envelope !== "string") throw new ContractMismatchError("rows.envelope");
   if (!Number.isSafeInteger(dto.count) || dto.count < 0) throw new ContractMismatchError("rows.count");
   return { envelope: dto.envelope, totalKrw: won(dto.totalKrw, "rows.totalKrw"), count: dto.count };
+}
+
+function toEnvelopeBalance(dto: ChatEnvelopeBalanceDto): ChatEnvelopeBalance {
+  if (typeof dto?.envelope !== "string") throw new ContractMismatchError("envelopeBalances.envelope");
+  return { envelope: dto.envelope, balanceKrw: won(dto.balanceKrw, "envelopeBalances.balanceKrw") };
 }
 
 function toEnvelopeSpendRow(dto: ChatEnvelopeSpendRowDto): ChatEnvelopeSpendRow {
@@ -180,6 +193,8 @@ export function toChatReply(dto: ChatReplyDto): ChatReply {
   if (typeof dto.reply !== "string") throw new ContractMismatchError("reply");
   const rows = dto.rows ?? [];
   if (!Array.isArray(rows)) throw new ContractMismatchError("rows");
+  const envelopeBalances = dto.envelopeBalances ?? [];
+  if (!Array.isArray(envelopeBalances)) throw new ContractMismatchError("envelopeBalances");
   const status = toUnion(CHAT_STATUSES, dto.status);
   return {
     reply: dto.reply,
@@ -193,6 +208,7 @@ export function toChatReply(dto: ChatReplyDto): ChatReply {
     rows: rows.map(toSpendingRow),
     totalKrw: dto.totalKrw == null ? null : won(dto.totalKrw, "totalKrw"),
     numericRows: toNumericRows(dto.numericRows),
+    envelopeBalances: envelopeBalances.map(toEnvelopeBalance),
   };
 }
 
@@ -205,6 +221,7 @@ export function toChatMessage(dto: ChatMessageDto): ChatMessage {
     rows: [],
     totalKrw: null,
     numericRows: null,
+    envelopeBalances: [],
   };
 }
 
@@ -238,8 +255,8 @@ export function appendChatTurn(history: ChatHistory, question: string, reply: Ch
     ...history,
     messages: [
       ...history.messages,
-      { role: "user", content: question, chartId: null, rows: [], totalKrw: null, numericRows: null },
-      { role: "assistant", content: reply.reply, chartId: reply.chartId, rows: reply.rows, totalKrw: reply.totalKrw, numericRows: reply.numericRows },
+      { role: "user", content: question, chartId: null, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] },
+      { role: "assistant", content: reply.reply, chartId: reply.chartId, rows: reply.rows, totalKrw: reply.totalKrw, numericRows: reply.numericRows, envelopeBalances: reply.envelopeBalances },
     ],
     hasSession: true,
   };

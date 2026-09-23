@@ -12,9 +12,14 @@ public record ChatReply(
 		String chartId,
 		List<Row> rows,
 		Long totalKrw,
-		NumericRows numericRows
+		NumericRows numericRows,
+		List<EnvelopeBalance> envelopeBalances
 ) {
 	public record Row(String envelope, long totalKrw, int count) {
+	}
+
+	/** 봉투별 장부 잔액 표 행. 본문에는 표 설명 한 줄만 있다. */
+	public record EnvelopeBalance(String envelope, long balanceKrw) {
 	}
 
 	public record NumericRows(String mode, List<EnvelopeSpend> envelopeSpend, List<BudgetRisk> budgetRisk) {
@@ -57,6 +62,9 @@ public record ChatReply(
 				chartId,
 				rows,
 				turn.totalKrw(),
-				NumericRows.from(turn.numericRows()));
+				NumericRows.from(turn.numericRows()),
+				turn.envelopeBalances() == null ? List.of() : turn.envelopeBalances().stream()
+						.map(row -> new EnvelopeBalance(row.envelope(), row.balanceKrw()))
+						.toList());
 	}
 }

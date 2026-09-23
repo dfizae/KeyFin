@@ -13,7 +13,7 @@ from test_engine import fixture
 from coaching_service.engine import EngineAdapter
 from coaching_service.numeric_rendering import numeric_rows_for, numeric_text
 from coaching_service.periods import RollingDays, resolve_period
-from coaching_service.rendering import authoritative_text
+from coaching_service.rendering import authoritative_text, envelope_balance_table
 from coaching_service.schemas import JsonDocument, Receipt
 
 JsonObject: TypeAlias = dict[str, object]
@@ -394,6 +394,37 @@ def test_numeric_forecast_is_labeled_separately_from_history_and_current_balance
     assert "이전 코칭 생성 당시의 기록: 결제액 888,888원" in text
     assert "현재 수신 이벤트까지 반영한 기타 봉투 장부 잔액은 777,777원" in text
     assert "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원" in text
+
+
+def test_dialogue_review_sends_envelope_balances_as_a_table_not_seven_sentences() -> None:
+    # Live 2026-09-23 ("내 소비습관 어때"): seven "…봉투 장부 잔액은 N원입니다." lines
+    # repeated. A dialogue turn with several envelopes ships them as table rows and
+    # the text keeps one sentence describing that table.
+    raw = receipt_for("forecast", {}).model_dump(mode="json")
+    raw["numeric_result"] = None
+    raw["numeric_request"] = None
+    raw["current_envelopes"] = [
+        {"envelope": "외식", "balance_krw": 343_700},
+        {"envelope": "교통비", "balance_krw": 150_000},
+    ]
+    receipt = Receipt.model_validate(raw)
+
+    text = authoritative_text(receipt)
+
+    assert "장부 잔액은" not in text
+    assert "봉투별 남은 잔액은 아래 표에 정리했어요." in text
+    assert envelope_balance_table(receipt) == receipt.current_envelopes
+
+
+def test_payment_and_single_envelope_turns_keep_balance_sentences() -> None:
+    raw = receipt_for("forecast", {}).model_dump(mode="json")
+    raw["numeric_result"] = None
+    raw["numeric_request"] = None
+    raw["current_envelopes"] = [{"envelope": "외식", "balance_krw": 343_700}]
+    single = Receipt.model_validate(raw)
+    # One envelope is simply stated; no table is attached.
+    assert "외식 봉투 장부 잔액은 343,700원입니다." in authoritative_text(single)
+    assert envelope_balance_table(single) == ()
 
 
 def _risk_with_accounts(total_cash: float, rows: list[JsonObject]) -> Receipt:

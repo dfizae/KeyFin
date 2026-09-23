@@ -12,6 +12,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useChatHistory, useSendChatMessage } from "@/features/coaching/api/queries";
+import { CoachingBalanceTable } from "@/features/coaching/components/CoachingBalanceTable";
 import { CoachingNumericTable } from "@/features/coaching/components/CoachingNumericTable";
 import { CoachingSpendingTable } from "@/features/coaching/components/CoachingSpendingTable";
 import { chatErrorMessage, isCoachRejected } from "@/features/coaching/errors";
@@ -96,7 +97,7 @@ function CoachingChatScreen() {
       list.push({
         key: "q-pending",
         kind: "message",
-        message: { role: "user", content: send.variables ?? "", chartId: null, rows: [], totalKrw: null, numericRows: null },
+        message: { role: "user", content: send.variables ?? "", chartId: null, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] },
       });
       list.push(
         send.isPending
@@ -223,6 +224,7 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
       </Text>
       <CoachingSpendingTable rows={message.rows} totalKrw={message.totalKrw} />
       <CoachingNumericTable numericRows={message.numericRows} />
+      <CoachingBalanceTable envelopeBalances={message.envelopeBalances} />
       {chartId === null ? null : (
         <Pressable
           accessibilityRole="button"
