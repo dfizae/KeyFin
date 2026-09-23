@@ -237,7 +237,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 
 		var canceled = transactionRepository.findById(tx).orElseThrow();
 		canceled.cancel();
-		syncWriter.save(userId, List.of(), List.of(), Map.of(tx, canceled), Set.of(1));
+		syncWriter.save(userId, List.of(), List.of(), Map.of(tx, canceled), Map.of(1, 2_000L));
 
 		boolean stillExceeded = remainingSpending > 1000;
 		assertThat(balances.getRemaining(userId, "202609", 1)).contains(1000 - remainingSpending);
@@ -251,7 +251,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 				.andExpect(jsonPath("$.data.stickers.removableToday").value(stillExceeded));
 		furnitureService.updatePlacement(userId, fridge, moved());
 		assertThat(rooms.getRoom(userId).stickers().count()).isEqualTo(stillExceeded ? 5 : 0);
-		syncWriter.save(userId, List.of(), List.of(), Map.of(tx, canceled), Set.of(1));
+		syncWriter.save(userId, List.of(), List.of(), Map.of(tx, canceled), Map.of(1, 2_000L));
 		assertThat(attachedCount()).isEqualTo(stillExceeded ? 5 : 0);
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(1);
 	}
@@ -485,7 +485,7 @@ class RoomStickersIntegrationTest extends SpringIntegrationTestSupport {
 		long nextTx = spend("2026-10-01", 2000, "PENDING", null);
 		var changed = transactionRepository.findById(nextTx).orElseThrow();
 		changed.confirmSubcategory(101);
-		syncWriter.save(userId, List.of(), List.of(), Map.of(nextTx, changed), Set.of());
+		syncWriter.save(userId, List.of(), List.of(), Map.of(nextTx, changed), Map.of());
 		assertThat(countFor("budget_sticker_applications", userId)).isEqualTo(2);
 	}
 

@@ -125,7 +125,7 @@ class TransactionSyncServiceTest {
 		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		ArgumentCaptor<List<Transaction>> captor = ArgumentCaptor.forClass(List.class);
-		verify(syncWriter).save(org.mockito.ArgumentMatchers.eq(USER_ID), anyList(), captor.capture(), anyMap(), anySet());
+		verify(syncWriter).save(org.mockito.ArgumentMatchers.eq(USER_ID), anyList(), captor.capture(), anyMap(), anyMap());
 		assertThat(captor.getValue()).containsExactly(accountTransaction, cardTransaction);
 		assertThat(account.getBalance()).isEqualTo(990_000L);
 		assertThat(account.getBalanceUpdatedAt()).isEqualTo(SYNC_TIME);
@@ -148,7 +148,7 @@ class TransactionSyncServiceTest {
 
 		syncService.sync(USER_ID, START_DATE, END_DATE);
 
-		verify(syncWriter).save(USER_ID, List.of(account), List.of(transaction), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(account), List.of(transaction), Map.of(), Map.of());
 		verify(classificationService, never()).fromAccount(user, account, stored);
 	}
 
@@ -159,7 +159,7 @@ class TransactionSyncServiceTest {
 		syncService.sync(USER_ID, START_DATE, END_DATE);
 
 		verifyNoInteractions(accountTransactionClient, cardTransactionClient, classificationService);
-		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(), Map.of());
 	}
 
 	@Test
@@ -198,7 +198,7 @@ class TransactionSyncServiceTest {
 		assertThat(existing.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
 		ArgumentCaptor<List<Transaction>> captor = ArgumentCaptor.forClass(List.class);
 		ArgumentCaptor<Map<Long, Transaction>> reclassifiedCaptor = ArgumentCaptor.forClass(Map.class);
-		verify(syncWriter).saveHistory(org.mockito.ArgumentMatchers.eq(USER_ID), anyList(), captor.capture(), reclassifiedCaptor.capture(), anySet());
+		verify(syncWriter).saveHistory(org.mockito.ArgumentMatchers.eq(USER_ID), anyList(), captor.capture(), reclassifiedCaptor.capture(), anyMap());
 		assertThat(captor.getValue()).containsExactly(current);
 		assertThat(reclassifiedCaptor.getValue()).containsEntry(existing.getId(), existing);
 	}
@@ -219,7 +219,7 @@ class TransactionSyncServiceTest {
 
 		verify(accountRepository, never())
 				.findByUserIdAndFinAccountNoAndManagedTrue(any(), any());
-		verify(syncWriter).save(USER_ID, List.of(source), List.of(current), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(source), List.of(current), Map.of(), Map.of());
 	}
 
 	@Test
@@ -269,7 +269,7 @@ class TransactionSyncServiceTest {
 
 		syncService.syncAccountTransactions(user, account, START_DATE, END_DATE);
 
-		verify(syncWriter).save(USER_ID, List.of(account), List.of(transaction), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(account), List.of(transaction), Map.of(), Map.of());
 		verifyNoInteractions(cardTransactionClient);
 	}
 
@@ -286,7 +286,7 @@ class TransactionSyncServiceTest {
 
 		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
 
-		verify(syncWriter).save(USER_ID, List.of(), List.of(transaction), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(), List.of(transaction), Map.of(), Map.of());
 		verifyNoInteractions(accountTransactionClient);
 		assertThat(account.getBalance()).isEqualTo(1_000_000L);
 	}
@@ -311,7 +311,7 @@ class TransactionSyncServiceTest {
 		assertThat(stored.getStatus()).isEqualTo(TransactionStatus.CANCELED);
 		assertThat(stored.getAmount()).isEqualTo(20_000L);
 		assertThat(stored.getSubcategoryId()).isEqualTo(203);
-		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(981L, stored), Set.of(2));
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(981L, stored), Map.of(2, 20_000L));
 		verify(classificationService, never()).fromCard(user, card, revoked);
 	}
 
@@ -329,7 +329,7 @@ class TransactionSyncServiceTest {
 
 		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
 
-		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(), Map.of());
 		verifyNoInteractions(subcategoryQueryRepository);
 	}
 
@@ -348,7 +348,7 @@ class TransactionSyncServiceTest {
 		syncService.syncCardTransactions(user, card, START_DATE, END_DATE);
 
 		assertThat(stored.getStatus()).isEqualTo(TransactionStatus.NORMAL);
-		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(), Set.of());
+		verify(syncWriter).save(USER_ID, List.of(), List.of(), Map.of(), Map.of());
 		verifyNoInteractions(subcategoryQueryRepository);
 	}
 
