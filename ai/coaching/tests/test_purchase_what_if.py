@@ -18,7 +18,7 @@ import pytest
 from test_api import TOKEN, TestModel, setup
 from test_engine import fixture
 
-from coaching_service.dialogue import _select_cash_account
+from coaching_service.dialogue import _select_card, _select_cash_account
 from coaching_service.fast_routes import NaturalPurchase, natural_purchase
 from coaching_service.llm_contract import EvidenceInput, Routing
 from coaching_service.numeric_rendering import _PURCHASE_OK, _PURCHASE_RISK, purchase_verdict_text
@@ -103,6 +103,37 @@ def test_select_cash_account_prefers_the_income_account_among_many() -> None:
         )
         is None
     )
+
+
+def two_card_fixture(user: str = "demo") -> Bootstrap:
+    """주거래 a + 보조 b 계좌, 각 계좌에서 출금되는 카드 두 장(라이브 gaza1268 구성)."""
+    base = fixture(user)
+    snapshot = dict(base.snapshot.root)
+    snapshot["accounts"] = [
+        {"account_id": "a", "balance_krw": 5_000_000, "is_income": True},
+        {"account_id": "b", "balance_krw": 45_400, "is_income": False},
+    ]
+    snapshot["cards"] = [
+        {"card_id": "side", "kind": "CREDIT", "settlement_account_id": "b",
+         "opening_payable_krw": 0, "payment_delay_days": 20},
+        {"card_id": "main", "kind": "CREDIT", "settlement_account_id": "a",
+         "opening_payable_krw": 0, "payment_delay_days": 20},
+    ]
+    return base.model_copy(update={"snapshot": JsonDocument(snapshot)})
+
+
+def test_select_card_defaults_to_the_card_settling_from_the_income_account() -> None:
+    accounts = two_card_fixture().snapshot.root["accounts"]
+    cards = two_card_fixture().snapshot.root["cards"]
+    assert isinstance(accounts, list)
+    assert isinstance(cards, list)
+    assert _select_card(cards, accounts) == cards[1]
+    # A sole card is unambiguous without any income flag.
+    assert _select_card([cards[0]], [{"account_id": "b"}]) == cards[0]
+    # No income account, or two cards on it, stays ambiguous (fail closed).
+    assert _select_card(cards, [{"account_id": "a"}, {"account_id": "b"}]) is None
+    both_on_income = [{**cards[0], "settlement_account_id": "a"}, cards[1]]
+    assert _select_card(both_on_income, accounts) is None
 
 
 def test_price_only_question_is_not_a_purchase_route() -> None:
@@ -407,6 +438,29 @@ async def test_cash_purchase_with_multiple_accounts_resolves_to_income_account(
         # Resolved (no clarification), and the change draws from the income account.
         assert receipt["routing"]["fallback_reason"] is None
         assert receipt["request"]["changes"][0]["account_id"] == "b"
+        assert model.routes == 0
+
+
+@pytest.mark.anyio
+async def test_card_purchase_with_two_cards_uses_the_income_account_card(tmp_path: Path) -> None:
+    # Live 2026-09-23: with two cards the card turn fell back to the misleading
+    # cash-vs-card question. The card settling from the 주거래 account is the default.
+    model = RouteMustNotRun()
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=setup(tmp_path / "purchase-card2.sqlite3", model)),
+        base_url="http://test", headers={"Authorization": "Bearer " + TOKEN},
+    ) as client:
+        path = "/v1/sessions/" + await _bootstrap(client, two_card_fixture())
+        response = await client.post(
+            path + "/messages",
+            json={"question": "30만원짜리 노트북 이번 주에 신용카드로 사면 이번 달 괜찮아? 2026-10-05 결제"},
+            headers={"Idempotency-Key": "turn"},
+        )
+        assert response.status_code == 200, response.text
+        receipt = response.json()["receipt"]
+        assert receipt["routing"]["fallback_reason"] is None
+        change = receipt["request"]["changes"][0]
+        assert (change["card_id"], change["payment_date"]) == ("main", "2026-10-05")
         assert model.routes == 0
 
 
