@@ -16,6 +16,7 @@ from coaching_service.periods import (
     ResolvedPeriod,
     RollingDays,
     ThroughDate,
+    budget_cycle,
     resolve_period,
 )
 from coaching_service.schemas import JsonDocument
@@ -75,6 +76,14 @@ def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:  # n
         raise ServiceError("invalid_question_period") from None
 
 
+def _default_spec(reference: date, budget_start_day: int) -> PeriodSpec:
+    """Period-less turns follow the budget cycle; its last day keeps the 7-day default."""
+    _, cycle_end = budget_cycle(reference, budget_start_day)
+    if cycle_end > reference:
+        return MonthEnd()
+    return RollingDays(days=7)
+
+
 def turn_period(
     reference: date,
     question: str,
@@ -84,13 +93,15 @@ def turn_period(
 ) -> ResolvedPeriod:
     """명시적 기간→질문→추가 분석 순으로 선택하되 서로 다른 종료일은 거부한다.
 
-    7일은 기간 정보가 전혀 없을 때의 기본 정책이다. 출처를 응답에 남기며,
-    분석 horizon_days까지 같은 미래 구간을 가리켜야 계산을 시작한다. 예산 주기는
-    ``budget_start_day`` (없으면 1일)로 정해 "이번 달" 기간이 설정 시작일을 따른다.
+    기간 정보가 전혀 없으면 현재 예산 주기(기준일~주기 말)를 기본으로 해, 항상
+    예산 월을 그리는 차트와 답변 기간이 어긋나지 않게 한다. 주기 마지막 날에는 남은
+    미래 일이 없으므로 7일 롤링을 쓴다. 출처를 응답에 남기며, 분석 horizon_days까지
+    같은 미래 구간을 가리켜야 계산을 시작한다. 예산 주기는 ``budget_start_day``
+    (없으면 1일)로 정해 "이번 달" 기간이 설정 시작일을 따른다.
     """
     recognized = question_period(question, explicit=explicit is not None)
     source: PeriodSource = "default"
-    spec: PeriodSpec = RollingDays(days=7)
+    spec: PeriodSpec = _default_spec(reference, budget_start_day)
     if analysis is not None:
         try:
             cost = RequestCost.model_validate(analysis.root)

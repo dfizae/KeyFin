@@ -320,6 +320,51 @@ def _percent_text(value: float) -> str:
     return f"{value * 100:.1f}".rstrip("0").rstrip(".") + "%"
 
 
+def _short_accounts(result: NumericResult, dataset: str) -> list[tuple[str, float]]:
+    """Label each account the engine says can run short, as ``(label, share)``, worst first.
+
+    The engine's ``account_shortfall`` rows carry only its own account id, the
+    reported opening balance and the income flag (no bank name), so the label is
+    "주거래 계좌" or the account's reported balance. Malformed rows are skipped.
+    """
+    raw = result.datasets.get(dataset)
+    if not isinstance(raw, list):
+        return []
+    found: list[tuple[str, float]] = []
+    for row in raw:
+        if not isinstance(row, dict):
+            continue
+        share = row.get("p_shortfall")
+        if isinstance(share, bool) or not isinstance(share, (int, float)) or not 0 < share <= 1:
+            continue
+        balance = row.get("balance_krw")
+        if row.get("is_income") is True:
+            label = "주거래 계좌"
+        elif isinstance(balance, int) and not isinstance(balance, bool):
+            label = f"{_money_text(balance)}이 든 계좌"
+        else:
+            label = "일부 계좌"
+        found.append((label, float(share)))
+    return sorted(found, key=lambda item: item[1], reverse=True)
+
+
+def _short_account_sentence(result: NumericResult, dataset: str, *, total_cash_ok: bool) -> list[str]:
+    """Say which account runs short, and that combined cash is fine when the engine says so."""
+    short = _short_accounts(result, dataset)
+    if not short:
+        return []
+    label, share = short[0]
+    # Every label ends in "계좌", so the topic particle is always "는".
+    target = label if len(short) == 1 else f"{label} 등 {len(short)}개 계좌"
+    sentence = f"{target}는 예정된 결제 때 잔액이 모자랄 수 있어요(부족 경로 {_percent_text(share)})."
+    if total_cash_ok:
+        return [
+            "모든 계좌를 합친 현금은 부족해지지 않아요. 다만 " + sentence
+            + " 결제 전에 다른 계좌에서 옮겨 두면 막을 수 있어요."
+        ]
+    return [sentence]
+
+
 def _common(result: NumericResult) -> list[str]:
     pieces: list[str] = []
     if result.status == "partial":
@@ -363,6 +408,8 @@ def _risk(result: RiskResult) -> list[str]:
     if any_account is None or total_cash is None or below_reserve is None:
         return ["현재 잔액 자료가 없어 계좌 부족 경로 비율과 부족액을 계산하지 못했습니다."]
     pieces = [
+        # Plain-language first: which account runs short, and whether combined cash is fine.
+        *_short_account_sentence(result, "account_shortfall", total_cash_ok=total_cash == 0),
         (
             f"조건부 모형 경로에서 계좌 하나라도 잔액 부족이 생긴 경로는 {_percent_text(any_account)}이고, "
             f"합산 현금 부족 경로는 {_percent_text(total_cash)}입니다."
@@ -433,6 +480,7 @@ def _what_if(result: WhatIfResult) -> list[str]:
     branch_risk = _probability(result, "branch_p_any_account_shortfall")
     if branch_risk is not None:
         pieces.append(f"가정 분기에서 계좌 부족이 생긴 경로는 {_percent_text(branch_risk)}입니다.")
+        pieces.extend(_short_account_sentence(result, "branch_account_shortfall", total_cash_ok=False))
     pieces.append("요청한 가정의 경로 비교이며 인과 효과나 실제 절감을 보장하지 않습니다.")
     return pieces
 
