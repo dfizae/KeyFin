@@ -1,35 +1,30 @@
-import { initTopbar, finCall, recRows, won } from '/common.js';
+import { initTopbar, finCall, recRows, won, $, esc, num, fmt, ymd, parseDate, toast, confirmDialog } from '/common.js';
 
 initTopbar('/subscriptions.html');
 
+let subs = [];
 let services = [];
 let cards = [];
-const $ = (id) => document.getElementById(id);
-const localYmd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const fmtYmd = (s) => (s && s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s || '');
-const CYCLE_KO = { MONTHLY: '월간', DAILY: '일간' };
-const STATUS_KO = { ACTIVE: '활성', PAUSED: '일시정지', CANCELED: '해지됨' };
-
-async function init() {
-  $('sub-start').value = localYmd(new Date());
-  $('new-sub-btn').addEventListener('click', openModal);
-  $('sub-close').addEventListener('click', () => $('sub-overlay').classList.add('hidden'));
-  $('sub-overlay').addEventListener('click', (e) => { if (e.target.id === 'sub-overlay') $('sub-overlay').classList.add('hidden'); });
-  $('sub-cycle').addEventListener('change', () => {
-    $('sub-payday-row').classList.toggle('hidden', $('sub-cycle').value !== 'MONTHLY');
-  });
-  $('sub-form').addEventListener('submit', onCreate);
-  await loadList();
-  loadServices();
-  loadCards();
-}
+const S = { filter: 'ALL', open: new Set(), hist: new Map(), svc: '', card: 0, cycle: 'MONTHLY', submitting: false };
+const STATUS = { ACTIVE: ['활성', 'badge-pos'], PAUSED: ['일시정지', 'badge-warn'], CANCELED: ['해지됨', 'badge-off'] };
+const FILTERS = [['ALL', '전체'], ['ACTIVE', '활성'], ['PAUSED', '일시정지'], ['CANCELED', '해지됨']];
+const idOf = (s) => String(s.subscriptionId ?? '');
 
 function showError(message) {
-  const box = $('sub-error');
-  box.textContent = message;
-  box.classList.toggle('hidden', !message);
+  $('err').textContent = message;
+  $('err').classList.toggle('hidden', !message);
+}
+const md = (s) => { const d = parseDate(s); return d ? `${d.getMonth() + 1}월 ${d.getDate()}일` : ''; };
+function dday(s) {
+  const d = parseDate(s);
+  if (!d) return '';
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const n = Math.round((d - today) / 864e5);
+  return n === 0 ? '오늘' : n === 1 ? '내일' : n > 1 ? `${n}일 뒤` : '';
 }
 
+// ---------- 목록 불러오기 ----------
 async function loadList() {
   showError('');
   let payload;
@@ -37,71 +32,136 @@ async function loadList() {
     payload = await finCall('subList', {});
   } catch (err) {
     showError('정기결제 목록 조회 실패: ' + (err?.message || err));
+    if (!subs.length) $('list').innerHTML = '';
     return;
   }
   const rec = payload.REC || {};
-  const subs = recRows(payload);
-  $('sub-summary').textContent = `활성 ${rec.activeCount ?? 0}건 · 월 합계 ${won(rec.totalMonthlyAmount ?? 0)}`;
-  const body = $('sub-body');
-  body.innerHTML = '';
-  for (const sub of subs) body.appendChild(renderRow(sub));
-  $('sub-wrap').classList.toggle('hidden', subs.length === 0);
-  $('sub-empty').classList.toggle('hidden', subs.length !== 0);
+  subs = recRows(payload);
+  $('s-total').innerHTML = `${fmt(rec.totalMonthlyAmount)}<small>원</small>`;
+  $('s-active').textContent = num(rec.activeCount ?? subs.filter((s) => s.status === 'ACTIVE').length);
+  $('s-paused').textContent = subs.filter((s) => s.status === 'PAUSED').length;
+  renderFilters();
+  renderList();
 }
 
-function renderRow(sub) {
-  const tr = document.createElement('tr');
-  const status = STATUS_KO[sub.status] || sub.status || '';
-  const cells = [
-    sub.subscriptionName ?? sub.subscriptionId,
-    won(sub.paymentAmount),
-    CYCLE_KO[sub.billingCycle] || sub.billingCycle || '',
-    fmtYmd(sub.nextPaymentDate),
-    status,
-  ];
-  cells.forEach((text, i) => {
-    const td = document.createElement('td');
-    td.textContent = text;
-    if (i === 1) td.className = 'money';
-    tr.appendChild(td);
+// ---------- 상태 색인 ----------
+function renderFilters() {
+  const box = $('filters');
+  box.querySelectorAll('.cat').forEach((b) => b.remove());
+  FILTERS.forEach(([k, label]) => {
+    const n = k === 'ALL' ? subs.length : subs.filter((s) => s.status === k).length;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'cat' + (k === 'ALL' ? ' all' : '') + (k === S.filter ? ' on' : '');
+    b.setAttribute('aria-pressed', k === S.filter);
+    b.innerHTML = `<span>${label}</span><em>${n}</em>`;
+    b.onclick = () => { S.filter = k; renderFilters(); renderList(); };
+    box.appendChild(b);
   });
+  requestAnimationFrame(moveInd);
+}
+function moveInd() {
+  const on = $('filters').querySelector('.cat.on');
+  const ind = $('cat-ind');
+  if (!on) return;
+  ind.style.transform = `translate(${on.offsetLeft}px,${on.offsetTop}px)`;
+  ind.style.height = on.offsetHeight + 'px';
+  ind.style.width = on.offsetWidth + 'px';
+}
 
-  const actions = document.createElement('td');
-  if (sub.status !== 'CANCELED') {
-    const historyBtn = button('이력', 'btn', () => toggleHistory(tr, sub));
-    actions.appendChild(historyBtn);
-    const toggleBtn = button(sub.status === 'PAUSED' ? '재개' : '일시정지', 'btn', async () => {
-      await act(toggleBtn, () => finCall('subToggle', {
-        subscriptionId: String(sub.subscriptionId),
-        action: sub.status === 'PAUSED' ? 'ACTIVE' : 'PAUSED',
-      }));
-    });
-    actions.appendChild(toggleBtn);
-    const cancelBtn = button('해지', 'btn danger', async () => {
-      if (!window.confirm(`"${sub.subscriptionName}" 구독을 해지할까요?`)) return;
-      await act(cancelBtn, () => finCall('subCancel', { subscriptionId: String(sub.subscriptionId) }));
-    });
-    actions.appendChild(cancelBtn);
+// ---------- 구독 목록 ----------
+function renderList() {
+  const list = subs.filter((s) => S.filter === 'ALL' || s.status === S.filter);
+  const label = FILTERS.find((f) => f[0] === S.filter)[1];
+  $('h1').textContent = S.filter === 'ALL' ? '구독 전체' : `${label} 구독`;
+  $('h1-sub').textContent = `${list.length}건`;
+  if (!list.length) {
+    $('list').innerHTML = `<div class="empty"><b>${S.filter === 'ALL' ? '아직 구독이 없어요' : `${label} 구독이 없어요`}</b>`
+      + '<p>오른쪽에서 새 구독을 시작할 수 있어요.</p><button type="button" class="btn btn-secondary btn-md" data-focus-form>새 구독 고르기</button></div>';
+    return;
   }
-  actions.style.display = 'flex';
-  actions.style.gap = '6px';
-  tr.appendChild(actions);
-  return tr;
+  $('list').innerHTML = list.map((s) => {
+    const id = idOf(s);
+    const [st, cls] = STATUS[s.status] || [s.status || '상태 미상', 'badge-off'];
+    const open = S.open.has(id);
+    const daily = s.billingCycle === 'DAILY';
+    const cycle = daily ? '매일' : s.billingCycle === 'MONTHLY' ? '매달' : (s.billingCycle || '');
+    const amount = daily ? (s.dailyAmount ?? s.paymentAmount) : s.paymentAmount;
+    const active = s.status === 'ACTIVE';
+    const next = active ? md(s.nextPaymentDate) : '';
+    return `<article class="sub${open ? ' open' : ''}${s.status === 'CANCELED' ? ' canceled' : ''}" data-id="${esc(id)}">
+      <div class="l1">
+        <div><div class="nm">${esc(s.subscriptionName ?? id)}</div>
+          <div class="price"><b>${esc(won(amount))}</b>${cycle ? ` · ${esc(cycle)}` : ''}</div></div>
+        <div class="next">${s.status === 'CANCELED' ? '결제 끝남' : s.status === 'PAUSED' ? '쉬는 중' : '다음 결제'}<b>${next || '-'}</b>${next ? `<span class="dday">${dday(s.nextPaymentDate)}</span>` : ''}</div>
+      </div>
+      <div class="l2">
+        <span class="badge ${cls}">${esc(st)}</span>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-secondary btn-sm" data-act="hist" aria-expanded="${open}">${open ? '이력 접기' : '결제 이력'}</button>
+        ${s.status === 'CANCELED' ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-act="toggle">${s.status === 'PAUSED' ? '다시 시작' : '일시정지'}</button>
+        <button type="button" class="btn btn-danger-text btn-sm" data-act="cancel">해지</button>`}
+      </div>
+      ${open ? histHtml(id) : ''}
+    </article>`;
+  }).join('');
+}
+function histHtml(id) {
+  const h = S.hist.get(id);
+  const wrap = (inner) => `<div class="hist"><h4>결제 이력</h4>${inner}</div>`;
+  if (h === undefined || h === 'loading') return wrap('<div class="none">불러오는 중이에요</div>');
+  if (h instanceof Error) return wrap(`<div class="none fail">이력 조회 실패: ${esc(h.message)}</div>`);
+  if (!h.length) return wrap('<div class="none">아직 결제된 적이 없어요.</div>');
+  return wrap(`<ol>${h.map((r) => {
+    const ok = r.resultCode === 'H0000';
+    return `<li><span>${esc(md(r.paymentDate) || r.paymentDate || '')}</span><span>${esc(won(r.paymentAmount))}</span>`
+      + `<span class="${ok ? 'ok' : 'fail'}">${ok ? '결제됨' : `실패 · ${esc(r.resultMessage ?? r.resultCode ?? '')}`}</span></li>`;
+  }).join('')}</ol>`);
+}
+async function toggleHistory(id) {
+  if (S.open.has(id)) { S.open.delete(id); renderList(); return; }
+  S.open.add(id);
+  S.hist.set(id, 'loading');
+  renderList();
+  try {
+    S.hist.set(id, recRows(await finCall('subHistory', { subscriptionId: id })));
+  } catch (err) {
+    S.hist.set(id, new Error(err?.message || String(err)));
+  }
+  if (S.open.has(id)) renderList();
 }
 
-function button(label, className, onClick) {
-  const btn = document.createElement('button');
-  btn.type = 'button';
-  btn.className = className;
-  btn.textContent = label;
-  btn.addEventListener('click', onClick);
-  return btn;
-}
-
-async function act(btn, fn) {
+$('list').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-focus-form]')) { $('svc').querySelector('input')?.focus(); return; }
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const id = b.closest('.sub').dataset.id;
+  const s = subs.find((x) => idOf(x) === id);
+  if (!s) return;
+  if (b.dataset.act === 'hist') { toggleHistory(id); return; }
+  if (b.dataset.act === 'toggle') {
+    const resume = s.status === 'PAUSED';
+    await act(b, () => finCall('subToggle', { subscriptionId: id, action: resume ? 'ACTIVE' : 'PAUSED' }),
+      resume ? `${s.subscriptionName} 구독을 다시 시작했어요` : `${s.subscriptionName} 구독을 잠시 멈췄어요`);
+    return;
+  }
+  if (b.dataset.act === 'cancel') {
+    const ok = await confirmDialog({
+      title: '구독을 해지할까요?',
+      body: `<b>${esc(s.subscriptionName ?? '')}</b> 구독을 해지하면 다음 결제일부터 <b>${esc(won(s.paymentAmount))}</b>이 더 나가지 않아요. 해지한 구독은 다시 시작할 수 없어요.`,
+      okLabel: '해지하기',
+    });
+    if (!ok) return;
+    await act(b, () => finCall('subCancel', { subscriptionId: id }), `${s.subscriptionName} 구독을 해지했어요`);
+  }
+});
+async function act(btn, fn, doneMessage) {
   btn.disabled = true;
   try {
     await fn();
+    toast(doneMessage);
+    S.hist.clear();
+    S.open.clear();
     await loadList();
   } catch (err) {
     showError('처리 실패: ' + (err?.message || err));
@@ -109,103 +169,95 @@ async function act(btn, fn) {
   }
 }
 
-async function toggleHistory(tr, sub) {
-  const next = tr.nextElementSibling;
-  if (next?.classList.contains('detail-row')) { next.remove(); return; }
-  let rows = [];
-  try {
-    rows = recRows(await finCall('subHistory', { subscriptionId: String(sub.subscriptionId) }));
-  } catch (err) {
-    showError('이력 조회 실패: ' + (err?.message || err));
-    return;
-  }
-  const detail = document.createElement('tr');
-  detail.className = 'detail-row';
-  const td = document.createElement('td');
-  td.colSpan = 6;
-  if (!rows.length) {
-    td.textContent = '결제 이력이 없습니다.';
-    td.style.color = 'var(--mut)';
-  } else {
-    for (const h of rows) {
-      const line = document.createElement('div');
-      const ok = h.resultCode === 'H0000';
-      line.textContent = `${fmtYmd(h.paymentDate)} · ${won(h.paymentAmount)} · ${ok ? '성공' : `실패(${h.resultMessage ?? h.resultCode})`}`;
-      if (!ok) line.style.color = 'var(--req)';
-      td.appendChild(line);
-    }
-  }
-  detail.appendChild(td);
-  tr.after(detail);
+// ---------- 새 구독 ----------
+function renderServices() {
+  const box = $('svc');
+  if (!services.length) { box.innerHTML = '<p class="form-msg">구독할 수 있는 서비스가 없어요</p>'; return; }
+  if (!services.some((v) => String(v.serviceId) === S.svc)) S.svc = String(services[0].serviceId);
+  box.innerHTML = services.map((v) => `<label><input type="radio" name="svc" value="${esc(v.serviceId)}"${String(v.serviceId) === S.svc ? ' checked' : ''} /><span class="dot"></span>`
+    + `<span class="t">${esc(v.serviceName)}${v.planName ? `<small>${esc(v.planName)}</small>` : ''}</span><span class="p">월 ${esc(fmt(v.monthlyPrice))}원</span></label>`).join('');
 }
+function renderFormCards() {
+  const box = $('card');
+  if (!cards.length) { box.innerHTML = '<p class="form-msg">보유한 카드가 없어요</p>'; return; }
+  box.innerHTML = cards.map((c, i) => `<button type="button" data-i="${i}" class="${i === S.card ? 'on' : ''}" aria-pressed="${i === S.card}">`
+    + `${esc(String(c.cardName).replace(/\s*카드$/, ''))} ${esc(String(c.cardNo).slice(0, 4))}</button>`).join('');
+}
+$('svc').addEventListener('change', (e) => { if (e.target.name === 'svc') S.svc = e.target.value; });
+$('card').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.card = +b.dataset.i; renderFormCards(); };
+$('cycle').onclick = (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  S.cycle = b.dataset.v;
+  $('cycle').querySelectorAll('button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
+  $('payday-f').classList.toggle('hidden', S.cycle !== 'MONTHLY');
+};
+const clampDay = (v) => Math.min(31, Math.max(1, Math.round(num(v)) || 1));
+$('pd-dn').onclick = () => { $('payday').value = clampDay(num($('payday').value) - 1); };
+$('pd-up').onclick = () => { $('payday').value = clampDay(num($('payday').value) + 1); };
+$('payday').addEventListener('change', () => { $('payday').value = clampDay($('payday').value); });
+
+function formNote(message, isErr) {
+  const note = $('f-note');
+  note.className = 'note ' + (isErr ? 'note-neg' : 'note-pos');
+  note.textContent = message;
+}
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (S.submitting) return;
+  const card = cards[S.card];
+  if (!services.length || !S.svc) { formNote('구독할 서비스를 골라 주세요.', true); return; }
+  if (!card) { formNote('결제할 카드가 없어요. 관리자 콘솔에서 카드를 먼저 발급하세요.', true); return; }
+  if (!$('start').value) { formNote('시작일을 골라 주세요.', true); return; }
+  const monthly = S.cycle === 'MONTHLY';
+  const fields = {
+    cardNo: String(card.cardNo),
+    serviceId: String(S.svc),
+    billingCycle: S.cycle,
+    startDate: $('start').value.replaceAll('-', ''),
+  };
+  if (monthly) fields.paymentDay = String(clampDay($('payday').value));
+  const btn = $('submit');
+  S.submitting = true;
+  btn.disabled = true;
+  btn.textContent = '등록 중';
+  try {
+    await finCall('subCreate', fields);
+    const v = services.find((x) => String(x.serviceId) === S.svc);
+    formNote(`${v?.serviceName ?? '새'} 구독을 시작했어요.`, false);
+    S.filter = 'ALL';
+    S.hist.clear();
+    S.open.clear();
+    await loadList();
+  } catch (err) {
+    formNote('등록 실패: ' + (err?.message || err), true);
+  } finally {
+    S.submitting = false;
+    btn.disabled = false;
+    btn.textContent = '구독 시작하기';
+  }
+});
 
 async function loadServices() {
   try {
     services = recRows(await finCall('subServices', {}));
-    const select = $('sub-service');
-    select.innerHTML = '';
-    for (const s of services) {
-      const opt = document.createElement('option');
-      opt.value = s.serviceId;
-      opt.textContent = `${s.serviceName} ${s.planName ?? ''} — 월 ${won(s.monthlyPrice)}`;
-      select.appendChild(opt);
-    }
   } catch (err) {
+    services = [];
     showError('구독 서비스 목록 조회 실패: ' + (err?.message || err));
   }
+  renderServices();
 }
-
 async function loadCards() {
   try {
     cards = recRows(await finCall('cards', {}));
-    const select = $('sub-card');
-    select.innerHTML = '';
-    for (const card of cards) {
-      const opt = document.createElement('option');
-      opt.value = card.cardNo;
-      opt.textContent = `${card.cardName} (${String(card.cardNo).slice(0, 4)}-****)`;
-      select.appendChild(opt);
-    }
   } catch (err) {
+    cards = [];
     showError('내 카드 목록 조회 실패: ' + (err?.message || err));
   }
+  renderFormCards();
 }
 
-function openModal() {
-  $('sub-result').classList.add('hidden');
-  $('sub-submit').disabled = false;
-  $('sub-overlay').classList.remove('hidden');
-}
-
-async function onCreate(e) {
-  e.preventDefault();
-  const resultBox = $('sub-result');
-  const btn = $('sub-submit');
-  btn.disabled = true;
-  btn.textContent = '등록 중...';
-  try {
-    const monthly = $('sub-cycle').value === 'MONTHLY';
-    const fields = {
-      cardNo: String($('sub-card').value),
-      serviceId: String($('sub-service').value),
-      billingCycle: $('sub-cycle').value,
-      startDate: $('sub-start').value.replaceAll('-', ''),
-    };
-    if (monthly) fields.paymentDay = String($('sub-payday').value);
-    await finCall('subCreate', fields);
-    resultBox.className = 'note';
-    resultBox.textContent = '구독이 등록되었습니다.';
-    resultBox.classList.remove('hidden');
-    await loadList();
-  } catch (err) {
-    resultBox.className = 'note err';
-    resultBox.textContent = '등록 실패: ' + (err?.message || err);
-    resultBox.classList.remove('hidden');
-    btn.disabled = false;
-  } finally {
-    btn.textContent = '등록';
-    if (btn.disabled) setTimeout(() => { btn.disabled = false; }, 800);
-  }
-}
-
-init();
+addEventListener('resize', moveInd);
+$('start').value = ymd(new Date());
+renderFilters();
+loadList().then(() => { loadServices(); loadCards(); });
