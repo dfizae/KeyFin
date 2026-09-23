@@ -19,8 +19,24 @@ public record CoachingTurnReply(
 		@JsonProperty("chart_hint") ChartHint chartHint,
 		@JsonProperty("rows") List<SpendingRow> rows,
 		@JsonProperty("total_krw") Long totalKrw,
-		@JsonProperty("numeric_rows") CoachingNumericRows numericRows
+		@JsonProperty("numeric_rows") CoachingNumericRows numericRows,
+		@JsonProperty("envelope_balances") List<EnvelopeBalance> envelopeBalances
 ) {
+	/** 봉투 잔액 표가 없는 응답(대부분의 턴)용 생성자. */
+	public CoachingTurnReply(String id, String answerType, String status, String text, String wordingSource,
+			String fallbackReason, Map<String, Object> receipt, ChartHint chartHint, List<SpendingRow> rows,
+			Long totalKrw, CoachingNumericRows numericRows) {
+		this(id, answerType, status, text, wordingSource, fallbackReason, receipt, chartHint, rows, totalKrw,
+				numericRows, List.of());
+	}
+
+	/** 대화 턴에서 봉투가 둘 이상일 때 코칭이 문장 대신 표 행으로 싣는 봉투별 장부 잔액. */
+	public record EnvelopeBalance(
+			@JsonProperty("envelope") String envelope,
+			@JsonProperty("balance_krw") long balanceKrw
+	) {
+	}
+
 	public boolean isCoaching() {
 		return answerType == null && receipt != null;
 	}

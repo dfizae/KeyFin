@@ -5,7 +5,7 @@ from typing import Final
 
 from coaching_service.numeric_rendering import numeric_text, purchase_verdict_text
 from coaching_service.periods import period_text
-from coaching_service.schemas import JsonDocument, Receipt, Tone
+from coaching_service.schemas import Envelope, JsonDocument, Receipt, Tone
 
 
 def authoritative_text(receipt: Receipt) -> str:
@@ -48,6 +48,26 @@ def authoritative_text(receipt: Receipt) -> str:
     return "\n".join(pieces)
 
 
+_BALANCE_TABLE_NOTE: Final = (
+    "봉투별 남은 잔액은 아래 표에 정리했어요. 지금까지 들어온 결제를 반영한 장부 잔액이에요."
+)
+
+
+def envelope_balance_table(receipt: Receipt) -> tuple[Envelope, ...]:
+    """Envelopes to send as a table row each instead of one sentence per envelope.
+
+    Only a dialogue turn listing several envelopes qualifies. A payment-event
+    coaching can also become push-notification text that carries no table, and a
+    follow-up about a stored coaching answers one specific balance, so both keep
+    their sentences.
+    """
+    if receipt.payment is not None or receipt.historical is not None:
+        return ()
+    if len(receipt.current_envelopes) < 2:
+        return ()
+    return receipt.current_envelopes
+
+
 def historical_text(receipt: Receipt) -> list[str]:
     pieces: list[str] = []
     past = receipt.historical
@@ -71,6 +91,11 @@ def historical_text(receipt: Receipt) -> list[str]:
     # contexts where current balance *is* the point: payment/lookup turns and
     # follow-ups about a stored coaching (``historical``).
     if receipt.numeric_result is not None and past is None:
+        return pieces
+    if envelope_balance_table(receipt):
+        # The per-envelope balances ship as the structured ``envelope_balances`` table
+        # the app renders below the answer; the text only explains that table.
+        pieces.append(_BALANCE_TABLE_NOTE)
         return pieces
     pieces.extend(
         f"현재 수신 이벤트까지 반영한 {envelope.envelope} 봉투 장부 잔액은 {envelope.balance_krw:,}원입니다."

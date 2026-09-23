@@ -199,6 +199,9 @@ class Coaching(Frozen):
     # 위험·가정 수치 대화에서만 채우는 봉투별 구조화 행. 같은 수치는 receipt의
     # numeric_result.datasets에도 그대로 있어 계약 보증이 이중으로 남는다.
     numeric_rows: NumericRows | None = None
+    # 대화 턴에서 봉투가 둘 이상일 때 봉투별 장부 잔액을 문장 대신 표 행으로 싣는다.
+    # 본문에는 표 설명 한 줄만 남고, 결제 알림·과거 코칭 후속은 비어 있다.
+    envelope_balances: tuple[Envelope, ...] = ()
 
 
 class EventResult(Frozen):

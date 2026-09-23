@@ -70,8 +70,8 @@ describe("coaching model", () => {
     const next = appendChatTurn(EMPTY_CHAT_HISTORY, "외식 얼마 남았어?", toChatReply(replyDto));
     expect(next.hasSession).toBe(true);
     expect(next.messages).toEqual([
-      { role: "user", content: "외식 얼마 남았어?", chartId: null, rows: [], totalKrw: null, numericRows: null },
-      { role: "assistant", content: replyDto.reply, chartId: null, rows: [], totalKrw: null, numericRows: null },
+      { role: "user", content: "외식 얼마 남았어?", chartId: null, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] },
+      { role: "assistant", content: replyDto.reply, chartId: null, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] },
     ]);
   });
 });
@@ -97,6 +97,7 @@ describe("소비 조회 집계", () => {
       ],
       totalKrw: "57000",
       numericRows: null,
+      envelopeBalances: [],
     });
     expect(next.messages[0]).toMatchObject({ rows: [], totalKrw: null });
     expect(next.messages[3]).toMatchObject({ rows: [], totalKrw: null });
@@ -122,7 +123,7 @@ describe("소비 조회 집계", () => {
       messages: [{ role: "assistant", content: "답변", chartId: MOCK_CHART_ID }],
       expiresAt: "2026-09-23T10:00:00",
     });
-    expect(history.messages[0]).toEqual({ role: "assistant", content: "답변", chartId: MOCK_CHART_ID, rows: [], totalKrw: null, numericRows: null });
+    expect(history.messages[0]).toEqual({ role: "assistant", content: "답변", chartId: MOCK_CHART_ID, rows: [], totalKrw: null, numericRows: null, envelopeBalances: [] });
   });
 
   it.each([1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, "45000", null])("잘못된 행 금액 %p는 계약 오류로 처리한다", (amount) => {
@@ -164,6 +165,23 @@ describe("위험·가정 표 데이터(numericRows)", () => {
     const { numericRows: _numericRows, ...legacy } = replyDto;
     expect(toChatReply(legacy as ChatReplyDto).numericRows).toBeNull();
     expect(toNumericRows({ mode: "risk", envelopeSpend: null, budgetRisk: null })).toEqual({ mode: "risk", envelopeSpend: [], budgetRisk: [] });
+  });
+
+  it("봉투별 장부 잔액 표를 그대로 옮기고, 없거나 null 이면 빈 배열로 본다", () => {
+    const reply = toChatReply({
+      ...replyDto,
+      envelopeBalances: [
+        { envelope: "외식", balanceKrw: 343700 },
+        { envelope: "기타", balanceKrw: -5000 },
+      ],
+    });
+    expect(reply.envelopeBalances).toEqual([
+      { envelope: "외식", balanceKrw: "343700" },
+      { envelope: "기타", balanceKrw: "-5000" },
+    ]);
+    expect(toChatReply({ ...replyDto, envelopeBalances: null }).envelopeBalances).toEqual([]);
+    expect(toChatReply(replyDto).envelopeBalances).toEqual([]);
+    expect(() => toChatReply({ ...replyDto, envelopeBalances: [{ envelope: "외식", balanceKrw: 1.5 }] })).toThrow(ContractMismatchError);
   });
 
   it("모르는 mode 는 UNKNOWN 으로 흡수하되 행은 그대로 쓴다", () => {

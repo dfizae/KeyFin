@@ -14,7 +14,7 @@ from coaching_service.llm_contract import EvidenceInput, Judgment, Routing, Word
 from coaching_service.llm_prompt import TEMPLATE_TEXT
 from coaching_service.numeric_rendering import numeric_rows_for, purchase_verdict_text
 from coaching_service.periods import ResolvedPeriod, ThroughDate, resolve_period
-from coaching_service.rendering import authoritative_text, deterministic_advice
+from coaching_service.rendering import authoritative_text, deterministic_advice, envelope_balance_table
 from coaching_service.repository import Repository, write
 from coaching_service.request_timing import measure_fdt, run_measured_fdt
 from coaching_service.schemas import (
@@ -171,6 +171,7 @@ class CoachingCore:
             receipt=receipt,
             created_at=time.time(),
             numeric_rows=numeric_rows_for(receipt),
+            envelope_balances=envelope_balance_table(receipt),
         )
 
 
