@@ -69,6 +69,8 @@ _IMPLICIT_FORECAST_TERMS: Final[tuple[str, ...]] = ("얼마", "남을", "남아"
 # alone never routes here.
 _SPEND_FORECAST_TERMS: Final[tuple[str, ...]] = ("쓸까", "쓸지", "소비할", "지출할")
 _RISK_SIGNALS: Final[tuple[str, ...]] = (
+    # "예산 위험해?"처럼 기간 없이 예산 자체의 위험을 묻는 문장(라이브 2026-09-23 모델 오분류).
+    "예산",
     "이번달",
     "이달",
     "월말",
