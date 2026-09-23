@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -45,12 +46,12 @@ public class TransactionSyncWriter {
 			List<Account> balanceUpdatedAccounts,
 			List<Transaction> newTransactions,
 			Map<Long, Transaction> reclassifiedTransactions,
-			Set<Integer> changedEnvelopeIds
+			Map<Integer, Long> changedEnvelopes
 	) {
 		persist(userId, balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
 		publishPendingTransactionEvents(newTransactions);
 		publishAccountWithdrawnEvents(newTransactions);
-		publishEnvelopeSpendingEvents(userId, newTransactions, changedEnvelopeIds);
+		publishEnvelopeSpendingEvents(userId, newTransactions, changedEnvelopes);
 	}
 
 	@Transactional
@@ -59,10 +60,10 @@ public class TransactionSyncWriter {
 			List<Account> balanceUpdatedAccounts,
 			List<Transaction> newTransactions,
 			Map<Long, Transaction> reclassifiedTransactions,
-			Set<Integer> changedEnvelopeIds
+			Map<Integer, Long> changedEnvelopes
 	) {
 		persist(userId, balanceUpdatedAccounts, newTransactions, reclassifiedTransactions);
-		publishEnvelopeSpendingEvents(userId, List.of(), changedEnvelopeIds);
+		publishEnvelopeSpendingEvents(userId, List.of(), changedEnvelopes);
 	}
 
 	private void persist(
@@ -100,10 +101,10 @@ public class TransactionSyncWriter {
 	private void publishEnvelopeSpendingEvents(
 			long userId,
 			List<Transaction> newTransactions,
-			Set<Integer> changedEnvelopeIds
+			Map<Integer, Long> changedEnvelopes
 	) {
 		Map<Integer, Optional<Integer>> envelopeBySubcategory = new HashMap<>();
-		Set<Integer> envelopeIds = new LinkedHashSet<>(changedEnvelopeIds);
+		Map<Integer, Long> envelopes = new LinkedHashMap<>(changedEnvelopes);
 		for (Transaction transaction : newTransactions) {
 			if (transaction.getStatus() != TransactionStatus.NORMAL
 					|| transaction.getConfirmStatus() == ConfirmStatus.PENDING
@@ -112,9 +113,10 @@ public class TransactionSyncWriter {
 			}
 			envelopeBySubcategory
 					.computeIfAbsent(transaction.getSubcategoryId(), subcategoryQueryRepository::findEnvelopeId)
-					.ifPresent(envelopeIds::add);
+					.ifPresent(envelopeId -> envelopes.putIfAbsent(envelopeId, null));
 		}
-		envelopeIds.forEach(envelopeId -> events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId)));
+		envelopes.forEach((envelopeId, restoredKrw) ->
+				events.publishEvent(new EnvelopeSpendingChanged(userId, envelopeId, restoredKrw)));
 	}
 
 	private void publishPendingTransactionEvents(List<Transaction> newTransactions) {
