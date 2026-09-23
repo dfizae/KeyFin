@@ -516,7 +516,7 @@ async def test_clear_natural_what_if_uses_typed_paired_fdt_without_model_routing
         "scenario": scenario,
     }
     assert answer["receipt"]["numeric_result"]["mode"] == "what_if"
-    assert "가정은" in answer["text"]
+    assert "가정했어요" in answer["text"]
     assert model.routes == 0
     assert model.writes == 0
 

@@ -18,6 +18,8 @@ from coaching_service.schemas import JsonDocument, Receipt
 
 JsonObject: TypeAlias = dict[str, object]
 InvalidMutation: TypeAlias = Literal["unit", "missing", "nan", "inf", "horizon", "mode"]
+# Users read these facts; statistics jargon and the old stock disclaimer must not reach them.
+_JARGON = ("P10", "P50", "P90", "조건부", "경로", "보장")
 
 
 def metric(value: float | None, unit: str) -> JsonObject:
@@ -116,8 +118,8 @@ CASES = (
         },
         None,
         (
-            "변동소비 평균은 21,000원이고 P10·P50·P90은 10,000원·20,000원·30,000원",
-            "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원",
+            "변동소비는 보통 20,000원 정도로 예상돼요. 적게 쓰면 10,000원, 많이 쓰면 30,000원까지",
+            "기간 말 현금은 보통 400,000원, 적게 남으면 350,000원, 많이 남으면 450,000원",
         ),
     ),
     (
@@ -129,7 +131,7 @@ CASES = (
             "maximum_total_cash_shortage_p50_krw": metric(50_000, "KRW"),
         },
         None,
-        ("계좌 하나라도 잔액 부족이 생긴 경로는 25%", "최대 합산 현금 부족액 P50은 50,000원"),
+        ("계좌 하나라도 잔액이 부족해지는 경우는 25%", "가장 많이 부족할 때 모자라는 돈은 보통 50,000원"),
     ),
     (
         "goal",
@@ -150,9 +152,9 @@ CASES = (
             "external_income_note": "가정한 외부 자금이며 자동으로 생기지 않습니다.",
         },
         (
-            "목표 1,000,000원에 도달한 경로는 70%",
-            "계좌 부족 없이 도달한 경로는 60%",
-            "목표 부족액 P50은 80,000원",
+            "목표 1,000,000원에 닿은 경우는 70%",
+            "잔액이 부족해지지 않고 닿은 경우는 60%",
+            "목표까지 모자라는 돈은 보통 80,000원",
         ),
     ),
     (
@@ -169,7 +171,7 @@ CASES = (
             "intervention": {"expense_multiplier": 0.9},
             "causal_effect_claim": False,
         },
-        ("소비 감소 P50은 30,000원", "기간말 현금 차이 P50은 20,000원"),
+        ("소비는 보통 30,000원 줄어들", "기간 말 현금 차이는 보통 20,000원"),
     ),
     (
         "optimize",
@@ -198,7 +200,7 @@ CASES = (
 
 
 @pytest.mark.parametrize(("mode", "metrics", "decision", "expected"), CASES)
-def test_supported_mode_renders_period_values_units_and_limit(
+def test_supported_mode_renders_period_values_units_in_plain_words(
     mode: str,
     metrics: JsonObject,
     decision: JsonObject | None,
@@ -208,7 +210,7 @@ def test_supported_mode_renders_period_values_units_and_limit(
 
     assert "예측 구간은 2026-09-10부터 2026-09-16 마감까지 7일" in text
     assert all(phrase in text for phrase in expected)
-    assert "실제 미래를 보장" in text
+    assert not any(term in text for term in _JARGON)
 
 
 def test_partial_forecast_names_missing_input_and_does_not_call_resource_proxy_cash() -> None:
@@ -233,8 +235,8 @@ def test_partial_forecast_names_missing_input_and_does_not_call_resource_proxy_c
     text = authoritative_text(receipt)
 
     assert "필요 자료: snapshot.accounts.balance_krw" in text
-    assert "구매시점 자금 여력 변화 P50은 -15,000원" in text
-    assert "기간말 현금 P50은 -15,000원" not in text
+    assert "들어오고 나가는 돈을 합치면 보통 -15,000원으로 예상돼요" in text
+    assert "기간 말 현금은 보통 -15,000원" not in text
 
 
 def test_insufficient_goal_does_not_turn_unknown_value_into_probability() -> None:
@@ -259,7 +261,7 @@ def test_insufficient_goal_does_not_turn_unknown_value_into_probability() -> Non
     text = authoritative_text(receipt)
 
     assert "목표 1,000,000원" in text
-    assert "목표 도달 경로 비율은 계산하지 못했습니다" in text
+    assert "목표에 닿을 가능성을 계산하지 못했어요" in text
     assert "필요 자료: snapshot.accounts" in text
     assert "%" not in text
 
@@ -351,7 +353,7 @@ def test_real_engine_supported_mode_matches_renderer_contract(
     text = authoritative_text(receipt)
 
     assert "수치 분석 결과의 계약을 확인할 수 없어" not in text
-    assert "실제 미래를 보장" in text
+    assert not any(term in text for term in _JARGON)
 
 
 def test_numeric_forecast_is_labeled_separately_from_history_and_current_balance() -> None:
@@ -393,7 +395,7 @@ def test_numeric_forecast_is_labeled_separately_from_history_and_current_balance
 
     assert "이전 코칭 생성 당시의 기록: 결제액 888,888원" in text
     assert "현재 수신 이벤트까지 반영한 기타 봉투 장부 잔액은 777,777원" in text
-    assert "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원" in text
+    assert "기간 말 현금은 보통 400,000원, 적게 남으면 350,000원, 많이 남으면 450,000원" in text
 
 
 def test_dialogue_review_sends_envelope_balances_as_a_table_not_seven_sentences() -> None:
@@ -505,10 +507,10 @@ def test_risk_names_the_short_account_and_says_combined_cash_is_fine() -> None:
     )
     text = "\n".join(numeric_text(receipt))
     assert text.startswith("모든 계좌를 합친 현금은 부족해지지 않아요.")
-    assert "다만 45,400원이 든 계좌는 예정된 결제 때 잔액이 모자랄 수 있어요(부족 경로 100%)" in text
+    assert "다만 45,400원이 든 계좌는 예정된 결제 때 잔액이 모자랄 수 있어요(예측한 경우 중 100%)" in text
     assert "주거래 계좌" not in text  # the income account is not short, so not named
     # The engine's own figures still follow for transparency.
-    assert "계좌 하나라도 잔액 부족이 생긴 경로는 100%" in text
+    assert "계좌 하나라도 잔액이 부족해지는 경우는 100%" in text
 
 
 def test_risk_names_account_without_reassurance_when_combined_cash_is_short() -> None:
@@ -518,14 +520,14 @@ def test_risk_names_account_without_reassurance_when_combined_cash_is_short() ->
     )
     text = "\n".join(numeric_text(receipt))
     assert "모든 계좌를 합친 현금은 부족해지지 않아요" not in text
-    assert "주거래 계좌는 예정된 결제 때 잔액이 모자랄 수 있어요(부족 경로 40%)" in text
+    assert "주거래 계좌는 예정된 결제 때 잔액이 모자랄 수 있어요(예측한 경우 중 40%)" in text
 
 
 def test_risk_without_account_rows_keeps_the_existing_wording() -> None:
     # Older engine results carry no account_shortfall dataset: nothing new is claimed.
     text = "\n".join(numeric_text(_risk_with_accounts(0.0, [])))
     assert "모자랄 수 있어요" not in text
-    assert "계좌 하나라도 잔액 부족이 생긴 경로는 100%" in text
+    assert "계좌 하나라도 잔액이 부족해지는 경우는 100%" in text
 
 
 def test_fresh_numeric_turn_leads_with_its_answer_not_every_envelope_balance() -> None:
@@ -556,7 +558,7 @@ def test_fresh_numeric_turn_leads_with_its_answer_not_every_envelope_balance() -
     text = authoritative_text(Receipt.model_validate(raw))
 
     assert "장부 잔액" not in text
-    assert "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원" in text
+    assert "기간 말 현금은 보통 400,000원, 적게 남으면 350,000원, 많이 남으면 450,000원" in text
 
 
 @pytest.mark.parametrize(
@@ -706,4 +708,4 @@ def test_real_engine_missing_cash_state_is_rendered_as_unavailable_not_invalid()
 
         assert "수치 분석 결과의 계약을 확인할 수 없어" not in text
         assert "필요 자료:" in text
-        assert "실제 미래를 보장" in text
+        assert not any(term in text for term in _JARGON)

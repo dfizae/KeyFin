@@ -33,7 +33,7 @@ def anyio_backend() -> str:
         ("예산 안에 들어와 괜찮아요.", "예산 안에 들어와 괜찮다냥."),
         ("이번 달 외식 예산 괜찮을까요?", "이번 달 외식 예산 괜찮을까냥?"),
         # A bracketed note after the verb keeps its figures and gets no voice itself.
-        ("잔액이 모자랄 수 있어요(부족 경로 100%).", "잔액이 모자랄 수 있다냥(부족 경로 100%)."),
+        ("잔액이 모자랄 수 있어요(예측한 경우 중 100%).", "잔액이 모자랄 수 있다냥(예측한 경우 중 100%)."),
         # Bold suggestion marks survive and the sentence inside them is voiced.
         ("**남는 만큼은 저축으로 옮겨 두면 좋아요.**", "**남는 만큼은 저축으로 옮겨 두면 좋다냥.**"),
         # Review D1: adjective 하다, ㅂ니다 verbs/adjectives, action verbs, contractions.
@@ -61,7 +61,7 @@ def test_cat_voice_rewrites_only_sentence_endings(plain: str, cat: str) -> None:
 def test_cat_voice_is_idempotent_and_keeps_every_number() -> None:
     text = (
         "자료 기준일은 2026-09-23 마감입니다. 예측 구간은 2026-09-24부터 7일입니다.\n"
-        "구매 후 기간말 예상 현금 P50은 5,281,220원입니다. **큰 지출은 미루는 편이 좋아요.**"
+        "구매 후 기간 말 현금은 보통 5,281,220원으로 예상돼요. **큰 지출은 미루는 편이 좋아요.**"
     )
     voiced = cat_voice(text)
     assert cat_voice(voiced) == voiced

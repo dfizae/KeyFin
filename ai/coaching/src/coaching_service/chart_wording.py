@@ -34,7 +34,7 @@ def chart_evidence(chart: ChartResult) -> EvidenceInput:
             id="total",
             text=(
                 f"입력에서 확인된 현재 변동소비 {chart.total_current:,}원, "
-                f"기간 말 예상 총소비(P50) {chart.total_forecast:,}원입니다."
+                f"기간 말 예상 총소비 {chart.total_forecast:,}원입니다."
                 + (" " + period.quality.summary if period.quality and period.quality.summary else "")
             ),
         ),
