@@ -220,7 +220,8 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
       </View>
     );
   }
-  const hasTable = message.rows.length > 0 || message.totalKrw !== null || message.numericRows !== null;
+  const hasTable =
+    message.rows.length > 0 || message.totalKrw !== null || message.numericRows !== null || message.envelopeBalances.length > 0;
   return (
     <CoachReply wide={hasTable}>
       <Text className="text-body text-foreground">
