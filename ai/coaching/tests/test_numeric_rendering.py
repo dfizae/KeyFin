@@ -11,7 +11,7 @@ from fdt.util import digest
 from test_engine import fixture
 
 from coaching_service.engine import EngineAdapter
-from coaching_service.numeric_rendering import numeric_rows_for
+from coaching_service.numeric_rendering import numeric_rows_for, numeric_text
 from coaching_service.periods import RollingDays, resolve_period
 from coaching_service.rendering import authoritative_text
 from coaching_service.schemas import JsonDocument, Receipt
@@ -394,6 +394,56 @@ def test_numeric_forecast_is_labeled_separately_from_history_and_current_balance
     assert "이전 코칭 생성 당시의 기록: 결제액 888,888원" in text
     assert "현재 수신 이벤트까지 반영한 기타 봉투 장부 잔액은 777,777원" in text
     assert "기간말 현금 P10·P50·P90은 350,000원·400,000원·450,000원" in text
+
+
+def _risk_with_accounts(total_cash: float, rows: list[JsonObject]) -> Receipt:
+    base = receipt_for(
+        "risk",
+        {
+            "p_any_account_shortfall": metric(1.0, "probability"),
+            "p_total_cash_shortfall": metric(total_cash, "probability"),
+            "p_liquid_below_reserve": metric(0.0, "probability"),
+            "maximum_total_cash_shortage_p50_krw": metric(0, "KRW"),
+        },
+    )
+    raw = base.model_dump(mode="json")
+    raw["numeric_result"]["datasets"]["account_shortfall"] = rows
+    return Receipt.model_validate(raw)
+
+
+def test_risk_names_the_short_account_and_says_combined_cash_is_fine() -> None:
+    # Live 2026-09-23: 100% "account shortfall" with 0% combined shortfall scared a
+    # user holding 5.6M because a 45,400원 side account was never named.
+    receipt = _risk_with_accounts(
+        0.0,
+        [
+            {"account_id": "1", "balance_krw": 5_624_570, "is_income": True, "p_shortfall": 0.0},
+            {"account_id": "2", "balance_krw": 45_400, "is_income": False, "p_shortfall": 1.0},
+        ],
+    )
+    text = "\n".join(numeric_text(receipt))
+    assert text.startswith("모든 계좌를 합친 현금은 부족해지지 않아요.")
+    assert "다만 45,400원이 든 계좌는 예정된 결제 때 잔액이 모자랄 수 있어요(부족 경로 100%)" in text
+    assert "주거래 계좌" not in text  # the income account is not short, so not named
+    # The engine's own figures still follow for transparency.
+    assert "계좌 하나라도 잔액 부족이 생긴 경로는 100%" in text
+
+
+def test_risk_names_account_without_reassurance_when_combined_cash_is_short() -> None:
+    receipt = _risk_with_accounts(
+        0.4,
+        [{"account_id": "1", "balance_krw": 10_000, "is_income": True, "p_shortfall": 0.4}],
+    )
+    text = "\n".join(numeric_text(receipt))
+    assert "모든 계좌를 합친 현금은 부족해지지 않아요" not in text
+    assert "주거래 계좌는 예정된 결제 때 잔액이 모자랄 수 있어요(부족 경로 40%)" in text
+
+
+def test_risk_without_account_rows_keeps_the_existing_wording() -> None:
+    # Older engine results carry no account_shortfall dataset: nothing new is claimed.
+    text = "\n".join(numeric_text(_risk_with_accounts(0.0, [])))
+    assert "모자랄 수 있어요" not in text
+    assert "계좌 하나라도 잔액 부족이 생긴 경로는 100%" in text
 
 
 def test_fresh_numeric_turn_leads_with_its_answer_not_every_envelope_balance() -> None:
