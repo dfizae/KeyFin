@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Final, Literal, TypeAlias
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter, ValidationError, model_validator
 
 from coaching_service.periods import DateOnly  # noqa: TC001 - Pydantic resolves this at runtime
+from coaching_service.schemas import BudgetRiskRow, EnvelopeSpendRow, NumericRows
 
 if TYPE_CHECKING:
     from coaching_service.schemas import Receipt
@@ -539,6 +540,109 @@ def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: PLR0911 - eac
             pieces.append(f"구매 후 기간말 예상 현금 P50은 {p50:,}원입니다.")
     pieces.append("부족 예측 있음." if planned_fraction > 0 else "부족 예측 없음.")
     return pieces
+
+
+def _int(value: JsonValue) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _envelope_spend_rows(result: ParsedResult) -> tuple[EnvelopeSpendRow, ...]:
+    """엔진 datasets['envelopes']의 봉투별 소비 분위수를 그대로 옮긴다.
+
+    형이 어긋난 행이 하나라도 있으면 조용히 값을 만들지 않고 전체를 비운다.
+    """
+    raw = result.datasets.get("envelopes")
+    if not isinstance(raw, list):
+        return ()
+    rows: list[EnvelopeSpendRow] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return ()
+        envelope = item.get("envelope")
+        p10, p50, p90 = _int(item.get("p10_krw")), _int(item.get("p50_krw")), _int(item.get("p90_krw"))
+        if not (
+            isinstance(envelope, str)
+            and envelope
+            and p10 is not None
+            and p50 is not None
+            and p90 is not None
+        ):
+            return ()
+        rows.append(EnvelopeSpendRow(envelope=envelope, p10_krw=p10, p50_krw=p50, p90_krw=p90))
+    return tuple(rows)
+
+
+def _budget_risk_rows(result: ParsedResult) -> tuple[BudgetRiskRow, ...]:
+    """엔진 datasets['budget_risk']의 봉투별 예산 대비 예측·초과 확률을 그대로 옮긴다.
+
+    스냅샷에 예산이 없으면 이 dataset 자체가 없어 빈 튜플을 돌려준다.
+    """
+    raw = result.datasets.get("budget_risk")
+    if not isinstance(raw, list):
+        return ()
+    rows: list[BudgetRiskRow] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return ()
+        envelope = item.get("envelope")
+        budget, observed = _int(item.get("budget_krw")), _int(item.get("observed_used_krw"))
+        projected = _int(item.get("projected_used_p50_krw"))
+        over = item.get("p_over_budget")
+        if not (
+            isinstance(envelope, str)
+            and envelope
+            and budget is not None
+            and observed is not None
+            and projected is not None
+            and isinstance(over, (int, float))
+            and not isinstance(over, bool)
+            and 0.0 <= over <= 1.0
+        ):
+            return ()
+        rows.append(
+            BudgetRiskRow(
+                envelope=envelope,
+                budget_krw=budget,
+                observed_used_krw=observed,
+                projected_used_p50_krw=projected,
+                p_over_budget=float(over),
+            )
+        )
+    return tuple(rows)
+
+
+def numeric_rows_for(receipt: Receipt) -> NumericRows | None:
+    """Return receipt-bound per-envelope rows for a risk or what-if turn, or None.
+
+    Reuses the same validation and receipt-identity gate as ``numeric_text`` so a
+    row is only surfaced from a contract-valid result that belongs to this
+    receipt. It never derives amounts: every figure is copied from the engine's
+    own ``datasets`` and the human ``text`` is untouched. The paired what-if
+    saving remains aggregate-only in the engine, so only the engine-computed
+    per-envelope projected spend (and, for risk, the budget-risk breakdown when a
+    snapshot budget exists) is exposed; no per-envelope what-if delta is invented.
+    """
+    raw = receipt.numeric_result
+    if raw is None:
+        return None
+    try:
+        encoded = json.dumps(raw.root, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        result = _RESULT.validate_json(encoded)
+        _ensure_receipt_match(result, receipt)
+    except (TypeError, ValueError, ValidationError, RecursionError):
+        return None
+    if isinstance(result, RiskResult):
+        mode: Literal["risk", "what_if"] = "risk"
+        budget_risk = _budget_risk_rows(result)
+    elif isinstance(result, WhatIfResult):
+        mode = "what_if"
+        budget_risk = ()
+    else:
+        return None
+    envelope_spend = _envelope_spend_rows(result)
+    if not envelope_spend and not budget_risk:
+        return None
+    return NumericRows(mode=mode, envelope_spend=envelope_spend, budget_risk=budget_risk)
 
 
 def numeric_text(receipt: Receipt) -> list[str]:

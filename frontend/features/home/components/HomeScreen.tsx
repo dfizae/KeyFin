@@ -1,5 +1,5 @@
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
-import { Bell, Coins, Shirt, Store, WifiOff } from "lucide-react-native";
+import { Bell, CircleQuestionMark, Coins, Shirt, Store, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import type { LucideIcon } from "lucide-react-native";
@@ -14,15 +14,15 @@ import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
 import { MOVING_IN_COPY, RoomWaiting, pickReturningCopy } from "@/features/room/components/RoomWaiting";
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
-import { HomeCoach } from "@/features/home/components/HomeCoach";
+import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
-import { AVATAR_SCENE } from "@/features/home/components/CoachBubble";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
 import { roomKeys, useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
+import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/components/RoomStickers";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
-import { getWallItemRect } from "@/features/room/scene";
+import { COACH_CAT_RECT, getWallItemRect, type Placement } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
@@ -76,6 +76,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   const budget = useCurrentBudget();
   const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
+  const [selectedSticker, setSelectedSticker] = React.useState<Placement | null>(null);
   const [box, setBox] = React.useState({ width: 0, height: 0 });
   const guide = useRoomGuide(room.isSuccess && sceneReady);
   const placements = useRoomStore(selectPlacements);
@@ -97,28 +98,21 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   // 화면은 씬(327:404)보다 세로로 길기 때문에 폭을 넘치게 키워(coverSceneWidth) 가운데를 보여 주고 좌우는 잘라 낸다.
   // 인사말은 버렸고 코인·알림만 방 위에 뜨는 사이드 버튼으로 남는다. 방이 화면을 꽉 채우니 세로 스크롤도 없다.
   const roomWidth = box.width > 0 && box.height > 0 ? coverSceneWidth(box.width, box.height) : 0;
-  // 방이 화면보다 넓으면 씬 x 0 이 화면 밖이다. 코치는 카메라를 따라가지 않는 패널이라 넘친 절반만큼 밀어 화면 안에 둔다.
-  const coachOffsetX = Math.max(0, (roomWidth - box.width) / 2);
 
   // 방 레이어는 화면 가운데에 놓이고 넘치는 만큼 잘리므로, 씬 좌표를 화면 좌표로 옮길 때 그 절반을 빼 준다.
   const roomScale = roomWidth > 0 ? getSceneScale(roomWidth) : 0;
+  const offsetX = Math.max(0, (roomWidth - box.width) / 2);
   const offsetY = roomWidth > 0 ? Math.max(0, (getCanvasSize(roomWidth).height - box.height) / 2) : 0;
   const sceneToScreen = (rect: SceneRect): SceneRect => ({
-    x: rect.x * roomScale - coachOffsetX,
+    x: rect.x * roomScale - offsetX,
     y: rect.y * roomScale - offsetY,
     width: rect.width * roomScale,
     height: rect.height * roomScale,
   });
-  // 코치는 패널 레이어에서 이미 coachOffsetX 만큼 밀어 두므로 화면 x 가 그대로 씬 x 다
-  const coachScreenRect = (): SceneRect => ({
-    x: AVATAR_SCENE.x * roomScale,
-    y: AVATAR_SCENE.y * roomScale - offsetY,
-    width: AVATAR_SCENE.size * roomScale,
-    height: AVATAR_SCENE.size * roomScale,
-  });
   const guideRect = (target: GuideTargetId): SceneRect | null => {
     if (roomScale === 0) return null;
-    if (target === "coach") return coachScreenRect();
+    // 코치는 방에 앉은 고양이라 벽 오브젝트처럼 씬 좌표에 있다
+    if (target === "coach") return sceneToScreen(COACH_CAT_RECT);
     if (target === "board" || target === "calendar") {
       const rect = getWallItemRect(placements, target);
       return rect === null ? null : sceneToScreen(rect);
@@ -153,17 +147,15 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
           <CharacterRoom
             width={roomWidth > 0 ? roomWidth : undefined}
             viewport={roomWidth > 0 ? box : undefined}
-            locked={panel !== null}
+            locked={panel !== null || selectedSticker !== null}
             onSceneReady={markSceneReady}
             sceneObjects={(width) => (
               <>
+                <RoomStickerTargets width={width} placements={placements} furnitures={room.data.furnitures}
+                  onSelect={(placement) => { guide.finish(); setSelectedSticker(placement); }} />
                 <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
-              </>
-            )}
-            panels={(width) => (
-              <>
-                <HomeCoach width={width} offsetX={coachOffsetX} />
+                <HomeCoachTarget width={width} onOpen={guide.finish} />
               </>
             )}
           />
@@ -173,8 +165,15 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
         ) : null}
       </View>
       <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
+      {selectedSticker && room.data ? <StickerRemovalDialog placement={selectedSticker} stickers={room.data.stickers}
+        onClose={() => setSelectedSticker(null)} /> : null}
       {room.isSuccess ? (
-        <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null} onMeasure={measureButton} />
+        <HomeSideActions
+          coinBalance={room.data.coinBalance}
+          showEdit={panel === null && selectedSticker === null}
+          onMeasure={measureButton}
+          onHelp={sceneReady ? guide.restart : undefined}
+        />
       ) : null}
       {/* 안내 덮개는 방과 사이드 버튼을 모두 덮어야 해서 맨 위에 둔다 */}
       {guide.step ? (
@@ -227,10 +226,13 @@ function HomeSideActions({
   coinBalance,
   showEdit,
   onMeasure,
+  onHelp,
 }: {
   coinBalance: number;
   showEdit: boolean;
   onMeasure: (id: GuideTargetId, rect: SceneRect) => void;
+  /** 첫 진입 안내를 다시 연다. 방이 다 그려지기 전에는 undefined 라 버튼을 숨긴다 */
+  onHelp?: () => void;
 }) {
   const topInset = useTopInset();
 
@@ -261,6 +263,7 @@ function HomeSideActions({
           guideId="wardrobe"
           onMeasure={onMeasure}
         />
+        {onHelp ? <HelpButton onPress={onHelp} /> : null}
       </View>
       {showEdit ? <RoomEditorOverlay /> : null}
     </View>
@@ -330,6 +333,27 @@ function RoomActionButton({ icon, label, hint, iconClassName, route, guideId, on
       onPress={() => router.push(route)}
     >
       <Icon as={icon} size={20} className={iconClassName} />
+    </Pressable>
+  );
+}
+
+/**
+ * 홈 안내 다시 보기 (사용자 요청 2026-09-23). 첫 진입 안내는 한 번 보면 다시 뜨지 않아, 사이드 버튼 줄 맨 아래에 "?" 로 다시 여는 길을 둔다.
+ * 모양은 알림·상점·옷장과 같은 40pt 원형이다. 안내가 가리키는 대상은 아니라 자리를 재지 않는다.
+ */
+export const HOME_HELP_LABEL = "홈 안내 다시 보기";
+
+function HelpButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={HOME_HELP_LABEL}
+      accessibilityHint="홈 화면 사용법을 처음부터 다시 보여 줍니다"
+      hitSlop={8}
+      className="h-10 w-10 items-center justify-center rounded-full bg-accent shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
+      onPress={onPress}
+    >
+      <Icon as={CircleQuestionMark} size={20} className="text-card-foreground" />
     </Pressable>
   );
 }

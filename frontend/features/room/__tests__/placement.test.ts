@@ -25,7 +25,7 @@ function expectSettled(placements: readonly Placement[], itemId: FurnitureId) {
 }
 
 describe("가구 카탈로그", () => {
-  it("그림이 있는 73종과 서버 기본 가구 3종이 모두 있고, 방향마다 그림·크기가 있다", () => {
+  it("그림이 있는 가구와 기존 서버 assetKey 별칭 3종이 모두 있고, 방향마다 그림·크기가 있다", () => {
     const ids = [...Object.keys(FURNITURE_SPRITES), "sofa_default", "fridge_default", "tv_default"];
 
     expect(Object.keys(FURNITURE).sort()).toEqual(ids.sort());

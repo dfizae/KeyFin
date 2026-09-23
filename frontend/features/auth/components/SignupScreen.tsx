@@ -1,7 +1,7 @@
 import { useRouter } from "expo-router";
 import { CircleAlert } from "lucide-react-native";
 import * as React from "react";
-import { KeyboardAvoidingView, Platform, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import Animated from "react-native-reanimated";
 
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { CoachRow } from "@/components/ui/coach-row";
 import { Icon } from "@/components/ui/icon";
 import { useIntroReveal } from "@/components/ui/intro-reveal";
 import { Input } from "@/components/ui/input";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { Screen, ScreenScrollView } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
@@ -49,7 +50,7 @@ function SignupScreen() {
 
   return (
     <Screen>
-    <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView className="flex-1">
       <Animated.View style={intro.revealStyle}>
         <ScreenHeader flat title="회원가입" onBack={() => router.back()} />
       </Animated.View>

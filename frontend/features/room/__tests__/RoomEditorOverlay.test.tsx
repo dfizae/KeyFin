@@ -2,14 +2,14 @@ import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as React from "react";
 
-import { acquireFurnitureMock, furnitureListMock, resetFurnitureMocks } from "@/api/mocks/furniture";
+import { acquireFurnitureMock, applyBudgetStickersMock, furnitureListMock, resetFurnitureMocks } from "@/api/mocks/furniture";
 import { ApiError } from "@/api/error";
 import * as furnitureApi from "@/features/room/api/furniture.api";
 import * as roomApi from "@/features/room/api/room.api";
 import { roomKeys } from "@/features/room/api/queries";
 import { toUserFurnitures, type UserFurniture } from "@/features/room/furniture";
 import { EDIT_LABEL, ROOM_EDIT_ROUTE, RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
-import { EDIT_HINT, RoomEditScreen } from "@/features/room/components/RoomEditScreen";
+import { EDIT_HINT, EDIT_ROOM_AREA_TEST_ID, RoomEditScreen, STORAGE_TITLE } from "@/features/room/components/RoomEditScreen";
 import { FURNITURE, WALL_ITEMS } from "@/features/room/catalog";
 import { cellAnchor } from "@/features/room/grid";
 import { DEFAULT_LAYOUT, SURFACES } from "@/features/room/scene";
@@ -39,20 +39,26 @@ const BOARD_MOVED = cellAnchor(SURFACES.WALL_RIGHT, { col: 4, row: 4 }, WALL_ITE
 const sofaAnchor = () => useRoomStore.getState().layout.find((p) => p.itemId === "sofa_default")!.anchor;
 
 /** 편집 화면은 GET /room 으로 서버 배치를 받고 나서 사본을 뜬다. 목이 기본 배치를 그대로 주므로 자리는 같다 */
-async function renderEditScreen() {
+async function renderEditScreen(props: { openStorage?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { gcTime: 0 } } });
   return { client, view: await render(
     <QueryClientProvider client={client}>
-      <RoomEditScreen />
+      <RoomEditScreen {...props} />
     </QueryClientProvider>
   ) };
 }
 
-async function renderEditing() {
-  const { view } = await renderEditScreen();
+async function renderEditing(props: { openStorage?: boolean } = {}) {
+  const { view } = await renderEditScreen(props);
   await waitFor(() => expect(useRoomStore.getState().draft).not.toBeNull());
   await waitFor(() => expect(screen.getByRole("button", { name: "편집 완료" })).toBeEnabled());
+  await layoutRoomArea();
   return view;
+}
+
+/** 말풍선은 방 크기를 잰 뒤에만 뜬다. 테스트에는 실제 레이아웃이 없어 크기를 흘려 넣는다 */
+async function layoutRoomArea() {
+  await fireEvent(screen.getByTestId(EDIT_ROOM_AREA_TEST_ID), "layout", { nativeEvent: { layout: { width: 327, height: 586 } } });
 }
 
 describe("방 꾸미기 진입과 편집 화면", () => {
@@ -72,12 +78,29 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     expect(useRoomStore.getState().draft).toBeNull();
   });
 
+  it("딱지가 붙은 일반 가구를 보관하면 부착 표시와 재설치 안내가 보인다", async () => {
+    const list = furnitureListMock();
+    const bed = list.find((item) => item.assetKey === "bed_pink")!;
+    resetFurnitureMocks(list.map((item) => item.userFurnitureId === bed.userFurnitureId ? {
+      ...item, placed: true, placementStatus: "FLOOR", placementDirection: "FRONT_RIGHT", positionX: 100, positionY: 500,
+    } : item));
+    applyBudgetStickersMock("202609");
+    await renderEditing();
+    await act(() => useRoomStore.getState().removeItem("bed_pink"));
+    await fireEvent.press(screen.getByRole("button", { name: /^보관함 열기/ }));
+    expect(await screen.findByRole("button", { name: `${bed.name}, 압류 딱지 부착, 방에 놓기` })).toBeTruthy();
+    expect(screen.getByText("압류 딱지는 다시 설치한 뒤 제거할 수 있어요.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "딱지 제거" })).toBeNull();
+  });
+
   it("편집 화면에 들어오면 사본을 만들고, 취소는 옮긴 것을 버리고 돌아간다", async () => {
     await renderEditing();
     expect(screen.getByText(EDIT_HINT)).toBeTruthy();
 
     await act(() => useRoomStore.getState().moveItem("sofa_default", SOFA_MOVED));
-    await fireEvent.press(screen.getByRole("button", { name: "편집 취소" }));
+    // 취소는 헤더의 뒤로가기다(2026-09-21 — 방을 크게 쓰려고 하단 취소/완료 줄을 없앴다)
+    expect(screen.queryByRole("button", { name: "편집 취소" })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: "뒤로" }));
     expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa_default")!.anchor);
     expect(useRoomStore.getState().draft).toBeNull();
     expect(mockBack).toHaveBeenCalledTimes(1);
@@ -109,6 +132,43 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     await waitFor(() => expect(sofaAnchor()).toEqual(SOFA_MOVED), { timeout: 3000 });
   });
 
+  it("보관함은 접혀 있다가 손잡이를 누르면 올라오고, 가구를 꺼내면 방에 놓이며 다시 내려간다", async () => {
+    await renderEditing();
+    const handle = await screen.findByRole("button", { name: /^보관함 열기, \d+개$/ });
+    expect(screen.queryByRole("header", { name: STORAGE_TITLE })).toBeNull();
+
+    await fireEvent.press(handle);
+    expect(await screen.findByRole("header", { name: STORAGE_TITLE })).toBeTruthy();
+
+    const before = useRoomStore.getState().draft?.length ?? 0;
+    const tiles = await screen.findAllByRole("button", { name: /, 방에 놓기$/ });
+    expect(tiles.length).toBeGreaterThan(1);
+    await fireEvent.press(tiles[0]);
+    expect(useRoomStore.getState().draft?.length).toBe(before + 1);
+    await waitFor(() => expect(screen.queryByRole("header", { name: STORAGE_TITLE })).toBeNull());
+  });
+
+  it("상점에서 가구를 사고 넘어오면 보관함을 펴 둔 채로 연다", async () => {
+    await renderEditing({ openStorage: true });
+    expect(await screen.findByRole("header", { name: STORAGE_TITLE })).toBeTruthy();
+  });
+
+  it("가구를 고르면 그 옆에 동작 버튼이 뜨고, 벽 오브젝트는 옮기기만 할 수 있다고 알려 준다", async () => {
+    await renderEditing();
+    expect(screen.queryByRole("button", { name: /방향 바꾸기$/ })).toBeNull();
+
+    await act(async () => useRoomStore.getState().select("sofa_default"));
+    expect(await screen.findByRole("button", { name: /방향 바꾸기$/ })).toBeTruthy();
+    // 필수 가구도 편집 중에는 넣어 둘 수 있다 — 개수는 완료할 때 검사한다
+    expect(screen.getByRole("button", { name: /넣어 두기$/ }).props.accessibilityState).toMatchObject({ disabled: false });
+
+    await act(async () => useRoomStore.getState().select("board"));
+    expect(screen.getByRole("button", { name: /넣어 두기$/ }).props.accessibilityState).toMatchObject({ disabled: true });
+    expect(screen.getByText("예산 보드·출금 캘린더는 옮기기만 할 수 있어요.")).toBeTruthy();
+    // 가구를 고른 동안에는 사용법 안내를 치운다 — 방을 가리는 글을 하나라도 줄인다
+    expect(screen.queryByText(EDIT_HINT)).toBeNull();
+  });
+
   it("화면을 떠나면(언마운트) 남은 사본은 버린다", async () => {
     const view = await renderEditing();
     await act(() => useRoomStore.getState().moveItem("sofa_default", SOFA_MOVED));
@@ -117,13 +177,13 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     expect(sofaAnchor()).toEqual(DEFAULT_LAYOUT.find((p) => p.itemId === "sofa_default")!.anchor);
   });
 
-  it("변경이 없어도 완료는 최종 3종을 한 번에 보낸다", async () => {
+  it("변경이 없어도 완료는 최종 4종을 한 번에 보낸다", async () => {
     const save = jest.spyOn(furnitureApi, "updateFurniturePlacements");
     await renderEditing();
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
     expect(save).toHaveBeenCalledTimes(1);
-    expect(save.mock.calls[0][0].placements).toHaveLength(3);
+    expect(save.mock.calls[0][0].placements).toHaveLength(4);
   });
 
   it("기본 소파를 보관하고 구매 소파를 꺼내 전체 배치를 저장한다", async () => {
@@ -136,7 +196,9 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     expect(await screen.findByText(/소파 0개/)).toBeTruthy();
     expect(save).not.toHaveBeenCalled();
-    await fireEvent.press(screen.getByRole("button", { name: "2인 소파 (블랙), 방에 놓기" }));
+    // 보관함은 접혀 있어 손잡이로 시트를 올린 뒤 꺼낸다(2026-09-21 배치)
+    await fireEvent.press(await screen.findByRole("button", { name: /^보관함 열기/ }));
+    await fireEvent.press(await screen.findByRole("button", { name: "2인 소파 (블랙), 방에 놓기" }));
     expect(screen.queryByText(/소파 0개/)).toBeNull();
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
@@ -180,8 +242,8 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     });
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
     await waitFor(() => expect(mockBack).toHaveBeenCalledTimes(1));
-    expect(save.mock.calls[0][0].placements).toHaveLength(3);
-    expect(client.getQueryData<UserFurniture[]>(roomKeys.furnitures())).toHaveLength(7);
+    expect(save.mock.calls[0][0].placements).toHaveLength(4);
+    expect(client.getQueryData<UserFurniture[]>(roomKeys.furnitures())).toHaveLength(8);
   });
 
   it("화면에 없는 설치 가구를 보존하고 응답 목록을 캐시에 반영한다", async () => {
@@ -203,7 +265,7 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     });
     expect(furnitureListMock().find((item) => item.userFurnitureId === 900)).toEqual(hidden);
     expect(client.getQueryData<UserFurniture[]>(roomKeys.furnitures())).toEqual(toUserFurnitures(furnitureListMock()));
-    expect(client.getQueryData<Room>(roomKeys.home())!.furnitures).toHaveLength(4);
+    expect(client.getQueryData<Room>(roomKeys.home())!.furnitures).toHaveLength(5);
   });
 
   it("저장 후 방 재조회 실패에도 성공 응답과 로컬 보드 위치를 유지한다", async () => {
@@ -247,7 +309,6 @@ describe("방 꾸미기 진입과 편집 화면", () => {
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     expect(mockPreventRemove).toHaveBeenLastCalledWith(true, expect.any(Function));
     await fireEvent.press(screen.getByRole("button", { name: "편집 완료" }));
-    await fireEvent.press(screen.getByRole("button", { name: "편집 취소" }));
     await fireEvent.press(screen.getByRole("button", { name: "뒤로" }));
     await act(() => {
       const state = useRoomStore.getState();

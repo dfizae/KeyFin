@@ -46,11 +46,11 @@ public class Item {
 	private String themeCode;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "default_furniture_type", length = 10)
+	@Column(name = "default_furniture_type", length = 20)
 	private DefaultFurnitureType defaultFurnitureType;
 
 	@Enumerated(EnumType.STRING)
-	@Column(name = "furniture_type", length = 10)
+	@Column(name = "furniture_type", length = 20)
 	private FurnitureType furnitureType;
 
 	@Column(name = "is_active", nullable = false)

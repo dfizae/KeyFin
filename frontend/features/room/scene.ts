@@ -88,18 +88,6 @@ function withDirection(placement: Placement, direction: PlacementDirection): Pla
   return next;
 }
 
-/**
- * 바닥 다각형. floor-tall.jpg 에서 바닥(나뭇결)이 시작되는 y 를 열마다 훑어 최소자승으로 피팅한 값이다(2026-09-18).
- * 왼쪽 벽 (0,371)→코너 (164,286)→오른쪽 벽 (327,371), 아래는 화면 끝. 바닥을 다시 만들면 같이 갱신한다.
- * 이 그림은 코너가 정중앙이라 좌우가 대칭이다(옛 그림은 코너가 왼쪽 41%).
- */
-export const FLOOR_POLYGON: ScenePolygon = [
-  { x: 0, y: 371 },
-  { x: 164, y: 286 },
-  { x: 327, y: 371 },
-  { x: 327, y: 586 },
-  { x: 0, y: 586 },
-];
 
 /**
  * 배치 격자를 얹는 세 면. 벽·바닥 경계선은 floor-tall.jpg 를 픽셀로 재서 얻었다(2026-09-18).
@@ -149,6 +137,27 @@ export const SURFACES: Record<Surface, SurfaceDef> = {
   },
 };
 
+/** 코너에서 벽선(바닥 격자의 뒤쪽 두 변)을 따라 x 가 주어진 값이 되는 점 */
+function wallLinePoint(corner: ScenePoint, along: ScenePoint, x: number): ScenePoint {
+  return { x, y: corner.y + ((x - corner.x) * (along.y - corner.y)) / (along.x - corner.x) };
+}
+
+/**
+ * 바닥 다각형. 걸레받이선은 floor-tall.jpg 를 픽셀로 재서 피팅한 값이고(2026-09-18) 코너 (164,286)·화면 아래는 화면 끝이다.
+ * 이 그림은 코너가 정중앙이라 좌우가 대칭이다(옛 그림은 코너가 왼쪽 41%). 바닥을 다시 만들면 SURFACES.FLOOR 와 같이 갱신한다.
+ *
+ * 벽 쪽 두 변은 손으로 반올림한 (0,371)·(327,371) 이 아니라 **바닥 격자(SURFACES.FLOOR.quad)의 뒤쪽 두 변을 화면 끝까지 연장**한 점이다
+ * (2026-09-22 사용자 보고). 반올림한 값은 격자 벽선보다 기울기가 0.6% 가팔라, 벽에 붙인 칸의 뒤쪽 모서리가 코너에서 멀어질수록
+ * 다각형 밖으로 나갔다 — 냉장고를 오른쪽 벽 3번째 타일에 붙이면 0.5pt 차이로 거부됐다. 같은 선을 쓰면 벽에 붙은 칸은 어디든 경계 위다.
+ */
+export const FLOOR_POLYGON: ScenePolygon = [
+  wallLinePoint(SURFACES.FLOOR.quad[0], SURFACES.FLOOR.quad[3], 0),
+  SURFACES.FLOOR.quad[0],
+  wallLinePoint(SURFACES.FLOOR.quad[0], SURFACES.FLOOR.quad[1], SCENE_WIDTH),
+  { x: SCENE_WIDTH, y: SCENE_HEIGHT },
+  { x: 0, y: SCENE_HEIGHT },
+];
+
 /** 경계 위의 점은 다각형 판정에서 안팎이 갈리므로 꼭짓점을 발자국 안쪽으로 이만큼 당겨서 본다. */
 const EDGE_INSET = 0.02;
 
@@ -170,13 +179,14 @@ export function isPlaceableOnFloor(cell: GridCell, footprint: GridFootprint): bo
 
 /**
  * 기본 배치. 칸으로 정의하고 발끝 좌표는 격자에서 파생시킨다. 목 데이터(api/mocks/furniture.ts)도 이 배치로 시작한다.
- * 가구 구성은 서버 기본 가구(백엔드 V15: 냉장고·소파·TV, 전부 FRONT_RIGHT)와 같다(2026-09-21). 서버처럼 TV 는 옛 책상 자리에 둔다.
- * 2026-09-18 세로 긴 방으로 바꾸면서 칸을 다시 골랐다 — 옛 칸은 새 격자에서 화면 밖이거나 바닥을 벗어났다.
+ * 서버 기본 가구(V24: 소파·TV·식탁·커피테이블, 전부 FRONT_RIGHT)와 좌표를 맞춘다.
+ * 기존 냉장고 기본 칸(0, 2)은 비워 두어 기존 사용자에게 식탁을 지급해도 겹치지 않는다.
  */
 export const DEFAULT_CELLS: readonly { itemId: FurnitureId; cell: GridCell }[] = [
   { itemId: "tv_default", cell: { col: 2, row: 0 } },
-  { itemId: "fridge_default", cell: { col: 0, row: 2 } },
+  { itemId: "dining_table_original", cell: { col: 0, row: 4 } },
   { itemId: "sofa_default", cell: { col: 6, row: 4 } },
+  { itemId: "coffee_table_original", cell: { col: 4, row: 6 } },
 ];
 
 /**
@@ -395,6 +405,25 @@ export function getWalkBlockers(placements: readonly Placement[]): ScenePolygon[
 
 /** 캐릭터 정지 이미지의 씬 단위 크기(char1-idle.png 496×756 비율) */
 export const CHARACTER_SIZE: SceneSize = { width: 72, height: 110 };
+
+/** 코치 고양이(AI 챗봇) 그림의 씬 단위 크기. coach-cat.png 는 512×512 정사각이다 */
+export const COACH_CAT_SIZE: SceneSize = { width: 60, height: 60 };
+/**
+ * 코치 고양이 발끝 자리 — 바닥 왼쪽 앞. 기본 가구(냉장고·TV 는 위쪽, 소파는 오른쪽)와 캐릭터 출발점(164,505)을 비껴 있고,
+ * 홈이 방을 화면보다 넓게 그릴 때 잘리는 좌우 폭(약 8%, 27 단위) 안쪽이다. 방 꾸미기에서 옮기는 대상이 아니다(2026-09-22).
+ */
+export const COACH_CAT_ANCHOR: ScenePoint = { x: 78, y: 552 };
+/** 코치 고양이 그림이 놓이는 씬 사각형. 홈의 탭 영역·말풍선·첫 진입 안내가 같은 값을 쓴다 */
+export const COACH_CAT_RECT: SceneRect = getSpriteRect(COACH_CAT_ANCHOR, COACH_CAT_SIZE);
+/** 고양이가 제자리 둘레를 오가는 범위(씬 단위, useCoachCatMotion 의 산책 지점과 맞춘다) */
+export const COACH_CAT_STROLL_RANGE = { left: 10, right: 12, down: 3 } as const;
+/** 캐릭터가 고양이를 밟고 지나가지 않게 막는 발자국. 발끝 둘레의 작은 사각형을 산책 범위만큼 넓혔다 */
+export const COACH_CAT_FOOTPRINT: ScenePolygon = [
+  { x: COACH_CAT_ANCHOR.x - 24 - COACH_CAT_STROLL_RANGE.left, y: COACH_CAT_ANCHOR.y - 16 },
+  { x: COACH_CAT_ANCHOR.x + 24 + COACH_CAT_STROLL_RANGE.right, y: COACH_CAT_ANCHOR.y - 16 },
+  { x: COACH_CAT_ANCHOR.x + 24 + COACH_CAT_STROLL_RANGE.right, y: COACH_CAT_ANCHOR.y + 6 + COACH_CAT_STROLL_RANGE.down },
+  { x: COACH_CAT_ANCHOR.x - 24 - COACH_CAT_STROLL_RANGE.left, y: COACH_CAT_ANCHOR.y + 6 + COACH_CAT_STROLL_RANGE.down },
+];
 
 /** 캐릭터 이동 파라미터. 시트 없이 정지 이미지 + 코드 모션으로 "움직이는 느낌"만 낸다. */
 export const CHARACTER_MOTION = {

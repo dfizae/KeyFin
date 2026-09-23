@@ -7,7 +7,6 @@ import {
   MipmapMode,
   Path,
   Skia,
-  useImage,
   type SkImage,
 } from "@shopify/react-native-skia";
 import { useColorScheme } from "nativewind";
@@ -17,8 +16,11 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { runOnJS, useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { CHARACTER_IDLE, ROOM_FLOOR } from "@/features/room/assets";
-import { useRoom } from "@/features/room/api/queries";
+import { CHARACTER_IDLE, COACH_CAT, ROOM_FLOOR, SEIZURE_STICKER } from "@/features/room/assets";
+import { useFurnitures, useRoom } from "@/features/room/api/queries";
+import { stickerGeometry, stickerPlacements } from "@/features/room/stickers";
+import { penaltyGeometry, PENALTY_SPRITES, type PenaltyGeometry } from "@/features/room/penalties";
+import { loadSceneImage } from "@/features/room/sceneImages";
 import { readCamera, useRoomCamera } from "@/features/room/camera";
 import { FURNITURE, WALL_ITEMS, isWallItemId, type RoomItemId } from "@/features/room/catalog";
 import {
@@ -51,6 +53,9 @@ import {
 import {
   CHARACTER_MOTION,
   CHARACTER_SIZE,
+  COACH_CAT_ANCHOR,
+  COACH_CAT_FOOTPRINT,
+  COACH_CAT_RECT,
   FLOOR_POLYGON,
   SURFACES,
   getSeatPoint,
@@ -64,6 +69,7 @@ import { findOutfit } from "@/features/room/outfits";
 import { useNotifySceneReady } from "@/features/room/sceneReady";
 import { selectIsEditing, selectPlacements, useRoomStore } from "@/features/room/store";
 import { useCharacterWalker, type CharacterWalker } from "@/features/room/useCharacterWalker";
+import { useCoachCatMotion } from "@/features/room/useCoachCatMotion";
 import { getColors } from "@/lib/theme";
 
 // 바닥 1장 + 벽 오브젝트(보드·캘린더·벽 장식) + 러그 + 가구를 그린다. 가구는 발끝 y 기준 painter's algorithm 으로 정렬하고 캐릭터는 정렬된 가구 사이에 끼운다.
@@ -81,7 +87,7 @@ const FLOOR_SURFACE = SURFACES.FLOOR;
  * 실제보다 오래 걸리는 것처럼 보였다(사용자 지적 2026-09-20). 이것과 놓인 가구 그림이 다 준비될 때까지 기다렸다가 방을 통째로 보여 준다.
  * 가구 그림은 146장(약 27MB)이라 전부 데우지 않고 놓인 것만 읽는다(sceneFurnitureSprites).
  */
-const BASE_SPRITES: readonly number[] = [ROOM_FLOOR, CHARACTER_IDLE, ...Object.values(WALL_ITEMS).map((item) => item.sprite)];
+const BASE_SPRITES: readonly number[] = [ROOM_FLOOR, CHARACTER_IDLE, COACH_CAT, SEIZURE_STICKER, ...Object.values(WALL_ITEMS).map((item) => item.sprite)];
 
 /**
  * 놓인 가구 그림. `current` 는 지금 방향 그림이라 방을 보여 주기 전에 기다리고,
@@ -100,14 +106,17 @@ function sceneFurnitureSprites(placements: readonly Placement[], editing: boolea
 
 /**
  * 스프라이트 한 장을 불러 위로 넘기기만 한다(그리지 않는다).
- * `useImage` 는 부르는 곳마다 따로 읽어들이므로(캐시가 없다) 이 로더를 계속 띄워 둔 채
+ * Skia는 부르는 곳마다 따로 읽어들이므로(캐시가 없다) 이 로더를 계속 띄워 둔 채
  * 읽어 온 이미지를 그리는 쪽에 넘긴다 — 그리는 쪽에서 다시 부르면 처음부터 다시 읽어 또 하나씩 튀어나온다.
  */
 function SpriteLoader({ source, onLoad }: { source: number; onLoad: (source: number, image: SkImage) => void }) {
-  const image = useImage(source);
   React.useEffect(() => {
-    if (image) onLoad(source, image);
-  }, [image, onLoad, source]);
+    let mounted = true;
+    void loadSceneImage(source).then((image) => {
+      if (mounted && image) onLoad(source, image);
+    });
+    return () => { mounted = false; };
+  }, [onLoad, source]);
   return null;
 }
 
@@ -144,12 +153,26 @@ type PlacedItem = {
   layer: number;
   item: PlacementView;
   surface: Surface;
+  sticker: ReturnType<typeof stickerGeometry>;
+  penalty: PenaltyGeometry | null;
 };
 
-function toPlaced(placement: Placement): PlacedItem {
+function toPlaced(placement: Placement, stickerAttached: boolean, overEnvelopeIds: readonly number[]): PlacedItem {
   const { itemId, anchor } = placement;
   const fixedWall = isWallItemId(itemId) ? WALL_ITEMS[itemId].surface : undefined;
-  return { id: itemId, anchor, layer: placement.layer ?? 0, item: placementView(placement), surface: placement.surface ?? fixedWall ?? "FLOOR" };
+  return { id: itemId, anchor, layer: placement.layer ?? 0, item: placementView(placement), surface: placement.surface ?? fixedWall ?? "FLOOR",
+    sticker: stickerAttached ? stickerGeometry(placement) : null, penalty: penaltyGeometry(placement, overEnvelopeIds) };
+}
+
+/**
+ * 코치 고양이도 바닥의 가구와 같은 발끝 y 기준 깊이 정렬에 끼운다 — 소파 뒤로 가려지거나 캐릭터 앞에 서는 것이 자연스러워야 한다.
+ * 가구가 아니라 편집 모드에서 끌리지 않고(hit test 에 넣지 않는다) 자리는 scene.ts 의 상수다.
+ */
+const COACH_CAT_NODE = { id: "coach_cat", anchor: COACH_CAT_ANCHOR, layer: 0 } as const;
+type DepthNode = PlacedItem | typeof COACH_CAT_NODE;
+
+function isCoachCat(node: DepthNode): node is typeof COACH_CAT_NODE {
+  return node.id === COACH_CAT_NODE.id;
 }
 
 type RoomSceneProps = {
@@ -168,6 +191,7 @@ function RoomScene({ width }: RoomSceneProps) {
 
   const placements = useRoomStore(selectPlacements);
   const isEditing = useRoomStore(selectIsEditing);
+  const owned = useFurnitures(undefined, isEditing);
   const saving = useRoomStore((state) => state.saving);
   const selectedId = useRoomStore((s) => s.selectedId);
   const select = useRoomStore((s) => s.select);
@@ -175,7 +199,8 @@ function RoomScene({ width }: RoomSceneProps) {
 
   const furnitureSprites = React.useMemo(() => sceneFurnitureSprites(placements, isEditing), [placements, isEditing]);
   const requiredSprites = React.useMemo(() => [...BASE_SPRITES, ...furnitureSprites.current], [furnitureSprites]);
-  const optionalSprites = React.useMemo(() => [...outfitSprites, ...furnitureSprites.turned], [outfitSprites, furnitureSprites]);
+  // 페널티 로드 실패·지연은 방의 ready 조건에 영향을 주지 않는다.
+  const optionalSprites = React.useMemo(() => [...outfitSprites, ...furnitureSprites.turned, ...PENALTY_SPRITES], [outfitSprites, furnitureSprites]);
   const { images, loaders, ready } = useSceneImages(requiredSprites, optionalSprites);
   // 한 번 보여 준 방은 다시 스켈레톤으로 돌리지 않는다 — 보관함에서 새 가구를 꺼내면 그 그림만 읽히는 동안 잠깐 비어 있다.
   const [revealed, setRevealed] = React.useState(false);
@@ -186,16 +211,25 @@ function RoomScene({ width }: RoomSceneProps) {
   const themeColors = getColors(colorScheme);
   const cameraTransform = useDerivedValue(() => [{ translateX: camera.tx.value }, { translateY: camera.ty.value }, { scale: camera.scale.value }]);
 
-  const placed = React.useMemo(() => placements.map(toPlaced), [placements]);
+  const placed = React.useMemo(() => {
+    const source = isEditing && owned.data ? owned.data.map((item) => item.serverState) : room.data?.furnitures ?? [];
+    const stamped = new Set(stickerPlacements(placements, source, isEditing));
+    return placements.map((placement) => {
+      const installed = isEditing || source.some((item) => item.assetKey === placement.itemId && item.placementStatus === "FLOOR");
+      return toPlaced(placement, stamped.has(placement), installed ? room.data?.overEnvelopeIds ?? [] : []);
+    });
+  }, [placements, isEditing, owned.data, room.data?.furnitures, room.data?.overEnvelopeIds]);
   const wallItems = React.useMemo(() => placed.filter((p) => p.surface !== "FLOOR"), [placed]);
   const rugs = React.useMemo(() => placed.filter((p) => p.surface === "FLOOR" && p.item.flat), [placed]);
   const sorted = React.useMemo<readonly PlacedItem[]>(
     () => sortByDepth(placed.filter((p) => p.surface === "FLOOR" && !p.item.flat)),
     [placed]
   );
-  const sortedKeys = React.useMemo(() => sorted.map(depthKey), [sorted]);
-  // 캐릭터가 피해 갈 가구 발자국. 벽 오브젝트와 러그는 빠진다.
-  const footprints = React.useMemo(() => getWalkBlockers(placements), [placements]);
+  // 그리는 순서. 가구 사이에 코치 고양이를 끼워 정렬한 것이라, 캐릭터가 들어갈 위치(depthIndex)도 이 순서 기준이다.
+  const depthNodes = React.useMemo<readonly DepthNode[]>(() => sortByDepth<DepthNode>([...sorted, COACH_CAT_NODE]), [sorted]);
+  const sortedKeys = React.useMemo(() => depthNodes.map(depthKey), [depthNodes]);
+  // 캐릭터가 피해 갈 발자국 — 가구(벽 오브젝트와 러그는 빠진다)와 코치 고양이 자리.
+  const footprints = React.useMemo(() => [...getWalkBlockers(placements), COACH_CAT_FOOTPRINT], [placements]);
   // 자동 보행은 편집 중에만 끈다 — 가구를 끌 때 캐릭터가 돌아다니면 방해된다(2026-09-09 결정의 이유, 2026-09-21 되켬).
   // 앉기는 앉은 그림이 있는 세트를 입었을 때만 한다. 기본 차림은 앉은 그림이 없어 걷기만 한다.
   const seat = React.useMemo(() => (outfit ? getSeatPoint(placements) : null), [outfit, placements]);
@@ -304,11 +338,17 @@ function RoomScene({ width }: RoomSceneProps) {
   const dragging = draggingId ? placed.find((p) => p.id === draggingId) ?? null : null;
   const stationaryWall = wallItems.filter((p) => p.id !== draggingId);
   const stationaryRugs = rugs.filter((p) => p.id !== draggingId);
-  const stationary = sorted.filter((p) => p.id !== draggingId);
+  const stationary = depthNodes.filter((node) => node.id !== draggingId);
   const behind = stationary.slice(0, Math.min(depthIndex, stationary.length));
   const inFront = stationary.slice(behind.length);
   const highlightId = draggingId ?? (isEditing ? selectedId : null);
   const spriteProps = { scale, ringColor: themeColors.primary, images };
+  const renderNode = (node: DepthNode) =>
+    isCoachCat(node) ? (
+      <CoachCatSprite key={node.id} scale={scale} image={images.get(COACH_CAT)} />
+    ) : (
+      <ItemSprite key={node.id} placed={node} highlighted={node.id === highlightId} {...spriteProps} />
+    );
 
   // 로더는 두 갈래 모두에서 같은 자리에 둔다 — 자리가 바뀌면 다시 마운트되어 이미지를 또 읽는다.
   if (!ready && !revealed) {
@@ -337,13 +377,9 @@ function RoomScene({ width }: RoomSceneProps) {
               <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
             ))}
             {isEditing ? <GridOverlay scale={scale} color={themeColors.white} /> : null}
-            {behind.map((p) => (
-              <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
-            ))}
+            {behind.map(renderNode)}
             <CharacterSprite walker={walker} scale={scale} image={character} />
-            {inFront.map((p) => (
-              <ItemSprite key={p.id} placed={p} highlighted={p.id === highlightId} {...spriteProps} />
-            ))}
+            {inFront.map(renderNode)}
             {dragging ? (
               <DraggingSprite
                 placed={dragging}
@@ -457,6 +493,8 @@ function ItemSprite({ placed, scale, highlighted = false, ringColor, images }: I
         </Group>
       ) : null}
       <SkiaImage image={image} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />
+      <PenaltySprite geometry={placed.penalty} scale={scale} images={images} />
+      <StickerSprite geometry={placed.sticker} scale={scale} image={images.get(SEIZURE_STICKER)} />
     </>
   );
 }
@@ -472,6 +510,22 @@ type DraggingSpriteProps = {
   blockedColor: string;
   images: SceneImages;
 };
+
+function PenaltySprite({ geometry, scale, images }: { geometry: PenaltyGeometry | null; scale: number; images: SceneImages }) {
+  const image = geometry ? images.get(geometry.sprite) : undefined;
+  if (!geometry || !image) return null;
+  return <SkiaImage image={image} {...sceneRectToCanvas(geometry.rect, scale)} fit="fill" sampling={SPRITE_SAMPLING} />;
+}
+
+function StickerSprite({ geometry, scale, image }: { geometry: ReturnType<typeof stickerGeometry>; scale: number; image: SkImage | undefined }) {
+  if (!geometry || !image) return null;
+  const rect = sceneRectToCanvas(geometry.rect, scale);
+  return (
+    <Group origin={{ x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }} transform={[{ rotate: geometry.angle }]}>
+      <SkiaImage image={image} {...rect} fit="contain" sampling={SPRITE_SAMPLING} />
+    </Group>
+  );
+}
 
 /** 끌리는 동안의 오브젝트. 위치는 셰어드 값에서 매 프레임 읽고, 놓일 칸을 그 면의 격자 모양 그대로 깔아 보여준다. */
 function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blockedColor, images }: DraggingSpriteProps) {
@@ -511,8 +565,31 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
         sampling={SPRITE_SAMPLING}
         opacity={spriteOpacity}
       />
+      <Group transform={ringTransform} opacity={spriteOpacity}>
+        <PenaltySprite geometry={placed.penalty ? { ...placed.penalty, rect: { ...placed.penalty.rect,
+          x: placed.penalty.rect.x - placed.anchor.x, y: placed.penalty.rect.y - placed.anchor.y } } : null}
+          scale={scale} images={images} />
+        <StickerSprite geometry={placed.sticker ? { ...placed.sticker, rect: { ...placed.sticker.rect,
+          x: placed.sticker.rect.x - placed.anchor.x, y: placed.sticker.rect.y - placed.anchor.y } } : null}
+          scale={scale} image={images.get(SEIZURE_STICKER)} />
+      </Group>
     </>
   );
+}
+
+type CoachCatSpriteProps = { scale: number; image: SkImage | undefined };
+
+/**
+ * 코치 고양이(AI 챗봇). 정지 이미지 한 장을 제자리 둘레로 둥둥 띄우고 조금씩 오가게 그린다(useCoachCatMotion).
+ * 탭 영역은 홈이 씬 레이어에 따로 얹고 같은 훅으로 같이 움직인다(CoachTarget).
+ */
+function CoachCatSprite({ scale, image }: CoachCatSpriteProps) {
+  const rect = React.useMemo(() => sceneRectToCanvas(COACH_CAT_RECT, scale), [scale]);
+  const offset = useCoachCatMotion();
+  const left = useDerivedValue(() => rect.x + offset.value.x * scale);
+  const top = useDerivedValue(() => rect.y + offset.value.y * scale);
+  if (!image) return null;
+  return <SkiaImage image={image} x={left} y={top} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />;
 }
 
 type CharacterSpriteProps = { walker: CharacterWalker; scale: number; image: SkImage | undefined };

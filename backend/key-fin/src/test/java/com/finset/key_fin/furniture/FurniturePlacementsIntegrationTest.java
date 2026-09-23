@@ -68,6 +68,8 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 	private long pinkSofa;
 	private long fridge;
 	private long tv;
+	private long diningTable;
+	private long coffeeTable;
 	private long desk;
 
 	@BeforeEach
@@ -79,6 +81,8 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 		pinkSofa = acquire(userId, "sofa_pink");
 		fridge = acquire(userId, "refrigerator_black");
 		tv = acquire(userId, "tv_set_black");
+		diningTable = acquire(userId, "dining_table_black");
+		coffeeTable = acquire(userId, "coffee_table_black");
 		desk = acquire(userId, "desk_original");
 	}
 
@@ -91,13 +95,13 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void savesCompleteLayoutAndReplacesAllThreeTypesWithStickerInheritance() throws Exception {
+	void savesCompleteLayoutAndReplacesAllFourTypesWithStickerInheritance() throws Exception {
 		attachAll();
-		var request = new FurniturePlacementsUpdateRequest(List.of(entry(sofa), entry(fridge), entry(tv), entry(desk)));
+		var request = new FurniturePlacementsUpdateRequest(List.of(entry(sofa), entry(diningTable), entry(coffeeTable), entry(tv), entry(desk)));
 		var before = owned();
 		mvc.perform(auth(put("/api/v1/furnitures/placements").contentType(APPLICATION_JSON).content(json.writeValueAsString(request))))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(8)))
-				.andExpect(jsonPath("$.data[?(@.placed == true)]", hasSize(4)));
+				.andExpect(status().isOk()).andExpect(jsonPath("$.data", hasSize(11)))
+				.andExpect(jsonPath("$.data[?(@.placed == true)]", hasSize(5)));
 		var saved = owned();
 		assertThat(saved).extracting(UserFurnitureResponse::userFurnitureId).isSorted();
 		assertThat(saved).extracting(UserFurnitureResponse::userFurnitureId).containsExactlyElementsOf(
@@ -118,8 +122,8 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 		for (int i = 0; i < 2; i++) {
 			defaults.provision(userId);
 			assertThat(rooms.getRoom(userId).furnitures()).extracting(f -> f.userFurnitureId())
-					.containsExactly(sofa, fridge, tv, desk);
-			assertThat(stickers.synchronize(userId).count()).isEqualTo(3);
+					.containsExactly(sofa, tv, diningTable, coffeeTable, desk);
+			assertThat(stickers.synchronize(userId).count()).isEqualTo(4);
 		}
 		service.updatePlacements(userId, layout(starter.get(FurnitureType.SOFA)));
 		assertThat(current(sofa).placed()).isFalse();
@@ -145,12 +149,39 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 			var entries = new ArrayList<>(layout(starter.get(FurnitureType.SOFA)).placements());
 			entries.removeIf(p -> p.userFurnitureId().equals(starter.get(type)));
 			assertRejected(new FurniturePlacementsUpdateRequest(entries), 409, "FURNITURE_004");
+			var duplicate = new ArrayList<>(layout(starter.get(FurnitureType.SOFA)).placements());
+			duplicate.add(entry(switch (type) {
+				case SOFA -> sofa;
+				case TV -> tv;
+				case DINING_TABLE -> diningTable;
+				case COFFEE_TABLE -> coffeeTable;
+			}));
+			assertRejected(new FurniturePlacementsUpdateRequest(duplicate), 409, "FURNITURE_004");
 		}
 		var duplicateType = new ArrayList<>(layout(sofa).placements());
 		duplicateType.add(entry(pinkSofa));
 		assertRejected(new FurniturePlacementsUpdateRequest(duplicateType), 409, "FURNITURE_004");
 		assertRejected(new FurniturePlacementsUpdateRequest(List.of()), 409, "FURNITURE_004");
 		assertThat(owned()).isEqualTo(before);
+	}
+
+	@Test
+	void fridgesAreOptionalAndDifferentStylesCanBeInstalledAndUnplaced() throws Exception {
+		long pinkFridge = acquire(userId, "refrigerator_pink");
+		long oldFridge = acquire(userId, "fridge_default");
+		var entries = new ArrayList<>(layout(sofa).placements());
+		entries.addAll(List.of(entry(fridge), entry(pinkFridge), entry(oldFridge)));
+		service.updatePlacements(userId, new FurniturePlacementsUpdateRequest(entries));
+		for (long id : List.of(fridge, pinkFridge, oldFridge)) {
+			assertThat(current(id).furnitureType()).isNull();
+			assertThat(current(id).defaultFurnitureType()).isNull();
+			assertThat(current(id).canUnplace()).isTrue();
+			assertThat(current(id).stickerAttached()).isFalse();
+			mvc.perform(auth(patch("/api/v1/furnitures/" + id).contentType(APPLICATION_JSON).content("{\"placed\":false}")))
+					.andExpect(status().isOk()).andExpect(jsonPath("$.data.placed").value(false));
+		}
+		service.updatePlacements(userId, layout(sofa));
+		assertThat(rooms.getRoom(userId).furnitures()).hasSize(4);
 	}
 
 	@Test
@@ -229,14 +260,15 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
-	void replacementDoesNotResetDailyStickerRemovalLimit() {
+	void replacementPreservesRemovedStickerAndAllowsAnotherRemoval() {
 		attachAll();
 		service.updatePlacements(userId, layout(sofa));
-		assertThat(stickers.remove(userId, sofa).stickers().count()).isEqualTo(2);
+		assertThat(stickers.remove(userId, sofa).stickers().count()).isEqualTo(3);
 		service.updatePlacements(userId, layout(pinkSofa));
 		assertThat(current(pinkSofa).stickerAttached()).isFalse();
-		assertThatThrownBy(() -> stickers.remove(userId, starter.get(FurnitureType.FRIDGE)))
-				.isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode().getCode()).isEqualTo("ROOM_002"));
+		assertThat(stickers.remove(userId, starter.get(FurnitureType.DINING_TABLE)).stickers().count()).isEqualTo(2);
+		assertThatThrownBy(() -> stickers.remove(userId, pinkSofa))
+				.isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode().getCode()).isEqualTo("ROOM_003"));
 		assertThatThrownBy(() -> stickers.remove(userId, sofa))
 				.isInstanceOfSatisfying(BusinessException.class, e -> assertThat(e.getErrorCode().getCode()).isEqualTo("ROOM_001"));
 	}
@@ -271,7 +303,7 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 		assertThat(current(pinkSofa).placed()).isTrue();
 		assertThat(current(pinkSofa).stickerAttached()).isTrue();
 		assertThat(current(sofa).placed()).isFalse();
-		assertThat(owned()).filteredOn(UserFurnitureResponse::placed).hasSize(3);
+		assertThat(owned()).filteredOn(UserFurnitureResponse::placed).hasSize(4);
 	}
 
 	@Test
@@ -292,7 +324,7 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 			assertThat(current(sofa).stickerAttached()).isEqualTo(result.equals("ROOM_001"));
 		}
 		assertThat(current(starter.get(FurnitureType.SOFA)).stickerAttached()).isFalse();
-		assertThat(owned()).filteredOn(UserFurnitureResponse::placed).hasSize(3);
+		assertThat(owned()).filteredOn(UserFurnitureResponse::placed).hasSize(4);
 	}
 
 	private long acquire(long owner, String assetKey) {
@@ -307,7 +339,8 @@ class FurniturePlacementsIntegrationTest extends SpringIntegrationTestSupport {
 	}
 
 	private FurniturePlacementsUpdateRequest layout(long sofaId) {
-		return new FurniturePlacementsUpdateRequest(List.of(entry(starter.get(FurnitureType.FRIDGE)), entry(starter.get(FurnitureType.TV)), entry(sofaId)));
+		return new FurniturePlacementsUpdateRequest(List.of(entry(starter.get(FurnitureType.DINING_TABLE)), entry(starter.get(FurnitureType.TV)),
+				entry(sofaId), entry(starter.get(FurnitureType.COFFEE_TABLE))));
 	}
 
 	private List<UserFurnitureResponse> owned() { return service.getFurnitures(userId, null); }

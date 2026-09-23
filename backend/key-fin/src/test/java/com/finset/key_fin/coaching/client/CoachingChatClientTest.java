@@ -19,6 +19,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import com.finset.key_fin.coaching.dto.CoachingSessionView;
+import com.finset.key_fin.coaching.dto.SpendingRow;
 import com.finset.key_fin.coaching.dto.CoachingTurnReply;
 
 class CoachingChatClientTest {
@@ -34,11 +35,18 @@ class CoachingChatClientTest {
 	private static final String CHAT_ANSWER_JSON = """
 			{"id":"ans-2","answer_type":"spending_history","status":"needs_data","text":"연결된 소비 자료가 없어요.",
 			 "wording_source":"template","model":"none","fallback_reason":"no_ledger","evidence":{"coverage":"unknown"},
-			 "created_at":1789000100.0}
+			 "rows":[{"envelope":"외식","total_krw":45000,"count":3},{"envelope":"교통비","total_krw":12000,"count":2}],
+			 "total_krw":57000,"created_at":1789000100.0}
 			""";
 	private static final String COACHING_JSON = """
 			{"id":"coach-3","text":"이번 달 말 잔액은 12만 원 남을 것 같아요.","wording_source":"llm","model":"qwen",
-			 "fallback_reason":null,"receipt":{"engine_commit":"abc","trigger":"forecast"},"created_at":1789000200.0}
+			 "fallback_reason":null,"receipt":{"engine_commit":"abc","trigger":"forecast"},"created_at":1789000200.0,
+			 "chart_hint":{"endpoint":"/v1/charts/budget-forecast","period_start":"2026-09-01","question":"월말 잔액 예측해줘",
+			               "purchase":{"envelope":"취미·여가","amount_krw":300000,"on_date":"2026-09-28"}},
+			 "numeric_rows":{"mode":"what_if",
+			                 "envelope_spend":[{"envelope":"외식","p10_krw":100000,"p50_krw":150000,"p90_krw":240000}],
+			                 "budget_risk":[{"envelope":"외식","budget_krw":297000,"observed_used_krw":63800,
+			                                 "projected_used_p50_krw":213800,"p_over_budget":0.12}]}}
 			""";
 
 	private MockRestServiceServer server;
@@ -68,6 +76,8 @@ class CoachingChatClientTest {
 		assertThat(session.id()).isEqualTo("sess-1");
 		assertThat(session.expiresAt()).isEqualTo(1789086400.5);
 		assertThat(session.messages()).extracting(CoachingSessionView.Message::role).containsExactly("user", "assistant");
+		assertThat(session.messages().get(0).response()).isNull();
+		assertThat(session.messages().get(1).response().id()).isEqualTo("ans-1");
 		server.verify();
 	}
 
@@ -95,6 +105,10 @@ class CoachingChatClientTest {
 		assertThat(reply.status()).isEqualTo("needs_data");
 		assertThat(reply.wordingSource()).isEqualTo("template");
 		assertThat(reply.fallbackReason()).isEqualTo("no_ledger");
+		assertThat(reply.rows()).extracting(SpendingRow::envelope).containsExactly("외식", "교통비");
+		assertThat(reply.rows().get(0).totalKrw()).isEqualTo(45_000L);
+		assertThat(reply.totalKrw()).isEqualTo(57_000L);
+		assertThat(reply.chartHint()).isNull();
 		server.verify();
 	}
 
@@ -108,6 +122,13 @@ class CoachingChatClientTest {
 		assertThat(reply.isCoaching()).isTrue();
 		assertThat(reply.status()).isNull();
 		assertThat(reply.text()).contains("12만 원");
+		assertThat(reply.chartHint().periodStart()).isEqualTo("2026-09-01");
+		assertThat(reply.chartHint().purchase().amountKrw()).isEqualTo(300_000L);
+		assertThat(reply.chartHint().purchase().onDate()).isEqualTo("2026-09-28");
+		assertThat(reply.rows()).isNull();
+		assertThat(reply.numericRows().mode()).isEqualTo("what_if");
+		assertThat(reply.numericRows().envelopeSpend().get(0).p90Krw()).isEqualTo(240_000L);
+		assertThat(reply.numericRows().budgetRisk().get(0).pOverBudget()).isEqualTo(0.12);
 		server.verify();
 	}
 }

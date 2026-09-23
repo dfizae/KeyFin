@@ -7,6 +7,7 @@ import type { SpriteFrames } from "@/components/ui/sprite";
 // 벽·바닥 경계선(scene.ts FLOOR_POLYGON·SURFACES)은 이 그림을 픽셀로 다시 재서 얻었다.
 // 옛 그림(floor-default.png, 327:404)은 되돌릴 때를 위해 남겨 두었고 지금은 쓰지 않는다.
 export const ROOM_FLOOR = require("@/assets/sprites/floors/floor-tall.jpg");
+export const SEIZURE_STICKER = require("@/assets/sprites/room/seizure-sticker.png");
 export const CHARACTER_IDLE = require("@/assets/sprites/char1-idle.png");
 /** 입주 연출(PAGE-08)에서만 쓰는 환호 포즈 */
 export const CHARACTER_CELEBRATE = require("@/assets/sprites/char1-celebrate.png");
@@ -28,3 +29,9 @@ export const CHARACTER_FRAMES = {
   scan: { base: CHARACTER_SCAN },
   celebrate: { base: CHARACTER_CELEBRATE },
 } satisfies Record<string, SpriteFrames>;
+
+/**
+ * 코치 고양이(AI 챗봇). 방 씬(Skia)에 늘 앉아 있고 탭하면 코치 말풍선이 열린다 (2026-09-22 사용자 결정 — 옛 32pt 원형 아이콘 버튼을 대신한다).
+ * 원본 1254×1254 를 512×512 로 줄였다(그려지는 크기의 약 6배). 자리·크기는 features/room/scene.ts COACH_CAT_* 에 있다.
+ */
+export const COACH_CAT = require("@/assets/sprites/coach-cat.png");

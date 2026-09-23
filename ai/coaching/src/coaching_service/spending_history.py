@@ -8,7 +8,8 @@ from typing import Final, Literal, assert_never
 from coaching_service.chart_projection import ENVELOPES
 from coaching_service.schemas import Frozen, TransactionView
 
-_ENVELOPE_PATTERN: Final = "|".join(re.escape(name) for name in (*ENVELOPES, "외식비"))
+# 엔진 mapping.py 는 일상어 "외식비"·"식비"를 모두 "외식" 봉투로 접는다.
+_ENVELOPE_PATTERN: Final = "|".join(re.escape(name) for name in (*ENVELOPES, "외식비", "식비"))
 # 부분 키워드 일치는 가맹점·현금·제외 조건을 지워 전체 합계로 바꿀 수 있다.
 # 지원하는 문장 전체가 맞아야 집계하며, 나머지는 명확한 조건을 다시 요청한다.
 _QUERY: Final = re.compile(
@@ -19,10 +20,14 @@ _QUERY: Final = re.compile(
     rf"(?P<envelope>{_ENVELOPE_PATTERN})?(?:봉투)?(?:에서|으로|에|의|는|은)?"
     r"(?:(?:전체|총|누적)?(?:소비|지출|사용|결제)(?:액|금액|내역)?|쓴돈|쓴금액)?"
     r"(?:이|가|은|는|을|를)?(?:다시)?"
-    r"(?:얼마(?:나)?(?:썼(?:어|나요|지|니)|사용했(?:어|나요)|나왔(?:어|나요))?"
+    r"(?:얼마(?:나)?(?:썼(?:어|나요|지|니)|사용했(?:어|나요)|나왔(?:어|나요)"
+    r"|나갔(?:어|나요|지|니)|지출했(?:어|나요))?"
     r"|얼마(?:야|인가요|예요|지)|알려(?:줘|주세요)|보여(?:줘|주세요)|확인해(?:줘|주세요))"
     r"[?!.\uff1f\u3002]*"
 )
+# 채팅 말풍선에 붙는 한 문장짜리 정직성 문구. 전체 근거·범위는 아래 _COVERAGE가
+# coverage_caveat 구조화 필드로 그대로 보존해 앱이 작은 글씨·툴팁으로 노출할 수 있다.
+_COVERAGE_SHORT: Final = "연결된 확정 거래 기준이라 월 전체·전 계좌 합계와 다를 수 있어요."
 _COVERAGE: Final = (
     "연결된 거래에서 확인된 7봉투 소비만 집계했습니다. "
     "고정비·본인계좌 이체·카드 대금 정산·현금 인출·대출 상환과 취소·미확정·제외 거래는 포함하지 않습니다. "
@@ -136,7 +141,7 @@ def spending_answer(
             text="중복 거래 또는 소비 반영값의 불일치가 있어 원장 확인이 필요합니다.",
         )
     envelope = query.group("envelope")
-    envelope = "외식" if envelope == "외식비" else envelope
+    envelope = "외식" if envelope in ("외식비", "식비") else envelope
     matched = tuple(
         row
         for day, row in dated
@@ -170,7 +175,7 @@ def spending_answer(
     details = ", ".join(f"{row.envelope} {row.total_krw:,}원({row.count}건)" for row in rows)
     text = (
         f"{start}부터 {end}까지 연결된 확정 봉투 소비는 {total:,}원, {len(matched)}건입니다. "
-        f"봉투별 내역: {details}. {_COVERAGE}"
+        f"봉투별 내역: {details}. {_COVERAGE_SHORT}"
     )
     return SpendingSummary(
         status="answered",

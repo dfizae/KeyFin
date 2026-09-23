@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { CountUpAmount } from "@/components/ui/count-up-amount";
 import { FillBar } from "@/components/ui/fill-bar";
 import { Icon } from "@/components/ui/icon";
+import { KeyboardAvoidingView } from "@/components/ui/keyboard-avoiding-view";
 import { Screen, ScreenScrollView, useHeaderlessTop } from "@/components/ui/screen";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
@@ -79,14 +80,11 @@ function BudgetContent({ budget }: BudgetContentProps) {
   const { total, envelopes } = budget.data;
 
   return (
-    <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6">
-      {/* 남는 높이를 카드 위아래로 나눠 총액 카드가 위쪽 영역 가운데에 온다 — 화면이 길면 카드 밑이 휑해 보였다(사용자 결정 2026-09-20). */}
-      <View className="flex-grow justify-center gap-4">
-        {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
-        {/* 비상금은 봉투 밖에서 쓰는 돈이라 총액 카드 아래에 둔다 — 회전판은 하단에 그대로 붙어 있어야 한다 */}
-        <EmergencySection budgetId={budget.data.budgetId} emergency={budget.data.emergency} />
-      </View>
-      {/* 회전판은 하단 탭 바로 위에 붙는다(사용자 결정 2026-09-18) */}
+    // 비상금 금액 입력이 화면 아래쪽에 있어 키패드가 덮지 않게 밀어 올린다
+    <KeyboardAvoidingView className="flex-1">
+    <ScreenScrollView className="flex-1" contentContainerClassName="flex-grow gap-10 px-6" keyboardShouldPersistTaps="handled">
+      {/* 총액 카드 바로 아래에 회전판이 온다 — 하단에 붙어 있던 회전판과 비상금의 위아래를 바꿨다(사용자 요청 2026-09-23) */}
+      {total === null ? null : <TotalCard total={total} period={budgetPeriodLabel(budget.data)} />}
       <View className="gap-4">
         <SectionTitle heading="봉투별 잔액" count={envelopes.length} />
         {envelopes.length === 0 ? (
@@ -102,7 +100,13 @@ function BudgetContent({ budget }: BudgetContentProps) {
           </View>
         )}
       </View>
+      {/* 비상금은 봉투 밖에서 쓰는 돈이라 맨 아래에 둔다. 남는 높이는 위에 몰아 비상금이 화면 바닥 쪽에 붙는다.
+          탭 바에 너무 붙어 보여 아래 여백을 32 둔다(사용자 요청 2026-09-23) */}
+      <View className="flex-grow justify-end pb-8">
+        <EmergencySection budgetId={budget.data.budgetId} emergency={budget.data.emergency} />
+      </View>
     </ScreenScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -113,7 +117,7 @@ type EmergencySectionProps = {
 };
 
 /**
- * 비상금 가상 풀 (FR-BGT-09, P1). 봉투 밖에서 따로 쓰는 돈이라 총액 카드 아래에 둔다.
+ * 비상금 가상 풀 (FR-BGT-09, P1). 봉투 밖에서 따로 쓰는 돈이라 회전판 아래, 화면 맨 아래에 둔다(2026-09-23 회전판과 자리 바꿈).
  * 실제 계좌가 아니고 봉투 잔액·이체에 영향을 주지 않아 확인 창 없이 저장 버튼만 둔다.
  * 사용액은 주기 안 EMERGENCY 태그 거래 합(서버 값)이고, 넘겨 쓰면 남은 금액이 음수가 된다.
  */

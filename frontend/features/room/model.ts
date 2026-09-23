@@ -260,6 +260,22 @@ export function pickWaypoint({
   return null;
 }
 
+/**
+ * 고른 오브젝트 옆에 띄우는 말풍선(동작 버튼)의 좌상단. 단위는 부르는 쪽이 맞춘다(모두 캔버스 pt 든 모두 씬 단위든).
+ * 기본은 오브젝트 바로 아래 가운데다 — 위에 두면 손가락이 방금 고른 가구를 가린다. 아래로 넘치면 위로 올리고,
+ * 위아래 모두 자리가 없으면(화면만큼 큰 가구) 영역 안쪽 아래에 붙인다. 좌우는 영역 밖으로 나가지 않게 당긴다.
+ */
+export function placeBubble(target: SceneRect, bubble: SceneSize, bounds: SceneSize, gap = 8): ScenePoint {
+  const centered = target.x + target.width / 2 - bubble.width / 2;
+  const x = clamp(centered, gap, Math.max(gap, bounds.width - bubble.width - gap));
+
+  const below = target.y + target.height + gap;
+  if (below + bubble.height + gap <= bounds.height) return { x, y: below };
+  const above = target.y - gap - bubble.height;
+  if (above >= gap) return { x, y: above };
+  return { x, y: Math.max(gap, bounds.height - bubble.height - gap) };
+}
+
 /** 일정 속도(씬 단위/초)로 이동할 때 걸리는 시간(ms) */
 export function travelDurationMs(from: ScenePoint, to: ScenePoint, speed: number): number {
   return Math.round((distance(from, to) / speed) * 1000);
@@ -330,7 +346,7 @@ export type PlacedFurnitureDto = {
   positionX: number;
   positionY: number;
   layer: number;
-  /** 기본 가구 식별값(FRIDGE·SOFA·TV). 일반 가구는 null */
+  /** 기본 지급 상품 식별값(SOFA·TV·DINING_TABLE·COFFEE_TABLE). 그 외 상품은 null */
   defaultFurnitureType: string | null;
   furnitureType: FurnitureType | null;
   stickerAttached: boolean;
@@ -338,13 +354,15 @@ export type PlacedFurnitureDto = {
   canUnplace: boolean;
 };
 
-export const FURNITURE_TYPES = ["FRIDGE", "SOFA", "TV"] as const;
+export const FURNITURE_TYPES = ["SOFA", "TV", "DINING_TABLE", "COFFEE_TABLE"] as const;
 export type FurnitureType = (typeof FURNITURE_TYPES)[number];
 
 export type EquippedItem = { slotType: SlotType; itemId: number; assetKey: string };
 /** type 값 목록은 미확정(frontend-spec §6 #2). until 은 시간대 없는 KST 문자열 */
 export type AvatarReaction = { type: string; until: string };
+/** removableToday는 호환용 이름이며 현재 설치된 바닥 가구에 딱지가 남아 있는지를 뜻한다. 일일 제한은 없다. */
 export type RoomStickers = { count: number; total: number; removableToday: boolean };
+export type StickerRemoval = { userFurnitureId: number; stickerAttached: boolean; stickers: RoomStickers };
 
 export type Room = {
   equipped: EquippedItem[];
@@ -355,7 +373,7 @@ export type Room = {
   checkedInToday: boolean;
   /** P1 압류 딱지. 응답에 없으면 null */
   stickers: RoomStickers | null;
-  /** P1 초과 봉투 id. 응답에 없으면 빈 배열 */
+  /** 현재 확정 예산에서 지출 > 예산인 봉투 ID. 구버전 응답에 없으면 빈 배열 */
   overEnvelopeIds: number[];
 };
 

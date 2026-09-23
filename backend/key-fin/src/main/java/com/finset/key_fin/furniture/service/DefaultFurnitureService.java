@@ -32,7 +32,7 @@ public class DefaultFurnitureService {
 				.orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
 		var defaults = items.findByDefaultFurnitureTypeIsNotNullOrderByIdAsc();
 		if (defaults.size() != DefaultFurnitureType.values().length) {
-			throw new IllegalStateException("Default furniture catalogue must contain FRIDGE, SOFA and TV");
+			throw new IllegalStateException("Default furniture catalogue must contain SOFA, TV, DINING_TABLE and COFFEE_TABLE");
 		}
 		Map<Long, UserFurniture> owned = new HashMap<>();
 		var placed = new EnumMap<FurnitureType, UserFurniture>(FurnitureType.class);

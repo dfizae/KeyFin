@@ -46,10 +46,10 @@ describe("room store (편집 모드)", () => {
   it("완료하면 사본이 확정본이 된다", () => {
     const store = useRoomStore.getState();
     store.startEdit();
-    store.moveItem("fridge_default", { x: 70, y: 180 });
+    store.moveItem("dining_table_original", { x: 70, y: 180 });
     store.commitEdit();
     const state = useRoomStore.getState();
     expect(state.draft).toBeNull();
-    expect(state.layout.find((p) => p.itemId === "fridge_default")!.anchor).toEqual({ x: 70, y: 180 });
+    expect(state.layout.find((p) => p.itemId === "dining_table_original")!.anchor).toEqual({ x: 70, y: 180 });
   });
 });

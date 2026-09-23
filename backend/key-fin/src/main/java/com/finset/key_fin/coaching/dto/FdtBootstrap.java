@@ -9,7 +9,8 @@ public record FdtBootstrap(
 		@JsonProperty("as_of") String asOf,
 		@JsonProperty("transactions") List<FdtTransaction> transactions,
 		@JsonProperty("snapshot") FdtSnapshot snapshot,
-		@JsonProperty("envelopes") List<Envelope> envelopes
+		@JsonProperty("envelopes") List<Envelope> envelopes,
+		@JsonProperty("budget_start_day") Integer budgetStartDay
 ) {
 
 	public record Envelope(

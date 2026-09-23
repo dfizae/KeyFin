@@ -24,7 +24,7 @@ public class TransactionSyncScheduler {
 	private final TransactionSyncManager syncManager;
 	private final AtomicBoolean running = new AtomicBoolean(false);
 
-	@Scheduled(cron = "0 * * * * *", zone = "Asia/Seoul")
+	@Scheduled(cron = "${transaction.sync.cron}", zone = "Asia/Seoul")
 	public void syncAll() {
 		if (!running.compareAndSet(false, true)) {
 			log.warn("거래 동기화 건너뜀 — 이전 실행 진행 중");

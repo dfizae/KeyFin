@@ -153,11 +153,11 @@ describe("알림 설정 (GET·PUT /settings/notifications)", () => {
     expect(quietHoursLabel(null)).toBe("사용 안 함");
   });
 
-  it("목은 저장한 값을 그대로 돌려준다", () => {
+  it("목 PUT 은 서버처럼 본문 없이 저장만 하고, 다음 GET 이 저장한 값을 준다", () => {
     resetSettingsMocks();
-    const saved = updateNotificationSettingsMock(notificationDto({ notiCleanup: true, quietHoursStart: null, quietHoursEnd: null }));
-    expect(saved.notiCleanup).toBe(true);
-    expect(notificationSettingsMock()).toEqual(saved);
+    const request = notificationDto({ notiCleanup: true, quietHoursStart: null, quietHoursEnd: null });
+    expect(updateNotificationSettingsMock(request)).toBeUndefined();
+    expect(notificationSettingsMock()).toEqual(request);
     resetSettingsMocks();
   });
 });

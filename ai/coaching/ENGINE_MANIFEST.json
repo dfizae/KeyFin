@@ -19,7 +19,7 @@
     "fdt/schemas/event.json": "8daa83073dcaaa84162f048b626603d418088637cf3f4a9422c6a4da4b494fb1",
     "fdt/schemas/request.json": "71956f3bf9fd4d1d08a0cb27909abb46a0c66fd157ea21570851b262db281930",
     "fdt/schemas/result.json": "6aa163b7606b4c340e1794f66beba5026b8250f9923f885b8b3ab99067b4a18d",
-    "fdt/schemas/snapshot.json": "f3989975e52a358e503a79d09b4a25bf819b2b48a9084426038a7a5c1de81a49",
+    "fdt/schemas/snapshot.json": "d9e71c5ea318fffa762308810b639bfab217d27571f351e96e23b23cd720e602",
     "fdt/simulation.py": "67beb29e0db1745d291860e06cecb3e188c8219d97518529de84eff4a3275640",
     "fdt/store.py": "e57ee7582297449ee7073daf705a97fe2ac754c9c8d2bb326a30ad4d08714695",
     "fdt/util.py": "05929fba7b6601e973ae3c971d6dc968decc3bf45e8a424fa74a405da165440b"

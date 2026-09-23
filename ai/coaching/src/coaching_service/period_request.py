@@ -76,12 +76,17 @@ def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:  # n
 
 
 def turn_period(
-    reference: date, question: str, explicit: PeriodSpec | None, analysis: JsonDocument | None
+    reference: date,
+    question: str,
+    explicit: PeriodSpec | None,
+    analysis: JsonDocument | None,
+    budget_start_day: int = 1,
 ) -> ResolvedPeriod:
     """명시적 기간→질문→추가 분석 순으로 선택하되 서로 다른 종료일은 거부한다.
 
     7일은 기간 정보가 전혀 없을 때의 기본 정책이다. 출처를 응답에 남기며,
-    분석 horizon_days까지 같은 미래 구간을 가리켜야 계산을 시작한다.
+    분석 horizon_days까지 같은 미래 구간을 가리켜야 계산을 시작한다. 예산 주기는
+    ``budget_start_day`` (없으면 1일)로 정해 "이번 달" 기간이 설정 시작일을 따른다.
     """
     recognized = question_period(question, explicit=explicit is not None)
     source: PeriodSource = "default"
@@ -96,9 +101,9 @@ def turn_period(
         spec, source = recognized, "question"
     if explicit is not None:
         spec, source = explicit, "request"
-    resolved = resolve_period(reference, spec, source)
+    resolved = resolve_period(reference, spec, source, budget_start_day)
     if explicit is not None and recognized is not None:
-        parsed = resolve_period(reference, recognized, "question")
+        parsed = resolve_period(reference, recognized, "question", budget_start_day)
         if parsed.forecast_end != resolved.forecast_end:
             raise ServiceError("period_conflict")
     if (

@@ -78,6 +78,7 @@ class CoachingTwinClientTest {
 				.andExpect(jsonPath("$.transactions[0].amount_krw").value(4500))
 				.andExpect(jsonPath("$.snapshot.reserve_krw").value(300000))
 				.andExpect(jsonPath("$.envelopes[0].balance_krw").value(200000))
+				.andExpect(jsonPath("$.budget_start_day").value(15))
 				.andRespond(withStatus(HttpStatus.OK)
 						.contentType(MediaType.APPLICATION_JSON).body(IDENTITY_JSON));
 
@@ -124,7 +125,7 @@ class CoachingTwinClientTest {
 
 	@Test
 	void 거래가_없으면_보내기_전에_막는다() {
-		FdtBootstrap empty = new FdtBootstrap("2026-09-10", List.of(), snapshot(), List.of());
+		FdtBootstrap empty = new FdtBootstrap("2026-09-10", List.of(), snapshot(), List.of(), 1);
 
 		assertThatIllegalArgumentException().isThrownBy(() -> client.create(USER_ID, empty, "key-6"));
 		server.verify();
@@ -152,12 +153,12 @@ class CoachingTwinClientTest {
 				"1", "100", "LIVE", "CARD", "2026-09-10", "12:30:00", "식비", "카페",
 				"메가MGC커피 선릉역점", "26", 4_500L, "", "7", "AUTO", "NORMAL", "NONE");
 		return new FdtBootstrap("2026-09-10", List.of(transaction), snapshot(),
-				List.of(new FdtBootstrap.Envelope("외식", 200_000L)));
+				List.of(new FdtBootstrap.Envelope("외식", 200_000L)), 15);
 	}
 
 	private FdtSnapshot snapshot() {
 		return new FdtSnapshot("2026-09-10", "LIVE",
-				List.of(new FdtSnapshot.Account("9700", 5_458_220L)),
+				List.of(new FdtSnapshot.Account("9700", 5_458_220L, false)),
 				List.of(), List.of(), List.of(), 300_000L,
 				Map.of("외식", 280_000L), FdtSnapshot.Coverage.NONE);
 	}

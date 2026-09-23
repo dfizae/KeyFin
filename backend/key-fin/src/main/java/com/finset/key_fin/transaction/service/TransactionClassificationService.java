@@ -184,6 +184,10 @@ public class TransactionClassificationService {
 		throw invalidResponse();
 	}
 
+	public boolean isCardCanceled(FinanceCardTransaction financeTransaction) {
+		return cardStatus(financeTransaction.cardStatus()) == TransactionStatus.CANCELED;
+	}
+
 	private TransactionStatus cardStatus(String status) {
 		if (CARD_APPROVED.equals(status)) {
 			return TransactionStatus.NORMAL;

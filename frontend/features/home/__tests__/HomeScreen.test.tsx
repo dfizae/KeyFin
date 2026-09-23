@@ -13,8 +13,8 @@ import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
 import { ROOM_LABEL } from "@/features/home/components/CharacterRoom";
-import { COACH_PLACEHOLDER, cleanupLinkLabel } from "@/features/home/components/CoachBubble";
-import { HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
+import { COACHING_CHAT_ROUTE } from "@/features/home/components/HomeCoach";
+import { HOME_HELP_LABEL, HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
 import { SPOTLIGHT_LABEL } from "@/features/home/components/RoomGuideOverlay";
@@ -164,6 +164,21 @@ describe("HomeScreen", () => {
     expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
   });
 
+  it("이미 본 안내도 ? 버튼으로 처음부터 다시 볼 수 있다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
+
+    await fireEvent.press(await screen.findByRole("button", { name: HOME_HELP_LABEL }));
+    expect(screen.getByText(ROOM_GUIDE_STEPS[0].message)).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "그만 보기" }));
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
+  });
+
   it("안내 중에 리스트를 직접 누르면 안내를 끝내고 예산 시트를 연다", async () => {
     await SecureStore.deleteItemAsync(ROOM_GUIDE_KEY);
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
@@ -178,7 +193,7 @@ describe("HomeScreen", () => {
     await waitFor(async () => expect(await SecureStore.getItemAsync(ROOM_GUIDE_KEY)).toBe("1"));
   });
 
-  it("코치를 탭하면 임시 말풍선이 열리고, 미확정 결제가 있으면 정리 화면 링크를 보여준다", async () => {
+  it("코치(고양이)를 탭하면 코칭 대화 화면으로 간다", async () => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
     mockedGetPending.mockResolvedValue(toPendingTransactions(pendingTransactionsMock()));
@@ -187,9 +202,7 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "코치" }));
-    expect(await screen.findByText(COACH_PLACEHOLDER)).toBeTruthy();
-    await fireEvent.press(screen.getByRole("link", { name: cleanupLinkLabel(2) }));
-    expect(mockPush).toHaveBeenCalledWith("/transaction/pending");
+    expect(mockPush).toHaveBeenCalledWith(COACHING_CHAT_ROUTE);
   });
 
   it("입주 연출에서 넘어오면 방을 다 그릴 때까지 입주 문구를 이어서 보여 준다", async () => {
@@ -311,22 +324,22 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     const board = await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" });
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(screen.queryByText("봉투별 남은 금액")).toBeNull();
 
     await fireEvent.press(board);
-    expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
-    expect(screen.getByText("180,000원 · 36% 남음")).toBeTruthy();
+    expect(await screen.findByText("봉투별 남은 금액")).toBeTruthy();
+    expect(screen.getByText("9월 1일~30일")).toBeTruthy();
     expect(screen.getByLabelText("쇼핑 초과 8,000원 남음")).toBeTruthy();
     expect(screen.getByLabelText("외식 32,000원 남음")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "보드 닫기" }));
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(screen.queryByText("봉투별 남은 금액")).toBeNull();
 
     // 링크로 나가면 시트도 닫힌다 — 돌아왔을 때 시트가 열린 채 남지 않도록.
     await fireEvent.press(board);
     await fireEvent.press(await screen.findByRole("button", { name: "예산 탭에서 자세히" }));
     expect(mockPush).toHaveBeenCalledWith("/budget");
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(screen.queryByText("봉투별 남은 금액")).toBeNull();
     await waitForQueriesToSettle();
   });
 
@@ -380,7 +393,7 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
-    expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
+    expect(await screen.findByText("봉투별 남은 금액")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" }));
     expect(mockPush).toHaveBeenCalledWith("/payment/calendar");

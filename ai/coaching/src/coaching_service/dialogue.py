@@ -8,12 +8,15 @@ from zoneinfo import ZoneInfo
 
 import anyio
 
+from coaching_service.chart_contract import budget_period
 from coaching_service.chat_answers import (
     ChatAnswer,
     FinanceQuestion,
     knowledge_answer,
     missing_twin_answer,
     out_of_scope_answer,
+    period_clarification_answer,
+    purchase_clarification_answer,
 )
 from coaching_service.coaching import CoachingCore, coaching_writes, evidence_for
 from coaching_service.dialogue_decision import decide_dialogue
@@ -25,6 +28,8 @@ from coaching_service.fast_routes import (
     NaturalWhatIf,
     deterministic_analysis_route,
     deterministic_lookup_route,
+    merged_purchase_question,
+    merged_spending_question,
     natural_goal,
     natural_purchase,
     natural_what_if,
@@ -42,21 +47,28 @@ from coaching_service.knowledge_retrieval import is_followup
 from coaching_service.llm_contract import ChatMessage, EvidenceInput, FinanceWording, Routing
 from coaching_service.payments import Ledger
 from coaching_service.period_request import turn_period
+from coaching_service.periods import ResolvedPeriod
 from coaching_service.personal_contract import PersonalContext
 from coaching_service.personal_service import CONTEXT_KEY, personal_answer
 from coaching_service.repository import Mutation, document, write
 from coaching_service.schemas import (
+    BUDGET_CONFIG_KEY,
     AnswerReference,
+    BudgetConfig,
+    ChartHint,
+    ChartPurchaseHint,
     Coaching,
     JsonDocument,
     Message,
+    PendingClarification,
     ReviewRequest,
     Session,
     SessionRequest,
     Tone,
     TurnRequest,
+    TwinIdentity,
 )
-from coaching_service.spending_history import spending_answer
+from coaching_service.spending_history import SpendingSummary, spending_answer
 from coaching_service.store import Operation
 
 if TYPE_CHECKING:
@@ -101,6 +113,69 @@ def turn_numeric_request(
     return None
 
 
+def chart_purchase_hint(change: JsonDocument, period: ResolvedPeriod) -> ChartPurchaseHint | None:
+    """확정된 구매 change에서 차트 힌트를 만든다. 예산 월·미래 조건을 못 채우면 None.
+
+    앱이 이 힌트를 그대로 차트 요청의 ``purchase`` 로 보내면 422 없이 겹쳐 그리도록
+    기준일 이후·예산 월(``period_start`` 로 파생한 예산 주기) 안에 드는 구매만 싣는다.
+    """
+    envelope = change.root.get("envelope")
+    amount = change.root.get("amount_krw")
+    on_date_raw = change.root.get("date")
+    if not (isinstance(envelope, str) and isinstance(amount, int) and isinstance(on_date_raw, str)):
+        return None
+    try:
+        on_date = date.fromisoformat(on_date_raw)
+        window = budget_period(period.budget_month_start, period.reference_date)
+    except (ValueError, ServiceError):
+        return None
+    if not window.as_of < on_date <= window.horizon_end:
+        return None
+    return ChartPurchaseHint(envelope=envelope, amount_krw=amount, on_date=on_date)
+
+
+def forecast_chart_hint(
+    numeric_request: JsonDocument | None,
+    parsed_purchase: NaturalPurchase | None,
+    period: ResolvedPeriod,
+    question: str,
+    purchase: ChartPurchaseHint | None = None,
+) -> ChartHint | None:
+    """예측·구매검토 대화에만 같은 예산 월의 차트 요청 본문을 힌트로 덧붙인다.
+
+    두 번째 시뮬레이션이나 차트 쓰기 없이 대화가 이미 사용한 기준일·기간에서
+    파생한다. ``period_start`` 는 기준일이 속한 예산 월의 1일이라 그 기준일을
+    포함하는 유효한 예산 주기다. 기준일이 속한 예산 월에 남은 예측일이 없으면
+    (기준일이 월말 경계) 차트가 가리킬 미래 구간이 없어 힌트를 만들지 않는다.
+    구매검토 대화에서 확정한 예정 구매(``purchase``)가 있으면 함께 싣는다.
+    """
+    is_forecast = numeric_request is not None and numeric_request.root.get("mode") == "forecast"
+    if not (is_forecast or parsed_purchase is not None):
+        return None
+    if period.budget_forecast_end <= period.reference_date:
+        return None
+    return ChartHint(period_start=period.budget_month_start, question=question, purchase=purchase)
+
+
+def _select_cash_account(accounts: "list[JsonValue]") -> "dict[str, JsonValue] | None":
+    """Pick the single account a cash purchase should draw from, or None if ambiguous.
+
+    One real account is unambiguous. With several, the user already chose the
+    method (cash), so the remaining ambiguity is *which* account, not cash-vs-card:
+    resolve it to the designated income (주거래) account when exactly one carries
+    ``is_income`` true. Zero or several income accounts stays genuinely ambiguous
+    and fails closed. (Older twins without the ``is_income`` field keep the
+    single-account behaviour and fall through to the caller's fail-closed clarify.)
+    """
+    valid = [a for a in accounts if isinstance(a, dict) and isinstance(a.get("account_id"), str)]
+    if len(valid) == 1:
+        return valid[0]
+    income = [a for a in valid if a.get("is_income") is True]
+    if len(income) == 1:
+        return income[0]
+    return None
+
+
 def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit fail-closed payment boundary.
     purchase: NaturalPurchase, twin: JsonDocument, reference: date
 ) -> JsonDocument:
@@ -129,13 +204,20 @@ def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit
                 raise ServiceError("purchase_payment_method_required")
             use_card = len(cards) == 1
     if use_card and purchase.card_payment_date is None:
-        raise ServiceError("purchase_payment_method_required")
+        # A card payment (named, or inferred from a single-card snapshot) still
+        # needs its own settlement date; ask precisely for that rather than
+        # re-asking cash-vs-card, which only loops on a clean card phrasing.
+        raise ServiceError("purchase_card_payment_date_required")
     if purchase.date_token == "today":  # noqa: S105 - a calendar token, not a credential.
         purchase_date = reference
     elif purchase.date_token == "tomorrow":  # noqa: S105 - a calendar token, not a credential.
         purchase_date = reference + timedelta(days=1)
     elif purchase.date_token == "this_week":  # noqa: S105 - a calendar token, not a credential.
         purchase_date = reference
+    elif purchase.date_token == "next_week":  # noqa: S105 - a calendar token, not a credential.
+        # Mirrors ``this_week`` (which resolves to the reference day) shifted by one
+        # week, giving a concrete representative day for the coming week.
+        purchase_date = reference + timedelta(days=7)
     else:
         try:
             purchase_date = date.fromisoformat(purchase.date_token)
@@ -156,13 +238,33 @@ def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit
         change["card_id"] = card_id
         change["payment_date"] = purchase.card_payment_date
     else:
-        if len(accounts) != 1 or not isinstance(accounts[0], dict):
+        account = _select_cash_account(accounts)
+        if account is None:
             raise ServiceError("purchase_payment_method_required")
-        account_id = accounts[0].get("account_id")
+        account_id = account.get("account_id")
         if not isinstance(account_id, str):
             raise ServiceError("purchase_payment_method_required")
         change["account_id"] = account_id
     return JsonDocument(change)
+
+
+def resolve_purchase_or_clarify(
+    purchase: NaturalPurchase, twin: JsonDocument, reference: date
+) -> tuple[JsonDocument, ...] | ChatAnswer:
+    """Resolve one purchase into an FDT change tuple, or a 200 clarification answer.
+
+    A twin-snapshot ambiguity whose code has an agreed clarify sentence becomes a
+    ``ChatAnswer(status="needs_clarification")`` the caller records as a normal
+    turn; any other ``ServiceError`` without an agreed clarify sentence propagates
+    and keeps its existing 4xx contract.
+    """
+    try:
+        return (resolve_purchase_change(purchase, twin, reference),)
+    except ServiceError as error:
+        clarification = purchase_clarification_answer(error.code)
+        if clarification is None:
+            raise
+        return clarification
 
 
 def chat_history(session: Session, *, include_subject: bool = False) -> tuple[ChatMessage, ...]:
@@ -183,8 +285,77 @@ def chat_history(session: Session, *, include_subject: bool = False) -> tuple[Ch
     )
 
 
+def spending_chat_answer(
+    identity: TwinIdentity, route: Routing, summary: SpendingSummary
+) -> ChatAnswer:
+    """Render one confirmed-ledger spending summary as its typed ``ChatAnswer``.
+
+    Mirrors the engine-sourced needs_clarification/needs_data/answered contract:
+    ``wording_source="engine"``, no model call, the same value on ``rows`` and in
+    ``evidence.spending`` so first-class fields and evidence never disagree.
+    """
+    return ChatAnswer(
+        id=uuid4().hex,
+        answer_type="spending_history",
+        status=summary.status,
+        text=summary.text,
+        wording_source="engine",
+        model="not_called",
+        evidence=JsonDocument(
+            {
+                "identity": document(identity).root,
+                "routing": document(route).root,
+                "spending": summary.model_dump(mode="json"),
+            }
+        ),
+        rows=summary.rows,
+        total_krw=summary.total_krw,
+        created_at=time.time(),
+    )
+
+
+def merged_clarification_question(pending: PendingClarification, followup: str) -> str | None:
+    """Merge a bare follow-up into a stored clarification, or None to handle it fresh.
+
+    Only a follow-up that is a bare fragment answering the pending question merges;
+    a complete different turn returns None so the caller discards the stale context.
+    """
+    match pending.kind:
+        case "purchase":
+            return merged_purchase_question(pending.question, followup)
+        case "spending":
+            return merged_spending_question(pending.question, followup)
+        case unreachable:
+            assert_never(unreachable)
+
+
+def _pending_for(question: str, answer: Coaching | ChatAnswer) -> PendingClarification | None:
+    """Derive the next pending clarification from this turn's answer.
+
+    A purchase/spending needs_clarification stores the (possibly merged) question so
+    the next bare follow-up can merge; every other outcome returns None, which clears
+    any prior pending context (resolution or a superseding fresh turn).
+    """
+    if not (isinstance(answer, ChatAnswer) and answer.status == "needs_clarification"):
+        return None
+    if answer.answer_type == "purchase_review":
+        return PendingClarification(
+            kind="purchase", question=question, code=answer.fallback_reason or "purchase_review"
+        )
+    if answer.answer_type == "spending_history":
+        return PendingClarification(
+            kind="spending", question=question, code=answer.fallback_reason or "spending_clarification"
+        )
+    return None
+
+
 def save_turn(session: Session, question: str, answer: Coaching | ChatAnswer) -> Mutation:
-    """Commit the delivered answer and session text together, including retries."""
+    """Commit the delivered answer and session text together, including retries.
+
+    The pending-clarification context is written into the same session mutation as
+    the turn: set when this answer is a purchase/spending clarification, cleared
+    otherwise. Joining the single mutation keeps it idempotent with the recorded turn.
+    """
     match answer:
         case Coaching():
             response = AnswerReference(kind="coaching", id=answer.id)
@@ -200,7 +371,8 @@ def save_turn(session: Session, question: str, answer: Coaching | ChatAnswer) ->
                 *session.messages,
                 Message(role="user", content=question),
                 Message(role="assistant", content=answer.text, response=response),
-            )
+            ),
+            "pending_clarification": _pending_for(question, answer),
         }
     )
     # 참조만 먼저 저장하거나 별도 호출로 재생성하지 않아 재시도에도 원문과 ID가 일치한다.
@@ -275,6 +447,19 @@ class Dialogue:
             raise ServiceError("session_turn_limit", 409)
         return session
 
+    async def _budget_start_day(self, owner: str) -> int:
+        """저장된 예산 시작일을 읽어 기간 계산에 넘긴다. 없으면 1일로 폴백한다.
+
+        구버전 Twin(설정 이전 부트스트랩)에는 이 키가 없어 기존 1일 동작을 그대로
+        유지한다. 값은 부트스트랩에서 1~28로 검증돼 저장되므로 여기서는 신뢰한다.
+        """
+        stored = await anyio.to_thread.run_sync(
+            self.core.repository.store.load, owner, BUDGET_CONFIG_KEY
+        )
+        if stored is None:
+            return 1
+        return BudgetConfig.model_validate_json(stored).start_day
+
     async def _effective_tone(self, owner: str, request: TurnRequest) -> Tone | None:
         """Resolve the tone for a turn: an explicit request tone always wins.
 
@@ -289,11 +474,21 @@ class Dialogue:
             return None
         return PersonalContext.model_validate_json(stored).tone
 
-    async def turn(  # noqa: C901 - one durable turn orchestrates every admitted no-model shortcut in sequence.
+    async def turn(  # noqa: C901, PLR0915 - one durable turn orchestrates every admitted no-model shortcut in sequence.
         self, op: Operation, session_id: str, request: TurnRequest
     ) -> JsonDocument:
-        async def action() -> Mutation:
+        async def action() -> Mutation:  # noqa: C901, PLR0911, PLR0912, PLR0915 - each admitted no-model shortcut (now including the purchase clarifications and the pending-clarification merge) is one explicit boundary recorded in a single atomic mutation.
+            nonlocal request
             session = await self.active_session(op.owner, session_id)
+            pending = session.pending_clarification
+            if pending is not None and request.analysis is None:
+                # A bare follow-up answering the previous clarification is merged into
+                # the accumulated question and re-resolved by the same parser below; a
+                # complete different turn returns None and is handled fresh, and
+                # ``save_turn`` then clears or replaces the stale pending context.
+                merged = merged_clarification_question(pending, request.question)
+                if merged is not None:
+                    request = request.model_copy(update={"question": merged})
             history = chat_history(session)
             # A natural goal is accepted only when the parser found one exact KRW
             # amount.  It is carried as a local typed value rather than mutating the
@@ -301,23 +496,36 @@ class Dialogue:
             # analysis from an admitted natural-language shortcut.
             parsed_goal = natural_goal(request.question) if request.analysis is None else None
             parsed_what_if = natural_what_if(request.question) if request.analysis is None else None
-            # A purchase clarification is raised immediately, exactly like
-            # ``period_clarification_required``: a 4xx code, before any session
-            # mutation, twin load, or model call, never a guessed expense.
+            # A purchase clarification is handled before any twin load or model
+            # call, never a guessed expense. Agreed clarify codes return a normal
+            # 200 ``needs_clarification`` turn (recorded like spending); any code
+            # without an agreed sentence keeps the existing 4xx contract.
             parsed_purchase_outcome = natural_purchase(request.question) if request.analysis is None else None
             if isinstance(parsed_purchase_outcome, str):
-                raise ServiceError(parsed_purchase_outcome)
+                clarification = purchase_clarification_answer(parsed_purchase_outcome)
+                if clarification is None:
+                    raise ServiceError(parsed_purchase_outcome)
+                return save_turn(session, request.question, clarification)
             parsed_purchase: NaturalPurchase | None = (
                 parsed_purchase_outcome if isinstance(parsed_purchase_outcome, NaturalPurchase) else None
             )
             route, finance = await self._route_for_turn(
                 request, session, history, parsed_goal, parsed_what_if, parsed_purchase,
             )
-            standalone = await self.standalone_answer(
-                op.owner, request, route,
-                chat_history(session, include_subject=True) if route.mode == "finance" else history,
-                finance,
-            )
+            try:
+                standalone = await self.standalone_answer(
+                    op.owner, request, route,
+                    chat_history(session, include_subject=True) if route.mode == "finance" else history,
+                    finance,
+                )
+            except ServiceError as error:
+                # A period-family clarification on the chat turn becomes the same 200
+                # needs_clarification turn as the purchase codes; a code without an
+                # agreed sentence (never a validation/chart code) keeps its 4xx contract.
+                clarification = period_clarification_answer(error.code)
+                if clarification is None:
+                    raise
+                return save_turn(session, request.question, clarification)
             if standalone is not None:
                 # Keep actual router adoption separate from answer generation and HTTP success.
                 standalone = standalone.model_copy(update={
@@ -387,28 +595,31 @@ class Dialogue:
                     await anyio.to_thread.run_sync(self.core.engine.transactions, twin),
                     request.question,
                 )
-                answer = ChatAnswer(
-                    id=uuid4().hex,
-                    answer_type="spending_history",
-                    status=summary.status,
-                    text=summary.text,
-                    wording_source="engine",
-                    model="not_called",
-                    evidence=JsonDocument(
-                        {
-                            "identity": document(identity).root,
-                            "routing": document(route).root,
-                            "spending": summary.model_dump(mode="json"),
-                        }
-                    ),
-                    created_at=time.time(),
+                return save_turn(session, request.question, spending_chat_answer(identity, route, summary))
+            budget_start_day = await self._budget_start_day(op.owner)
+            try:
+                period = turn_period(
+                    reference, request.question, request.period, request.analysis, budget_start_day,
                 )
-                return save_turn(session, request.question, answer)
-            period = turn_period(reference, request.question, request.period, request.analysis)
+            except ServiceError as error:
+                clarification = period_clarification_answer(error.code)
+                if clarification is None:
+                    raise
+                if parsed_purchase is None:
+                    # A genuine period ambiguity/conflict on the chat turn becomes a 200
+                    # needs_clarification turn instead of a 503, like the purchase codes.
+                    return save_turn(session, request.question, clarification)
+                # A purchase supplies its own authoritative date token (다음주/내일/오늘/
+                # ISO), which the period parser treats as ambiguous prose. The purchase
+                # date is authoritative, so derive the review window from the request's
+                # explicit period/analysis (default horizon otherwise) without the
+                # purchase's own timing prose, rather than re-asking for a period.
+                period = turn_period(reference, "", request.period, request.analysis, budget_start_day)
             today = datetime.now(ZoneInfo("Asia/Seoul")).date()
             numeric_request = turn_numeric_request(
                 request.analysis, parsed_goal, parsed_what_if, route, period.forecast_days,
             )
+            purchase_hint: ChartPurchaseHint | None = None
             if numeric_request is not None:
                 receipt = await self.core.numeric_receipt(
                     twin, identity, numeric_request, period, replay=reference != today
@@ -416,7 +627,14 @@ class Dialogue:
             else:
                 changes: tuple[JsonDocument, ...] = ()
                 if parsed_purchase is not None:
-                    changes = (resolve_purchase_change(parsed_purchase, twin, reference),)
+                    # A twin-snapshot ambiguity (e.g. ``purchase_payment_method_required``)
+                    # becomes the same 200 ``needs_clarification`` turn as the text-only
+                    # codes; a code without an agreed sentence keeps its 4xx contract.
+                    resolved = resolve_purchase_or_clarify(parsed_purchase, twin, reference)
+                    if isinstance(resolved, ChatAnswer):
+                        return save_turn(session, request.question, resolved)
+                    changes = resolved
+                    purchase_hint = chart_purchase_hint(resolved[0], period)
                 receipt = await self.core.receipt(
                     twin,
                     ReviewRequest(
@@ -449,6 +667,13 @@ class Dialogue:
             evidence = bounded_evidence(receipt, request.question, history)
             coaching = await self.core.compose(
                 receipt, evidence, tone=await self._effective_tone(op.owner, request)
+            )
+            coaching = coaching.model_copy(
+                update={
+                    "chart_hint": forecast_chart_hint(
+                        numeric_request, parsed_purchase, period, request.question, purchase_hint
+                    )
+                }
             )
             return save_turn(session, request.question, coaching)
 

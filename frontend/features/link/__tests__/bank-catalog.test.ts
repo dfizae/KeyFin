@@ -1,4 +1,4 @@
-import { BANK_CATALOG, bankInitial, bankLogo, bankLogoByName } from "@/features/link/bank-catalog";
+import { BANK_CATALOG, CARD_ISSUER_CATALOG, bankInitial, bankLogo, bankLogoByName } from "@/features/link/bank-catalog";
 
 describe("BANK_CATALOG", () => {
   it("금융망 은행 코드 18개를 담는다", () => {
@@ -31,6 +31,13 @@ describe("bankLogoByName", () => {
     expect(bankLogoByName("국민카드")).toBe(bankLogo("004"));
     expect(bankLogoByName("KB국민카드")).toBe(bankLogo("004"));
     expect(bankLogoByName("하나카드")).toBe(bankLogo("081"));
+  });
+
+  it("은행이 없는 카드사는 카드사 로고를 쓴다", () => {
+    const samsung = CARD_ISSUER_CATALOG.find((issuer) => issuer.name === "삼성카드")?.logo;
+    expect(samsung).toBeDefined();
+    expect(bankLogoByName("삼성카드")).toBe(samsung);
+    expect(bankLogoByName("삼성 카드")).toBe(samsung);
   });
 
   it("모르는 발급사와 로고 없는 은행은 폴백 타일로 둔다", () => {

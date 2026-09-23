@@ -5,13 +5,13 @@ import type { Placement } from "@/features/room/scene";
 import { ContractMismatchError } from "@/lib/contract";
 
 export type FurniturePlacementsRequest = { placements: FurniturePlacementEntry[] };
-const TYPE_NAMES = { FRIDGE: "냉장고", SOFA: "소파", TV: "TV" } as const;
+const TYPE_NAMES = { SOFA: "소파", TV: "TV", DINING_TABLE: "식탁", COFFEE_TABLE: "커피테이블" } as const;
 
 export function validatePlacements(request: FurniturePlacementsRequest, owned: readonly UserFurniture[]): void {
   if (request.placements.length > 100) throw new ApiError(400, "COMMON_001", "가구는 최대 100개까지 배치할 수 있어요.");
   const byId = new Map(owned.map((furniture) => [furniture.userFurnitureId, furniture]));
   const ids = new Set<number>();
-  const counts = { FRIDGE: 0, SOFA: 0, TV: 0 };
+  const counts = { SOFA: 0, TV: 0, DINING_TABLE: 0, COFFEE_TABLE: 0 };
   for (const placement of request.placements) {
     const id = placement.userFurnitureId;
     if (!Number.isSafeInteger(id) || id <= 0 || ids.has(id) || !validPlacementFields(placement)) {

@@ -4,7 +4,7 @@ import type { AnchorRatio, PlacementDirection, SceneSize, Surface } from "@/feat
 
 /**
  * 가구 정의 (2026-09-21 새 가구로 교체 — 사용자 결정). 서버 items.asset_key 가 곧 가구 id 다.
- * 구성은 백엔드 V20__seed_furniture_catalog.sql 의 판매 가구 56종 + 기본 가구 그림으로 쓰는 오리지널 3종(소파·냉장고·TV)이고
+ * 구성은 백엔드 V20 카탈로그와 소파·냉장고·TV 오리지널 그림이며, V24 이후 식탁·커피테이블 오리지널도 기본 지급이다.
  * 이름도 V20 값이다. 원본 에셋의 탁상 소품 10종·작은 화분 4종은 서버 상품이 아니고 앞으로도 넣지 않아 뺐다(사용자 결정 2026-09-21).
  * - 그림은 방향별로 한 장씩이다(furniture-sprites.ts). 왼쪽 벽을 등진 그림이 FRONT_RIGHT, 오른쪽 벽을 등진 그림이 FRONT_LEFT 다.
  *   두 장은 좌우 반전이 아니라 따로 렌더된 그림이라 빛·그림자 방향이 같다 — 방 꾸미기의 '방향 바꾸기'는 그림을 뒤집지 않고 바꿔 끼운다.
@@ -22,6 +22,11 @@ import type { AnchorRatio, PlacementDirection, SceneSize, Surface } from "@/feat
 /** 상점 선택창의 가구 분류. 서버에는 없는 클라이언트 분류이며 이름은 shop/catalog.ts 가 붙인다 */
 export const FURNITURE_GROUPS = ["bed", "sofa", "table", "chair", "storage", "appliance", "wall", "decor", "rug", "plant"] as const;
 export type FurnitureGroup = (typeof FURNITURE_GROUPS)[number];
+
+/** 선택창 키처럼 밖에서 온 문자열이 가구 분류인지 (상점 가구 탭의 분류 선택창) */
+export function isFurnitureGroup(value: string): value is FurnitureGroup {
+  return (FURNITURE_GROUPS as readonly string[]).includes(value);
+}
 
 /** 서버 slotType. 바닥 가구는 바닥 격자, 벽 장식은 두 벽 중 한 곳에 놓인다 */
 export type FurnitureSlot = "FLOOR" | "WALL";
@@ -161,8 +166,8 @@ const SHAPES: Record<ColoredKind | SingleItem, Shape> = {
 };
 
 /**
- * 서버 기본 가구(백엔드 V15, 가입 시 지급·설치되고 치울 수 없다). 새 그림의 오리지널 색을 쓴다(사용자 결정 2026-09-21).
- * 같은 그림의 `*_original` 은 상점에서 팔지 않는다 — 모두가 이미 가진 가구와 똑같아 보여서다(api/mocks/shop.ts).
+ * V15에서 사용한 서버 assetKey 별칭. V24 이후 fridge_default는 기존 보유자를 위한 일반 가구로 유지한다.
+ * 소파·TV는 이 별칭으로, 식탁·커피테이블은 *_original 키로 기본 지급한다. 비판매 키는 api/mocks/shop.ts에서 관리한다.
  */
 const DEFAULT_ITEMS = {
   sofa_default: { name: "소파", kind: "sofa", sprites: FURNITURE_SPRITES.sofa_original },
