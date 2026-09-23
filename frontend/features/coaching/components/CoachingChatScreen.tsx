@@ -262,17 +262,21 @@ type ChatComposerProps = {
   tooLong: boolean;
 };
 
+// 입력칸이 화면 바닥에 너무 붙어 있어(Android edge-to-edge 는 시스템 내비 바와도 겹친다) 아래 여백을 16 → 32pt 로 올렸다(사용자 요청 2026-09-23).
+// 입력칸은 보내기 버튼과 같은 높이(h-touch)로 가로 가운데를 맞추고, 여러 줄 입력의 placeholder 는 Android 에서 위로 붙어 세로 가운데로 잡는다.
+// placeholder 는 기본(50%)보다 흐리게 30% 로 (같은 날 요청).
 function ChatComposer({ value, onChange, onSubmit, disabled, sending, tooLong }: ChatComposerProps) {
   return (
-    <View className="gap-1 border-t border-border bg-background px-6 pb-4 pt-3">
-      <View className="flex-row items-end gap-2">
+    <View className="gap-1 border-t border-border bg-background px-6 pb-8 pt-3">
+      <View className="flex-row items-center gap-2">
         <Input
-          className="max-h-32 flex-1"
+          className="h-touch max-h-32 flex-1 placeholder:text-card-foreground/30"
           value={value}
           onChangeText={onChange}
           placeholder="이번 달 외식 얼마 남았어?"
           accessibilityLabel={CHAT_INPUT_LABEL}
           multiline
+          textAlignVertical="center"
           maxLength={CHAT_MESSAGE_MAX_LENGTH}
           editable={!sending}
           returnKeyType="send"

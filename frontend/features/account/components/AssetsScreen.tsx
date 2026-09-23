@@ -124,17 +124,23 @@ function AssetsScreen() {
 
 // Pencil AccountItem (w4jgr1): 흰 카드(tint 배경 위, 2026-09-16). 송금 버튼 대신 로고 타일과 마스킹 번호를 둔다.
 // 별칭이 있으면 제목으로 올리고 은행명은 아래로 내린다. 수입 계좌에는 뱃지를 단다.
+// 행을 누르면 그 계좌로 거른 거래 내역(GET /transactions?accountId=)으로 간다(사용자 요청 2026-09-23) —
+// 은행별 상세 내역 API 는 백엔드가 따로 만들기로 해 나오면 목적지만 바꾼다.
 function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
+  const router = useRouter();
   if (accounts.length === 0) {
     return <EmptyState icon={WalletMinimal} title="연결된 계좌가 없어요" className="py-6" />;
   }
   return (
     <View className="gap-2">
       {accounts.map((account) => (
-        <View
+        <Pressable
           key={account.accountId}
-          className="flex-row items-center gap-3 rounded-lg bg-card p-4 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none"
+          onPress={() => router.push({ pathname: TRANSACTIONS_ROUTE, params: { accountId: String(account.accountId) } })}
+          className="flex-row items-center gap-3 rounded-lg bg-card p-4 shadow shadow-black/10 active:opacity-80 dark:border dark:border-border dark:shadow-none"
           accessible
+          accessibilityRole="button"
+          accessibilityHint="이 계좌의 거래 내역을 엽니다"
           accessibilityLabel={[
             account.alias ?? account.bankName,
             account.isIncome ? "수입 계좌" : null,
@@ -163,7 +169,8 @@ function AccountList({ accounts }: { accounts: LinkedAccount[] }) {
           <Text className="text-amount-sm tabular-nums text-foreground" maxFontSizeMultiplier={1.3}>
             {formatKRW(account.balance)}
           </Text>
-        </View>
+          <Icon as={ChevronRight} size={18} className="text-card-foreground" />
+        </Pressable>
       ))}
     </View>
   );

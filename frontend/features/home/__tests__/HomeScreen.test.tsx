@@ -309,22 +309,22 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     const board = await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" });
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(screen.queryByText("봉투별 남은 금액")).toBeNull();
 
     await fireEvent.press(board);
-    expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
-    expect(screen.getByText("180,000원 · 36% 남음")).toBeTruthy();
+    expect(await screen.findByText("봉투별 남은 금액")).toBeTruthy();
+    expect(screen.getByText("9월 1일~30일")).toBeTruthy();
     expect(screen.getByLabelText("쇼핑 초과 8,000원 남음")).toBeTruthy();
     expect(screen.getByLabelText("외식 32,000원 남음")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "보드 닫기" }));
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(screen.queryByText("봉투별 남은 금액")).toBeNull();
 
     // 링크로 나가면 시트도 닫힌다 — 돌아왔을 때 시트가 열린 채 남지 않도록.
     await fireEvent.press(board);
     await fireEvent.press(await screen.findByRole("button", { name: "예산 탭에서 자세히" }));
     expect(mockPush).toHaveBeenCalledWith("/budget");
-    expect(screen.queryByText("9월 1일~30일 예산 보드")).toBeNull();
+    expect(screen.queryByText("봉투별 남은 금액")).toBeNull();
     await waitForQueriesToSettle();
   });
 
@@ -378,7 +378,7 @@ describe("HomeScreen", () => {
     await layoutRoom();
 
     await fireEvent.press(await screen.findByRole("button", { name: "예산 보드, 9월 1일~30일 36% 남음" }));
-    expect(await screen.findByText("9월 1일~30일 예산 보드")).toBeTruthy();
+    expect(await screen.findByText("봉투별 남은 금액")).toBeTruthy();
 
     await fireEvent.press(screen.getByRole("button", { name: "출금 캘린더, 9월 15일 월세, 준비 부족" }));
     expect(mockPush).toHaveBeenCalledWith("/payment/calendar");

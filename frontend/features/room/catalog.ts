@@ -23,6 +23,11 @@ import type { AnchorRatio, PlacementDirection, SceneSize, Surface } from "@/feat
 export const FURNITURE_GROUPS = ["bed", "sofa", "table", "chair", "storage", "appliance", "wall", "decor", "rug", "plant"] as const;
 export type FurnitureGroup = (typeof FURNITURE_GROUPS)[number];
 
+/** 선택창 키처럼 밖에서 온 문자열이 가구 분류인지 (상점 가구 탭의 분류 선택창) */
+export function isFurnitureGroup(value: string): value is FurnitureGroup {
+  return (FURNITURE_GROUPS as readonly string[]).includes(value);
+}
+
 /** 서버 slotType. 바닥 가구는 바닥 격자, 벽 장식은 두 벽 중 한 곳에 놓인다 */
 export type FurnitureSlot = "FLOOR" | "WALL";
 

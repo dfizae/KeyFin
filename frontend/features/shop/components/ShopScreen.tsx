@@ -13,24 +13,22 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { roomKeys } from "@/features/room/api/queries";
-import { furnitureGroupOf } from "@/features/room/catalog";
+import { furnitureGroupOf, isFurnitureGroup } from "@/features/room/catalog";
+import type { FurnitureGroup } from "@/features/room/catalog";
 import { EDIT_FROM_SHOP } from "@/features/room/components/RoomEditScreen";
 import { isOutfitKey } from "@/features/room/outfits";
 import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
 import { useCoinBalance, usePurchaseShopItem, useShopItems } from "@/features/shop/api/queries";
-import { SHOP_FURNITURE_GROUPS, shopCategoryIcon, shopItemSprite, shopSlotLabel } from "@/features/shop/catalog";
+import { SHOP_FURNITURE_GROUPS, shopCategoryIcon, shopItemSprite } from "@/features/shop/catalog";
 import { shopPurchaseErrorMessage } from "@/features/shop/errors";
 import {
   canBuyShopItem,
   coinCountLabel,
-  hasUnknownSlotItem,
-  SHOP_DEFAULT_FILTER,
   shopCategoryFilterKey,
   shopGroupFilterKey,
   shopGroupsWithItems,
   shopItemsForFilter,
   shopPriceLabel,
-  shopSlotFilterKey,
   type ShopFilterKey,
   type ShopItem,
 } from "@/features/shop/model";
@@ -45,27 +43,33 @@ const ROOM_EDIT_ROUTE = "/room/edit";
 const SPRITE_STYLE = { width: 72, height: 72 } as const;
 /** 의상 세트 그림은 상·하의·신발이 가로로 놓여 있어(512×208) 정사각 자리에 넣으면 옷이 너무 작아진다 */
 const OUTFIT_SPRITE_STYLE = { width: "100%", height: 72 } as const;
-const FILTER_TITLE = "종류";
+const GROUP_TITLE = "분류";
+const ALL_GROUPS_KEY = "all";
+
+/** 옷·가구 탭 (사용자 요청 2026-09-23 "옷, 가구 탭 구분 확실히" — 선택창 한 개 안의 구역 제목만으로는 둘이 갈라져 보이지 않았다) */
+type ShopTab = "AVATAR" | "FURNITURE";
+const SHOP_TABS: readonly { key: ShopTab; label: string }[] = [
+  { key: "AVATAR", label: "옷" },
+  { key: "FURNITURE", label: "가구" },
+];
 
 /**
- * 선택창 목록 — 세트와 가구를 구역으로 나누고, 가구는 '전체' 아래에 분류(침대·소파 … 식물)를 둔다.
- * 분류는 파는 상품이 있는 것만 보인다(사용자 요청 2026-09-21 '가구 카테고리', 벽·바닥 두 줄에서 바꿈).
- * 옷은 세트 한 벌이라 부위로 나누지 않으므로 세트 구역은 한 줄이다 (사용자 결정 2026-09-21).
- * 모르는 부위 상품이 오면 '기타'를 덧붙여 그 상품도 볼 수 있게 한다.
+ * 가구 탭의 분류 선택창 — '가구 전체' 아래에 분류(침대·소파 … 식물). 파는 상품이 있는 분류만 보인다(사용자 요청 2026-09-21).
+ * 옷은 세트 한 벌이라 부위로 나누지 않으므로 옷 탭에는 선택창이 없다 (사용자 결정 2026-09-21).
+ * 부위(slot)를 모르는 상품도 카테고리는 있어 두 탭 중 한쪽 '전체'에 그대로 보인다 (규칙 90).
  */
-function filterOptions(items: readonly ShopItem[]): SelectOption[] {
+function groupOptions(items: readonly ShopItem[]): SelectOption[] {
   const present = new Set(shopGroupsWithItems(items, SHOP_FURNITURE_GROUPS.map(({ group }) => group), furnitureGroupOf));
-  const options: SelectOption[] = [
-    { key: shopCategoryFilterKey("AVATAR"), label: "세트", section: "옷" },
-    { key: shopCategoryFilterKey("FURNITURE"), label: "가구 전체", section: "가구" },
-    ...SHOP_FURNITURE_GROUPS.filter(({ group }) => present.has(group)).map(({ group, label, section }) => ({
-      key: shopGroupFilterKey(group),
-      label,
-      section,
-    })),
+  return [
+    { key: ALL_GROUPS_KEY, label: "가구 전체" },
+    ...SHOP_FURNITURE_GROUPS.filter(({ group }) => present.has(group)).map(({ group, label, section }) => ({ key: group, label, section })),
   ];
-  if (hasUnknownSlotItem(items)) options.push({ key: shopSlotFilterKey("UNKNOWN"), label: shopSlotLabel("UNKNOWN"), section: "기타" });
-  return options;
+}
+
+/** 탭·분류 → 목록 필터 값. 옷 탭은 옷 전체, 가구 탭은 분류가 있으면 그 분류, 없으면 가구 전체 */
+function filterKeyOf(tab: ShopTab, group: FurnitureGroup | null): ShopFilterKey {
+  if (tab === "AVATAR") return shopCategoryFilterKey("AVATAR");
+  return group === null ? shopCategoryFilterKey("FURNITURE") : shopGroupFilterKey(group);
 }
 
 /**
@@ -82,12 +86,14 @@ function ShopScreen() {
   const items = useShopItems();
   const balance = useCoinBalance();
   const purchase = usePurchaseShopItem();
-  const [filterKey, setFilterKey] = React.useState<ShopFilterKey>(SHOP_DEFAULT_FILTER);
+  const [tab, setTab] = React.useState<ShopTab>("AVATAR");
+  /** 가구 탭의 분류. null 은 가구 전체. 탭을 옮겨도 남겨 두어 가구 탭으로 돌아오면 보던 분류가 그대로다 */
+  const [group, setGroup] = React.useState<FurnitureGroup | null>(null);
   const [target, setTarget] = React.useState<ShopItem | null>(null);
   const [bought, setBought] = React.useState<ShopItem | null>(null);
 
   const all = items.data ?? [];
-  const shown = shopItemsForFilter(all, filterKey, furnitureGroupOf);
+  const shown = shopItemsForFilter(all, filterKeyOf(tab, group), furnitureGroupOf);
 
   const openPurchase = (item: ShopItem) => {
     purchase.reset();
@@ -138,14 +144,32 @@ function ShopScreen() {
         right={<CoinBadge balance={balance.data} pending={balance.isPending} />}
       />
 
-      <View className="flex-row px-6 pb-4">
-        <FilterSelect
-          title={FILTER_TITLE}
-          options={filterOptions(all)}
-          selectedKey={filterKey}
-          onSelect={(key) => setFilterKey(key as ShopFilterKey)}
-        />
+      {/* 자산 탭(계좌·카드)과 같은 탭 모양. 고른 탭은 primary 로 채워 어느 쪽인지 한눈에 보인다 */}
+      <View className="flex-row gap-2 px-6 pb-3" accessibilityRole="tablist">
+        {SHOP_TABS.map(({ key, label }) => (
+          <Pressable
+            key={key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: tab === key }}
+            onPress={() => setTab(key)}
+            className={cn("h-10 flex-1 items-center justify-center rounded-md", tab === key ? "bg-primary" : "bg-accent")}
+          >
+            <Text className={cn("text-label", tab === key ? "text-primary-foreground" : "text-card-foreground")}>{label}</Text>
+          </Pressable>
+        ))}
       </View>
+      {tab === "FURNITURE" ? (
+        <View className="flex-row px-6 pb-4">
+          <FilterSelect
+            title={GROUP_TITLE}
+            options={groupOptions(all)}
+            selectedKey={group ?? ALL_GROUPS_KEY}
+            onSelect={(key) => setGroup(isFurnitureGroup(key) ? key : null)}
+          />
+        </View>
+      ) : (
+        <View className="pb-1" />
+      )}
 
       {items.isPending ? (
         <ShopSkeleton />

@@ -32,6 +32,8 @@ const OVERLAY = { position: "absolute", top: 0, left: 0, right: 0, zIndex: 10 } 
  * tint 배경 위에 탭바와 짝이 되는 흰 면이다 — 상태바 영역까지 직접 칠하고(라우트에 SafeAreaView 를 두지 않는다),
  * 하단 보더 + 아래 그림자(다크는 보더만), 본문과는 24 를 띄운다(2026-09-16 사용자 결정).
  * 제목 행은 상태바 아래 80 높이(`min-h-20`)에 세로 가운데 — 40 이 좁다는 피드백으로 두 배(2026-09-16).
+ * 뒤로가기 화살표는 44×44 상자 가운데에 두어 제목 글자와 같은 가로선에 놓이고(2026-09-23 코치 화면에서 어긋나 보인다는 피드백) 터치 영역도 44 가 된다.
+ * 상자 왼쪽을 10 만큼 당겨 화살표 자체는 예전처럼 좌우 여백 24 자리에 온다.
  *
  * `Screen` 안에서는 본문 위에 떠 있다가 스크롤하면 투명해지고 제목·뒤로가기도 같이 사라진다. 맨 위로 돌아오면 다시 나타난다.
  * 그동안 헤더 자리는 같은 높이의 빈 공간이 흐름에 남아 있어, 스크롤이 없는 상태에서도 배치가 같다.
@@ -66,7 +68,12 @@ function ScreenHeader({ title, onBack, right, children, flat = false, className 
       {children ?? (
         <View className="flex-row items-center gap-3">
           {onBack === undefined ? null : (
-            <Pressable accessibilityRole="button" accessibilityLabel="뒤로" hitSlop={10} onPress={onBack}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="뒤로"
+              onPress={onBack}
+              className="-ml-2.5 h-touch w-touch items-center justify-center"
+            >
               <Icon as={ChevronLeft} size={24} className="text-foreground" />
             </Pressable>
           )}
