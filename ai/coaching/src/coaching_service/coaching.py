@@ -14,6 +14,7 @@ from coaching_service.llm_contract import EvidenceInput, Judgment, Routing, Word
 from coaching_service.llm_prompt import TEMPLATE_TEXT
 from coaching_service.numeric_rendering import numeric_rows_for, purchase_verdict_text
 from coaching_service.periods import ResolvedPeriod, ThroughDate, resolve_period
+from coaching_service.persona import Persona, strip_bold
 from coaching_service.rendering import authoritative_text, deterministic_advice, envelope_balance_table
 from coaching_service.repository import Repository, write
 from coaching_service.request_timing import measure_fdt, run_measured_fdt
@@ -48,7 +49,12 @@ class LanguageModel(Protocol):
 
 class CoachingCore:
     def __init__(
-        self, repository: Repository, model: LanguageModel, *, fdt_max_concurrency: int = 2
+        self,
+        repository: Repository,
+        model: LanguageModel,
+        *,
+        fdt_max_concurrency: int = 2,
+        persona: Persona = "plain",
     ) -> None:
         """Keep the FDT worker limit explicit and independently configurable.
 
@@ -60,6 +66,7 @@ class CoachingCore:
             raise ValueError("fdt_max_concurrency_out_of_range")
         self.repository: Repository = repository
         self.model: LanguageModel = model
+        self.persona: Persona = persona
         self.engine: EngineAdapter = EngineAdapter()
         self.engine_limit: anyio.CapacityLimiter = anyio.CapacityLimiter(fdt_max_concurrency)
 
@@ -235,7 +242,7 @@ def supplementary_evidence(evidence: EvidenceInput, answer_text: str) -> Evidenc
             question=evidence.question,
             history=evidence.history[-2:],
             facts_json=JsonDocument(
-                {"basis": "displayed_receipt", "authoritative_answer": answer_text}
+                {"basis": "displayed_receipt", "authoritative_answer": strip_bold(answer_text)}
             ).model_dump_json(),
         )
     except ValidationError:

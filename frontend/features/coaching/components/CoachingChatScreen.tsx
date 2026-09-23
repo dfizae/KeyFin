@@ -12,6 +12,7 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { useChatHistory, useSendChatMessage } from "@/features/coaching/api/queries";
+import { boldSegments } from "@/features/coaching/boldSegments";
 import { CoachingBalanceTable } from "@/features/coaching/components/CoachingBalanceTable";
 import { CoachingNumericTable } from "@/features/coaching/components/CoachingNumericTable";
 import { CoachingSpendingTable } from "@/features/coaching/components/CoachingSpendingTable";
@@ -225,7 +226,15 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
   return (
     <CoachReply wide={hasTable}>
       <Text className="text-body text-foreground">
-        {message.content}
+        {boldSegments(message.content).map((segment, index) =>
+          segment.bold ? (
+            <Text key={index} className="font-bold">
+              {segment.text}
+            </Text>
+          ) : (
+            segment.text
+          ),
+        )}
       </Text>
       <CoachingSpendingTable rows={message.rows} totalKrw={message.totalKrw} />
       <CoachingNumericTable numericRows={message.numericRows} />
