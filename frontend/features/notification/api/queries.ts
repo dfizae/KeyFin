@@ -154,7 +154,7 @@ function affectedQueryKeys(type: PushDataType): QueryKey[] {
     case "COACHING":
       return [transactionKeys.all];
     case "BUDGET_ALERT":
-      return [budgetKeys.current()];
+      return [budgetKeys.current(), roomKeys.home()];
     case "TRANSFER_REQUEST":
       return [paymentKeys.transfers()];
     case "PAYMENT_RISK":
