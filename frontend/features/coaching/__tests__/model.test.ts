@@ -33,7 +33,7 @@ const replyDto: ChatReplyDto = {
 
 describe("coaching model", () => {
   it("답변 DTO 를 화면 모델로 바꾸고 answered 만 실제 답변으로 본다", () => {
-    expect(toChatReply(replyDto)).toEqual({ ...replyDto, isAnswered: true, chartId: null });
+    expect(toChatReply(replyDto)).toEqual({ ...replyDto, isAnswered: true, chartId: null, envelopeBalances: [] });
     const declined = toChatReply({ ...replyDto, kind: "COACHING", status: "needs_data", source: "template" });
     expect(declined.isAnswered).toBe(false);
     expect(declined.kind).toBe("COACHING");
