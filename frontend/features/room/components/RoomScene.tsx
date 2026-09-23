@@ -69,6 +69,7 @@ import { findOutfit } from "@/features/room/outfits";
 import { useNotifySceneReady } from "@/features/room/sceneReady";
 import { selectIsEditing, selectPlacements, useRoomStore } from "@/features/room/store";
 import { useCharacterWalker, type CharacterWalker } from "@/features/room/useCharacterWalker";
+import { useCoachCatMotion } from "@/features/room/useCoachCatMotion";
 import { getColors } from "@/lib/theme";
 
 // 바닥 1장 + 벽 오브젝트(보드·캘린더·벽 장식) + 러그 + 가구를 그린다. 가구는 발끝 y 기준 painter's algorithm 으로 정렬하고 캐릭터는 정렬된 가구 사이에 끼운다.
@@ -578,11 +579,17 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
 
 type CoachCatSpriteProps = { scale: number; image: SkImage | undefined };
 
-/** 코치 고양이(AI 챗봇). 정지 이미지 한 장을 정해진 자리에 그린다. 탭 영역은 홈이 씬 레이어에 따로 얹는다(CoachTarget) */
+/**
+ * 코치 고양이(AI 챗봇). 정지 이미지 한 장을 제자리 둘레로 둥둥 띄우고 조금씩 오가게 그린다(useCoachCatMotion).
+ * 탭 영역은 홈이 씬 레이어에 따로 얹고 같은 훅으로 같이 움직인다(CoachTarget).
+ */
 function CoachCatSprite({ scale, image }: CoachCatSpriteProps) {
   const rect = React.useMemo(() => sceneRectToCanvas(COACH_CAT_RECT, scale), [scale]);
+  const offset = useCoachCatMotion();
+  const left = useDerivedValue(() => rect.x + offset.value.x * scale);
+  const top = useDerivedValue(() => rect.y + offset.value.y * scale);
   if (!image) return null;
-  return <SkiaImage image={image} x={rect.x} y={rect.y} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />;
+  return <SkiaImage image={image} x={left} y={top} width={rect.width} height={rect.height} fit="contain" sampling={SPRITE_SAMPLING} />;
 }
 
 type CharacterSpriteProps = { walker: CharacterWalker; scale: number; image: SkImage | undefined };

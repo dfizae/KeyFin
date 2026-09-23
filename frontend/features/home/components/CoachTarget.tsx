@@ -1,7 +1,9 @@
 import { Pressable, View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 
 import { getSceneScale } from "@/features/room/model";
 import { COACH_CAT_RECT } from "@/features/room/scene";
+import { useCoachCatMotion } from "@/features/room/useCoachCatMotion";
 
 // 코치 = 방에 앉아 있는 고양이(AI 챗봇). 그림은 Skia 씬이 스프라이트(assets COACH_CAT)로 그리고, 여기에는 그 위에 얹는 탭 영역만 있다.
 // 옛 Pencil CoachAvatar (Qxnt5) 32pt 원형 아이콘 버튼과 임시 "?" 말풍선(CoachBubble o3byv)을 대신한다 —
@@ -17,13 +19,23 @@ type CoachTargetProps = {
   onPress: () => void;
 };
 
-/** 고양이 그림 위의 투명한 탭 영역. 씬 레이어(sceneObjects)에 놓아야 확대·이동해도 그림과 같이 움직인다 */
+/** 제자리 사각형을 통째로 옮기는 틀. `Animated.View` 에는 className 이 먹지 않아 자리·크기를 스타일로 준다 */
+const FILL = { position: "absolute", left: 0, top: 0, right: 0, bottom: 0 } as const;
+
+/**
+ * 고양이 그림 위의 투명한 탭 영역. 씬 레이어(sceneObjects)에 놓아야 확대·이동해도 그림과 같이 움직인다.
+ * 고양이가 둥둥 떠서 오가므로(useCoachCatMotion) 탭 영역과 점도 같은 오프셋으로 따라간다.
+ */
 function CoachTarget({ width, hasPending = false, onPress }: CoachTargetProps) {
   const scale = getSceneScale(width);
   const badge = BADGE_SIZE * scale;
+  const offset = useCoachCatMotion();
+  const follow = useAnimatedStyle(() => ({
+    transform: [{ translateX: offset.value.x * scale }, { translateY: offset.value.y * scale }],
+  }));
 
   return (
-    <>
+    <Animated.View style={[FILL, follow]} pointerEvents="box-none">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={COACH_LABEL}
@@ -50,7 +62,7 @@ function CoachTarget({ width, hasPending = false, onPress }: CoachTargetProps) {
           }}
         />
       ) : null}
-    </>
+    </Animated.View>
   );
 }
 
