@@ -14,8 +14,7 @@ const MERCHANT_SQL =
 // 원장이 아는 금융망 가맹점 ID 전부 — 중복 등록으로 걸러진 ID도 원장에는 있으니 미분류가 아니다
 const KNOWN_ID_SQL = 'SELECT fin_merchant_id FROM merchants';
 
-// 금융망에는 있지만 원장 merchants 에 없는 가맹점. 여기서 결제하면 백엔드가 세분류를 못 찾아 미분류 거래로 두고
-// 앱이 사용자에게 어느 카테고리인지 묻는다.
+// 금융망에는 있지만 원장 merchants 에 없는 가맹점은 '미분류' 업종으로 내려 준다
 export const UNCATEGORIZED = '미분류';
 const FIN_MERCHANT_TTL_MS = 60_000; // 콘솔에서 새로 등록한 가맹점이 1분 안에 목록에 뜨도록
 
@@ -109,7 +108,7 @@ export function createApp({ finBaseUrl, finApiKey, db, fetchImpl = fetch }) {
       // 이름이 원장 가맹점과 같으면 중복 등록 잔재라 목록에서 같은 가게가 두 번 보이지 않게 뺀다
       if (!Number.isFinite(id) || !name || ledger.ids.has(String(id)) || ledger.names.has(name)) continue;
       const prev = byName.get(name);
-      if (!prev || id < prev.finMerchantId) byName.set(name, { finMerchantId: id, name, subcategoryName: UNCATEGORIZED, uncategorized: true });
+      if (!prev || id < prev.finMerchantId) byName.set(name, { finMerchantId: id, name, subcategoryName: UNCATEGORIZED });
     }
     return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }
@@ -125,9 +124,8 @@ export function createApp({ finBaseUrl, finApiKey, db, fetchImpl = fetch }) {
     try {
       extra = uncategorizedOf(await loadFinMerchants(), ledger);
     } catch (err) {
-      // 미분류 목록은 부가 기능 — 금융망이 실패해도 원장 가맹점으로는 결제할 수 있게 둔다
+      // 금융망이 실패해도 원장 가맹점으로는 결제할 수 있게 둔다
       console.warn('금융망 가맹점 조회 실패:', err?.message || err);
-      res.set('X-Uncategorized', 'unavailable');
     }
     res.json([...ledger.merchants, ...extra]);
   });

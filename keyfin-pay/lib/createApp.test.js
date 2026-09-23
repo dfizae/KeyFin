@@ -124,8 +124,8 @@ test('GET /api/merchants appends finance merchants missing from the ledger as �
   });
   const list = await (await fetch(`http://localhost:${port}/api/merchants`)).json();
   assert.deepEqual(list.slice(1), [
-    { finMerchantId: 41003, name: '구름 문구', subcategoryName: '미분류', uncategorized: true },
-    { finMerchantId: 41001, name: '동네 꽃집', subcategoryName: '미분류', uncategorized: true },
+    { finMerchantId: 41003, name: '구름 문구', subcategoryName: '미분류' },
+    { finMerchantId: 41001, name: '동네 꽃집', subcategoryName: '미분류' },
   ]);
   const finCall = calls.find((c) => c.url?.endsWith('/inquireMerchantList'));
   assert.equal(finCall.url, 'https://fin.example/api/v1/edu/creditCard/inquireMerchantList');
@@ -142,7 +142,6 @@ test('GET /api/merchants still serves the ledger when the finance merchant list 
     try {
       const res = await fetch(`http://localhost:${port}/api/merchants`);
       assert.equal(res.status, 200);
-      assert.equal(res.headers.get('x-uncategorized'), 'unavailable');
       assert.deepEqual(await res.json(), [{ finMerchantId: 40779, name: '강남PC존', subcategoryName: '게임·콘텐츠' }]);
       await fetch(`http://localhost:${port}/api/merchants`);
       assert.equal(calls.filter((c) => c.url?.endsWith('/inquireMerchantList')).length, 2); // 실패는 캐시하지 않는다
