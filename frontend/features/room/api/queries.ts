@@ -22,6 +22,7 @@ export function roomQueryOptions() {
     queryKey: roomKeys.home(),
     queryFn: ({ signal }) => getRoom(signal),
     staleTime: 30_000,
+    refetchOnWindowFocus: "always",
   });
 }
 

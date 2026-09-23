@@ -18,14 +18,14 @@ import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
-import { roomKeys, useCheckAttendance, useRoom } from "@/features/room/api/queries";
+import { useHomeDataRefresh } from "@/features/home/useHomeDataRefresh";
+import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/components/RoomStickers";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
 import { COACH_CAT_RECT, getWallItemRect, type Placement } from "@/features/room/scene";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
-import { useRefetchStaleOnFocus } from "@/hooks/use-refetch-stale-on-focus";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -58,6 +58,9 @@ type HomeScreenProps = {
 function HomeScreen({ arriving = false }: HomeScreenProps) {
   const router = useRouter();
   const room = useRoom();
+  // 재조회가 실패해도 마지막으로 받은 방과 편집 상태를 유지한다.
+  const roomData = room.data;
+  const initialRoomError = room.isError && roomData === undefined;
   // 방 데이터가 와도 그림(가구·바닥 스프라이트)을 읽는 데 시간이 더 걸린다. 그동안 빈 방·스켈레톤 대신 대기 화면을 덮어 둔다
   // (사용자 요청 2026-09-21). 문구는 들어올 때 한 번 고르고, 기다리는 도중에 바뀌지 않게 상태로 잡아 둔다.
   const [sceneReady, setSceneReady] = React.useState(false);
@@ -68,17 +71,16 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
     return () => clearTimeout(timer);
   }, [sceneReady, markSceneReady]);
   const [waitingCopy] = React.useState(() => (arriving ? MOVING_IN_COPY : pickReturningCopy()));
-  // 코인 수는 방 홈의 값이다. 코인 이력·상점에서 돌아왔을 때 옛 잔액이 남지 않게 한다
-  useRefetchStaleOnFocus(roomKeys.all);
+  useHomeDataRefresh();
   useRoomLayoutSync();
   const topInset = useTopInset();
   const month = currentMonthKey();
   const budget = useCurrentBudget();
-  const attendance = useHomeAttendance(room.isSuccess && !room.data.checkedInToday);
+  const attendance = useHomeAttendance(roomData !== undefined && !roomData.checkedInToday);
   const [panel, setPanel] = React.useState<RoomPanel>(null);
   const [selectedSticker, setSelectedSticker] = React.useState<Placement | null>(null);
   const [box, setBox] = React.useState({ width: 0, height: 0 });
-  const guide = useRoomGuide(room.isSuccess && sceneReady);
+  const guide = useRoomGuide(roomData !== undefined && sceneReady);
   const placements = useRoomStore(selectPlacements);
   // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
   const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
@@ -133,7 +135,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   return (
     <Screen>
       <View className="flex-1 items-center justify-center overflow-hidden" onLayout={handleLayout} testID={HOME_ROOM_BOX_TEST_ID}>
-        {room.isError ? (
+        {initialRoomError ? (
           <View className="w-full flex-1 px-6" style={{ paddingTop: topInset + ERROR_TOP_GAP }}>
             <EmptyState
               icon={WifiOff}
@@ -143,7 +145,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
             />
           </View>
         ) : null}
-        {room.isSuccess ? (
+        {roomData ? (
           <CharacterRoom
             width={roomWidth > 0 ? roomWidth : undefined}
             viewport={roomWidth > 0 ? box : undefined}
@@ -151,7 +153,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
             onSceneReady={markSceneReady}
             sceneObjects={(width) => (
               <>
-                <RoomStickerTargets width={width} placements={placements} furnitures={room.data.furnitures}
+                <RoomStickerTargets width={width} placements={placements} furnitures={roomData.furnitures}
                   onSelect={(placement) => { guide.finish(); setSelectedSticker(placement); }} />
                 <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
@@ -160,16 +162,16 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
             )}
           />
         ) : null}
-        {room.isSuccess && sceneReady && attendance.isSuccess && attendance.data.granted > 0 ? (
+        {roomData && sceneReady && attendance.isSuccess && attendance.data.granted > 0 ? (
           <AttendanceToast granted={attendance.data.granted} />
         ) : null}
       </View>
       <HomeBoardPanel visible={panel === "board"} budget={budget} onClose={() => setPanel(null)} />
-      {selectedSticker && room.data ? <StickerRemovalDialog placement={selectedSticker} stickers={room.data.stickers}
+      {selectedSticker && roomData ? <StickerRemovalDialog placement={selectedSticker} stickers={roomData.stickers}
         onClose={() => setSelectedSticker(null)} /> : null}
-      {room.isSuccess ? (
+      {roomData ? (
         <HomeSideActions
-          coinBalance={room.data.coinBalance}
+          coinBalance={roomData.coinBalance}
           showEdit={panel === null && selectedSticker === null}
           onMeasure={measureButton}
           onHelp={sceneReady ? guide.restart : undefined}
@@ -188,7 +190,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
       ) : null}
       {/* 방 대기 덮개. 방은 밑에서 계속 그림을 읽고 있어야 하므로 방을 치우지 않고 위에 덮는다 — 사이드 버튼까지 가려야 해서 맨 위다.
           오류일 때는 걷는다(다시 시도 버튼이 보여야 한다). */}
-      {!sceneReady && !room.isError ? (
+      {!sceneReady && !initialRoomError ? (
         <View className="absolute inset-0">
           <RoomWaiting copy={waitingCopy} />
         </View>

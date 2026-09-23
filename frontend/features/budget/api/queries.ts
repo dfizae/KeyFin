@@ -18,6 +18,7 @@ export function currentBudgetQueryOptions() {
     queryKey: budgetKeys.current(),
     queryFn: ({ signal }) => getCurrentBudget(signal),
     staleTime: 30_000,
+    refetchOnWindowFocus: "always",
   });
 }
 

@@ -1,4 +1,4 @@
-import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as SecureStore from "expo-secure-store";
 import * as React from "react";
@@ -20,8 +20,9 @@ import { toPaymentCalendar } from "@/features/payment/model";
 import { SPOTLIGHT_LABEL } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS } from "@/features/home/useRoomGuide";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
+import { roomKeys } from "@/features/room/api/queries";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
-import { toAttendance, toRoom } from "@/features/room/model";
+import { toAttendance, toRoom, type Room } from "@/features/room/model";
 import { classifyTransaction, getPendingTransactions, getSubcategories } from "@/features/transaction/api/transaction.api";
 import { toPendingTransactions, toSubcategories } from "@/features/transaction/model";
 
@@ -36,9 +37,16 @@ jest.mock("@/features/transaction/api/transaction.api", () => ({
 
 // 테스트에는 그림을 읽어 주는 Skia 가 없어 방 씬이 영영 '준비 중'이다. 그러면 홈이 방 대기 덮개를 걷지 않으므로
 // 씬을 "다 그린 상태"로 바꿔 둔다 — 방 데이터가 와서 씬이 올라가는 순간 준비됐다고 알린다.
+const mockSceneMount = jest.fn();
+const mockSceneUnmount = jest.fn();
 jest.mock("@/features/room/components/RoomSceneLoader", () => {
+  const ReactActual = jest.requireActual<typeof import("react")>("react");
   const { useNotifySceneReady } = jest.requireActual("@/features/room/sceneReady");
   function MockRoomSceneLoader() {
+    ReactActual.useEffect(() => {
+      mockSceneMount();
+      return () => { mockSceneUnmount(); };
+    }, []);
     useNotifySceneReady(true);
     return null;
   }
@@ -133,6 +141,8 @@ describe("HomeScreen", () => {
     mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", subcategoryId: 102, excludeTag: "NONE", adjustedAmount: null });
     mockPush.mockReset();
     mockRedirect.mockReset();
+    mockSceneMount.mockClear();
+    mockSceneUnmount.mockClear();
   });
 
   it("처음 들어오면 코치가 리스트·캘린더를 차례로 안내하고, 다 보면 다시 나오지 않는다", async () => {
@@ -432,6 +442,39 @@ describe("HomeScreen", () => {
 
     expect(await screen.findByLabelText(ROOM_LABEL)).toBeTruthy();
     expect(mockedGetRoom).toHaveBeenCalledTimes(2);
+  });
+
+  it("방 재조회 중·실패에도 씬을 유지하고 앱 복귀 후 최신 데이터로 회복한다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+    expect(mockSceneMount).toHaveBeenCalledTimes(1);
+
+    let rejectRefresh!: (error: Error) => void;
+    mockedGetRoom.mockImplementationOnce(() => new Promise<Room>((_resolve, reject) => { rejectRefresh = reject; }));
+    await act(async () => { void client.invalidateQueries({ queryKey: roomKeys.home() }); });
+    expect(screen.getByLabelText(ROOM_LABEL)).toBeTruthy();
+    expect(screen.getByRole("button", { name: HOME_HELP_LABEL })).toBeTruthy();
+    await act(async () => rejectRefresh(new Error("network")));
+    await waitFor(() => expect(client.getQueryState(roomKeys.home())?.status).toBe("error"));
+    expect(screen.getByLabelText(ROOM_LABEL)).toBeTruthy();
+    expect(screen.getByRole("button", { name: HOME_HELP_LABEL })).toBeTruthy();
+    expect(screen.queryByText("방 정보를 불러오지 못했어요")).toBeNull();
+    expect(mockSceneUnmount).not.toHaveBeenCalled();
+
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, coin: { balance: 999 }, attendance: { checkedToday: true } }));
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+    expect(await screen.findByRole("button", { name: "코인 999개" })).toBeTruthy();
+    expect(mockSceneMount).toHaveBeenCalledTimes(1);
+    expect(mockSceneUnmount).not.toHaveBeenCalled();
+    expect(mockedGetRoom).toHaveBeenCalledTimes(3);
+    focusManager.setFocused(undefined);
+    await waitForQueriesToSettle();
   });
 
   it("예산만 못 받으면 방은 그대로 두고, 리스트를 탭한 시트 안에서 재시도한다", async () => {
