@@ -127,9 +127,13 @@ public class FdtSnapshotAssembler {
 		return schedules;
 	}
 
+	/**
+	 * FDT 는 next_date 가 기준일(as_of) 이하인 일정을 PAST_SCHEDULE 로 보고 트윈 전체를 거부한다.
+	 * 결제일이 오늘이면 이번 달 회차는 이미 기준일에 속하므로 다음 달 회차를 보낸다(청구서의 dueDate 처리와 같은 경계).
+	 */
 	private LocalDate nextDate(FixedExpense expense, LocalDate asOf) {
 		LocalDate thisMonth = expense.paymentDateIn(YearMonth.from(asOf));
-		return thisMonth.isBefore(asOf) ? expense.paymentDateIn(YearMonth.from(asOf).plusMonths(1)) : thisMonth;
+		return thisMonth.isAfter(asOf) ? thisMonth : expense.paymentDateIn(YearMonth.from(asOf).plusMonths(1));
 	}
 
 	public static List<CardBilling> unpaid(Collection<CardBilling> billings) {
