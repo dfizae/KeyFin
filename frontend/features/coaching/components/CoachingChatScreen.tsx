@@ -146,6 +146,8 @@ function CoachingChatScreen() {
           <ScreenFlatList
             testID="coaching-chat-list"
             ref={listRef}
+            // 스크롤해도 헤더가 흐려지지 않게 한다 — 대화는 계속 아래로 쌓여 헤더가 늘 사라져 있었고, 뒤로 가기를 누를 수 없었다(사용자 요청 2026-09-23)
+            overlapHeader={false}
             data={rows}
             keyExtractor={(row) => row.key}
             contentContainerClassName="px-6 pb-4"

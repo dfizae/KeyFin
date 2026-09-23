@@ -17,6 +17,7 @@ import { MOVING_IN_COPY, RoomWaiting, pickReturningCopy } from "@/features/room/
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
 import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
 import { coachSituationMessage } from "@/features/home/model";
+import { useCoachSpeech } from "@/features/home/useCoachSpeech";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
@@ -26,6 +27,7 @@ import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay"
 import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/components/RoomStickers";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
 import { COACH_CAT_RECT, getWallItemRect, type Placement } from "@/features/room/scene";
+import { useCoachSpeechStore } from "@/features/notification/store";
 import { roomItemName } from "@/features/room/catalog";
 import { visiblePenalties } from "@/features/room/penalties";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
@@ -96,13 +98,13 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
         })),
       })
     : null;
-  // 말풍선을 누르면 그 문구만 닫는다. 상황이 바뀌어 문구가 달라지면 다시 뜬다(사용자 요청 2026-09-23).
-  // 안내·보드·딱지 창이 떠 있는 동안에는 겹치지 않게 가린다.
-  const [dismissedSpeech, setDismissedSpeech] = React.useState<string | null>(null);
-  const coachSpeech =
-    coachMessage !== null && coachMessage !== dismissedSpeech && guide.step === null && panel === null && selectedSticker === null
-      ? coachMessage
-      : null;
+  // 고양이가 할 말: 방금 온 알림이 있으면 그것, 없으면 방 상황(딱지·부스러기). 2~3초 말풍선 뒤 대화 아이콘으로 접힌다(사용자 요청 2026-09-23).
+  // 방 대기 화면·안내·보드·딱지 창이 떠 있는 동안에는 겹치지 않게 가린다.
+  const pushSpeech = useCoachSpeechStore((state) => state.latest);
+  const clearPushSpeech = useCoachSpeechStore((state) => state.clear);
+  const coachLine = pushSpeech ?? (coachMessage === null ? null : { key: `situation:${coachMessage}`, text: coachMessage });
+  const coachSpeechPaused = !sceneReady || guide.step !== null || panel !== null || selectedSticker !== null;
+  const coachSpeech = useCoachSpeech(coachLine, coachSpeechPaused, clearPushSpeech);
   // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
   const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
   const measureButton = React.useCallback((id: GuideTargetId, rect: SceneRect) => {
@@ -182,7 +184,6 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
                   width={width}
                   onOpen={guide.finish}
                   speech={coachSpeech}
-                  onSpeechPress={() => setDismissedSpeech(coachMessage)}
                 />
               </>
             )}
