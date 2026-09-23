@@ -23,6 +23,14 @@ const LOGOS = {
   kakao: require("@/assets/brand/banks/kakao.png"),
 };
 
+/**
+ * 은행이 없는 카드 발급사 로고 (사용자 제공 PNG, 2026-09-23 삼성카드). 은행 로고와 달리 코드가 없어 이름으로만 찾는다.
+ * 신한·국민·하나처럼 같은 브랜드 은행이 있는 카드사는 여기 두지 않고 은행 로고를 같이 쓴다.
+ */
+export const CARD_ISSUER_CATALOG: readonly { name: string; logo: number }[] = [
+  { name: "삼성카드", logo: require("@/assets/brand/cards/samsung.png") },
+];
+
 /** 킷에서 두 은행이 한 심볼을 같이 쓰는 경우가 있다(광주·전북, 신한·제주, 경남·부산). */
 export const BANK_CATALOG: readonly Bank[] = [
   { code: "001", name: "한국은행" },
@@ -53,16 +61,18 @@ export function bankLogo(bankCode: string): number | undefined {
 
 /**
  * 이름으로 로고를 찾는다. 카드 후보에는 은행 코드가 없고 발급사 이름만 오기 때문이다
- * ("신한카드" → 신한은행 로고). 계좌도 모르는 코드일 때 이름으로 한 번 더 찾는다.
+ * ("신한카드" → 신한은행 로고, "삼성카드" → 카드사 로고). 계좌도 모르는 코드일 때 이름으로 한 번 더 찾는다.
  */
 export function bankLogoByName(name: string): number | undefined {
   const key = brandKey(name);
   if (key.length === 0) return undefined;
 
-  return BANK_CATALOG.find((bank) => {
-    const catalogKey = brandKey(bank.name);
+  const matches = (catalogName: string) => {
+    const catalogKey = brandKey(catalogName);
     return catalogKey.length > 0 && (key.includes(catalogKey) || catalogKey.includes(key));
-  })?.logo;
+  };
+
+  return CARD_ISSUER_CATALOG.find((issuer) => matches(issuer.name))?.logo ?? BANK_CATALOG.find((bank) => matches(bank.name))?.logo;
 }
 
 /** 업권 접미사를 떼어 "신한카드"·"KEB하나은행" 처럼 다르게 적힌 같은 브랜드를 맞춘다 */
