@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KeyFin Pay — 결제 내역</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">KeyFin Pay</span>
+    <nav>
+      <a href="/pay.html">결제</a>
+      <a href="/history.html">결제 내역</a>
+      <a href="/subscriptions.html">정기결제</a>
+    </nav>
+    <span class="who"><span id="who-name"></span><button id="logout-btn" class="btn">로그아웃</button></span>
+  </header>
+  <main class="wrap">
+    <h1>결제 내역</h1>
+    <div class="toolbar">
+      <select id="card-select"></select>
+      <input id="start-date" type="date" />
+      <input id="end-date" type="date" />
+      <button id="load-btn" class="btn primary" type="button">조회</button>
+    </div>
+    <div id="history-error" class="note err hidden"></div>
+    <div class="tblwrap hidden" id="history-wrap">
+      <table>
+        <thead>
+          <tr><th>거래번호</th><th>일시</th><th>가맹점</th><th>카테고리</th><th>금액</th><th>상태</th><th></th></tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+    <div id="history-empty" class="empty hidden">조회된 결제 내역이 없습니다.</div>
+  </main>
+  <script type="module" src="/history.js"></script>
+</body>
+</html>

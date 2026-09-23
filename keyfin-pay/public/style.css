@@ -1,0 +1,75 @@
+/* fin-console과 같은 디자인 토큰 — 이커머스 리디자인 시 이 파일만 교체 */
+:root{
+  --paper:#F5F7F9; --panel:#FFFFFF; --panel2:#EDF1F5; --ink:#18222E; --ink2:#4A5A6B; --mut:#7A8898;
+  --line:#DDE4EB; --acc:#0E7490; --acc-ink:#0B5C73; --acc-soft:#E3F1F5; --chip:#EEF3F6; --req:#B42318;
+  --shadow:0 1px 2px rgba(20,35,50,.05),0 8px 24px rgba(20,35,50,.06);
+}
+@media (prefers-color-scheme: dark){ :root{
+  --paper:#0E1319; --panel:#151C24; --panel2:#1B242E; --ink:#E3EAF1; --ink2:#A8B6C4; --mut:#6E7E8E;
+  --line:#27323E; --acc:#3FB3CE; --acc-ink:#7BD0E3; --acc-soft:#12303B; --chip:#1E2933; --req:#F08C84;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+}}
+*{box-sizing:border-box} html,body{margin:0}
+body{background:var(--paper);color:var(--ink);font:17px/1.6 "IBM Plex Sans KR",-apple-system,"Segoe UI",sans-serif}
+.hidden{display:none!important}
+
+.topbar{background:var(--panel);border-bottom:1px solid var(--line);padding:12px 24px;display:flex;align-items:center;gap:18px}
+.topbar .brand{font-weight:700;font-size:19px;letter-spacing:-.2px}
+.topbar nav{display:flex;gap:4px}
+.topbar nav a{color:var(--ink2);text-decoration:none;padding:7px 13px;border-radius:8px;font-size:15.5px}
+.topbar nav a:hover{background:var(--panel2)}
+.topbar nav a.on{background:var(--acc-soft);color:var(--acc-ink);font-weight:600}
+.topbar .who{margin-left:auto;color:var(--ink2);font-size:15px;display:flex;align-items:center;gap:10px}
+
+.wrap{max-width:1080px;margin:0 auto;padding:28px 24px 80px}
+h1{font-size:26px;margin:0 0 18px;letter-spacing:-.3px}
+.btn{border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:15.5px;padding:9px 16px;border-radius:9px;cursor:pointer}
+.btn:hover{background:var(--panel2)}
+.btn.primary{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.btn.primary:hover{background:var(--acc-ink)}
+.btn.danger{color:var(--req);border-color:var(--req)}
+.btn:disabled{opacity:.55;cursor:default}
+input,select{padding:11px 13px;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--ink);font:inherit;font-size:16px}
+input:focus,select:focus{outline:2px solid var(--acc);outline-offset:1px;border-color:transparent}
+label{display:block;font-size:15px;font-weight:600;margin:0 0 5px}
+.note{border-left:3px solid var(--acc);background:var(--panel);border-radius:0 9px 9px 0;padding:13px 17px;margin:12px 0;box-shadow:var(--shadow);font-size:15.5px}
+.note.err{border-left-color:var(--req);color:var(--req)}
+
+/* 로그인 */
+.login-box{max-width:420px;margin:10vh auto 0;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:32px}
+.login-box h1{font-size:22px}
+.login-box p{color:var(--mut);font-size:14.5px;margin:4px 0 20px}
+.login-box input{width:100%;margin-bottom:12px}
+.login-box .btn{width:100%}
+
+/* 결제 — 가맹점 그리드 */
+.toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px}
+.toolbar input[type=search]{flex:1;min-width:220px}
+.cat-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px}
+.cat-tabs button{border:1px solid var(--line);background:var(--panel);color:var(--ink2);font:inherit;font-size:14.5px;padding:6px 14px;border-radius:99px;cursor:pointer}
+.cat-tabs button.on{background:var(--acc-soft);border-color:var(--acc);color:var(--acc-ink);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px}
+.m-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:16px;cursor:pointer;text-align:left;font:inherit;color:var(--ink)}
+.m-card:hover{border-color:var(--acc)}
+.m-card b{display:block;font-size:16.5px;margin-bottom:8px;line-height:1.35}
+.m-card .chip{display:inline-block;background:var(--chip);color:var(--ink2);font-size:13px;border-radius:5px;padding:2px 8px}
+.empty{color:var(--mut);text-align:center;padding:50px 0}
+
+/* 결제 모달 */
+.overlay{position:fixed;inset:0;background:rgba(10,18,26,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal{background:var(--panel);border-radius:14px;box-shadow:var(--shadow);padding:26px;width:100%;max-width:440px}
+.modal h2{margin:0 0 4px;font-size:20px}
+.modal .chip{display:inline-block;background:var(--chip);color:var(--ink2);font-size:13px;border-radius:5px;padding:2px 8px;margin-bottom:16px}
+.modal .row{margin-bottom:14px}
+.modal select,.modal input{width:100%}
+.modal .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+
+/* 내역 테이블 */
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;font-size:15.5px}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel2);white-space:nowrap}
+td{padding:10px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+td.money{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td.canceled{color:var(--mut);text-decoration:line-through}
+@media(max-width:640px){.wrap{padding:20px 14px 60px}.topbar{padding:10px 14px;flex-wrap:wrap}}

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KeyFin Pay — 정기결제</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">KeyFin Pay</span>
+    <nav>
+      <a href="/pay.html">결제</a>
+      <a href="/history.html">결제 내역</a>
+      <a href="/subscriptions.html">정기결제</a>
+    </nav>
+    <span class="who"><span id="who-name"></span><button id="logout-btn" class="btn">로그아웃</button></span>
+  </header>
+  <main class="wrap">
+    <h1>정기결제</h1>
+    <div class="toolbar">
+      <span id="sub-summary" class="chip"></span>
+      <button id="new-sub-btn" class="btn primary" type="button" style="margin-left:auto">+ 새 구독</button>
+    </div>
+    <div id="sub-error" class="note err hidden"></div>
+    <div class="tblwrap hidden" id="sub-wrap">
+      <table>
+        <thead>
+          <tr><th>구독명</th><th>결제금액</th><th>주기</th><th>다음 결제일</th><th>상태</th><th></th></tr>
+        </thead>
+        <tbody id="sub-body"></tbody>
+      </table>
+    </div>
+    <div id="sub-empty" class="empty hidden">등록된 정기결제가 없습니다. "새 구독"으로 시작해 보세요.</div>
+  </main>
+
+  <div id="sub-overlay" class="overlay hidden">
+    <div class="modal">
+      <h2>새 구독 등록</h2>
+      <form id="sub-form">
+        <div class="row">
+          <label for="sub-service">서비스</label>
+          <select id="sub-service" required></select>
+        </div>
+        <div class="row">
+          <label for="sub-card">결제 카드</label>
+          <select id="sub-card" required></select>
+        </div>
+        <div class="row">
+          <label for="sub-cycle">결제 주기</label>
+          <select id="sub-cycle">
+            <option value="MONTHLY">MONTHLY — 월간</option>
+            <option value="DAILY">DAILY — 일간</option>
+          </select>
+        </div>
+        <div class="row" id="sub-payday-row">
+          <label for="sub-payday">월 결제일 (1~31)</label>
+          <input id="sub-payday" type="number" min="1" max="31" value="1" />
+        </div>
+        <div class="row">
+          <label for="sub-start">시작일</label>
+          <input id="sub-start" type="date" required />
+        </div>
+        <div id="sub-result" class="note hidden"></div>
+        <div class="actions">
+          <button type="button" class="btn" id="sub-close">닫기</button>
+          <button type="submit" class="btn primary" id="sub-submit">등록</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script type="module" src="/subscriptions.js"></script>
+</body>
+</html>

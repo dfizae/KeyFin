@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KeyFin Pay — 결제</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <span class="brand">KeyFin Pay</span>
+    <nav>
+      <a href="/pay.html">결제</a>
+      <a href="/history.html">결제 내역</a>
+      <a href="/subscriptions.html">정기결제</a>
+    </nav>
+    <span class="who"><span id="who-name"></span><button id="logout-btn" class="btn">로그아웃</button></span>
+  </header>
+  <main class="wrap">
+    <h1>가맹점 결제</h1>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="가맹점 이름·카테고리 검색..." />
+    </div>
+    <div id="cat-tabs" class="cat-tabs"></div>
+    <div id="merchant-grid" class="grid"></div>
+    <div id="grid-empty" class="empty hidden">검색 결과가 없습니다.</div>
+  </main>
+
+  <div id="pay-overlay" class="overlay hidden">
+    <div class="modal">
+      <h2 id="pay-merchant-name"></h2>
+      <span class="chip" id="pay-merchant-cat"></span>
+      <form id="pay-form">
+        <div class="row">
+          <label for="pay-card">결제 카드</label>
+          <select id="pay-card" required></select>
+        </div>
+        <div class="row">
+          <label for="pay-amount">결제 금액 (원)</label>
+          <input id="pay-amount" type="number" min="1" step="1" required placeholder="10000" />
+        </div>
+        <div id="pay-result" class="note hidden"></div>
+        <div class="actions">
+          <button type="button" class="btn" id="pay-close">닫기</button>
+          <button type="submit" class="btn primary" id="pay-submit">결제하기</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <script type="module" src="/pay.js"></script>
+</body>
+</html>

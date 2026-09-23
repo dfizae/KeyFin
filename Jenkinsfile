@@ -1,15 +1,15 @@
 // Compare against a known successful/develop base, not Jenkins' previous job-wide changelog.
 def selectCiComponents(String baseCommit) {
-    def allComponents = [backend: true, frontend: true]
+    def allComponents = [backend: true, frontend: true, keyfinPay: true]
     if (!(baseCommit ==~ /[0-9a-fA-F]{40}/)) {
-        echo 'No comparison baseline is available; validating both applications.'
+        echo 'No comparison baseline is available; validating every application.'
         return allComponents
     }
 
     return withEnv(["CI_DIFF_BASE=${baseCommit}"]) {
         if (sh(script: 'git merge-base --is-ancestor "$CI_DIFF_BASE" HEAD',
                returnStatus: true) != 0) {
-            echo 'The baseline is unavailable or not an ancestor; validating both applications.'
+            echo 'The baseline is unavailable or not an ancestor; validating every application.'
             return allComponents
         }
 
@@ -21,12 +21,14 @@ def selectCiComponents(String baseCommit) {
         def sharedChange = paths.any { path ->
             !path.startsWith('backend/') && !path.startsWith('frontend/') &&
             !path.startsWith('ai/') && !path.startsWith('docs/') &&
+            !path.startsWith('keyfin-pay/') &&
             !path.startsWith('.gitlab/merge_request_templates/') && path != 'README.md'
         }
 
         return [
             backend: sharedChange || paths.any { it.startsWith('backend/') },
-            frontend: sharedChange || paths.any { it.startsWith('frontend/') }
+            frontend: sharedChange || paths.any { it.startsWith('frontend/') },
+            keyfinPay: sharedChange || paths.any { it.startsWith('keyfin-pay/') }
         ]
     }
 }
@@ -48,6 +50,21 @@ RUN pnpm test --ci --runInBand
 '''
     // Cache dependency installation, but execute the checks again for each Jenkins build.
     sh 'docker build --build-arg "CI_RUN_ID=$BUILD_TAG" --file .ci-frontend.Dockerfile frontend'
+}
+
+// keyfin-pay runs on the Node test runner only; no toolchain is needed on the agent itself.
+def checkKeyfinPay() {
+    writeFile file: '.ci-keyfin-pay.Dockerfile', text: '''
+FROM node:22-alpine
+ENV CI=true
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY . .
+ARG CI_RUN_ID
+RUN echo "CI run: $CI_RUN_ID" && npm test
+'''
+    sh 'docker build --build-arg "CI_RUN_ID=$BUILD_TAG" --file .ci-keyfin-pay.Dockerfile keyfin-pay'
 }
 
 pipeline {
@@ -87,7 +104,9 @@ pipeline {
                     def components = selectCiComponents(env.CI_BASE_COMMIT)
                     env.CI_RUN_BACKEND = components.backend.toString()
                     env.CI_RUN_FRONTEND = components.frontend.toString()
-                    echo "Backend: ${env.CI_RUN_BACKEND}; frontend: ${env.CI_RUN_FRONTEND}"
+                    env.CI_RUN_KEYFIN_PAY = components.keyfinPay.toString()
+                    echo "Backend: ${env.CI_RUN_BACKEND}; frontend: ${env.CI_RUN_FRONTEND}; " +
+                         "keyfin-pay: ${env.CI_RUN_KEYFIN_PAY}"
                 }
             }
         }
@@ -126,6 +145,13 @@ pipeline {
             when { expression { env.CI_RUN_FRONTEND == 'true' } }
             steps {
                 script { checkFrontend() }
+            }
+        }
+
+        stage('keyfin-pay Checks') {
+            when { expression { env.CI_RUN_KEYFIN_PAY == 'true' } }
+            steps {
+                script { checkKeyfinPay() }
             }
         }
 
@@ -199,6 +225,44 @@ pipeline {
                 script { env.CI_BACKEND_DEPLOYED = 'true' }
             }
         }
+
+        stage('Build keyfin-pay Image') {
+            when { expression { env.CI_RUN_KEYFIN_PAY == 'true' } }
+            steps {
+                script {
+                    env.CI_COMMIT = sh(
+                        script: 'git rev-parse HEAD',
+                        returnStdout: true
+                    ).trim()
+
+                    env.KEYFIN_PAY_IMAGE =
+                        "keyfin-pay:ci-${env.BUILD_NUMBER}-${env.CI_COMMIT.take(12)}"
+                }
+
+                sh '''
+                    set -eu
+
+                    docker build \
+                        --label "org.opencontainers.image.revision=$CI_COMMIT" \
+                        -t "$KEYFIN_PAY_IMAGE" keyfin-pay
+                '''
+            }
+        }
+
+        stage('Deploy keyfin-pay') {
+            when { expression { env.CI_RUN_KEYFIN_PAY == 'true' } }
+            steps {
+                sh '''
+                    set -eu
+
+                    test "$(git rev-parse HEAD)" = \
+                        "$(git rev-parse refs/remotes/origin/develop)"
+
+                    bash infra/jenkins/deploy-keyfin-pay.sh "$KEYFIN_PAY_IMAGE"
+                '''
+                script { env.CI_KEYFIN_PAY_DEPLOYED = 'true' }
+            }
+        }
     }
 
     post {
@@ -206,12 +270,16 @@ pipeline {
             script {
                 def result = currentBuild.currentResult
 
+                def deployed = []
+                if (env.CI_BACKEND_DEPLOYED == 'true') { deployed << '백엔드' }
+                if (env.CI_KEYFIN_PAY_DEPLOYED == 'true') { deployed << 'keyfin-pay' }
+
                 def notifications = [
                     SUCCESS: [
                         color: 'good',
-                        title: env.CI_BACKEND_DEPLOYED == 'true'
-                            ? '✅ CI 검증·백엔드 배포 성공'
-                            : '✅ CI 검증 완료 (백엔드 배포 없음)'
+                        title: deployed
+                            ? "✅ CI 검증·${deployed.join('·')} 배포 성공"
+                            : '✅ CI 검증 완료 (배포 없음)'
                     ],
                     FAILURE: [
                         color: 'danger',
@@ -240,7 +308,7 @@ pipeline {
                     "**${notification.title}**",
                     "작업: ${env.JOB_NAME} · 빌드: #${env.BUILD_NUMBER}",
                     "브랜치: ${branch} · 커밋: ${shortCommit}",
-                    "검증 대상 — 백엔드: ${env.CI_RUN_BACKEND ?: '미확인'} · 프론트엔드: ${env.CI_RUN_FRONTEND ?: '미확인'}",
+                    "검증 대상 — 백엔드: ${env.CI_RUN_BACKEND ?: '미확인'} · 프론트엔드: ${env.CI_RUN_FRONTEND ?: '미확인'} · keyfin-pay: ${env.CI_RUN_KEYFIN_PAY ?: '미확인'}",
                     "[실행 결과](${env.BUILD_URL}) · [콘솔 로그](${env.BUILD_URL}console)"
                 ].join('\n')
 
