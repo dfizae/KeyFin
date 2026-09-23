@@ -176,6 +176,36 @@ def _select_cash_account(accounts: "list[JsonValue]") -> "dict[str, JsonValue] |
     return None
 
 
+def _select_card(
+    cards: "list[JsonValue]", accounts: "list[JsonValue]"
+) -> "dict[str, JsonValue] | None":
+    """Pick the card a card purchase should use, or None if genuinely ambiguous.
+
+    One real card is unambiguous. With several, the user already chose the method
+    (card), so the remaining ambiguity is *which* card: default to the card that
+    settles from the designated income (주거래) account when exactly one does. No
+    income account, several, or several cards on it stays ambiguous and fails closed.
+    """
+    valid = [c for c in cards if isinstance(c, dict) and isinstance(c.get("card_id"), str)]
+    if len(valid) == 1:
+        return valid[0]
+    income_ids = [
+        a.get("account_id")
+        for a in accounts
+        if isinstance(a, dict) and isinstance(a.get("account_id"), str) and a.get("is_income") is True
+    ]
+    if len(income_ids) != 1:
+        return None
+    # The card path always carries a deferred settlement date, which the engine only
+    # accepts for CREDIT (a DEBIT card must settle on the purchase date), so a
+    # default among several is only ever a CREDIT card.
+    on_income = [
+        c for c in valid
+        if c.get("settlement_account_id") == income_ids[0] and c.get("kind") == "CREDIT"
+    ]
+    return on_income[0] if len(on_income) == 1 else None
+
+
 def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit fail-closed payment boundary.
     purchase: NaturalPurchase, twin: JsonDocument, reference: date
 ) -> JsonDocument:
@@ -230,9 +260,10 @@ def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit
         "envelope": purchase.envelope,
     }
     if use_card:
-        if len(cards) != 1 or not isinstance(cards[0], dict):
+        card = _select_card(cards, accounts)
+        if card is None:
             raise ServiceError("purchase_payment_method_required")
-        card_id = cards[0].get("card_id")
+        card_id = card.get("card_id")
         if not isinstance(card_id, str):
             raise ServiceError("purchase_payment_method_required")
         change["card_id"] = card_id
