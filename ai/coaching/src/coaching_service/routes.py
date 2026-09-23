@@ -8,11 +8,12 @@ from coaching_service.auth import Authenticate
 from coaching_service.chat_answers import ChatAnswer, FinanceQuestion
 from coaching_service.coaching import CoachingCore
 from coaching_service.dialogue import Dialogue
+from coaching_service.envelope_review import EnvelopeReview, EnvelopeReviewRequest, evaluate_envelope
 from coaching_service.events import Events
 from coaching_service.http_contracts import RequestKey, operation
 from coaching_service.persona import Persona, present
 from coaching_service.records import Records
-from coaching_service.repository import document
+from coaching_service.repository import Mutation, document
 from coaching_service.schemas import (
     Bootstrap,
     Coaching,
@@ -74,9 +75,27 @@ def register_twin(app: FastAPI, core: CoachingCore, auth: Authenticate) -> None:
     async def twin(owner: Annotated[str, Depends(auth.backend)]) -> JsonDocument:
         return await core.twin(owner)
 
+    async def envelope_review(
+        body: EnvelopeReviewRequest, key: RequestKey, owner: Annotated[str, Depends(auth.backend)]
+    ) -> EnvelopeReview:
+        twin_document = await core.twin(owner)
+
+        async def action() -> Mutation:
+            return await evaluate_envelope(core.repository, owner, twin_document, body)
+
+        result = await core.repository.mutate(
+            operation(owner, "envelope-review", key, document(body)), action
+        )
+        review = EnvelopeReview.model_validate(result.root)
+        # Shown in the alert surface, which renders no markdown: voiced, never bold.
+        return review.model_copy(update={"text": present(review.text, core.persona, bold=False)})
+
     app.add_api_route("/v1/twin", bootstrap, methods=["POST"], response_model=TwinIdentity)
     app.add_api_route("/v1/events", event, methods=["POST"], response_model=EventResult)
     app.add_api_route("/v1/twin", twin, methods=["GET"], response_model=JsonDocument)
+    app.add_api_route(
+        "/v1/coaching/envelope-reviews", envelope_review, methods=["POST"], response_model=EnvelopeReview
+    )
 
 
 def register_coaching(app: FastAPI, core: CoachingCore, auth: Authenticate) -> None:
