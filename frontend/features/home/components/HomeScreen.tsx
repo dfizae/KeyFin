@@ -9,12 +9,14 @@ import { Icon } from "@/components/ui/icon";
 import { Screen, useTopInset } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
+import { envelopeName } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
 import { MOVING_IN_COPY, RoomWaiting, pickReturningCopy } from "@/features/room/components/RoomWaiting";
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
 import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
+import { coachSituationMessage } from "@/features/home/model";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
@@ -24,6 +26,8 @@ import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay"
 import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/components/RoomStickers";
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
 import { COACH_CAT_RECT, getWallItemRect, type Placement } from "@/features/room/scene";
+import { roomItemName } from "@/features/room/catalog";
+import { visiblePenalties } from "@/features/room/penalties";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
 import { currentMonthKey } from "@/lib/date";
@@ -82,6 +86,23 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   const [box, setBox] = React.useState({ width: 0, height: 0 });
   const guide = useRoomGuide(roomData !== undefined && sceneReady);
   const placements = useRoomStore(selectPlacements);
+  const coachMessage = room.data
+    ? coachSituationMessage({
+        stickerCount: room.data.stickers?.count ?? 0,
+        removableToday: room.data.stickers?.removableToday ?? false,
+        penalties: visiblePenalties(placements, room.data.overEnvelopeIds).map((penalty) => ({
+          envelopeName: envelopeName(penalty.envelopeId),
+          furnitureName: roomItemName(penalty.itemId),
+        })),
+      })
+    : null;
+  // 말풍선을 누르면 그 문구만 닫는다. 상황이 바뀌어 문구가 달라지면 다시 뜬다(사용자 요청 2026-09-23).
+  // 안내·보드·딱지 창이 떠 있는 동안에는 겹치지 않게 가린다.
+  const [dismissedSpeech, setDismissedSpeech] = React.useState<string | null>(null);
+  const coachSpeech =
+    coachMessage !== null && coachMessage !== dismissedSpeech && guide.step === null && panel === null && selectedSticker === null
+      ? coachMessage
+      : null;
   // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
   const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
   const measureButton = React.useCallback((id: GuideTargetId, rect: SceneRect) => {
@@ -157,7 +178,12 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
                   onSelect={(placement) => { guide.finish(); setSelectedSticker(placement); }} />
                 <HomeWallBoard width={width} budget={budget} onOpen={openBoard} />
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
-                <HomeCoachTarget width={width} onOpen={guide.finish} />
+                <HomeCoachTarget
+                  width={width}
+                  onOpen={guide.finish}
+                  speech={coachSpeech}
+                  onSpeechPress={() => setDismissedSpeech(coachMessage)}
+                />
               </>
             )}
           />
