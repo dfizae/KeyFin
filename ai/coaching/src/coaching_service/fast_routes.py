@@ -608,16 +608,40 @@ def spending_period_fragment(question: str) -> str | None:
     return match.group("period") if match is not None else None
 
 
+def _payment_answer_override(question_so_far: str, followup: str) -> str:
+    """Let a single-method follow-up answer overwrite a stale conflicting payment token.
+
+    A payment-method clarification only stores accumulated text, so a plain append
+    can never resolve it: once the stored text carries both a cash and a card token
+    (e.g. the user wrote "현금결제 신용카드로"), every later "카드"/"현금" answer keeps
+    both tokens present and ``natural_purchase`` re-asks the same method question
+    forever. When the follow-up names exactly one payment method, that answer is
+    authoritative, so remove the *conflicting* method's tokens from the prior text
+    before merging. A follow-up that names both methods, or neither, is left to the
+    normal append path (no method was actually chosen).
+    """
+    fu = re.sub(r"\s+", "", unicodedata.normalize("NFKC", followup).lower())
+    fu_card = _PURCHASE_CARD.search(fu) is not None
+    fu_cash = _PURCHASE_CASH.search(fu) is not None
+    if fu_card == fu_cash:  # both or neither -> not a clean single-method answer.
+        return question_so_far
+    conflicting = _PURCHASE_CASH if fu_card else _PURCHASE_CARD
+    return conflicting.sub("", question_so_far)
+
+
 def merged_purchase_question(question_so_far: str, followup: str) -> str | None:
     """Combine a stored purchase clarification with a bare follow-up, or None to discard."""
     if not is_bare_purchase_fragment(followup):
         return None
-    combined = f"{question_so_far} {followup}"
+    base = _payment_answer_override(question_so_far, followup)
+    combined = f"{base} {followup}"
     if len(combined) > _MERGED_QUESTION_MAX_CHARS:
         # Bound the re-stored pending text: drop this fragment rather than append
-        # unboundedly. ``question_so_far`` is itself already bounded (a prior merged
-        # result or the validated request), so the stored state cannot grow.
-        return question_so_far
+        # unboundedly. ``base`` is bounded by ``question_so_far`` (itself a prior
+        # merged result or the validated request), so the stored state cannot grow;
+        # returning the override-applied ``base`` keeps a resolved method sticky even
+        # when the fresh fragment cannot be appended.
+        return base
     return combined
 
 
