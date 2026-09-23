@@ -20,7 +20,6 @@ import { CHAT_MESSAGE_MAX_LENGTH, validateChatMessage, type ChatMessage } from "
 import { COACH_CAT } from "@/features/room/assets";
 import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 import { formatDateTime, parseKSTLocalDateTime } from "@/lib/date";
-import { typography } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 const HOME_ROUTE = "/";
@@ -36,15 +35,7 @@ export const THINKING_LABEL = "코치가 생각하고 있어요";
 const AVATAR_STYLE = { width: 36, height: 36 } as const;
 /** 내 질문 말풍선은 화면 폭의 85% 를 넘지 않는다(비율 값이라 style 로 준다) */
 const BUBBLE_MAX_STYLE = { maxWidth: "85%" } as const;
-/**
- * 말풍선 글자는 `text-label`(15/22) 보다 4 작은 11/16 — 폰에서 한 말풍선이 너무 길게 늘어져 보여 줄였다(2026-09-22 사용자 요청).
- * 토큰에 없는 크기라 CoachRow 처럼 label 토큰에서 빼서 style 로 준다. DESIGN.md 의 최소 12 아래라 대화 말풍선에만 쓴다.
- */
-const CHAT_TEXT_SHRINK = 4;
-const CHAT_TEXT_STYLE = {
-  fontSize: typography.label.fontSize - CHAT_TEXT_SHRINK,
-  lineHeight: typography.label.lineHeight - CHAT_TEXT_SHRINK - 2,
-} as const;
+/** 말풍선 글자는 본문 토큰 `text-body`(16/24) 다 — 2026-09-22 에 11/16 으로 줄였다가 작아서 읽기 어렵다는 요청으로 16 으로 올렸다(2026-09-23). */
 
 export function cleanupLinkLabel(pendingCount: number, pendingMore = false): string {
   return `미확정 결제 ${pendingCount}건${pendingMore ? "+" : ""} 정리`;
@@ -130,9 +121,11 @@ function CoachingChatScreen() {
             ref={listRef}
             data={rows}
             keyExtractor={(row) => row.key}
-            contentContainerClassName="gap-3 px-6 pb-4"
-            renderItem={({ item }) => (
-              <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+            contentContainerClassName="px-6 pb-4"
+            renderItem={({ item, index }) => (
+              <View className={rowSpacingClass(item, index)}>
+                <ChatRowView row={item} onRetry={retry} onOpenChart={(chartId) => router.push(`${CHART_ROUTE}/${chartId}`)} />
+              </View>
             )}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
             keyboardShouldPersistTaps="handled"
@@ -146,7 +139,7 @@ function CoachingChatScreen() {
                     onPress={() => router.push(CLEANUP_ROUTE)}
                     className="self-start rounded-lg bg-accent px-3.5 py-2 active:opacity-80"
                   >
-                    <Text className="text-label text-primary">{cleanupLinkLabel(pendingCount, pending.hasNextPage)}</Text>
+                    <Text className="text-body text-primary">{cleanupLinkLabel(pendingCount, pending.hasNextPage)}</Text>
                   </Pressable>
                 ) : null}
                 {expiresAt !== null ? (
@@ -178,13 +171,23 @@ function CoachingChatScreen() {
   );
 }
 
+/**
+ * 질문·답변 한 쌍은 붙이고(12) 새 질문이 시작되는 곳만 넓게(40) 띄워 대화가 묻고 답한 단위로 끊겨 보이게 한다(사용자 요청 2026-09-23).
+ * 목록 전체 gap 으로는 쌍 안팎을 구분할 수 없어 줄마다 위 여백으로 준다.
+ */
+function rowSpacingClass(row: ChatRow, index: number): string {
+  if (index === 0) return "";
+  const isQuestion = row.kind === "message" && row.message.role === "user";
+  return isQuestion ? "pt-10" : "pt-3";
+}
+
 type ChatRowViewProps = { row: ChatRow; onRetry: () => void; onOpenChart: (chartId: string) => void };
 
 function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
   if (row.kind === "thinking") {
     return (
       <CoachReply>
-        <Text className="text-label text-muted-foreground" style={CHAT_TEXT_STYLE} accessibilityLiveRegion="polite">
+        <Text className="text-body text-muted-foreground" accessibilityLiveRegion="polite">
           {THINKING_LABEL}
         </Text>
       </CoachReply>
@@ -193,12 +196,12 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
   if (row.kind === "error") {
     return (
       <CoachReply>
-        <Text className="text-label text-destructive" style={CHAT_TEXT_STYLE} accessibilityLiveRegion="polite">
+        <Text className="text-body text-destructive" accessibilityLiveRegion="polite">
           {row.message}
         </Text>
         {row.retryable ? (
           <Pressable accessibilityRole="button" accessibilityLabel="다시 시도" hitSlop={6} onPress={onRetry} className="self-start">
-            <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
+            <Text className="text-body text-primary">
               다시 시도
             </Text>
           </Pressable>
@@ -211,15 +214,17 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
   if (message.role === "user") {
     return (
       <View className="self-end rounded-2xl bg-primary px-4 py-3" style={BUBBLE_MAX_STYLE} accessibilityRole="text">
-        <Text className="text-label text-primary-foreground" style={CHAT_TEXT_STYLE}>
+        <Text className="text-body text-primary-foreground">
           {message.content}
         </Text>
       </View>
     );
   }
+  const hasTable =
+    message.rows.length > 0 || message.totalKrw !== null || message.numericRows !== null || message.envelopeBalances.length > 0;
   return (
-    <CoachReply>
-      <Text className="text-label text-foreground" style={CHAT_TEXT_STYLE}>
+    <CoachReply wide={hasTable}>
+      <Text className="text-body text-foreground">
         {message.content}
       </Text>
       <CoachingSpendingTable rows={message.rows} totalKrw={message.totalKrw} />
@@ -234,7 +239,7 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
           className="flex-row items-center gap-1.5 self-start rounded-lg bg-accent px-3.5 py-2 active:opacity-80"
         >
           <Icon as={ChartLine} size={16} className="text-primary" />
-          <Text className="text-label text-primary" style={CHAT_TEXT_STYLE}>
+          <Text className="text-body text-primary">
             {CHART_LINK_LABEL}
           </Text>
         </Pressable>
@@ -244,11 +249,20 @@ function ChatRowView({ row, onRetry, onOpenChart }: ChatRowViewProps) {
 }
 
 /** 코치(고양이) 답변 — 고양이 얼굴 아래에 말풍선 카드 없이 바탕에 그대로 적는다(2026-09-22 사용자 요청). 카드가 없으니 폭 제한도 없다 */
-function CoachReply({ children }: { children: React.ReactNode }) {
+// 코치 답변도 내 질문처럼 말풍선으로 감싼다(사용자 요청 2026-09-23). 흰 카드 면 + 그림자이고 고양이 쪽 위 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다.
+// 표가 붙은 답변(wide)은 85% 폭이면 금액 열이 두 줄로 꺾여 화면 폭 가득 쓴다.
+function CoachReply({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
   return (
     <View className="gap-1.5">
       <Image source={COACH_CAT} style={AVATAR_STYLE} resizeMode="contain" accessible={false} />
-      <View className="gap-2" accessibilityRole="text">
+      <View
+        className={cn(
+          "gap-2 rounded-2xl rounded-tl-sm bg-card px-4 py-3 shadow shadow-black/10 dark:border dark:border-border dark:shadow-none",
+          wide ? "self-stretch" : "self-start"
+        )}
+        style={wide ? undefined : BUBBLE_MAX_STYLE}
+        accessibilityRole="text"
+      >
         {children}
       </View>
     </View>
