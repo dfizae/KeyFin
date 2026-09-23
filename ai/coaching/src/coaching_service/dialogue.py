@@ -196,7 +196,13 @@ def _select_card(
     ]
     if len(income_ids) != 1:
         return None
-    on_income = [c for c in valid if c.get("settlement_account_id") == income_ids[0]]
+    # The card path always carries a deferred settlement date, which the engine only
+    # accepts for CREDIT (a DEBIT card must settle on the purchase date), so a
+    # default among several is only ever a CREDIT card.
+    on_income = [
+        c for c in valid
+        if c.get("settlement_account_id") == income_ids[0] and c.get("kind") == "CREDIT"
+    ]
     return on_income[0] if len(on_income) == 1 else None
 
 

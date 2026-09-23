@@ -134,6 +134,9 @@ def test_select_card_defaults_to_the_card_settling_from_the_income_account() -> 
     assert _select_card(cards, [{"account_id": "a"}, {"account_id": "b"}]) is None
     both_on_income = [{**cards[0], "settlement_account_id": "a"}, cards[1]]
     assert _select_card(both_on_income, accounts) is None
+    # A DEBIT card must settle on the purchase date, so it is never the deferred default.
+    debit_on_income = [cards[0], {**cards[1], "kind": "DEBIT"}]
+    assert _select_card(debit_on_income, accounts) is None
 
 
 def test_price_only_question_is_not_a_purchase_route() -> None:
