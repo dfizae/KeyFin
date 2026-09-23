@@ -297,8 +297,8 @@ class NaturalPurchase:
 # a 4xx code, not a fabricated financial answer.
 # Strict buy verbs: an unambiguous purchase signal on their own.
 _PURCHASE_VERB_STRICT: Final = re.compile(
-    r"사면|사도|살까|사려고|사려는|사려해|사서|구매하면|구매하려고|구매하려는|구매해도|구매해서|"
-    r"지르면|질러도|지르려고|지르려는|구입하면|구입하려고|구입하려는|구입해서"
+    r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|"
+    r"지르면|질러도|지르려고|구입하면|구입해서"
 )
 # Casual buy phrasings. Whitespace is already stripped before matching, so
 # "사고 싶어" -> "사고싶어" and "사고싶" covers both. Deliberately excluded:
@@ -308,8 +308,19 @@ _PURCHASE_VERB_STRICT: Final = re.compile(
 # 좋아"), so a casual-only match needs a concrete amount or item alias before it
 # counts as a purchase (see ``natural_purchase``). "장만하" was dropped entirely:
 # "장만하다 뜻" / "집 장만" are definition/goal, not purchase.
-# Future-tense "살건데/살거야/살예정" also collide with 살다 (=live), so they stay casual.
-_PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까|살건데|살거야|살거예요|살예정|살생각")
+_PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까")
+# Future-tense plans ("내일 70만원 스위치 사려는데"). These collide with saving goals
+# ("노트북 사려는데 200만원 모을 수 있을까"), financial products ("주식 사려는데"),
+# 살다 = live ("부산에 살건데 월세 50만원") and hearsay ("사려는 사람"), so they
+# count only with an amount AND an item alias AND none of those signals.
+_PURCHASE_VERB_FUTURE: Final = re.compile(
+    r"사려는데|사려는중|사려해|구매하려는데|구입하려고|구입하려는데|지르려는데"
+    r"|살건데|살거야|살거예요|살예정|살생각이"
+)
+_PURCHASE_FUTURE_BLOCK: Final = re.compile(
+    r"모으|모을|모아|모이|저축|적금|예금|주식|코인|펀드|채권|etf"
+    r"|월세|전세|관리비|생활비|동네|자취|원룸|에살|에서살|혼자살|오래살"
+)
 _PURCHASE_VERB: Final = re.compile(
     _PURCHASE_VERB_STRICT.pattern + r"|" + _PURCHASE_VERB_CASUAL.pattern
 )
@@ -346,6 +357,25 @@ _PURCHASE_ENVELOPE_ALIASES: Final[dict[str, str]] = {
 }
 
 
+def _has_purchase_intent(normalized: str) -> bool:
+    """Decide whether the whitespace-free text is a purchase question at all.
+
+    Strict buy verbs count on their own. Casual verbs ("사고싶"/"사볼까"/"사둘까")
+    collide with finance/definition/goal questions, so they need an amount or a
+    known item/envelope alias. Future-tense plans need both, and none of the
+    saving-goal, financial-product or 살다 (=live) signals.
+    """
+    if _PURCHASE_VERB_STRICT.search(normalized) is not None:
+        return True
+    has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
+    has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
+    if _PURCHASE_VERB_CASUAL.search(normalized) is not None:
+        return has_amount or has_alias
+    if _PURCHASE_VERB_FUTURE.search(normalized) is None or _PURCHASE_FUTURE_BLOCK.search(normalized):
+        return False
+    return has_amount and has_alias
+
+
 def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clarify-vs-admit boundary.
     question: str,
 ) -> NaturalPurchase | str | None:
@@ -362,17 +392,8 @@ def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clari
     snapshot and can still fail closed there.
     """
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
-    if not normalized or _PURCHASE_VERB.search(normalized) is None:
+    if not normalized or not _has_purchase_intent(normalized):
         return None
-    if _PURCHASE_VERB_STRICT.search(normalized) is None:
-        # Only a casual verb ("사고싶"/"사볼까"/"사둘까") matched. These collide
-        # with finance/definition/goal questions, so demand a concrete purchase
-        # signal — an amount or a known item/envelope alias — before hijacking the
-        # turn into a purchase clarify. Otherwise fall through to normal routing.
-        has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
-        has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
-        if not has_amount and not has_alias:
-            return None
     if _PURCHASE_INSTALLMENT.search(normalized) is not None:
         # Multi-installment purchases need a payment schedule the FDT contract
         # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).
