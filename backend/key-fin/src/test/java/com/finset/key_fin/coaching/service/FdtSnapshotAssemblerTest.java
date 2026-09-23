@@ -126,6 +126,16 @@ class FdtSnapshotAssemblerTest {
 		assertThat(snapshot.schedules().get(1).nextDate()).isEqualTo("2026-09-25");
 	}
 
+	/** 결제일이 기준일과 같으면 FDT 가 PAST_SCHEDULE 로 트윈 전체를 거부하므로 다음 달 회차를 보낸다(2026-09-23 라이브 장애). */
+	@Test
+	void 출금일이_오늘이면_다음달로_넘긴다() {
+		FixedExpense today = fixedExpense(33L, "chatGPT pro", ExpenseType.SUBSCRIPTION, 100_000L, 10, 1L);
+
+		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(today), 0L, Map.of());
+
+		assertThat(snapshot.schedules().get(0).nextDate()).isEqualTo("2026-10-10");
+	}
+
 	@Test
 	void 대출은_debt_service로_보내고_fixed_group을_비운다() {
 		FixedExpense loan = fixedExpense(33L, "학자금 상환", ExpenseType.LOAN, 200_000L, 15, 1L);
