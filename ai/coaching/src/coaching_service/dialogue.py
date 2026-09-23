@@ -27,6 +27,7 @@ from coaching_service.fast_routes import (
     NaturalGoal,
     NaturalPurchase,
     NaturalWhatIf,
+    balance_check_question,
     deterministic_analysis_route,
     deterministic_lookup_route,
     merged_purchase_question,
@@ -755,6 +756,10 @@ class Dialogue:
             # validated calendar result below. ``review`` is the existing route
             # label for entering a typed numeric operation without asking a
             # model to invent an FDT parameter.
+            return Routing(mode="review", source="template"), None
+        if parsed_purchase is None and balance_check_question(request.question):
+            # "봉투 잔액 보여줘"/"예산 괜찮아?" is the envelope table plus a short
+            # summary on the review route, not a sentence list or a finance concept.
             return Routing(mode="review", source="template"), None
         lookup_route = deterministic_lookup_route(request.question)
         if lookup_route is not None:

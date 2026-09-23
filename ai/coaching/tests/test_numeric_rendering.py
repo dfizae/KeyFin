@@ -464,8 +464,8 @@ def test_review_text_drops_engine_boilerplate_but_keeps_actionable_steps() -> No
     }
     actionable = authoritative_text(Receipt.model_validate(raw))
     assert "결제 계좌를 준비하세요. 예정 결제 전에 잔액을 옮겨 두세요." in actionable
-    # Review D4: an actionable step may quote path counts, so its caveat stays.
-    assert "경로 수와 분위수는 계산입니다." in actionable
+    # The user asked for this caveat to go everywhere (2026-09-23), even next to a step.
+    assert "경로 수와 분위수" not in actionable
     assert "카드 청구 단순화" not in actionable
 
 

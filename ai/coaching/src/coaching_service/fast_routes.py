@@ -453,6 +453,30 @@ _TWIN_BACKED_TOPICS: Final[frozenset[str]] = frozenset(
 )
 
 
+# A balance check asks how much is left in the envelopes now ("봉투 잔액 보여줘",
+# "소비 잔액 확인해줘", "예산 괜찮아?", "예산 초과한 봉투 있어?"). It is answered by
+# the envelope table plus a short summary, never by the forecast/risk simulation.
+_BALANCE_SUBJECT: Final = re.compile(r"봉투|예산|소비|지출")
+_BALANCE_ASK: Final = re.compile(r"잔액|잔고|남은|남았|남아|여유|초과|넘은|넘었|넘어|괜찮")
+_BALANCE_EXCLUDE: Final = re.compile(
+    r"예측|전망|앞으로|다음달|다음주|내일|모레|월말|말까지|말에|위험|부족|하면|되면|줄이|늘리"
+    r"|계좌|통장|현금|카드|대출|빚|부채|자산|보험|소득|월급|목표|지난|작년|썼|쓴|내역|기간"
+)
+
+
+def balance_check_question(question: str) -> bool:
+    """Admit a current envelope-balance check; forecasts, lookups and purchases stay out."""
+    normalized = compact(question)
+    if (
+        not normalized
+        or _DEFINITION_LANGUAGE.search(normalized) is not None
+        or _BALANCE_EXCLUDE.search(normalized) is not None
+        or natural_purchase(question) is not None
+    ):
+        return False
+    return _BALANCE_SUBJECT.search(normalized) is not None and _BALANCE_ASK.search(normalized) is not None
+
+
 def deterministic_lookup_route(question: str) -> LookupRoute | None:
     """Reuse existing exact lookup grammars before consulting the model.
 

@@ -11,7 +11,12 @@ from coaching_service.schemas import Envelope, JsonDocument, Receipt, Tone
 def authoritative_text(receipt: Receipt) -> str:
     pieces = historical_text(receipt)
     if receipt.period is not None:
-        pieces.append(period_text(receipt.period, date.fromisoformat(receipt.identity.as_of)))
+        observed_on = date.fromisoformat(receipt.identity.as_of)
+        # A balance check (table turn without a purchase) shows what is left now; the
+        # forecast window header belongs to forecast/risk answers. A stale-data notice
+        # still shows because it changes how the balances should be read.
+        if not _is_balance_check(receipt) or observed_on != receipt.period.reference_date:
+            pieces.append(period_text(receipt.period, observed_on))
     pieces.extend(numeric_text(receipt))
     facts = receipt.payment
     if facts is not None:
@@ -40,23 +45,33 @@ def authoritative_text(receipt: Receipt) -> str:
     action = result.root.get("next_action")
     # "keep_and_review" only says no new cut is advised plus a safety disclaimer;
     # actionable next steps (payment account, earmark, cap, ...) are still shown.
-    shown_action = False
     if isinstance(action, dict) and action.get("kind") not in _SILENT_ACTIONS:
         title, detail = action.get("title"), action.get("detail")
         if isinstance(title, str) and isinstance(detail, str):
             pieces.append(title + ". " + detail)
-            shown_action = True
-    # An actionable step can quote path counts or quantiles, so the conditional-model
-    # caveat stays whenever such a step is printed.
-    pieces.extend(user_warnings(result, keep_model_caveat=shown_action))
+    pieces.extend(user_warnings(result))
     if not pieces:
         pieces.append("현재 자료로 확인할 수 있는 코칭 근거가 부족합니다. 거래·잔액 정보를 확인해 주세요.")
     return "\n".join(pieces)
 
 
 _BALANCE_TABLE_NOTE: Final = (
-    "봉투별 남은 잔액은 아래 표에 정리했어요. 지금까지 들어온 결제를 반영한 장부 잔액이에요."
+    "**봉투별 남은 잔액은 아래 표에 정리했어요.** 지금까지 들어온 결제를 반영한 장부 잔액이에요."
 )
+
+
+def _is_balance_check(receipt: Receipt) -> bool:
+    changes = receipt.request.root.get("changes")
+    return bool(envelope_balance_table(receipt)) and not (isinstance(changes, list) and changes)
+
+
+def _balance_summary(envelopes: tuple[Envelope, ...]) -> str:
+    total = sum(envelope.balance_krw for envelope in envelopes)
+    lowest = min(envelopes, key=lambda envelope: envelope.balance_krw)
+    head = f"봉투 잔액 합계는 {total:,}원이에요."
+    if lowest.balance_krw < 0:
+        return head  # 초과 봉투는 가장 크게 넘은 순서로 조언 문장이 짚는다
+    return head + f" 가장 적게 남은 봉투는 {lowest.envelope}로 {lowest.balance_krw:,}원이 남았어요."
 
 
 def envelope_balance_table(receipt: Receipt) -> tuple[Envelope, ...]:
@@ -106,6 +121,7 @@ def historical_text(receipt: Receipt) -> list[str]:
         # The per-envelope balances ship as the structured ``envelope_balances`` table
         # the app renders below the answer; the text only explains that table.
         pieces.append(_BALANCE_TABLE_NOTE)
+        pieces.append(_balance_summary(receipt.current_envelopes))
         return pieces
     pieces.extend(
         f"현재 수신 이벤트까지 반영한 {envelope.envelope} 봉투 장부 잔액은 {envelope.balance_krw:,}원입니다."
@@ -118,6 +134,13 @@ _OVER_BUDGET_ENCOURAGING: Final = (
     "{env} 지출이 예산을 넘고 있어요. **이번 기간 {env} 소비를 조금 줄여보면 좋아요.**"
 )
 _OVER_BUDGET_DIRECT: Final = "{env} 예산을 초과했어요. **{env} 소비를 줄이세요.**"
+_OVER_BUDGET_MANY_ENCOURAGING: Final = (
+    "{env} 지출이 예산을 가장 많이 넘었고, {others}도 예산을 넘었어요. "
+    "**이번 기간 {env} 소비부터 줄여보면 좋아요.**"
+)
+_OVER_BUDGET_MANY_DIRECT: Final = (
+    "{env} 예산을 가장 크게 초과했고, {others}도 초과했어요. **{env} 소비부터 줄이세요.**"
+)
 _NEAR_LIMIT_ENCOURAGING: Final = "{env} 예산이 거의 다 찼어요. **남은 기간 지출을 조절해 보세요.**"
 _NEAR_LIMIT_DIRECT: Final = "{env} 예산이 얼마 남지 않았어요. **{env} 지출을 줄이세요.**"
 _SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요. **큰 지출은 미루는 편이 좋아요.**"
@@ -191,14 +214,35 @@ def _observed_budget_bands(receipt: Receipt) -> tuple[tuple[str, float], ...]:
     return tuple(bands)
 
 
-def _over_budget_envelope(receipt: Receipt) -> str | None:
-    """Name one envelope already confirmed over budget by the engine's own facts.
+def _budget_by_envelope(receipt: Receipt) -> dict[str, float]:
+    rows = receipt.result.root.get("observed_budgets")
+    budgets: dict[str, float] = {}
+    if isinstance(rows, list):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            envelope, budget = row.get("envelope"), row.get("budget_krw")
+            if (
+                isinstance(envelope, str)
+                and isinstance(budget, (int, float))
+                and not isinstance(budget, bool)
+                and budget > 0
+            ):
+                budgets[envelope] = float(budget)
+    return budgets
+
+
+def _over_budget_envelopes(receipt: Receipt) -> list[str]:
+    """Name every envelope already confirmed over budget, the most exceeded first.
 
     ``remaining_percent`` is the service-computed payment ledger fact
     (``PaymentFacts``); a value at or below zero means this payment already
-    consumed the envelope. ``current_envelopes`` is the separately maintained
-    ledger balance. Neither path invents a new threshold: both simply read an
-    existing signal that the engine already produced.
+    exhausted its envelope. Otherwise a negative current ledger balance, or the
+    review engine's own observed-budget remaining at or below zero, confirms the
+    overage. Candidates are ranked by how far past the budget they are (percent of
+    budget, so a 2,000% overage is named before a 0.7% one); a ledger overage whose
+    budget is unknown ranks after every known one. Nothing is invented: every
+    candidate reads an existing engine or ledger signal.
     """
     payment = receipt.payment
     if payment is not None and payment.remaining_percent is not None:
@@ -207,21 +251,24 @@ def _over_budget_envelope(receipt: Receipt) -> str | None:
         except ValueError:
             remaining = None
         if remaining is not None and remaining <= 0:
-            return payment.envelope
+            return [payment.envelope]
+    budgets = _budget_by_envelope(receipt)
+    severity: dict[str, float] = {}
     for envelope in receipt.current_envelopes:
         if envelope.balance_krw < 0:
-            return envelope.envelope
+            budget = budgets.get(envelope.envelope)
+            severity[envelope.envelope] = envelope.balance_krw / budget * 100 if budget else 0.0
     for name, remaining_percent in _observed_budget_bands(receipt):
         if remaining_percent <= 0:
-            return name
-    return None
+            severity[name] = min(severity.get(name, remaining_percent), remaining_percent)
+    return sorted(severity, key=lambda name: severity[name])
 
 
 def _near_limit_envelope(receipt: Receipt) -> str | None:
     """Name an envelope that is not over budget yet but is nearly exhausted.
 
     Reads the same already-validated ``remaining_percent`` payment fact as
-    ``_over_budget_envelope`` and fires only in the strictly-between band
+    ``_over_budget_envelopes`` and fires only in the strictly-between band
     ``0 < remaining_percent <= 10``. A value outside that band, missing, or
     unparseable returns ``None`` instead of guessing. On a review receipt with no
     payment fact, the same band is read from the engine's own observed-budget
@@ -236,17 +283,15 @@ def _near_limit_envelope(receipt: Receipt) -> str | None:
         except ValueError:
             return None
         return payment.envelope if 0 < remaining <= _NEAR_LIMIT_MAX_PERCENT else None
-    for name, remaining_percent in _observed_budget_bands(receipt):
-        if 0 < remaining_percent <= _NEAR_LIMIT_MAX_PERCENT:
-            return name
-    return None
+    near = [band for band in _observed_budget_bands(receipt) if 0 < band[1] <= _NEAR_LIMIT_MAX_PERCENT]
+    return min(near, key=lambda band: band[1])[0] if near else None
 
 
 def _healthy_envelope(receipt: Receipt) -> str | None:
     """Name an envelope the engine already reports as comfortably in surplus.
 
     Reads the same already-validated ``remaining_percent`` payment fact as
-    ``_near_limit_envelope`` and ``_over_budget_envelope`` and fires only when it
+    ``_near_limit_envelope`` and ``_over_budget_envelopes`` and fires only when it
     sits at or above ``_HEALTHY_MIN_PERCENT``. This is the lowest-precedence
     signal: a value below that band, missing, or unparseable returns ``None`` so
     no maintenance nudge is invented for an account with no clear surplus. On a
@@ -262,10 +307,8 @@ def _healthy_envelope(receipt: Receipt) -> str | None:
         except ValueError:
             return None
         return payment.envelope if remaining >= _HEALTHY_MIN_PERCENT else None
-    for name, remaining_percent in _observed_budget_bands(receipt):
-        if remaining_percent >= _HEALTHY_MIN_PERCENT:
-            return name
-    return None
+    healthy = [band for band in _observed_budget_bands(receipt) if band[1] >= _HEALTHY_MIN_PERCENT]
+    return max(healthy, key=lambda band: band[1])[0] if healthy else None
 
 
 def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str | None:
@@ -285,10 +328,13 @@ def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str |
     remaining (``_observed_budget_bands``) with the identical thresholds; a
     payment-event receipt keeps its established single-envelope payment path.
     """
-    envelope = _over_budget_envelope(receipt)
-    if envelope is not None:
+    over = _over_budget_envelopes(receipt)
+    if len(over) > 1:
+        template = _OVER_BUDGET_MANY_DIRECT if tone == "direct" else _OVER_BUDGET_MANY_ENCOURAGING
+        return template.format(env=over[0], others=", ".join(over[1:]))
+    if over:
         template = _OVER_BUDGET_DIRECT if tone == "direct" else _OVER_BUDGET_ENCOURAGING
-        return template.format(env=envelope)
+        return template.format(env=over[0])
     envelope = _near_limit_envelope(receipt)
     if envelope is not None:
         template = _NEAR_LIMIT_DIRECT if tone == "direct" else _NEAR_LIMIT_ENCOURAGING
@@ -302,13 +348,16 @@ def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str |
     return None
 
 
-# Boilerplate caveats the engine attaches to every review regardless of the user's
-# data; they repeated on each answer without telling the user anything new.
-_BOILERPLATE_WARNINGS: Final = frozenset({"CONDITIONAL_MODEL", "EXISTING_CARD_SCHEDULE_APPROXIMATION"})
+# Boilerplate caveats the engine attaches regardless of the user's data; they
+# repeated on each answer without telling the user anything new, so the user asked
+# for them to go ("경로 수와 분위수는…", "다음 달 예산을 이번 달 예산과 같다고…").
+_BOILERPLATE_WARNINGS: Final = frozenset(
+    {"CONDITIONAL_MODEL", "EXISTING_CARD_SCHEDULE_APPROXIMATION", "NEXT_MONTH_BUDGET_UNCONFIRMED"}
+)
 _SILENT_ACTIONS: Final = frozenset({"keep_and_review"})
 
 
-def user_warnings(result: JsonDocument, *, keep_model_caveat: bool = True) -> list[str]:
+def user_warnings(result: JsonDocument) -> list[str]:
     pieces: list[str] = []
     warnings = result.root.get("warnings")
     if isinstance(warnings, list):
@@ -316,10 +365,7 @@ def user_warnings(result: JsonDocument, *, keep_model_caveat: bool = True) -> li
             if (
                 isinstance(warning, dict)
                 and warning.get("severity") == "user"
-                and not (
-                    warning.get("code") in _BOILERPLATE_WARNINGS
-                    and not (keep_model_caveat and warning.get("code") == "CONDITIONAL_MODEL")
-                )
+                and warning.get("code") not in _BOILERPLATE_WARNINGS
             ):
                 detail = warning.get("detail")
                 if isinstance(detail, str):
