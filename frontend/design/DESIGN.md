@@ -137,7 +137,7 @@
 | `Toast` | `components/ui/toast.tsx` | — | `info` `success` `error`, `bg-inverse` |
 | `BottomSheet` | `components/ui/bottom-sheet.tsx` | `Dialog` 또는 별도 | `bg-popover` |
 | `ListGroup` | `components/ui/list-group.tsx` | `Separator` | 설정·메뉴 목록 |
-| `TabBar` | `components/ui/tab-bar.tsx` | `Pressable`, `Icon`, `Text` | Pencil 홈 `BottomTabBar`(NaYk9) — 탭 5개(홈·자산·예산·리포트·마이), 아이콘 20 + `text-caption` 라벨 상시 표시. 활성 탭은 `bg-accent rounded-lg` + `text-primary`, 비활성은 `text-muted-foreground`. 바탕 `bg-card`, 상단 `border-border`. `app/(tabs)/_layout.tsx`의 `tabBar` |
+| `TabBar` | `components/ui/tab-bar.tsx` | `Pressable`, `Icon`, `Text` | Pencil 홈 `BottomTabBar`(NaYk9) — 탭 4개(홈·자산·예산·마이, 리포트는 2026-09-23 제외), 아이콘 20 + `text-caption` 라벨 상시 표시. 활성 탭은 `bg-accent rounded-lg` + `text-primary`, 비활성은 `text-muted-foreground`. 바탕 `bg-card`, 상단 `border-border`. `app/(tabs)/_layout.tsx`의 `tabBar` |
 | `CharacterRoom` | `features/home/components/CharacterRoom.tsx` | `Image`, `Pressable` | Pencil 홈 `CharacterRoom`(Rj36w · Plvf1) — 좌우 여백 24, 이미지 `rounded-xl`. 캐릭터 없음: 빈 방 이미지 전체가 "캐릭터를 등록하세요" 버튼(327×596). 캐릭터 있음: 캐릭터 방 이미지(327×404) |
 | `BudgetCard` | `features/home/components/BudgetCard.tsx` | `Text` | Pencil `BudgetCard`(oIAhy) — `bg-primary rounded-xl p-5 gap-4`, 제목 `text-h3`, 상태 라벨 `text-caption text-positive`, 남은 예산 `text-display tabular-nums`, 설명 `text-caption`, 진행 바 `h-2 rounded-full bg-accent` + `bg-positive` |
 | `SignupScreen` | `features/auth/components/SignupScreen.tsx` | `Text`, `Input`, `Button`, `Icon` | Pencil `signup`(ZjEHu) · `signup/error`(UdUD7) · `signup/pending`(b1O9sc) — 뒤로가기 헤더 + `text-h1` 제목, 이름·이메일·비밀번호 3필드(`h-input rounded-lg`). 중복 이메일은 이메일 필드 아래 `text-destructive` 아이콘+문구, 하단 CTA `h-button-lg` |
@@ -155,7 +155,7 @@
 ## 6. 화면 패턴
 
 - 화면 제목은 `text-h1` 하나. 뒤로가기는 플랫폼 기본 헤더 또는 좌상단 아이콘 버튼(`accessibilityLabel="뒤로"`).
-- 하단 탭은 KeyFin 기준 5개(홈·자산·예산·리포트·마이, `TabBar`). 핵심 액션은 각 탭 화면 안에 둔다.
+- 하단 탭은 KeyFin 기준 4개(홈·자산·예산·마이, `TabBar`). 리포트 탭은 구현하지 않기로 해 2026-09-23 뺐다. 핵심 액션은 각 탭 화면 안에 둔다.
 - 홈은 tint 배경(`bg-background`). 헤더는 `px-6 py-4`, 좌측에 `text-caption text-muted-foreground` "환영합니다"와 `text-h2` 인사말("{이름}님, 안녕하세요!"), 우측에 코인 배지(`bg-accent rounded-full`, 노란 원 + `text-label tabular-nums`)와 상점 버튼(40 원형 `bg-accent`, 우상단 배지 `bg-destructive`). 본문은 방 씬이 화면 폭 가득(좌우 여백 없음, 편집 화면과 같은 크기)이고 그 아래에는 아무것도 두지 않는다(사용자 결정 2026-09-15 — 방이 곧 대시보드). 예산 카드(`BudgetCard`)는 홈 본문에서 빠져 벽의 리스트(보드)를 탭하면 아래서 올라오는 예산 시트(`BudgetSheet`: 기간·요약 + 예산 카드 + 봉투별 남은 금액 + 예산 탭 링크)에만 있다. 캘린더 탭은 씬 안 팝오버 그대로.
 - 이체 플로우는 `받는 사람 → 금액 → 확인 → 인증(PIN/생체) → 완료`의 5단계를 넘지 않는다. 확인 화면은 금액을 `text-amount-lg`로, 받는 사람·계좌를 마스킹해 표시한다.
 - 로딩은 스피너보다 `Skeleton`. 1초 이상 걸리는 작업에만 진행 표시.

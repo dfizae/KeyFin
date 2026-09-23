@@ -6,7 +6,7 @@ jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
-const TITLES: Record<string, string> = { index: "홈", assets: "자산", budget: "예산", report: "리포트", my: "마이" };
+const TITLES: Record<string, string> = { index: "홈", assets: "자산", budget: "예산", my: "마이" };
 
 function buildProps(activeIndex: number) {
   const routes = Object.keys(TITLES).map((name) => ({ key: `${name}-key`, name }));
@@ -22,7 +22,7 @@ function buildProps(activeIndex: number) {
 }
 
 describe("TabBar", () => {
-  it("탭 5개의 라벨을 모두 보여주고 활성 탭만 selected 상태를 갖는다", async () => {
+  it("탭 4개의 라벨을 모두 보여주고 활성 탭만 selected 상태를 갖는다", async () => {
     await render(<TabBar {...buildProps(0).props} />);
     for (const title of Object.values(TITLES)) expect(screen.getByText(title)).toBeTruthy();
     expect(screen.getByRole("tab", { name: "홈" }).props.accessibilityState).toEqual({ selected: true });
