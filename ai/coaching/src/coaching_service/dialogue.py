@@ -157,6 +157,25 @@ def forecast_chart_hint(
     return ChartHint(period_start=period.budget_month_start, question=question, purchase=purchase)
 
 
+def _select_cash_account(accounts: "list[JsonValue]") -> "dict[str, JsonValue] | None":
+    """Pick the single account a cash purchase should draw from, or None if ambiguous.
+
+    One real account is unambiguous. With several, the user already chose the
+    method (cash), so the remaining ambiguity is *which* account, not cash-vs-card:
+    resolve it to the designated income (주거래) account when exactly one carries
+    ``is_income`` true. Zero or several income accounts stays genuinely ambiguous
+    and fails closed. (Older twins without the ``is_income`` field keep the
+    single-account behaviour and fall through to the caller's fail-closed clarify.)
+    """
+    valid = [a for a in accounts if isinstance(a, dict) and isinstance(a.get("account_id"), str)]
+    if len(valid) == 1:
+        return valid[0]
+    income = [a for a in valid if a.get("is_income") is True]
+    if len(income) == 1:
+        return income[0]
+    return None
+
+
 def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit fail-closed payment boundary.
     purchase: NaturalPurchase, twin: JsonDocument, reference: date
 ) -> JsonDocument:
@@ -219,9 +238,10 @@ def resolve_purchase_change(  # noqa: C901, PLR0912 - each guard is one explicit
         change["card_id"] = card_id
         change["payment_date"] = purchase.card_payment_date
     else:
-        if len(accounts) != 1 or not isinstance(accounts[0], dict):
+        account = _select_cash_account(accounts)
+        if account is None:
             raise ServiceError("purchase_payment_method_required")
-        account_id = accounts[0].get("account_id")
+        account_id = account.get("account_id")
         if not isinstance(account_id, str):
             raise ServiceError("purchase_payment_method_required")
         change["account_id"] = account_id

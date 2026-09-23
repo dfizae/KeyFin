@@ -158,7 +158,7 @@ class CoachingTwinClientTest {
 
 	private FdtSnapshot snapshot() {
 		return new FdtSnapshot("2026-09-10", "LIVE",
-				List.of(new FdtSnapshot.Account("9700", 5_458_220L)),
+				List.of(new FdtSnapshot.Account("9700", 5_458_220L, false)),
 				List.of(), List.of(), List.of(), 300_000L,
 				Map.of("외식", 280_000L), FdtSnapshot.Coverage.NONE);
 	}

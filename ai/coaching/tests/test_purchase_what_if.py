@@ -18,6 +18,7 @@ import pytest
 from test_api import TOKEN, TestModel, setup
 from test_engine import fixture
 
+from coaching_service.dialogue import _select_cash_account
 from coaching_service.fast_routes import NaturalPurchase, natural_purchase
 from coaching_service.llm_contract import EvidenceInput, Routing
 from coaching_service.numeric_rendering import _PURCHASE_OK, _PURCHASE_RISK, purchase_verdict_text
@@ -57,6 +58,17 @@ def multi_account_fixture(user: str = "demo") -> Bootstrap:
     return base.model_copy(update={"snapshot": JsonDocument(snapshot)})
 
 
+def multi_account_income_fixture(user: str = "demo") -> Bootstrap:
+    """Two accounts, one marked 주거래(is_income): an explicit cash purchase uses it."""
+    base = fixture(user)
+    snapshot = dict(base.snapshot.root)
+    snapshot["accounts"] = [
+        {"account_id": "a", "balance_krw": 1_000_000, "is_income": False},
+        {"account_id": "b", "balance_krw": 5_000_000, "is_income": True},
+    ]
+    return base.model_copy(update={"snapshot": JsonDocument(snapshot)})
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
@@ -73,6 +85,24 @@ async def _bootstrap(client: httpx2.AsyncClient, twin: Bootstrap) -> str:
 
 
 # --- (e) adversarial: a price-only question must never be treated as a purchase ---
+
+
+def test_select_cash_account_prefers_the_income_account_among_many() -> None:
+    # A sole account is unambiguous regardless of the income flag.
+    assert _select_cash_account([{"account_id": "a"}]) == {"account_id": "a"}
+    # Several accounts resolve to the one designated 주거래(is_income).
+    picked = _select_cash_account(
+        [{"account_id": "a", "is_income": False}, {"account_id": "b", "is_income": True}]
+    )
+    assert picked == {"account_id": "b", "is_income": True}
+    # Zero or several income accounts stays ambiguous (fail closed).
+    assert _select_cash_account([{"account_id": "a"}, {"account_id": "b"}]) is None
+    assert (
+        _select_cash_account(
+            [{"account_id": "a", "is_income": True}, {"account_id": "b", "is_income": True}]
+        )
+        is None
+    )
 
 
 def test_price_only_question_is_not_a_purchase_route() -> None:
@@ -350,6 +380,33 @@ async def test_ambiguous_payment_method_clarifies_without_model_call(tmp_path: P
         )
         assert answer["model"] == "not_called"
         assert model.writes == 0
+        assert model.routes == 0
+
+
+@pytest.mark.anyio
+async def test_cash_purchase_with_multiple_accounts_resolves_to_income_account(
+    tmp_path: Path,
+) -> None:
+    # The user named the method (cash); with several accounts the remaining
+    # ambiguity is which account, resolved to the designated 주거래(is_income)
+    # instead of looping the misleading cash-vs-card clarification.
+    model = RouteMustNotRun()
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=setup(tmp_path / "purchase-inc.sqlite3", model)),
+        base_url="http://test", headers={"Authorization": "Bearer " + TOKEN},
+    ) as client:
+        path = "/v1/sessions/" + await _bootstrap(client, multi_account_income_fixture())
+        response = await client.post(
+            path + "/messages",
+            json={"question": "30만원짜리 노트북 이번 주에 현금으로 사면 이번 달 괜찮아?"},
+            headers={"Idempotency-Key": "turn"},
+        )
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        receipt = answer["receipt"]
+        # Resolved (no clarification), and the change draws from the income account.
+        assert receipt["routing"]["fallback_reason"] is None
+        assert receipt["request"]["changes"][0]["account_id"] == "b"
         assert model.routes == 0
 
 
