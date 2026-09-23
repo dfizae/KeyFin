@@ -48,7 +48,8 @@ public class FdtSnapshotAssembler {
 				asOf.toString(),
 				SOURCE_LIVE,
 				accounts.stream()
-						.map(account -> new FdtSnapshot.Account(id(account.getId()), account.getBalance()))
+						.map(account -> new FdtSnapshot.Account(
+								id(account.getId()), account.getBalance(), account.isIncome()))
 						.toList(),
 				cards(cards, unpaidBillings),
 				knownBills(cards, unpaidBillings, asOf),

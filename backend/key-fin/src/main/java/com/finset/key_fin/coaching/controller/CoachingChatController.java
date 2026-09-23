@@ -44,6 +44,12 @@ public class CoachingChatController implements CoachingChatControllerDocs {
 		return BaseResponse.ok(coachingChatService.history(userId));
 	}
 
+	@PostMapping("/chat/reset")
+	public BaseResponse<Void> reset(@AuthenticationPrincipal Long userId) {
+		coachingChatService.reset(userId);
+		return BaseResponse.ok();
+	}
+
 	@GetMapping(value = "/charts/{chartId}/html", produces = MediaType.TEXT_HTML_VALUE)
 	@Override
 	public ResponseEntity<String> chartHtml(

@@ -30,8 +30,18 @@ class FdtSnapshotAssemblerTest {
 
 		assertThat(snapshot.asOf()).isEqualTo("2026-09-10");
 		assertThat(snapshot.source()).isEqualTo("LIVE");
-		assertThat(snapshot.accounts()).containsExactly(new FdtSnapshot.Account("1", 5_458_220L));
+		assertThat(snapshot.accounts()).containsExactly(new FdtSnapshot.Account("1", 5_458_220L, false));
 		assertThat(snapshot.coverage()).isEqualTo(FdtSnapshot.Coverage.NONE);
+	}
+
+	@Test
+	void 주거래_계좌의_income_플래그를_스냅샷에_전달한다() {
+		Account income = account(1L, 1_000_000L);
+		ReflectionTestUtils.setField(income, "income", true);
+
+		FdtSnapshot snapshot = assemble(List.of(income), List.of(), List.of(), List.of(), 0L, Map.of());
+
+		assertThat(snapshot.accounts()).containsExactly(new FdtSnapshot.Account("1", 1_000_000L, true));
 	}
 
 	@Test

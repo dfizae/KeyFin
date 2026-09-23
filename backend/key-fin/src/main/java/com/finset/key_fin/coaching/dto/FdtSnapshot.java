@@ -22,7 +22,8 @@ public record FdtSnapshot(
 
 	public record Account(
 			@JsonProperty("account_id") String accountId,
-			@JsonProperty("balance_krw") long balanceKrw
+			@JsonProperty("balance_krw") long balanceKrw,
+			@JsonProperty("is_income") boolean isIncome
 	) {
 	}
 

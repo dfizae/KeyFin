@@ -63,6 +63,11 @@ public class CoachingChatService {
 		return ChatReply.from(turn, createChart(userId, session, turn));
 	}
 
+	/** 시연·새 대화 시작용: 새 코칭 세션을 강제 발급해 이력·되묻기 맥락을 초기화한다. */
+	public void reset(long userId) {
+		renew(userId, sessionRepository.findByUserId(userId).orElse(null));
+	}
+
 	public String chartHtml(long userId, String chartId) {
 		try {
 			return chartClient.html(userId, chartId);
