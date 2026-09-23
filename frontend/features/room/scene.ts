@@ -415,12 +415,14 @@ export const COACH_CAT_SIZE: SceneSize = { width: 60, height: 60 };
 export const COACH_CAT_ANCHOR: ScenePoint = { x: 78, y: 552 };
 /** 코치 고양이 그림이 놓이는 씬 사각형. 홈의 탭 영역·말풍선·첫 진입 안내가 같은 값을 쓴다 */
 export const COACH_CAT_RECT: SceneRect = getSpriteRect(COACH_CAT_ANCHOR, COACH_CAT_SIZE);
-/** 캐릭터가 고양이를 밟고 지나가지 않게 막는 발자국. 발끝 둘레의 작은 사각형이다 */
+/** 고양이가 제자리 둘레를 오가는 범위(씬 단위, useCoachCatMotion 의 산책 지점과 맞춘다) */
+export const COACH_CAT_STROLL_RANGE = { left: 10, right: 12, down: 3 } as const;
+/** 캐릭터가 고양이를 밟고 지나가지 않게 막는 발자국. 발끝 둘레의 작은 사각형을 산책 범위만큼 넓혔다 */
 export const COACH_CAT_FOOTPRINT: ScenePolygon = [
-  { x: COACH_CAT_ANCHOR.x - 24, y: COACH_CAT_ANCHOR.y - 16 },
-  { x: COACH_CAT_ANCHOR.x + 24, y: COACH_CAT_ANCHOR.y - 16 },
-  { x: COACH_CAT_ANCHOR.x + 24, y: COACH_CAT_ANCHOR.y + 6 },
-  { x: COACH_CAT_ANCHOR.x - 24, y: COACH_CAT_ANCHOR.y + 6 },
+  { x: COACH_CAT_ANCHOR.x - 24 - COACH_CAT_STROLL_RANGE.left, y: COACH_CAT_ANCHOR.y - 16 },
+  { x: COACH_CAT_ANCHOR.x + 24 + COACH_CAT_STROLL_RANGE.right, y: COACH_CAT_ANCHOR.y - 16 },
+  { x: COACH_CAT_ANCHOR.x + 24 + COACH_CAT_STROLL_RANGE.right, y: COACH_CAT_ANCHOR.y + 6 + COACH_CAT_STROLL_RANGE.down },
+  { x: COACH_CAT_ANCHOR.x - 24 - COACH_CAT_STROLL_RANGE.left, y: COACH_CAT_ANCHOR.y + 6 + COACH_CAT_STROLL_RANGE.down },
 ];
 
 /** 캐릭터 이동 파라미터. 시트 없이 정지 이미지 + 코드 모션으로 "움직이는 느낌"만 낸다. */

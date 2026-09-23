@@ -26,6 +26,8 @@ export type RoomGuide = {
   step: RoomGuideStep | null;
   next: () => void;
   finish: () => void;
+  /** 홈의 "?" 버튼으로 처음부터 다시 본다(사용자 요청 2026-09-23). 끝나면 다시 "봤음"으로 남는다 */
+  restart: () => void;
 };
 
 /** enabled 는 방이 그려진 뒤에 참이 된다 — 불러오는 중·오류 화면 위에는 안내를 띄우지 않는다 */
@@ -53,6 +55,11 @@ export function useRoomGuide(enabled: boolean): RoomGuide {
     if (userId !== null) void saveRoomGuideSeen(userId);
   }, [userId]);
 
+  const restart = React.useCallback(() => {
+    finished.current = false;
+    setIndex(0);
+  }, []);
+
   const next = React.useCallback(() => {
     if (index === null) return;
     if (index >= ROOM_GUIDE_STEPS.length - 1) finish();
@@ -64,5 +71,6 @@ export function useRoomGuide(enabled: boolean): RoomGuide {
     step: current && index !== null ? { ...current, index, isLast: index === ROOM_GUIDE_STEPS.length - 1 } : null,
     next,
     finish,
+    restart,
   };
 }

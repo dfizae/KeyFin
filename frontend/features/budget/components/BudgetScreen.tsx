@@ -100,8 +100,9 @@ function BudgetContent({ budget }: BudgetContentProps) {
           </View>
         )}
       </View>
-      {/* 비상금은 봉투 밖에서 쓰는 돈이라 맨 아래에 둔다. 남는 높이는 위에 몰아 비상금이 화면 바닥 쪽에 붙는다 */}
-      <View className="flex-grow justify-end">
+      {/* 비상금은 봉투 밖에서 쓰는 돈이라 맨 아래에 둔다. 남는 높이는 위에 몰아 비상금이 화면 바닥 쪽에 붙는다.
+          탭 바에 너무 붙어 보여 아래 여백을 32 둔다(사용자 요청 2026-09-23) */}
+      <View className="flex-grow justify-end pb-8">
         <EmergencySection budgetId={budget.data.budgetId} emergency={budget.data.emergency} />
       </View>
     </ScreenScrollView>

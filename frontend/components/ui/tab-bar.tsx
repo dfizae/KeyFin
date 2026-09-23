@@ -23,8 +23,9 @@ const TAB_ICONS: Record<string, LucideIcon> = {
 
 // Pencil Tabs 프레임 padding [12,16,8,16]. 홈 인디케이터 영역은 safe area 로 대체한다.
 const MIN_BOTTOM_INSET = 8;
-/** 탭 행의 위 여백(pt-3)과 탭 높이(h-12) — 인디케이터를 탭과 같은 자리에 겹치기 위한 값 */
-const TAB_TOP = 12;
+/** 탭 행의 위 여백과 탭 높이(h-12) — 인디케이터를 탭과 같은 자리에 겹치기 위한 값.
+ * 위 여백은 12 에서 활성 영역 위로 2 를 더 띄웠다(사용자 요청 2026-09-23). 12 가 아니라 클래스 대신 스타일로 준다 */
+const TAB_TOP = 14;
 const TAB_HEIGHT = 48;
 const INDICATOR_SPRING = { damping: 18, stiffness: 220, mass: 0.8 } as const;
 type TabLayout = { x: number; width: number };
@@ -71,8 +72,8 @@ function TabBar({ state, descriptors, navigation }: TabBarProps) {
 
   return (
     <View
-      className="flex-row items-center justify-between border-t border-border bg-card px-4 pt-3"
-      style={[TAB_BAR_SHADOW, { paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }]}
+      className="flex-row items-center justify-between border-t border-border bg-card px-4"
+      style={[TAB_BAR_SHADOW, { paddingTop: TAB_TOP, paddingBottom: Math.max(insets.bottom, MIN_BOTTOM_INSET) }]}
       accessibilityRole="tablist"
     >
       <Animated.View style={[INDICATOR_BASE, indicatorStyle]} pointerEvents="none" accessible={false}>

@@ -1,5 +1,5 @@
 import { Redirect, useFocusEffect, useRouter } from "expo-router";
-import { Bell, Coins, Shirt, Store, WifiOff } from "lucide-react-native";
+import { Bell, CircleQuestionMark, Coins, Shirt, Store, WifiOff } from "lucide-react-native";
 import * as React from "react";
 import { Pressable, View, type LayoutChangeEvent } from "react-native";
 import type { LucideIcon } from "lucide-react-native";
@@ -168,7 +168,12 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
       {selectedSticker && room.data ? <StickerRemovalDialog placement={selectedSticker} stickers={room.data.stickers}
         onClose={() => setSelectedSticker(null)} /> : null}
       {room.isSuccess ? (
-        <HomeSideActions coinBalance={room.data.coinBalance} showEdit={panel === null && selectedSticker === null} onMeasure={measureButton} />
+        <HomeSideActions
+          coinBalance={room.data.coinBalance}
+          showEdit={panel === null && selectedSticker === null}
+          onMeasure={measureButton}
+          onHelp={sceneReady ? guide.restart : undefined}
+        />
       ) : null}
       {/* 안내 덮개는 방과 사이드 버튼을 모두 덮어야 해서 맨 위에 둔다 */}
       {guide.step ? (
@@ -221,10 +226,13 @@ function HomeSideActions({
   coinBalance,
   showEdit,
   onMeasure,
+  onHelp,
 }: {
   coinBalance: number;
   showEdit: boolean;
   onMeasure: (id: GuideTargetId, rect: SceneRect) => void;
+  /** 첫 진입 안내를 다시 연다. 방이 다 그려지기 전에는 undefined 라 버튼을 숨긴다 */
+  onHelp?: () => void;
 }) {
   const topInset = useTopInset();
 
@@ -255,6 +263,7 @@ function HomeSideActions({
           guideId="wardrobe"
           onMeasure={onMeasure}
         />
+        {onHelp ? <HelpButton onPress={onHelp} /> : null}
       </View>
       {showEdit ? <RoomEditorOverlay /> : null}
     </View>
@@ -324,6 +333,27 @@ function RoomActionButton({ icon, label, hint, iconClassName, route, guideId, on
       onPress={() => router.push(route)}
     >
       <Icon as={icon} size={20} className={iconClassName} />
+    </Pressable>
+  );
+}
+
+/**
+ * 홈 안내 다시 보기 (사용자 요청 2026-09-23). 첫 진입 안내는 한 번 보면 다시 뜨지 않아, 사이드 버튼 줄 맨 아래에 "?" 로 다시 여는 길을 둔다.
+ * 모양은 알림·상점·옷장과 같은 40pt 원형이다. 안내가 가리키는 대상은 아니라 자리를 재지 않는다.
+ */
+export const HOME_HELP_LABEL = "홈 안내 다시 보기";
+
+function HelpButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={HOME_HELP_LABEL}
+      accessibilityHint="홈 화면 사용법을 처음부터 다시 보여 줍니다"
+      hitSlop={8}
+      className="h-10 w-10 items-center justify-center rounded-full bg-accent shadow shadow-black/10 active:opacity-70 dark:border dark:border-border dark:shadow-none"
+      onPress={onPress}
+    >
+      <Icon as={CircleQuestionMark} size={20} className="text-card-foreground" />
     </Pressable>
   );
 }

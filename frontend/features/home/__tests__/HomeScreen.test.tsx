@@ -14,7 +14,7 @@ import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProp
 import { toBudget } from "@/features/budget/model";
 import { ROOM_LABEL } from "@/features/home/components/CharacterRoom";
 import { COACHING_CHAT_ROUTE } from "@/features/home/components/HomeCoach";
-import { HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
+import { HOME_HELP_LABEL, HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
 import { SPOTLIGHT_LABEL } from "@/features/home/components/RoomGuideOverlay";
@@ -161,6 +161,21 @@ describe("HomeScreen", () => {
     await renderHome();
     await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
+  });
+
+  it("이미 본 안내도 ? 버튼으로 처음부터 다시 볼 수 있다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+    expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
+
+    await fireEvent.press(await screen.findByRole("button", { name: HOME_HELP_LABEL }));
+    expect(screen.getByText(ROOM_GUIDE_STEPS[0].message)).toBeTruthy();
+
+    await fireEvent.press(screen.getByRole("button", { name: "그만 보기" }));
     expect(screen.queryByText(ROOM_GUIDE_STEPS[0].message)).toBeNull();
   });
 
