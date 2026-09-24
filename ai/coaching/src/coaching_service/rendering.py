@@ -65,13 +65,28 @@ def _is_balance_check(receipt: Receipt) -> bool:
     return bool(envelope_balance_table(receipt)) and not (isinstance(changes, list) and changes)
 
 
+_HANGUL_FIRST: Final = 0xAC00
+_HANGUL_LAST: Final = 0xD7A3
+_JONG_COUNT: Final = 28
+_JONG_RIEUL: Final = 8
+
+
+def _with_ro(word: str) -> str:
+    """Attach 로/으로 by the last syllable: 외식으로, 쇼핑으로, 기타로, 교통비로, 취미·여가로."""
+    last = ord(word[-1]) if word else 0
+    if _HANGUL_FIRST <= last <= _HANGUL_LAST:
+        final = (last - _HANGUL_FIRST) % _JONG_COUNT
+        return word + ("로" if final in {0, _JONG_RIEUL} else "으로")
+    return word + "(으)로"
+
+
 def _balance_summary(envelopes: tuple[Envelope, ...]) -> str:
     total = sum(envelope.balance_krw for envelope in envelopes)
     lowest = min(envelopes, key=lambda envelope: envelope.balance_krw)
     head = f"봉투 잔액 합계는 {total:,}원이에요."
     if lowest.balance_krw < 0:
         return head  # 초과 봉투는 가장 크게 넘은 순서로 조언 문장이 짚는다
-    return head + f" 가장 적게 남은 봉투는 {lowest.envelope}로 {lowest.balance_krw:,}원이 남았어요."
+    return head + f" 가장 적게 남은 봉투는 {_with_ro(lowest.envelope)} {lowest.balance_krw:,}원이 남았어요."
 
 
 def envelope_balance_table(receipt: Receipt) -> tuple[Envelope, ...]:

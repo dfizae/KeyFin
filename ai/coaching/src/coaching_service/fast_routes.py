@@ -484,6 +484,14 @@ _BALANCE_EXCLUDE: Final = re.compile(
     r"예측|전망|앞으로|다음달|다음주|내일|모레|월말|말까지|말에|위험|부족|하면|되면|줄이|늘리"
     r"|계좌|통장|현금|카드|대출|빚|부채|자산|보험|소득|월급|목표|지난|작년|썼|쓴|내역|기간"
 )
+# The balance check answers from the ledger alone, so anything that needs a future
+# point ("30일 뒤", "향후", "이번달 말까지"), an outcome ("남을까", "괜찮을까"), or a
+# purchase review ("3만원짜리 책 살 건데") keeps its forecast/purchase route instead.
+_BALANCE_NOT_NOW: Final = re.compile(
+    r"뒤|후|향후|(?<!지금)까지|동안|달말|말일|을까|될까|할까"
+    r"|살(?:건|거|게|까|래|려|예정)|사려|사면|사도|사고싶|구매|구입|결제할|결제하려"
+    r"|\d[\d,]*(?:만|천|백)?원"
+)
 
 
 def balance_check_question(question: str) -> bool:
@@ -493,6 +501,7 @@ def balance_check_question(question: str) -> bool:
         not normalized
         or _DEFINITION_LANGUAGE.search(normalized) is not None
         or _BALANCE_EXCLUDE.search(normalized) is not None
+        or _BALANCE_NOT_NOW.search(normalized) is not None
         or natural_purchase(question) is not None
     ):
         return False
