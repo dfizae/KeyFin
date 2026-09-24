@@ -7,6 +7,8 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
 
@@ -44,16 +46,20 @@ public class FdtSnapshotAssembler {
 			long emergencyAmount,
 			Map<String, Long> budgets
 	) {
+		List<FdtSnapshot.Account> snapshotAccounts = accounts.stream()
+				.map(account -> new FdtSnapshot.Account(
+						id(account.getId()), account.getBalance(), account.isIncome()))
+				.toList();
+		List<FdtSnapshot.Card> snapshotCards = cards(cards, unpaidBillings);
 		return new FdtSnapshot(
 				asOf.toString(),
 				SOURCE_LIVE,
-				accounts.stream()
-						.map(account -> new FdtSnapshot.Account(
-								id(account.getId()), account.getBalance(), account.isIncome()))
-						.toList(),
-				cards(cards, unpaidBillings),
+				snapshotAccounts,
+				snapshotCards,
 				knownBills(cards, unpaidBillings, asOf),
-				schedules(fixedExpenses, asOf),
+				schedules(fixedExpenses, asOf,
+						snapshotAccounts.stream().map(FdtSnapshot.Account::accountId).collect(Collectors.toSet()),
+						snapshotCards.stream().map(FdtSnapshot.Card::cardId).collect(Collectors.toSet())),
 				emergencyAmount,
 				budgets.isEmpty() ? null : budgets,
 				FdtSnapshot.Coverage.NONE
@@ -105,11 +111,21 @@ public class FdtSnapshotAssembler {
 		return bills;
 	}
 
-	/** 카드대금은 known_bills 로 따로 나가므로 일정에서 뺀다. 두 번 세면 예측이 그만큼 비관적이 된다. */
-	private List<FdtSnapshot.Schedule> schedules(List<FixedExpense> fixedExpenses, LocalDate asOf) {
+	/**
+	 * 카드대금은 known_bills 로 따로 나가므로 일정에서 뺀다. 두 번 세면 예측이 그만큼 비관적이 된다.
+	 * FDT 는 일정의 card_id·account_id 가 snapshot 에 없으면 INVALID_SCHEDULE_* 로 트윈 전체를 거부하므로 그 일정만 뺀다.
+	 */
+	private List<FdtSnapshot.Schedule> schedules(List<FixedExpense> fixedExpenses, LocalDate asOf,
+			Set<String> accountIds, Set<String> cardIds) {
 		List<FdtSnapshot.Schedule> schedules = new ArrayList<>();
 		for (FixedExpense expense : fixedExpenses) {
 			if (expense.getExpenseType() == ExpenseType.CARD_BILL || expense.getAmount() == null) {
+				continue;
+			}
+			String accountId = expense.isSynced() || expense.getWithdrawalAccountId() == null
+					? null : id(expense.getWithdrawalAccountId());
+			String cardId = expense.isSynced() && expense.getCardId() != null ? id(expense.getCardId()) : null;
+			if (!(cardId != null ? cardIds.contains(cardId) : accountIds.contains(accountId))) {
 				continue;
 			}
 			String fixedGroup = FIXED_GROUP.get(expense.getExpenseType());
@@ -121,7 +137,8 @@ public class FdtSnapshotAssembler {
 					nextDate(expense, asOf).toString(),
 					expense.getPaymentDay(),
 					fixedGroup,
-					expense.getWithdrawalAccountId() == null ? null : id(expense.getWithdrawalAccountId())
+					accountId,
+					cardId
 			));
 		}
 		return schedules;
