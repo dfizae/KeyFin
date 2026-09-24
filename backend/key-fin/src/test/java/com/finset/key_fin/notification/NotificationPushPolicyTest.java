@@ -17,7 +17,7 @@ class NotificationPushPolicyTest {
 	private final NotificationPushPolicy policy = new NotificationPushPolicy();
 
 	@ParameterizedTest
-	@EnumSource(value = NotificationType.class, names = "WARNING", mode = EnumSource.Mode.EXCLUDE)
+	@EnumSource(value = NotificationType.class, names = {"WARNING", "SUBSCRIPTION_CARD"}, mode = EnumSource.Mode.EXCLUDE)
 	void onlyTheMatchingSwitchControlsEachType(NotificationType type) {
 		UserSettings settings = settings();
 		settings.updateNotificationSettings(type == NotificationType.COACHING, type == NotificationType.BUDGET_ALERT,
@@ -28,12 +28,13 @@ class NotificationPushPolicyTest {
 		assertThat(policy.evaluate(settings, type, LocalTime.NOON)).isEqualTo(TYPE_DISABLED);
 	}
 
-	@Test
-	void warningIgnoresTypeSwitchesButRespectsQuietHours() {
+	@ParameterizedTest
+	@EnumSource(value = NotificationType.class, names = {"WARNING", "SUBSCRIPTION_CARD"})
+	void warningIgnoresTypeSwitchesButRespectsQuietHours(NotificationType type) {
 		UserSettings settings = settings();
 		settings.updateNotificationSettings(false, false, false, false, LocalTime.of(23, 0), LocalTime.of(8, 0));
-		assertThat(policy.evaluate(settings, NotificationType.WARNING, LocalTime.NOON)).isEqualTo(ALLOW);
-		assertThat(policy.evaluate(settings, NotificationType.WARNING, LocalTime.MIDNIGHT)).isEqualTo(QUIET_HOURS);
+		assertThat(policy.evaluate(settings, type, LocalTime.NOON)).isEqualTo(ALLOW);
+		assertThat(policy.evaluate(settings, type, LocalTime.MIDNIGHT)).isEqualTo(QUIET_HOURS);
 	}
 
 	@ParameterizedTest
