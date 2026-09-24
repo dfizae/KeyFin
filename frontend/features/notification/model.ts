@@ -7,7 +7,7 @@ import { formatDateGroupLabel, formatTime, KST_LOCAL_DATE_TIME, parseKSTLocalDat
  * requiresAction 은 읽음 처리로 바뀌지 않는다(이체를 승인해도 그대로) — 그래서 '확인 필요' 표시는 안 읽은 건에만 붙인다.
  * 모르는 type 은 UNKNOWN 으로 흡수한다 (규칙 80).
  */
-export const NOTIFICATION_TYPES = ["COACHING", "BUDGET_ALERT", "TRANSFER_REQUEST", "CLEANUP", "WARNING"] as const;
+export const NOTIFICATION_TYPES = ["COACHING", "BUDGET_ALERT", "TRANSFER_REQUEST", "CLEANUP", "WARNING", "SUBSCRIPTION_CARD"] as const;
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number] | "UNKNOWN";
 
 export type NotificationItemDto = {
@@ -89,6 +89,8 @@ const PENDING_CLEANUP_ROUTE = "/transaction/pending";
 const TRANSACTION_ROUTE = "/transaction";
 const LINKS_ROUTE = "/my/links";
 const COIN_ROUTE = "/coin";
+/** 뒤에 고정지출 id 를 붙이면 수정 화면, 동기화 항목이면 카드 정기결제 상세(PAGE-26) */
+const FIXED_EXPENSE_ROUTE = "/payment/fixed-expense";
 
 const POSITIVE_ID = /^[1-9]\d*$/;
 
@@ -107,6 +109,7 @@ function positiveIdOf(refId: string | null): string | null {
  *   거래 상세로 바로 보내지 않는 이유: 단건 조회 API 가 없어 캐시에 없는 거래는 "찾을 수 없어요"가 된다. refId 가 없으면 홈(코치 말풍선)
  * - BUDGET_ALERT: 봉투 id · TRANSFER_REQUEST: 이체 id(★ '승인 필요' 알림만 서버가 받는 계좌 id 를 넣는다 — 백엔드에 수정 요청, api-contract NOTIFICATION)
  * - WARNING: 계좌 id 지만 쓰지 않고 결제 캘린더로 간다 · CLEANUP: 없음
+ * - SUBSCRIPTION_CARD: 고정지출 id(-183) — 카드 정기결제 상세에서 결제 카드를 고른다
  * refId 가 없거나 id 모양이 아니면 그 종류의 목록 화면으로 보낸다(규칙 50: 파라미터는 믿지 않는다). 모르는 종류는 갈 곳이 없다(null).
  */
 export function notificationHref(notification: Pick<InboxNotification, "type" | "refId">): string | null {
@@ -120,6 +123,8 @@ export function notificationHref(notification: Pick<InboxNotification, "type" | 
       return PENDING_CLEANUP_ROUTE;
     case "WARNING":
       return PAYMENT_CALENDAR_ROUTE;
+    case "SUBSCRIPTION_CARD":
+      return id === null ? FIXED_EXPENSE_ROUTE : `${FIXED_EXPENSE_ROUTE}/${id}`;
     case "COACHING":
       return id === null ? HOME_ROUTE : pendingFocusHref(id);
     case "UNKNOWN":
@@ -174,7 +179,7 @@ export function toPushDeviceRequest(token: unknown): PushDeviceRequest | null {
 
 /* ───────────── FCM data 메시지 규약 ─────────────
  * 백엔드 발송 코드 대조(NotificationPushListener, develop 392ca77, 2026-09-21): 서버가 실제로 보내는 data 는
- *   { notificationId, type, requiresAction, refId? } 이고 type 은 **알림함과 같은 5종**(COACHING·BUDGET_ALERT·TRANSFER_REQUEST·CLEANUP·WARNING),
+ *   { notificationId, type, requiresAction, refId? } 이고 type 은 **알림함과 같은 6종**(COACHING·BUDGET_ALERT·TRANSFER_REQUEST·CLEANUP·WARNING·SUBSCRIPTION_CARD),
  *   대상 id 는 종류와 무관하게 **refId 하나**다. Notion 「FCM data 메시지 규약」의 9종·종류별 id 필드(transferId 등)는 아직 구현되지 않았다.
  * 앱은 둘 다 읽는다 — 지금 서버(refId·WARNING)로 동작하고, 서버가 Notion 규약으로 옮겨 가도 그대로 동작하게.
  */
@@ -194,6 +199,7 @@ export const PUSH_DATA_TYPES = [
   "PAYMENT_RISK",
   "WARNING",
   "COIN_GRANTED",
+  "SUBSCRIPTION_CARD",
 ] as const;
 
 export type PushDataType = (typeof PUSH_DATA_TYPES)[number] | "UNKNOWN";
@@ -264,6 +270,10 @@ export function pushNotificationHref(data: unknown): string | null {
       return LINKS_ROUTE;
     case "COIN_GRANTED":
       return COIN_ROUTE;
+    case "SUBSCRIPTION_CARD": {
+      const id = pushIdOf(data, "fixedExpenseId", true);
+      return id === null ? FIXED_EXPENSE_ROUTE : `${FIXED_EXPENSE_ROUTE}/${id}`;
+    }
     case "COACHING": {
       const id = pushIdOf(data, "transactionId", true);
       return id === null ? HOME_ROUTE : pendingFocusHref(id);
@@ -273,6 +283,29 @@ export function pushNotificationHref(data: unknown): string | null {
     case "UNKNOWN":
       return null;
   }
+}
+
+/** 푸시 data 의 알림 id. 코치 피드백 조회 키다(서버는 모든 푸시에 notificationId 를 넣는다) */
+export function pushNotificationId(data: unknown): number | null {
+  if (typeof data !== "object" || data === null) return null;
+  const raw = (data as Record<string, unknown>).notificationId;
+  return typeof raw === "string" && POSITIVE_ID.test(raw) ? Number(raw) : null;
+}
+
+/**
+ * GET /notifications/{id}/coach-feedback 계약 (-182). 예산 구간 알림마다 서버가 AI 봉투 평가를 비동기로 받아 24시간 둔다.
+ * 모든 상태가 200 이고 없거나 만료·남의 알림은 NONE 이다. 모르는 status 와 문장 없는 READY 는 NONE 으로 흡수한다 (규칙 90).
+ */
+export const COACH_FEEDBACK_STATUSES = ["PENDING", "READY", "FAILED", "NONE"] as const;
+export type CoachFeedbackStatus = (typeof COACH_FEEDBACK_STATUSES)[number];
+export type CoachFeedbackDto = { status: string; text: string | null };
+export type CoachFeedback = { status: CoachFeedbackStatus; text: string | null };
+
+export function toCoachFeedback(dto: CoachFeedbackDto): CoachFeedback {
+  const status = (COACH_FEEDBACK_STATUSES as readonly string[]).includes(dto.status) ? (dto.status as CoachFeedbackStatus) : "NONE";
+  const text = dto.text?.trim() ?? "";
+  if (status === "READY" && text === "") return { status: "NONE", text: null };
+  return { status, text: status === "READY" ? text : null };
 }
 
 /** 고양이 말풍선에 한 번에 담을 최대 글자 수. 넘치면 말줄임표로 줄인다 */

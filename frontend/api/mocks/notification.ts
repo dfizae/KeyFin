@@ -2,6 +2,7 @@ import { ApiError } from "@/api/error";
 import {
   isInstallationId,
   toPushDeviceRequest,
+  type CoachFeedbackDto,
   type NotificationItemDto,
   type NotificationListDto,
   type PushDeviceRequest,
@@ -129,6 +130,13 @@ export function notificationListMock(page: { cursor: number | null; size: number
   const items = sorted.slice(0, page.size);
   const hasNext = sorted.length > page.size;
   return { items: items.map((item) => ({ ...item })), nextCursor: hasNext ? items[items.length - 1].id : null };
+}
+
+/** GET /notifications/{id}/coach-feedback 목. 예산 알림이면 코치 문장을, 그 외는 NONE 을 준다 */
+export function coachFeedbackMock(notificationId: number): CoachFeedbackDto {
+  const target = store().find((item) => item.id === notificationId);
+  if (target?.type !== "BUDGET_ALERT") return { status: "NONE", text: null };
+  return { status: "READY", text: "외식 봉투가 30% 남았다냥. 주기 끝까지 12일 남았으니 하루 2,600원 안쪽으로 쓰면 버틸 수 있다냥." };
 }
 
 /** 이미 읽은 알림도 성공. 없는 id 는 404 NOTI_001 */

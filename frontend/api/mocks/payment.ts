@@ -28,6 +28,8 @@ type MockFixedExpense = {
   withdrawalAccountId: number | null;
   /** 금융망 정기결제 id. 있으면 동기화 항목이다 */
   finSubscriptionId: string | null;
+  /** 동기화 항목의 결제 카드. 넷플릭스는 미지정으로 두어 지정 흐름을 폰에서 볼 수 있게 한다 */
+  cardId: number | null;
   prepared: boolean;
   shortage: number;
 };
@@ -42,6 +44,7 @@ const INITIAL_FIXED: MockFixedExpense[] = [
     paymentDay: 15,
     withdrawalAccountId: 1,
     finSubscriptionId: null,
+    cardId: null,
     prepared: false,
     shortage: 230000,
   },
@@ -54,6 +57,7 @@ const INITIAL_FIXED: MockFixedExpense[] = [
     paymentDay: 20,
     withdrawalAccountId: null,
     finSubscriptionId: "SUB-0001",
+    cardId: null,
     prepared: true,
     shortage: 0,
   },
@@ -66,6 +70,7 @@ const INITIAL_FIXED: MockFixedExpense[] = [
     paymentDay: 25,
     withdrawalAccountId: 1,
     finSubscriptionId: null,
+    cardId: null,
     prepared: true,
     shortage: 0,
   },
@@ -140,6 +145,7 @@ export function fixedExpenseListMock(): FixedExpenseListDto {
         paymentDay: expense.paymentDay,
         withdrawalAccountId: expense.withdrawalAccountId,
         synced: isSynced(expense),
+        cardId: expense.cardId,
       })
     );
 }
@@ -174,7 +180,7 @@ export function createFixedExpenseMock(request: FixedExpenseRequest): { id: numb
   if (duplicated) throw new ApiError(409, "PAY_003", "같은 내용의 고정지출이 이미 등록되어 있습니다.");
 
   nextId += 1;
-  fixedExpenses = [...fixedExpenses, { ...request, id: nextId, finSubscriptionId: null, prepared: true, shortage: 0 }];
+  fixedExpenses = [...fixedExpenses, { ...request, id: nextId, finSubscriptionId: null, cardId: null, prepared: true, shortage: 0 }];
   return { id: nextId };
 }
 
@@ -190,6 +196,19 @@ export function updateFixedExpenseMock(id: number, request: FixedExpenseRequest)
 export function deleteFixedExpenseMock(id: number): void {
   const target = findManual(id);
   fixedExpenses = fixedExpenses.filter((expense) => expense !== target);
+}
+
+/** 카드 목(cardBillingsMock)과 같은 카드 id. 링크 목의 연결 카드 2장이다 */
+const MOCK_CARD_IDS = [1, 2];
+
+/** PATCH /fixed-expenses/{id}/card — 동기화 항목에만 본인 관리 카드를 지정한다 */
+export function assignFixedExpenseCardMock(id: number, cardId: number): { id: number } {
+  const expense = fixedExpenses.find((candidate) => candidate.id === id);
+  if (expense === undefined) throw new ApiError(404, "PAY_001", "고정지출을 찾을 수 없습니다.");
+  if (!isSynced(expense)) throw new ApiError(409, "PAY_014", "카드 정기결제 항목만 결제 카드를 지정할 수 있습니다.");
+  if (!MOCK_CARD_IDS.includes(cardId)) throw new ApiError(404, "PAY_013", "카드를 찾을 수 없습니다.");
+  fixedExpenses = fixedExpenses.map((candidate) => (candidate === expense ? { ...candidate, cardId } : candidate));
+  return { id };
 }
 
 function shiftDateKey(key: string, days: number): string {

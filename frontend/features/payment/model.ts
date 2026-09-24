@@ -460,6 +460,8 @@ export type FixedExpenseDto = {
   paymentDay: number;
   withdrawalAccountId: number | null;
   synced: boolean;
+  /** 동기화 항목의 결제 카드(-183, 2026-09-24). 미지정·수동 항목은 null, 필드 추가 전 서버는 보내지 않는다 */
+  cardId?: number | null;
 };
 
 export type FixedExpenseListDto = FixedExpenseDto[];
@@ -474,6 +476,7 @@ export type FixedExpense = {
   paymentDay: number;
   withdrawalAccountId: number | null;
   synced: boolean;
+  cardId: number | null;
 };
 
 export const MIN_PAYMENT_DAY = 1;
@@ -493,6 +496,7 @@ export function toFixedExpense(dto: FixedExpenseDto): FixedExpense {
     paymentDay: dto.paymentDay,
     withdrawalAccountId: dto.withdrawalAccountId ?? null,
     synced: dto.synced,
+    cardId: dto.cardId ?? null,
   };
 }
 

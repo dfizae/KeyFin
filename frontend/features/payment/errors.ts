@@ -30,6 +30,26 @@ export function fixedExpenseDeleteErrorMessage(error: unknown): string {
   return messageOf(error, DELETE_UNKNOWN_MESSAGE);
 }
 
+const CARD_ASSIGN_UNKNOWN_MESSAGE = "결제 카드를 지정하지 못했어요. 잠시 뒤 다시 시도해 주세요.";
+
+/** 정기결제 결제 카드 지정 실패 문구 (백엔드 PaymentErrorCode, -183) */
+const CARD_ASSIGN_MESSAGES: Record<string, string> = {
+  PAY_001: "이미 해지됐거나 찾을 수 없는 정기결제예요.",
+  PAY_013: "카드를 찾을 수 없어요. 목록을 새로 불러왔으니 다시 골라 주세요.",
+  PAY_014: "카드 정기결제만 결제 카드를 지정할 수 있어요.",
+  PAY_015: "연결을 해제한 카드는 지정할 수 없어요. 다른 카드를 골라 주세요.",
+};
+
+export function fixedExpenseCardErrorMessage(error: unknown): string {
+  if (!isApiError(error)) return CARD_ASSIGN_UNKNOWN_MESSAGE;
+  return CARD_ASSIGN_MESSAGES[error.code] ?? (error.message !== "" ? error.message : CARD_ASSIGN_UNKNOWN_MESSAGE);
+}
+
+/** 카드 목록이 서버와 어긋난 오류(카드 없음·미관리). 카드 목록을 다시 받아야 풀린다 */
+export function isStaleCardError(error: unknown): boolean {
+  return isApiError(error) && (error.code === "PAY_013" || error.code === "PAY_015");
+}
+
 /** 화면이 들고 있던 고정지출이 서버와 어긋난 오류(이미 삭제됨·동기화 항목). 목록·캘린더를 다시 받아야 풀린다 */
 const STALE_FIXED_EXPENSE_CODES = ["PAY_001", "PAY_002"];
 
