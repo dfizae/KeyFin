@@ -23,6 +23,7 @@ import {
   useUpdateFixedExpense,
 } from "@/features/payment/api/queries";
 import { MANUAL_EXPENSE_TYPE_OPTIONS, expenseTypeIcon, expenseTypeLabel } from "@/features/payment/catalog";
+import { SubscriptionCardField } from "@/features/payment/components/SubscriptionCardField";
 import { fixedExpenseDeleteErrorMessage, fixedExpenseSaveErrorMessage } from "@/features/payment/errors";
 import {
   EMPTY_FIXED_EXPENSE_FORM,
@@ -307,11 +308,12 @@ function SyncedExpenseDetail({ expense, onBack }: { expense: FixedExpense; onBac
           <DetailRow label="유형" value={expenseTypeLabel(expense.expenseType)} />
           <DetailRow label="출금일" value={paymentDayLabel(expense.paymentDay)} />
           <DetailRow label="결제 경로" value={CARD_PAYMENT_ROUTE_LABEL} />
+          <SubscriptionCardField expense={expense} />
         </View>
         <View className="flex-row gap-2 rounded-lg bg-muted p-3.5">
           <Icon as={Lock} size={16} className="mt-0.5 text-card-foreground" />
           <Text className="shrink text-body-sm text-card-foreground">
-            카드사에서 관리하는 정기결제라 여기서는 바꿀 수 없어요. 카드사·서비스에서 바꾸거나 해지하면 다음 동기화 때 반영돼요.
+            금액·출금일은 카드사에서 관리해 여기서 바꿀 수 없어요. 결제 카드만 지정할 수 있어요.
           </Text>
         </View>
       </ScreenScrollView>

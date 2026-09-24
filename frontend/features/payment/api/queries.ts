@@ -11,6 +11,7 @@ import {
 import { accountKeys } from "@/features/account/api/queries";
 import { isStaleAccountError } from "@/features/account/errors";
 import {
+  assignFixedExpenseCard,
   approveTransfer,
   createFixedExpense,
   deleteFixedExpense,
@@ -25,7 +26,7 @@ import {
   updateFixedExpense,
   type TransferListParams,
 } from "@/features/payment/api/payment.api";
-import { isCardNotFoundError, isStaleFixedExpenseError } from "@/features/payment/errors";
+import { isCardNotFoundError, isStaleCardError, isStaleFixedExpenseError } from "@/features/payment/errors";
 import { findFixedExpense, type Transfer, type TransferPage } from "@/features/payment/model";
 import { roomKeys } from "@/features/room/api/queries";
 
@@ -117,6 +118,23 @@ export function useUpdateFixedExpense() {
 
 export function useDeleteFixedExpense() {
   return useFixedExpenseMutation(deleteFixedExpense);
+}
+
+/**
+ * 정기결제 결제 카드 지정(-183). 캘린더·이체에는 영향이 없어 고정지출 목록만 다시 받는다.
+ * 카드가 없거나 연결 해제됐으면(PAY_013·015) 카드 목록을, 항목이 사라졌으면(PAY_001) 고정지출 목록을 다시 받는다.
+ */
+export function useAssignFixedExpenseCard() {
+  const queryClient = useQueryClient();
+  const refreshExpenses = () => queryClient.invalidateQueries({ queryKey: paymentKeys.fixedExpenses() });
+  return useMutation({
+    mutationFn: assignFixedExpenseCard,
+    onSuccess: refreshExpenses,
+    onError: (error) => {
+      if (isStaleFixedExpenseError(error)) void refreshExpenses();
+      if (isStaleCardError(error)) void queryClient.invalidateQueries({ queryKey: paymentKeys.cardBillings() });
+    },
+  });
 }
 
 /** 커서 페이지(-62). 결제 캘린더는 해당 달(dueDate 기준)로 좁혀 첫 쪽만으로 부족 뱃지를 잇는다 */

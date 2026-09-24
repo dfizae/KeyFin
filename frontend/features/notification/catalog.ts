@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Bell, ListChecks, MessageCircle, TriangleAlert, Wallet, type LucideIcon } from "lucide-react-native";
+import { ArrowLeftRight, Bell, CreditCard, ListChecks, MessageCircle, TriangleAlert, Wallet, type LucideIcon } from "lucide-react-native";
 
 import type { NotificationType } from "@/features/notification/model";
 
@@ -9,6 +9,7 @@ const NOTIFICATION_ICONS: Record<NotificationType, LucideIcon> = {
   CLEANUP: ListChecks,
   COACHING: MessageCircle,
   WARNING: TriangleAlert,
+  SUBSCRIPTION_CARD: CreditCard,
   UNKNOWN: Bell,
 };
 

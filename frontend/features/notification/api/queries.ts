@@ -163,6 +163,8 @@ function affectedQueryKeys(type: PushDataType): QueryKey[] {
     case "PAYMENT_RISK":
     case "WARNING":
       return [paymentKeys.calendar()];
+    case "SUBSCRIPTION_CARD":
+      return [paymentKeys.fixedExpenses()];
     case "COIN_GRANTED":
       return [shopKeys.coins(), roomKeys.home()];
     case "NEW_LINK_FOUND":

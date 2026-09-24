@@ -1,6 +1,7 @@
 import { TIMEOUT_MONEY_MS, api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
+  assignFixedExpenseCardMock,
   cardBillingDetailMock,
   cardBillingsMock,
   createFixedExpenseMock,
@@ -66,6 +67,18 @@ export type UpdateFixedExpenseInput = { id: number; request: FixedExpenseRequest
 export async function updateFixedExpense({ id, request }: UpdateFixedExpenseInput): Promise<number> {
   if (isMocked("payment")) return (await withMockLatency(updateFixedExpenseMock(id, request))).id;
   const { data } = await api.put<FixedExpenseResponseDto>(`/fixed-expenses/${id}`, request);
+  return data.id;
+}
+
+export type AssignFixedExpenseCardInput = { id: number; cardId: number };
+
+/**
+ * PATCH /fixed-expenses/{id}/card — 금융망 정기결제(synced)의 결제 카드 지정 (-183). 다시 부르면 카드를 바꾼다.
+ * 오류: 404 PAY_001(없음·타인) · 404 PAY_013(카드 없음·타인) · 409 PAY_014(수동 항목) · 409 PAY_015(미관리 카드).
+ */
+export async function assignFixedExpenseCard({ id, cardId }: AssignFixedExpenseCardInput): Promise<number> {
+  if (isMocked("payment")) return (await withMockLatency(assignFixedExpenseCardMock(id, cardId))).id;
+  const { data } = await api.patch<FixedExpenseResponseDto>(`/fixed-expenses/${id}/card`, { cardId });
   return data.id;
 }
 
