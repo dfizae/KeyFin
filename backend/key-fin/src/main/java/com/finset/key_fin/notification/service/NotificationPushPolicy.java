@@ -23,7 +23,7 @@ public class NotificationPushPolicy {
 			case BUDGET_ALERT -> settings.isNotiBudgetAlert();
 			case TRANSFER_REQUEST -> settings.isNotiTransfer();
 			case CLEANUP -> settings.isNotiCleanup();
-			case WARNING -> true;
+			case WARNING, SUBSCRIPTION_CARD -> true;
 		};
 		if (!enabled) return Decision.TYPE_DISABLED;
 		if (start != null) {
