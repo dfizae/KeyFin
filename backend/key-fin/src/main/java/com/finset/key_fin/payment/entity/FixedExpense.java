@@ -53,6 +53,9 @@ public class FixedExpense {
 	@Column(name = "withdrawal_account_id")
 	private Long withdrawalAccountId;
 
+	@Column(name = "card_id")
+	private Long cardId;
+
 	@Column(name = "fin_subscription_id", length = 30)
 	private String finSubscriptionId;
 
@@ -92,6 +95,10 @@ public class FixedExpense {
 		this.variable = variable;
 		this.paymentDay = paymentDay;
 		this.withdrawalAccountId = withdrawalAccountId;
+	}
+
+	public void assignCard(long cardId) {
+		this.cardId = cardId;
 	}
 
 	public void deactivate() {

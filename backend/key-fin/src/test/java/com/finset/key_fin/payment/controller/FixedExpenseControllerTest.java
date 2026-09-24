@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -80,8 +81,8 @@ class FixedExpenseControllerTest {
 	@Test
 	void listsFixedExpenses() throws Exception {
 		when(fixedExpenseService.list(1L)).thenReturn(List.of(
-				new FixedExpenseResponse(7L, "월세", ExpenseType.RENT, 550000L, false, 15, 3L, false),
-				new FixedExpenseResponse(8L, "FLO 개인", ExpenseType.SUBSCRIPTION, 7900L, false, 15, 3L, true)));
+				new FixedExpenseResponse(7L, "월세", ExpenseType.RENT, 550000L, false, 15, 3L, false, null),
+				new FixedExpenseResponse(8L, "FLO 개인", ExpenseType.SUBSCRIPTION, 7900L, false, 15, 3L, true, 2L)));
 
 		mockMvc.perform(get("/api/v1/fixed-expenses"))
 				.andExpect(status().isOk())
@@ -100,6 +101,25 @@ class FixedExpenseControllerTest {
 						.content(RENT_JSON))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.data.id").value(7));
+	}
+
+	@Test
+	void assignsCardToSubscription() throws Exception {
+		when(fixedExpenseService.assignCard(1L, 8L, 2L)).thenReturn(new FixedExpenseIdResponse(8L));
+
+		mockMvc.perform(patch("/api/v1/fixed-expenses/8/card")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"cardId\":2}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.data.id").value(8));
+	}
+
+	@Test
+	void rejectsCardAssignmentWithoutCardId() throws Exception {
+		mockMvc.perform(patch("/api/v1/fixed-expenses/8/card")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

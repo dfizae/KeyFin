@@ -11,7 +11,8 @@ public record FixedExpenseResponse(
 		boolean isVariable,
 		int paymentDay,
 		Long withdrawalAccountId,
-		boolean synced
+		boolean synced,
+		Long cardId
 ) {
 
 	public static FixedExpenseResponse from(FixedExpense expense) {
@@ -23,6 +24,7 @@ public record FixedExpenseResponse(
 				expense.isVariable(),
 				expense.getPaymentDay(),
 				expense.getWithdrawalAccountId(),
-				expense.isSynced());
+				expense.isSynced(),
+				expense.getCardId());
 	}
 }

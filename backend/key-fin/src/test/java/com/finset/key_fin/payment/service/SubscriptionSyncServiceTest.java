@@ -14,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentMatchers;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,9 @@ class SubscriptionSyncServiceTest extends SpringIntegrationTestSupport {
 
 	@Autowired
 	private FixedExpenseRepository fixedExpenseRepository;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 
 	@Test
@@ -100,12 +104,55 @@ class SubscriptionSyncServiceTest extends SpringIntegrationTestSupport {
 	}
 
 	@Test
+	@DisplayName("관리 카드가 한 장이면 새 구독의 결제 카드로 자동 지정하고 알림은 보내지 않는다")
+	void assignsOnlyManagedCardToNewSubscription() {
+		insertCard(9801L, true);
+		insertCard(9802L, false);
+		when(financeSubscriptionClient.findSubscriptions(USER_KEY)).thenReturn(List.of(
+				monthly("SUB-NETFLIX", "넷플릭스", "13500", "20261001", "ACTIVE")));
+
+		subscriptionSyncService.sync(CONNECTED_USER);
+
+		assertThat(synced().get("SUB-NETFLIX").getCardId()).isEqualTo(9801L);
+		assertThat(cardNotifications()).isEmpty();
+	}
+
+	@Test
+	@DisplayName("관리 카드가 여러 장이면 새 구독마다 결제 카드 확인 알림을 보내고 기존 구독에는 보내지 않는다")
+	void asksCardForNewSubscriptionWhenSeveralCards() {
+		insertCard(9801L, true);
+		insertCard(9802L, true);
+		when(financeSubscriptionClient.findSubscriptions(USER_KEY)).thenReturn(List.of(
+				monthly("SUB-FLO", "FLO 개인", "9900", "20261015", "ACTIVE"),
+				monthly("SUB-NETFLIX", "넷플릭스", "13500", "20261001", "ACTIVE")));
+
+		subscriptionSyncService.sync(CONNECTED_USER);
+
+		FixedExpense netflix = synced().get("SUB-NETFLIX");
+		assertThat(netflix.getCardId()).isNull();
+		assertThat(cardNotifications()).containsExactly(
+				Map.of("title", "넷플릭스 결제 카드를 알려 주세요", "ref_id", String.valueOf(netflix.getId()),
+						"requires_action", true));
+	}
+
+	@Test
 	@DisplayName("금융망 미연결 사용자는 호출 없이 건너뛴다")
 	void skipsUserWithoutFinanceKey() {
 		SyncResult result = subscriptionSyncService.sync(UNLINKED_USER);
 
 		assertThat(result.connected()).isFalse();
 		verify(financeSubscriptionClient, never()).findSubscriptions(ArgumentMatchers.anyString());
+	}
+
+	private void insertCard(long id, boolean managed) {
+		jdbcTemplate.update("INSERT INTO cards (id, user_id, fin_card_no_enc, cvc, issuer_code, card_name, "
+				+ "withdrawal_account_id, withdrawal_weekday, is_managed) VALUES (?, ?, ?, '123', '1001', '테스트카드', 9504, 3, ?)",
+				id, CONNECTED_USER, "986000000000" + id, managed);
+	}
+
+	private List<Map<String, Object>> cardNotifications() {
+		return jdbcTemplate.queryForList("SELECT title, ref_id, requires_action FROM notifications "
+				+ "WHERE user_id = ? AND noti_type = 'SUBSCRIPTION_CARD'", CONNECTED_USER);
 	}
 
 	private Map<String, FixedExpense> synced() {

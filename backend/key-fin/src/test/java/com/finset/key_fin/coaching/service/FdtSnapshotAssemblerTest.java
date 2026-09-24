@@ -104,7 +104,7 @@ class FdtSnapshotAssemblerTest {
 	void 고정지출을_월주기_일정으로_보낸다() {
 		FixedExpense rent = fixedExpense(31L, "월세", ExpenseType.RENT, 750_000L, 5, 1L);
 
-		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(rent), 0L, Map.of());
+		FdtSnapshot snapshot = assemble(List.of(account(1L, 0L)), List.of(), List.of(), List.of(rent), 0L, Map.of());
 
 		FdtSnapshot.Schedule schedule = snapshot.schedules().get(0);
 		assertThat(schedule.kind()).isEqualTo("fixed_expense");
@@ -120,7 +120,7 @@ class FdtSnapshotAssemblerTest {
 		FixedExpense passed = fixedExpense(31L, "월세", ExpenseType.RENT, 750_000L, 5, 1L);
 		FixedExpense upcoming = fixedExpense(32L, "관리비", ExpenseType.UTILITY, 115_000L, 25, 1L);
 
-		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(passed, upcoming), 0L, Map.of());
+		FdtSnapshot snapshot = assemble(List.of(account(1L, 0L)), List.of(), List.of(), List.of(passed, upcoming), 0L, Map.of());
 
 		assertThat(snapshot.schedules().get(0).nextDate()).isEqualTo("2026-10-05");
 		assertThat(snapshot.schedules().get(1).nextDate()).isEqualTo("2026-09-25");
@@ -131,7 +131,7 @@ class FdtSnapshotAssemblerTest {
 	void 출금일이_오늘이면_다음달로_넘긴다() {
 		FixedExpense today = fixedExpense(33L, "chatGPT pro", ExpenseType.SUBSCRIPTION, 100_000L, 10, 1L);
 
-		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(today), 0L, Map.of());
+		FdtSnapshot snapshot = assemble(List.of(account(1L, 0L)), List.of(), List.of(), List.of(today), 0L, Map.of());
 
 		assertThat(snapshot.schedules().get(0).nextDate()).isEqualTo("2026-10-10");
 	}
@@ -140,7 +140,7 @@ class FdtSnapshotAssemblerTest {
 	void 대출은_debt_service로_보내고_fixed_group을_비운다() {
 		FixedExpense loan = fixedExpense(33L, "학자금 상환", ExpenseType.LOAN, 200_000L, 15, 1L);
 
-		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(loan), 0L, Map.of());
+		FdtSnapshot snapshot = assemble(List.of(account(1L, 0L)), List.of(), List.of(), List.of(loan), 0L, Map.of());
 
 		assertThat(snapshot.schedules()).hasSize(1);
 		assertThat(snapshot.schedules().get(0).kind()).isEqualTo("debt_service");
@@ -152,10 +152,40 @@ class FdtSnapshotAssemblerTest {
 		FixedExpense cardBill = fixedExpense(34L, "삼성카드 대금", ExpenseType.CARD_BILL, 400_000L, 10, 1L);
 		FixedExpense rent = fixedExpense(31L, "월세", ExpenseType.RENT, 750_000L, 5, 1L);
 
-		FdtSnapshot snapshot = assemble(List.of(), List.of(), List.of(), List.of(cardBill, rent), 0L, Map.of());
+		FdtSnapshot snapshot = assemble(List.of(account(1L, 0L)), List.of(), List.of(), List.of(cardBill, rent), 0L, Map.of());
 
 		assertThat(snapshot.schedules()).hasSize(1);
 		assertThat(snapshot.schedules().get(0).fixedGroup()).isEqualTo("주거");
+	}
+
+	@Test
+	void 카드_정기결제는_지정된_카드로_보내고_카드를_모르면_그_일정만_뺀다() {
+		Account settlement = account(1L, 0L);
+		FixedExpense netflix = subscription(35L, "넷플릭스", 17_000L, 28);
+		netflix.assignCard(7L);
+		FixedExpense disney = subscription(36L, "디즈니+", 9_900L, 28);
+
+		FdtSnapshot snapshot = assemble(List.of(settlement), List.of(card(7L, settlement, 3)), List.of(),
+				List.of(netflix, disney), 0L, Map.of());
+
+		assertThat(snapshot.schedules()).hasSize(1);
+		assertThat(snapshot.schedules().get(0).ruleId()).isEqualTo("35");
+		assertThat(snapshot.schedules().get(0).cardId()).isEqualTo("7");
+		assertThat(snapshot.schedules().get(0).accountId()).isNull();
+	}
+
+	/** FDT 는 snapshot 에 없는 카드·계좌를 가리키는 일정 하나로 트윈 전체를 거부한다(2026-09-24 INVALID_SCHEDULE_ACCOUNT). */
+	@Test
+	void snapshot에_없는_카드나_계좌를_가리키는_일정은_뺀다() {
+		Account settlement = account(1L, 0L);
+		FixedExpense noWeekdayCard = subscription(35L, "넷플릭스", 17_000L, 28);
+		noWeekdayCard.assignCard(8L);
+		FixedExpense unmanagedAccount = fixedExpense(31L, "월세", ExpenseType.RENT, 750_000L, 5, 2L);
+
+		FdtSnapshot snapshot = assemble(List.of(settlement), List.of(card(8L, settlement, null)), List.of(),
+				List.of(noWeekdayCard, unmanagedAccount), 0L, Map.of());
+
+		assertThat(snapshot.schedules()).isEmpty();
 	}
 
 	@Test
@@ -211,6 +241,12 @@ class FdtSnapshotAssemblerTest {
 	private FixedExpense fixedExpense(long id, String name, ExpenseType type, long amount, int paymentDay,
 			long withdrawalAccountId) {
 		FixedExpense expense = FixedExpense.register(user(), name, type, amount, false, paymentDay, withdrawalAccountId);
+		ReflectionTestUtils.setField(expense, "id", id);
+		return expense;
+	}
+
+	private FixedExpense subscription(long id, String name, long amount, int paymentDay) {
+		FixedExpense expense = FixedExpense.sync(user(), "SUB" + id, name, amount, paymentDay);
 		ReflectionTestUtils.setField(expense, "id", id);
 		return expense;
 	}

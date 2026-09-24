@@ -53,7 +53,8 @@ public record FdtSnapshot(
 			@JsonProperty("next_date") String nextDate,
 			@JsonProperty("day_of_month") Integer dayOfMonth,
 			@JsonProperty("fixed_group") String fixedGroup,
-			@JsonProperty("account_id") String accountId
+			@JsonProperty("account_id") String accountId,
+			@JsonProperty("card_id") String cardId
 	) {
 	}
 

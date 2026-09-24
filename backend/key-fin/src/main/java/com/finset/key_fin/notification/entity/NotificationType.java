@@ -5,5 +5,6 @@ public enum NotificationType {
 	BUDGET_ALERT,
 	TRANSFER_REQUEST,
 	CLEANUP,
-	WARNING
+	WARNING,
+	SUBSCRIPTION_CARD
 }

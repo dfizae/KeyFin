@@ -8,6 +8,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.finset.key_fin.account.entity.Account;
 import com.finset.key_fin.account.exception.AccountErrorCode;
 import com.finset.key_fin.account.repository.AccountRepository;
+import com.finset.key_fin.card.entity.Card;
+import com.finset.key_fin.card.repository.CardRepository;
 import com.finset.key_fin.global.exception.BusinessException;
 import com.finset.key_fin.payment.dto.request.FixedExpenseRequest;
 import com.finset.key_fin.payment.dto.response.FixedExpenseIdResponse;
@@ -25,6 +27,7 @@ public class FixedExpenseService {
 
 	private final FixedExpenseRepository fixedExpenseRepository;
 	private final AccountRepository accountRepository;
+	private final CardRepository cardRepository;
 	private final UserRepository userRepository;
 
 	@Transactional
@@ -64,6 +67,22 @@ public class FixedExpenseService {
 	@Transactional
 	public void delete(long userId, long fixedExpenseId) {
 		findManual(userId, fixedExpenseId).deactivate();
+	}
+
+	@Transactional
+	public FixedExpenseIdResponse assignCard(long userId, long fixedExpenseId, long cardId) {
+		FixedExpense expense = fixedExpenseRepository.findByIdAndUserIdAndActiveTrue(fixedExpenseId, userId)
+				.orElseThrow(() -> new BusinessException(PaymentErrorCode.FIXED_EXPENSE_NOT_FOUND));
+		if (!expense.isSynced()) {
+			throw new BusinessException(PaymentErrorCode.FIXED_EXPENSE_NOT_SUBSCRIPTION);
+		}
+		Card card = cardRepository.findByIdAndUserId(cardId, userId)
+				.orElseThrow(() -> new BusinessException(PaymentErrorCode.CARD_NOT_FOUND));
+		if (!card.isManaged()) {
+			throw new BusinessException(PaymentErrorCode.CARD_NOT_MANAGED);
+		}
+		expense.assignCard(card.getId());
+		return new FixedExpenseIdResponse(expense.getId());
 	}
 
 	private FixedExpense findManual(long userId, long fixedExpenseId) {
