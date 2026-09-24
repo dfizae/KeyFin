@@ -33,6 +33,7 @@ import { roomItemName } from "@/features/room/catalog";
 import { visiblePenalties } from "@/features/room/penalties";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
+import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -56,6 +57,9 @@ const ERROR_TOP_GAP = 24;
  * "다 그렸다"는 신호가 영영 오지 않아 홈이 통째로 막힌다. 넘기면 덮개를 걷고 방이 스스로 보여 주는 상태(스켈레톤)에 맡긴다.
  */
 const SCENE_WAIT_LIMIT_MS = 10_000;
+
+/** 건수나 목록이 바뀌어도 같은 홈에서는 반복해서 자동 표시하지 않는 리마인드. */
+const PENDING_COACH_SPEECH = { key: "pending-transactions", text: "정리할 결제가 있어요" };
 
 type HomeScreenProps = {
   /** 입주 연출(PAGE-08)에서 막 넘어왔다. 방을 다 그릴 때까지 입주 문구를 이어서 보여 준다 */
@@ -99,11 +103,14 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
         })),
       })
     : null;
-  // 고양이가 할 말: 방금 온 알림이 있으면 그것, 없으면 방 상황(딱지·부스러기). 2~3초 말풍선 뒤 대화 아이콘으로 접힌다(사용자 요청 2026-09-23).
+  const pending = usePendingTransactions();
+  const hasPending = flattenPending(pending.data).length > 0;
+  // 알림 → 방 상황(딱지·부스러기) → 미확정 결제 순으로 안내한다. 아이콘은 내용만 다시 펼친다.
   // 방 대기 화면·안내·보드·딱지 창이 떠 있는 동안에는 겹치지 않게 가린다.
   const pushSpeech = useCoachSpeechStore((state) => state.latest);
   const clearPushSpeech = useCoachSpeechStore((state) => state.clear);
-  const coachLine = pushSpeech ?? (coachMessage === null ? null : { key: `situation:${coachMessage}`, text: coachMessage });
+  const situationSpeech = coachMessage === null ? null : { key: `situation:${coachMessage}`, text: coachMessage };
+  const coachLine = pushSpeech ?? situationSpeech ?? (hasPending ? PENDING_COACH_SPEECH : null);
   const coachSpeechPaused = !sceneReady || guide.step !== null || panel !== null || selectedSticker !== null;
   const homeActive = useHomeActive();
   const coachSpeech = useCoachSpeech(coachLine, { paused: coachSpeechPaused, active: homeActive }, clearPushSpeech);
@@ -186,6 +193,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
                   width={width}
                   onOpen={guide.finish}
                   speech={coachSpeech}
+                  hasPending={hasPending}
                 />
               </>
             )}

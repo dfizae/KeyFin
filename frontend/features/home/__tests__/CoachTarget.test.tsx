@@ -43,15 +43,24 @@ describe("CoachTarget", () => {
     expect(onPressCat).not.toHaveBeenCalled();
   });
 
-  it("접힌 아이콘을 누르면 말풍선을 다시 여는 콜백을 부른다", async () => {
+  it.each([false, true])("접힌 아이콘은 미확정 결제 유무와 관계없이 말풍선만 펼친다 (미확정: %s)", async (hasPending) => {
     const speech = makeSpeech({ open: false, unread: false });
-    await render(<CoachTarget width={327} speech={speech} onPress={jest.fn()} />);
+    const onPressCat = jest.fn();
+    await render(<CoachTarget width={327} speech={speech} hasPending={hasPending} onPress={onPressCat} />);
 
     expect(screen.queryByText(speech.text)).toBeNull();
     expect(screen.queryByRole("button", { name: "코치 말풍선 닫기" })).toBeNull();
-    await fireEvent.press(screen.getByRole("button", { name: "코치가 할 말 보기" }));
+    await fireEvent.press(screen.getByRole("button", { name: hasPending ? "코치가 할 말 보기, 새 메시지" : "코치가 할 말 보기" }));
     expect(speech.onPressIcon).toHaveBeenCalledTimes(1);
     expect(speech.onClose).not.toHaveBeenCalled();
+    expect(onPressCat).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("표시할 메시지가 없으면 이동용 아이콘을 만들지 않는다 (미확정: %s)", async (hasPending) => {
+    await render(<CoachTarget width={327} speech={null} hasPending={hasPending} onPress={jest.fn()} />);
+
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "코치" })).toBeTruthy();
   });
 
   // Jest는 네이티브 레이아웃을 계산하지 않으므로 높이 제한과 스크롤 설정의 계약을 검사한다.

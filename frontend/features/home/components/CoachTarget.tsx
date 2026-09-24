@@ -17,7 +17,6 @@ export const COACH_LABEL = "코치";
 export const COACH_SPEECH_HINT = "말풍선을 접습니다";
 export const COACH_SPEECH_CLOSE_LABEL = "코치 말풍선 닫기";
 export const COACH_SPEECH_ICON_LABEL = "코치가 할 말 보기";
-export const PENDING_ICON_LABEL = "코치: 정리할 결제가 있어요";
 /** 말풍선 최대 폭과 고양이 머리 위 간격(pt). 폭은 화면 기준이라 씬 배율을 곱하지 않는다 */
 const SPEECH_MAX_WIDTH = 230;
 const SPEECH_MAX_HEIGHT = 240;
@@ -33,7 +32,7 @@ const SPEECH_BORDER_Y = 2;
 type CoachTargetProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
   width: number;
-  /** 미확정 결제가 있으면 대화 아이콘에 빨간 점을 단다(할 말이 없으면 아이콘만 둔다) */
+  /** 미확정 결제가 있으면 대화 아이콘에 빨간 점을 단다. 메시지가 없으면 아이콘도 없다. */
   hasPending?: boolean;
   /** 고양이가 머리 위로 하는 말. 펼치면 말풍선, 접으면 대화 아이콘이다. null 이면 둘 다 없다 */
   speech?: CoachSpeechView | null;
@@ -74,9 +73,6 @@ function CoachTarget({ width, hasPending = false, speech = null, onPress }: Coac
         <CoachSpeech text={speech.text} scale={scale} onClose={speech.onClose} />
       ) : speech !== null ? (
         <CoachSpeechIcon scale={scale} unread={speech.unread || hasPending} onPress={speech.onPressIcon} />
-      ) : hasPending ? (
-        // 할 말은 없고 정리할 결제만 있으면 아이콘만 두고, 누르면 정리 링크가 있는 코칭 대화로 간다
-        <CoachSpeechIcon scale={scale} unread onPress={onPress} opensChat />
       ) : null}
     </Animated.View>
   );
@@ -139,13 +135,10 @@ function CoachSpeechIcon({
   scale,
   unread,
   onPress,
-  opensChat = false,
 }: {
   scale: number;
   unread: boolean;
   onPress: () => void;
-  /** 할 말 없이 정리할 결제만 있을 때 — 누르면 말풍선 대신 코칭 대화를 연다 */
-  opensChat?: boolean;
 }) {
   const catCenter = (COACH_CAT_RECT.x + COACH_CAT_RECT.width / 2) * scale;
   return (
@@ -160,9 +153,9 @@ function CoachSpeechIcon({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={
-          opensChat ? PENDING_ICON_LABEL : unread ? `${COACH_SPEECH_ICON_LABEL}, 새 메시지` : COACH_SPEECH_ICON_LABEL
+          unread ? `${COACH_SPEECH_ICON_LABEL}, 새 메시지` : COACH_SPEECH_ICON_LABEL
         }
-        accessibilityHint={opensChat ? "코치와 대화하는 화면을 엽니다" : "코치의 말풍선을 다시 펼칩니다"}
+        accessibilityHint="코치의 말풍선을 다시 펼칩니다"
         hitSlop={6}
         onPress={onPress}
         className="h-9 w-9 items-center justify-center rounded-full bg-card shadow-md shadow-black/20 active:opacity-80 dark:border dark:border-border dark:shadow-none"
