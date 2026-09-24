@@ -102,7 +102,8 @@ function FixedExpenseEditLoader({ id, onBack, onOpenList }: FixedExpenseEditLoad
     return <FixedExpenseNotFound onBack={onBack} onOpenList={onOpenList} />;
   }
 
-  if (expense.synced) return <SyncedExpenseDetail expense={expense} onBack={onBack} />;
+  // 동기화 항목은 삭제되지 않아 고정할 이유가 없고, 결제 카드 지정(-184)이 목록을 다시 받으면 바로 보여야 한다
+  if (expense.synced) return <SyncedExpenseDetail expense={query.data ?? expense} onBack={onBack} />;
 
   return <FixedExpenseEditor editId={id} initial={toFixedExpenseForm(expense)} onDone={onBack} />;
 }
