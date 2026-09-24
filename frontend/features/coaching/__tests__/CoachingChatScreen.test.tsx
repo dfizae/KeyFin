@@ -1,7 +1,7 @@
 import { notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as React from "react";
-import type { FlatList, FlatListProps } from "react-native";
+import { Keyboard, Platform, type FlatList, type FlatListProps, type KeyboardEvent, type KeyboardEventName } from "react-native";
 
 import { ApiError } from "@/api/error";
 import { getChatHistory, sendChatMessage } from "@/features/coaching/api/coaching.api";
@@ -13,7 +13,17 @@ import { getPendingTransactions } from "@/features/transaction/api/transaction.a
 jest.mock("@/features/coaching/api/coaching.api", () => ({ getChatHistory: jest.fn(), sendChatMessage: jest.fn() }));
 jest.mock("@/features/transaction/api/transaction.api", () => ({ getPendingTransactions: jest.fn() }));
 const mockPush = jest.fn();
-jest.mock("expo-router", () => ({ useRouter: () => ({ push: mockPush, canGoBack: () => true, back: jest.fn() }) }));
+let mockFocused = true;
+jest.mock("expo-router", () => {
+  const ReactActual = jest.requireActual<typeof import("react")>("react");
+  return {
+    useRouter: () => ({ push: mockPush, canGoBack: () => true, back: jest.fn() }),
+    useFocusEffect: (effect: () => void | (() => void)) => {
+      const focused = mockFocused;
+      ReactActual.useEffect(() => focused ? effect() : undefined, [effect, focused]);
+    },
+  };
+});
 
 type TestRow = { key: string; kind: string };
 let mockListProps: FlatListProps<TestRow>;
@@ -61,6 +71,7 @@ const reply = toChatReply({
 let client: QueryClient;
 let frameId: number;
 let frames: Map<number, FrameRequestCallback>;
+let keyboardListeners: Map<KeyboardEventName, Set<(event: KeyboardEvent) => void>>;
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -71,6 +82,16 @@ function deferred<T>() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFocused = true;
+  jest.replaceProperty(Platform, "OS", "android");
+  jest.spyOn(Keyboard, "isVisible").mockReturnValue(false);
+  keyboardListeners = new Map();
+  jest.spyOn(Keyboard, "addListener").mockImplementation((eventName, listener) => {
+    const listeners = keyboardListeners.get(eventName) ?? new Set();
+    keyboardListeners.set(eventName, listeners);
+    listeners.add(listener);
+    return { remove: () => { listeners.delete(listener); } } as ReturnType<typeof Keyboard.addListener>;
+  });
   mockRowRenders.length = 0;
   frameId = 0;
   frames = new Map();
@@ -106,6 +127,25 @@ async function contentSize(height: number) {
 
 async function viewport(height = 500) {
   await act(() => mockListProps.onLayout?.({ nativeEvent: { layout: { x: 0, y: 0, width: 360, height } } } as Parameters<NonNullable<typeof mockListProps.onLayout>>[0]));
+}
+
+async function scrollTo(offset: number) {
+  await act(() => mockListProps.onScroll?.({ nativeEvent: { contentOffset: { x: 0, y: offset } } } as Parameters<NonNullable<typeof mockListProps.onScroll>>[0]));
+}
+
+async function keyboardEvent(visible: boolean) {
+  const name = Platform.OS === "ios"
+    ? (visible ? "keyboardWillShow" : "keyboardWillHide")
+    : (visible ? "keyboardDidShow" : "keyboardDidHide");
+  await act(() => {
+    keyboardListeners.get(name)?.forEach((listener) => listener({
+      duration: 0, easing: "keyboard", endCoordinates: { height: visible ? 300 : 0, width: 360, screenX: 0, screenY: 500 },
+    } as KeyboardEvent));
+  });
+}
+
+async function focusInput() {
+  await fireEvent(screen.getByLabelText(CHAT_INPUT_LABEL), "focus");
 }
 
 async function markerLayout() {
@@ -283,7 +323,7 @@ it("화면을 닫으면 예약된 프레임을 취소한다", async () => {
   expect(mockScrollToOffset).not.toHaveBeenCalled();
 });
 
-it("표·차트가 있는 긴 답변과 키보드 크기 변화 및 차트 복귀는 추가 이동을 만들지 않는다", async () => {
+it("표·차트가 있는 긴 답변과 키패드 알림 없는 크기 변화 및 차트 복귀는 추가 이동을 만들지 않는다", async () => {
   const response = deferred<ChatReply>();
   jest.mocked(sendChatMessage).mockReturnValue(response.promise);
   await openChat();
@@ -311,6 +351,209 @@ it("표·차트가 있는 긴 답변과 키보드 크기 변화 및 차트 복�
   await markerLayout();
   await flushFrame();
   expect(mockScrollToOffset).not.toHaveBeenCalled();
+});
+
+it("StrictMode에서 캐시 이력으로 시작해도 최초 이동과 키패드 보정이 각각 한 번 동작한다", async () => {
+  client.setQueryData(coachingKeys.chat(), initialHistory);
+  await render(<React.StrictMode><QueryClientProvider client={client}><CoachingChatScreen /></QueryClientProvider></React.StrictMode>);
+  await screen.findByTestId("coaching-chat-list");
+  await viewport();
+  await contentSize(1000);
+  await markerLayout();
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([[{ offset: 500, animated: false }]]);
+  await focusInput();
+  await keyboardEvent(true);
+  await viewport(300);
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([
+    [{ offset: 500, animated: false }], [{ offset: 700, animated: false }],
+  ]);
+});
+
+describe.each(["android", "ios"] as const)("%s 키패드 위치 보정", (platform) => {
+  beforeEach(() => { jest.replaceProperty(Platform, "OS", platform); });
+
+  it.each(["알림 먼저", "레이아웃 먼저"])("%s 도착해도 줄어든 높이만큼만 이동한다", async (order) => {
+    await openChat();
+    await contentSize(2400);
+    await viewport(600);
+    await scrollTo(800);
+    await focusInput();
+    if (order === "알림 먼저") await keyboardEvent(true);
+    await viewport(450);
+    await viewport(350);
+    if (order === "레이아웃 먼저") {
+      await flushFrame();
+      expect(mockScrollToOffset).not.toHaveBeenCalled();
+      await keyboardEvent(true);
+    }
+    await flushFrame();
+    expect(mockScrollToOffset.mock.calls).toEqual([[{ offset: 1050, animated: false }]]);
+    await keyboardEvent(true); // 중복 알림과 후속 입력창 높이 변경은 재실행하지 않는다.
+    await viewport(300);
+    await contentSize(4000);
+    await flushFrame();
+    expect(mockScrollToOffset).toHaveBeenCalledTimes(1);
+  });
+});
+
+it.each([
+  { content: 2400, before: 1800, after: 2050 },
+  { content: 450, before: 0, after: 100 },
+  { content: 200, before: 0, after: 0 },
+])("맨 아래와 짧은 이력의 이동 범위를 제한한다 ($content)", async ({ content, before, after }) => {
+  await openChat();
+  await contentSize(content);
+  await viewport(600);
+  await scrollTo(before);
+  await focusInput();
+  await keyboardEvent(true);
+  await viewport(350);
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([[{ offset: after, animated: false }]]);
+});
+
+it("포커스만 받거나 키패드가 목록을 가리지 않으면 이동하지 않는다", async () => {
+  await openChat();
+  await focusInput();
+  await viewport(400);
+  await flushFrame();
+  expect(mockScrollToOffset).not.toHaveBeenCalled();
+  await viewport(500);
+  await keyboardEvent(true);
+  await flushFrame();
+  expect(mockScrollToOffset).not.toHaveBeenCalled();
+});
+
+it("키패드를 닫을 때는 이동하지 않고 포커스를 유지한 채 다시 눌러도 새 기준으로 보정한다", async () => {
+  await openChat();
+  await contentSize(2400);
+  await viewport(600);
+  await scrollTo(800);
+  await focusInput();
+  await keyboardEvent(true);
+  await viewport(350);
+  await flushFrame();
+  await keyboardEvent(false);
+  await viewport(600);
+  await flushFrame();
+  expect(mockScrollToOffset).toHaveBeenCalledTimes(1);
+  await fireEvent(screen.getByLabelText(CHAT_INPUT_LABEL), "pressIn");
+  await viewport(350); // 재개 시 onFocus 없이 배치가 먼저 와도 보정한다.
+  await keyboardEvent(true);
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([
+    [{ offset: 1050, animated: false }], [{ offset: 1300, animated: false }],
+  ]);
+});
+
+it.each(["알림 전 드래그", "예약 후 드래그", "키패드 닫기", "화면 이탈", "언마운트"])("%s는 남은 키패드 보정을 취소한다", async (reason) => {
+  const result = await openChat();
+  await focusInput();
+  if (reason !== "알림 전 드래그") await keyboardEvent(true);
+  await viewport(300);
+  if (reason.includes("드래그")) {
+    await act(() => mockListProps.onScrollBeginDrag?.({} as Parameters<NonNullable<typeof mockListProps.onScrollBeginDrag>>[0]));
+    if (reason === "알림 전 드래그") await keyboardEvent(true);
+  } else if (reason === "키패드 닫기") {
+    await keyboardEvent(false);
+  } else if (reason === "화면 이탈") {
+    mockFocused = false;
+    await result.rerender(<QueryClientProvider client={client}><CoachingChatScreen /></QueryClientProvider>);
+    await keyboardEvent(false);
+    await keyboardEvent(true); // 배경 화면은 다른 화면의 키패드 알림을 무시한다.
+    mockFocused = true;
+    await result.rerender(<QueryClientProvider client={client}><CoachingChatScreen /></QueryClientProvider>);
+  } else {
+    await result.unmount();
+    expect([...keyboardListeners.values()].every((listeners) => listeners.size === 0)).toBe(true);
+  }
+  await viewport(250);
+  await contentSize(1800);
+  await flushFrame();
+  expect(mockScrollToOffset).not.toHaveBeenCalled();
+  expect(frames.size).toBe(0);
+});
+
+it.each(["키패드 먼저", "전송 먼저", "전송 이동 후 알림"])("전송과 키패드 열기가 겹치면 하단으로 한 번만 이동한다 (%s)", async (order) => {
+  await openChat();
+  await focusInput();
+  if (order === "키패드 먼저") await keyboardEvent(true);
+  await viewport(300);
+  await submit();
+  if (order === "전송 먼저") await keyboardEvent(true);
+  await contentSize(1150);
+  await markerLayout();
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([[{ offset: 850, animated: false }]]);
+  await viewport(250);
+  await keyboardEvent(true);
+  await flushFrame();
+  expect(mockScrollToOffset).toHaveBeenCalledTimes(1);
+});
+
+it("키패드 보정보다 전송이 우선된 뒤 빠른 응답이 오면 둘 다 뒤늦게 실행하지 않는다", async () => {
+  const response = deferred<ChatReply>();
+  jest.mocked(sendChatMessage).mockReturnValue(response.promise);
+  await openChat();
+  await focusInput();
+  await keyboardEvent(true);
+  await viewport(300);
+  await submit();
+  await act(() => response.resolve(reply));
+  await screen.findByText(reply.reply);
+  await contentSize(3000);
+  await markerLayout();
+  await flushFrame();
+  expect(mockScrollToOffset).not.toHaveBeenCalled();
+});
+
+it.each(["성공", "실패"])("답변 %s는 별도로 예약된 키패드 보정을 취소하거나 추가 이동시키지 않는다", async (outcome) => {
+  const response = deferred<ChatReply>();
+  jest.mocked(sendChatMessage).mockReturnValue(response.promise);
+  await openChat();
+  await submit();
+  await contentSize(2000);
+  await markerLayout();
+  await flushFrame();
+  mockScrollToOffset.mockClear();
+  await scrollTo(800);
+  // 전송 시 입력창이 비활성화되어도 이미 시작한 키패드 열기 알림이 뒤늦게 도착할 수 있다.
+  await keyboardEvent(true);
+  await viewport(250);
+  if (outcome === "성공") {
+    await act(() => response.resolve(reply));
+    await screen.findByText(reply.reply);
+    expect(screen.getByLabelText(CHAT_INPUT_LABEL)).toHaveProp("value", "");
+  } else {
+    await act(() => response.reject(new ApiError(503, "AI_001", "잠시 후 다시 시도해 주세요.")));
+    await screen.findByRole("button", { name: "다시 시도" });
+  }
+  await contentSize(4000);
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([[{ offset: 1050, animated: false }]]);
+  await contentSize(5000); // 표의 후속 배치
+  await viewport(300); // 입력값 초기화로 입력창이 줄어드는 경우
+  await flushFrame();
+  expect(mockScrollToOffset).toHaveBeenCalledTimes(1);
+});
+
+it("웹에서는 키패드 보정 리스너를 등록하지 않고 기존 이동만 사용한다", async () => {
+  jest.replaceProperty(Platform, "OS", "web");
+  await openChat();
+  // 공통 KeyboardAvoidingView의 리스너만 있고 코칭 훅은 구독하지 않는다.
+  expect(keyboardListeners.get("keyboardDidShow")?.size).toBe(1);
+  await focusInput();
+  await keyboardEvent(true);
+  await viewport(300);
+  await flushFrame();
+  expect(mockScrollToOffset).not.toHaveBeenCalled();
+  await submit();
+  await contentSize(1150);
+  await markerLayout();
+  await flushFrame();
+  expect(mockScrollToOffset.mock.calls).toEqual([[{ offset: 850, animated: false }]]);
 });
 
 it("이력 재조회는 최초 진입 이동을 반복하지 않는다", async () => {

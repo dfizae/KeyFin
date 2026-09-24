@@ -20,4 +20,10 @@ public class RoomStickerRepository {
 		jdbc.sql("INSERT INTO budget_sticker_applications (user_id, budget_id, applied_at) VALUES (:user, :budget, :at)")
 				.param("user", userId).param("budget", budgetId).param("at", appliedAt).update();
 	}
+
+	/** Reset only the recovered budget; manual sticker removal keeps the application marker. */
+	public void clearApplication(long budgetId) {
+		jdbc.sql("DELETE FROM budget_sticker_applications WHERE budget_id = :id")
+				.param("id", budgetId).update();
+	}
 }

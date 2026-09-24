@@ -70,8 +70,9 @@ public class RoomStickerService {
 		budgets.currentBudgetOverrun(userId, now.toLocalDate()).ifPresent(budget -> {
 			if (!budget.exceeded()) {
 				// Recovery also clears stored furniture so reinstalling cannot restore an old sticker.
-				// Keep the application history: each budget period can attach stickers only once.
 				owned.forEach(UserFurniture::removeSticker);
+				// A later overrun starts a new application, even within the same budget period.
+				stickers.clearApplication(budget.budgetId());
 			} else if (!stickers.wasApplied(budget.budgetId())) {
 				stickers.recordApplication(userId, budget.budgetId(), now);
 				targets.forEach(UserFurniture::attachSticker);

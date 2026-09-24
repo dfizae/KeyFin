@@ -28,6 +28,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.finset.key_fin.furniture.FurnitureFixtures.owned;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -52,6 +53,12 @@ class RoomStickerServiceTest {
 
 	@BeforeEach
 	void setUp() {
+		var applied = new AtomicBoolean();
+		when(applications.wasApplied(10L)).thenAnswer(invocation -> applied.get());
+		doAnswer(invocation -> { applied.set(true); return null; })
+				.when(applications).recordApplication(eq(1L), eq(10L), any());
+		doAnswer(invocation -> { applied.set(false); return null; })
+				.when(applications).clearApplication(10L);
 		when(users.findActiveByIdForUpdate(1L)).thenReturn(Optional.of(mock(User.class)));
 		when(furnitures.findByUserIdOrderByIdAsc(1L)).thenReturn(owned);
 		var budget = Budget.propose(null, "202609");
@@ -60,7 +67,6 @@ class RoomStickerServiceTest {
 		when(budgets.findByUserIdAndBudgetMonth(1L, "202609")).thenReturn(Optional.of(budget));
 		spending(1500);
 		assertThat(service.synchronize(1L).count()).isEqualTo(2);
-		when(applications.wasApplied(10L)).thenReturn(true);
 		stored.unplace();
 	}
 
@@ -77,6 +83,7 @@ class RoomStickerServiceTest {
 		assertThat(owned).allSatisfy(f -> assertThat(f.isStickerAttached()).isFalse());
 		assertThat(service.synchronize(1L)).isEqualTo(status);
 		verify(applications, times(1)).recordApplication(eq(1L), eq(10L), any());
+		verify(applications, times(2)).clearApplication(10L);
 	}
 
 	@Test
@@ -87,6 +94,7 @@ class RoomStickerServiceTest {
 		assertThat(floor.isStickerAttached()).isTrue();
 		assertThat(stored.isStickerAttached()).isTrue();
 		assertThat(wall.isStickerAttached()).isFalse();
+		verify(applications, never()).clearApplication(anyLong());
 	}
 
 	@Test
@@ -99,14 +107,32 @@ class RoomStickerServiceTest {
 	}
 
 	@Test
-	void recoveryDoesNotAllowReattachmentInTheSameBudgetPeriod() {
-		spending(1000);
-		service.synchronize(1L);
-		spending(1500);
+	void recoveryAllowsRepeatedReattachmentInTheSameBudgetPeriod() {
+		for (int cycle = 0; cycle < 2; cycle++) {
+			spending(1000);
+			assertThat(service.synchronize(1L).count()).isZero();
+			spending(1500);
+
+			assertThat(service.synchronize(1L).count()).isEqualTo(1);
+			assertThat(floor.isStickerAttached()).isTrue();
+			assertThat(stored.isStickerAttached()).isFalse();
+			assertThat(wall.isStickerAttached()).isFalse();
+		}
+		verify(applications, times(3)).recordApplication(eq(1L), eq(10L), any());
+		verify(applications, times(2)).clearApplication(10L);
+	}
+
+	@Test
+	void manualRemovalDoesNotReattachWhileBudgetRemainsExceeded() {
+		when(furnitures.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(floor));
+		service.remove(1L, 1L);
+		spending(2000);
 
 		assertThat(service.synchronize(1L).count()).isZero();
-		assertThat(stored.isStickerAttached()).isFalse();
+		assertThat(floor.isStickerAttached()).isFalse();
+		assertThat(stored.isStickerAttached()).isTrue();
 		verify(applications, times(1)).recordApplication(eq(1L), eq(10L), any());
+		verify(applications, never()).clearApplication(anyLong());
 	}
 
 	@Test
@@ -117,6 +143,7 @@ class RoomStickerServiceTest {
 				.thenReturn(Optional.of(Budget.propose(null, "202609")));
 		assertThat(service.synchronize(1L).count()).isEqualTo(1);
 		assertThat(stored.isStickerAttached()).isTrue();
+		verify(applications, never()).clearApplication(anyLong());
 	}
 
 	private void spending(long amount) {
