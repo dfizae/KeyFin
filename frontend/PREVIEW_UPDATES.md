@@ -75,6 +75,40 @@ fingerprint는 보수적으로 호환성을 판단하므로 의존성·설정 �
 새 APK가 필요할 수 있다. 단순 JS 변경만 배포할 때는 의존성이나 네이티브 설정을 함께 바꾸지 않는다.
 EAS Update는 Gradle 컴파일을 가속하는 기능이 아니라 호환되는 변경에서 APK 빌드를 생략하는 기능이다.
 
+## 코치 말풍선 preview 검증
+
+작은 화면과 큰 화면의 Android release 앱에서 기본 글꼴과 확대 글꼴로 다음 항목을 확인한다.
+Jest는 실제 네이티브 레이아웃·터치 제스처를 계산하지 않으므로 실기기 확인을 대신하지 않는다.
+
+| 시나리오 | 기대 결과 |
+| --- | --- |
+| 짧은 방 상황 안내 자동 표시 | 내용에 필요한 높이만 차지하고 2.5초 뒤 접힌다. |
+| 아이콘으로 긴 AI 피드백 열기 | 전체 높이는 최대 240pt, 닫기 버튼은 고정된 44×44pt 영역이다. 본문 끝까지 스크롤할 수 있다. |
+| 본문 탭·스크롤, X 누르기 | 본문 조작으로 접히지 않고 X로만 닫힌다. 펼친 동안 방 확대·이동은 잠긴다. |
+| A를 읽는 중 B 도착 후 X | A의 내용은 바뀌지 않는다. X는 A를 닫고 B를 미읽음 아이콘으로 남긴다. |
+| 홈 탭 이탈·앱 백그라운드 | 펼침이 해제되고 복귀만으로 이미 표시한 메시지가 다시 펼쳐지지 않는다. |
+| 홈 밖에서 새 알림 수신 후 복귀 | 홈과 앱이 모두 활성화된 뒤 새 메시지를 표시한다. |
+| 안내·보드로 자동 말풍선을 가렸다가 닫기 | 가려진 미읽음 메시지를 다시 2.5초 동안 보여 준다. |
+
+문제가 발생한 기기는 앱 버전 이름만 비교하지 말고, 검증용 진단 출력에서 다음 `expo-updates` 값을 확보한다.
+
+```ts
+import * as Updates from "expo-updates";
+
+console.info("Preview update", {
+  updateId: Updates.updateId,
+  runtimeVersion: Updates.runtimeVersion,
+  channel: Updates.channel,
+  isEmbeddedLaunch: Updates.isEmbeddedLaunch,
+  isEnabled: Updates.isEnabled,
+});
+```
+
+이 출력은 검증용 코드 예시이며 앱에 상시 진단 화면이 추가된 것은 아니다.
+실행 중인 `updateId`를 배포된 Android 업데이트 ID와 대조하고, `runtimeVersion`과 `preview` 채널도 일치하는지 확인한다.
+개발 모드에서 얻은 `null` 값으로 release 업데이트 적용 여부를 판단하지 않는다.
+런타임이 일치하면 다운로드 후 완전 종료·재실행하여 다시 확인하고, 다르면 새 preview APK를 설치한다.
+
 ## 참고
 
 - [EAS Update 설정과 배포](https://docs.expo.dev/eas-update/getting-started/)

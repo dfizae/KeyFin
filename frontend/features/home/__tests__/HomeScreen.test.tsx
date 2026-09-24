@@ -1,7 +1,8 @@
 import { focusManager, notifyManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import * as SecureStore from "expo-secure-store";
 import * as React from "react";
+import { AppState, type AppStateStatus } from "react-native";
 
 import { authUserMock } from "@/api/mocks/auth";
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
@@ -13,12 +14,14 @@ import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { toBudget } from "@/features/budget/model";
 import { ROOM_LABEL } from "@/features/home/components/CharacterRoom";
+import { COACH_SPEECH_CLOSE_LABEL, COACH_SPEECH_ICON_LABEL } from "@/features/home/components/CoachTarget";
 import { COACHING_CHAT_ROUTE } from "@/features/home/components/HomeCoach";
 import { HOME_HELP_LABEL, HOME_ROOM_BOX_TEST_ID, HomeScreen } from "@/features/home/components/HomeScreen";
 import { getPaymentCalendar } from "@/features/payment/api/payment.api";
 import { toPaymentCalendar } from "@/features/payment/model";
 import { SPOTLIGHT_LABEL } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS } from "@/features/home/useRoomGuide";
+import { useCoachSpeechStore } from "@/features/notification/store";
 import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { roomKeys } from "@/features/room/api/queries";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
@@ -39,6 +42,18 @@ jest.mock("@/features/transaction/api/transaction.api", () => ({
 // 씬을 "다 그린 상태"로 바꿔 둔다 — 방 데이터가 와서 씬이 올라가는 순간 준비됐다고 알린다.
 const mockSceneMount = jest.fn();
 const mockSceneUnmount = jest.fn();
+const mockRoomLock = jest.fn();
+jest.mock("@/features/home/components/CharacterRoom", () => {
+  const ReactActual = jest.requireActual<typeof import("react")>("react");
+  const actual = jest.requireActual<typeof import("@/features/home/components/CharacterRoom")>("@/features/home/components/CharacterRoom");
+  return {
+    ...actual,
+    CharacterRoom: (props: React.ComponentProps<typeof actual.CharacterRoom>) => {
+      mockRoomLock(props.locked);
+      return ReactActual.createElement(actual.CharacterRoom, props);
+    },
+  };
+});
 jest.mock("@/features/room/components/RoomSceneLoader", () => {
   const ReactActual = jest.requireActual<typeof import("react")>("react");
   const { useNotifySceneReady } = jest.requireActual("@/features/room/sceneReady");
@@ -70,6 +85,8 @@ jest.mock("@/lib/date", () => ({
 
 const mockPush = jest.fn();
 const mockRedirect = jest.fn();
+let mockHomeFocused = true;
+const mockFocusListeners = new Set<(focused: boolean) => void>();
 jest.mock("expo-router", () => {
   const ReactActual = jest.requireActual<typeof import("react")>("react");
   return {
@@ -78,7 +95,19 @@ jest.mock("expo-router", () => {
       mockRedirect(href);
       return null;
     },
-    useFocusEffect: (effect: () => void) => ReactActual.useEffect(effect, [effect]),
+    useFocusEffect: (effect: () => void | (() => void)) => ReactActual.useEffect(() => {
+      let dispose: void | (() => void);
+      const onFocus = (focused: boolean) => {
+        dispose?.();
+        dispose = focused ? effect() : undefined;
+      };
+      mockFocusListeners.add(onFocus);
+      onFocus(mockHomeFocused);
+      return () => {
+        mockFocusListeners.delete(onFocus);
+        dispose?.();
+      };
+    }, [effect]),
   };
 });
 
@@ -100,6 +129,24 @@ async function layoutRoom() {
 const ROOM_GUIDE_KEY = `keyfin.roomGuide.${authUserMock.id}`;
 
 let client: QueryClient;
+const appStateListeners = new Set<(state: AppStateStatus) => void>();
+let appStateSubscription: jest.SpyInstance;
+const originalAppState = AppState.currentState;
+
+async function setHomeFocused(focused: boolean) {
+  await act(async () => {
+    mockHomeFocused = focused;
+    [...mockFocusListeners].forEach((listener) => listener(focused));
+  });
+  await waitForQueriesToSettle();
+}
+
+async function setAppState(state: AppStateStatus) {
+  await act(async () => {
+    AppState.currentState = state;
+    [...appStateListeners].forEach((listener) => listener(state));
+  });
+}
 
 /** 확정 뒤 무효화로 도는 재조회가 테스트 밖에서 끝나 act 경고를 내지 않도록 기다린다 */
 async function waitForQueriesToSettle() {
@@ -123,6 +170,13 @@ function renderHome(props: { arriving?: boolean } = {}) {
 
 describe("HomeScreen", () => {
   beforeEach(async () => {
+    mockHomeFocused = true;
+    AppState.currentState = "active";
+    useCoachSpeechStore.setState({ latest: null });
+    appStateSubscription = jest.spyOn(AppState, "addEventListener").mockImplementation((event, listener) => {
+      if (event === "change") appStateListeners.add(listener);
+      return { remove: () => { appStateListeners.delete(listener); } };
+    });
     // 대부분의 테스트는 첫 진입 안내를 이미 본 사용자 기준이다. 안내 자체는 아래 전용 테스트가 기록을 지우고 본다.
     await SecureStore.setItemAsync(ROOM_GUIDE_KEY, "1");
     // 로그인 화면(PAGE-01)이 생기면서 스토어 기본값이 비로그인이 됐다. 홈은 로그인 이후 화면이라 사용자를 넣고 시작한다.
@@ -143,6 +197,66 @@ describe("HomeScreen", () => {
     mockRedirect.mockReset();
     mockSceneMount.mockClear();
     mockSceneUnmount.mockClear();
+    mockRoomLock.mockClear();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+    expect(appStateListeners.size).toBe(0);
+    appStateSubscription.mockRestore();
+    AppState.currentState = originalAppState;
+    useCoachSpeechStore.setState({ latest: null });
+  });
+
+  it("말풍선은 방 카메라를 잠그고 홈 이탈 시 읽음 처리 없이 접힌다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    useCoachSpeechStore.getState().announce("첫 코치 메시지");
+    const pending = useCoachSpeechStore.getState().latest;
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+
+    expect(screen.getByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeTruthy();
+    expect(mockRoomLock).toHaveBeenLastCalledWith(true);
+    await setHomeFocused(false);
+    expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
+    expect(mockRoomLock).toHaveBeenLastCalledWith(false);
+    expect(useCoachSpeechStore.getState().latest).toEqual(pending);
+
+    await setHomeFocused(true);
+    expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: `${COACH_SPEECH_ICON_LABEL}, 새 메시지` }));
+    expect(screen.getByText("첫 코치 메시지")).toBeTruthy();
+    expect(mockRoomLock).toHaveBeenLastCalledWith(true);
+    await fireEvent.press(screen.getByRole("button", { name: COACH_SPEECH_CLOSE_LABEL }));
+    expect(mockRoomLock).toHaveBeenLastCalledWith(false);
+  });
+
+  it("백그라운드에서는 접고, 새 메시지는 앱과 홈이 모두 활성화된 뒤 보여준다", async () => {
+    mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
+    mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
+    useCoachSpeechStore.getState().announce("기존 코치 메시지");
+    await renderHome();
+    await screen.findByLabelText(ROOM_LABEL);
+    await layoutRoom();
+
+    await setAppState("background");
+    expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
+    expect(useCoachSpeechStore.getState().latest?.text).toBe("기존 코치 메시지");
+    await setAppState("active");
+    expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
+    await fireEvent.press(screen.getByRole("button", { name: `${COACH_SPEECH_ICON_LABEL}, 새 메시지` }));
+    expect(screen.getByText("기존 코치 메시지")).toBeTruthy();
+    await setAppState("background");
+    expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
+    await setHomeFocused(false);
+    await act(async () => { useCoachSpeechStore.getState().announce("백그라운드에서 받은 메시지"); });
+    await setAppState("active");
+    expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
+    await setHomeFocused(true);
+    expect(screen.getByText("백그라운드에서 받은 메시지")).toBeTruthy();
+    expect(screen.getByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeTruthy();
   });
 
   it("처음 들어오면 코치가 리스트·캘린더를 차례로 안내하고, 다 보면 다시 나오지 않는다", async () => {

@@ -22,6 +22,7 @@ import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWa
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
 import { ROOM_GUIDE_STEPS, useRoomGuide, type GuideTargetId } from "@/features/home/useRoomGuide";
 import { useHomeDataRefresh } from "@/features/home/useHomeDataRefresh";
+import { useHomeActive } from "@/features/home/useHomeActive";
 import { useCheckAttendance, useRoom } from "@/features/room/api/queries";
 import { RoomEditorOverlay } from "@/features/room/components/RoomEditorOverlay";
 import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/components/RoomStickers";
@@ -104,7 +105,8 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   const clearPushSpeech = useCoachSpeechStore((state) => state.clear);
   const coachLine = pushSpeech ?? (coachMessage === null ? null : { key: `situation:${coachMessage}`, text: coachMessage });
   const coachSpeechPaused = !sceneReady || guide.step !== null || panel !== null || selectedSticker !== null;
-  const coachSpeech = useCoachSpeech(coachLine, coachSpeechPaused, clearPushSpeech);
+  const homeActive = useHomeActive();
+  const coachSpeech = useCoachSpeech(coachLine, { paused: coachSpeechPaused, active: homeActive }, clearPushSpeech);
   // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
   const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
   const measureButton = React.useCallback((id: GuideTargetId, rect: SceneRect) => {
@@ -172,7 +174,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
           <CharacterRoom
             width={roomWidth > 0 ? roomWidth : undefined}
             viewport={roomWidth > 0 ? box : undefined}
-            locked={panel !== null || selectedSticker !== null}
+            locked={panel !== null || selectedSticker !== null || coachSpeech?.open === true}
             onSceneReady={markSceneReady}
             sceneObjects={(width) => (
               <>

@@ -1,4 +1,4 @@
-import { MessageCircleMore } from "lucide-react-native";
+import { MessageCircleMore, X } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, ZoomIn } from "react-native-reanimated";
 
@@ -15,16 +15,20 @@ import { useCoachCatMotion } from "@/features/room/useCoachCatMotion";
 // 2026-09-22 사용자 요청으로 탭하면 코칭 대화 화면(PAGE-31)이 열리므로 말풍선은 없앴고, 미확정 정리 링크는 그 화면 상단으로 옮겼다.
 export const COACH_LABEL = "코치";
 export const COACH_SPEECH_HINT = "말풍선을 접습니다";
+export const COACH_SPEECH_CLOSE_LABEL = "코치 말풍선 닫기";
 export const COACH_SPEECH_ICON_LABEL = "코치가 할 말 보기";
 export const PENDING_ICON_LABEL = "코치: 정리할 결제가 있어요";
 /** 말풍선 최대 폭과 고양이 머리 위 간격(pt). 폭은 화면 기준이라 씬 배율을 곱하지 않는다 */
 const SPEECH_MAX_WIDTH = 230;
+const SPEECH_MAX_HEIGHT = 240;
 const SPEECH_GAP = 4;
+const SPEECH_CLOSE_SIZE = 44;
 /** 접힌 대화 아이콘 버튼 크기(pt). 누르기 쉽게 hitSlop 을 더한다 */
 const SPEECH_ICON_SIZE = 36;
 const SPEECH_APPEAR_MS = 180;
-/** 말풍선 위아래 여백(py-2)의 합. 긴 문장(코치 피드백)은 남는 높이 안에서 말풍선 안쪽이 스크롤된다 */
+/** 닫기 버튼을 제외한 본문만 스크롤하도록 여백과 테두리까지 전체 높이 상한에 포함한다 */
 const SPEECH_PADDING_Y = 16;
+const SPEECH_BORDER_Y = 2;
 
 type CoachTargetProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
@@ -67,7 +71,7 @@ function CoachTarget({ width, hasPending = false, speech = null, onPress }: Coac
         }}
       />
       {speech?.open ? (
-        <CoachSpeech text={speech.text} scale={scale} onPress={speech.onPressBubble} />
+        <CoachSpeech text={speech.text} scale={scale} onClose={speech.onClose} />
       ) : speech !== null ? (
         <CoachSpeechIcon scale={scale} unread={speech.unread || hasPending} onPress={speech.onPressIcon} />
       ) : hasPending ? (
@@ -81,10 +85,12 @@ function CoachTarget({ width, hasPending = false, speech = null, onPress }: Coac
 /**
  * 고양이 머리 위 말풍선 (사용자 요청 2026-09-23 — 예산 초과로 딱지·부스러기가 생겼을 때 상황을 알린다).
  * 고양이 윗변에 아래쪽을 붙이려고, 방 맨 위부터 고양이 윗변까지의 칸을 만들고 그 바닥에 말풍선을 둔다.
- * 고양이 쪽(왼쪽 아래) 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다. 누르면 대화 아이콘으로 접힌다.
+ * 고양이 쪽(왼쪽 아래) 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다. 닫기 버튼을 누르면 대화 아이콘으로 접힌다.
  */
-function CoachSpeech({ text, scale, onPress }: { text: string; scale: number; onPress?: () => void }) {
-  const height = COACH_CAT_RECT.y * scale - SPEECH_GAP;
+function CoachSpeech({ text, scale, onClose }: { text: string; scale: number; onClose: () => void }) {
+  const height = Math.max(0, COACH_CAT_RECT.y * scale - SPEECH_GAP);
+  const maxHeight = Math.min(SPEECH_MAX_HEIGHT, height);
+  const contentMaxHeight = Math.max(0, maxHeight - SPEECH_CLOSE_SIZE - SPEECH_PADDING_Y - SPEECH_BORDER_Y);
   return (
     <View
       className="absolute justify-end"
@@ -92,30 +98,40 @@ function CoachSpeech({ text, scale, onPress }: { text: string; scale: number; on
       pointerEvents="box-none"
     >
       <Animated.View entering={ZoomIn.duration(SPEECH_APPEAR_MS)}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`${COACH_LABEL}: ${text}`}
-          accessibilityHint={COACH_SPEECH_HINT}
-          accessibilityLiveRegion="polite"
-          onPress={onPress}
-          className="self-start rounded-2xl rounded-bl-sm bg-card px-3 py-2 shadow-md shadow-black/20 active:opacity-80 dark:border dark:border-border dark:shadow-none"
+        <View
+          testID="coach-speech-bubble"
+          style={{ maxHeight }}
+          className="self-start rounded-2xl rounded-bl-sm border border-transparent bg-card px-3 py-2 shadow-md shadow-black/20 dark:border-border dark:shadow-none"
         >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={COACH_SPEECH_CLOSE_LABEL}
+            accessibilityHint={COACH_SPEECH_HINT}
+            onPress={onClose}
+            style={{ width: SPEECH_CLOSE_SIZE, height: SPEECH_CLOSE_SIZE, flexShrink: 0 }}
+            className="self-end items-center justify-center rounded-full active:opacity-80"
+          >
+            <Icon as={X} size={20} className="text-foreground" />
+          </Pressable>
           {/* ScrollView 는 기본이 flexGrow 1 이라 짧은 문장에도 남는 높이를 다 채운다 — 내용 높이만 쓰고 넘칠 때만 스크롤 */}
           <ScrollView
-            style={{ flexGrow: 0, maxHeight: Math.max(0, height - SPEECH_PADDING_Y) }}
-            showsVerticalScrollIndicator={false}
+            testID="coach-speech-content"
+            style={{ flexGrow: 0, maxHeight: contentMaxHeight }}
+            showsVerticalScrollIndicator
             bounces={false}
           >
-            <Text className="text-body-sm text-foreground">{text}</Text>
+            <Text accessibilityLabel={`${COACH_LABEL}: ${text}`} accessibilityLiveRegion="polite" className="text-body-sm text-foreground">
+              {text}
+            </Text>
           </ScrollView>
-        </Pressable>
+        </View>
       </Animated.View>
     </View>
   );
 }
 
 /**
- * 말풍선이 2~3초 뒤 접히면 남는 대화 아이콘 버튼 (사용자 요청 2026-09-23). 고양이 머리 위 가운데에 두고, 누르면 말풍선을 다시 펼친다.
+ * 말풍선을 접으면 남는 대화 아이콘 버튼. 고양이 머리 위 가운데에 두고, 누르면 말풍선을 다시 펼친다.
  * 아직 직접 열어 보지 않은 말이 있거나 정리할 미확정 결제가 있으면 오른쪽 위에 빨간 점을 달아 눌러 보도록 강조한다 —
  * 예전에 고양이 귀 옆에 따로 있던 미확정 결제 점을 이 점 하나로 합쳤다(사용자 요청 2026-09-23).
  */
