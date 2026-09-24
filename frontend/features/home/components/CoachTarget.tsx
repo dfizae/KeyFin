@@ -100,7 +100,12 @@ function CoachSpeech({ text, scale, onPress }: { text: string; scale: number; on
           onPress={onPress}
           className="self-start rounded-2xl rounded-bl-sm bg-card px-3 py-2 shadow-md shadow-black/20 active:opacity-80 dark:border dark:border-border dark:shadow-none"
         >
-          <ScrollView style={{ maxHeight: Math.max(0, height - SPEECH_PADDING_Y) }} showsVerticalScrollIndicator={false} bounces={false}>
+          {/* ScrollView 는 기본이 flexGrow 1 이라 짧은 문장에도 남는 높이를 다 채운다 — 내용 높이만 쓰고 넘칠 때만 스크롤 */}
+          <ScrollView
+            style={{ flexGrow: 0, maxHeight: Math.max(0, height - SPEECH_PADDING_Y) }}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+          >
             <Text className="text-body-sm text-foreground">{text}</Text>
           </ScrollView>
         </Pressable>
