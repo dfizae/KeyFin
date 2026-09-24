@@ -1,7 +1,8 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 
-import { pushNotificationHref } from "@/features/notification/model";
+import { announceCoachFeedback } from "@/features/notification/coachFeedback";
+import { pushNotificationHref, pushNotificationId, toPushDataType } from "@/features/notification/model";
 import { canUsePush, getLaunchPushData, reportPushSkip, subscribePushResponse } from "@/features/notification/push";
 
 /**
@@ -23,6 +24,9 @@ export function usePushDeepLink(enabled: boolean) {
     const go = (data: unknown) => {
       const href = pushNotificationHref(data);
       if (href !== null && active) router.push(href);
+      // 예산 알림을 눌러 들어오면 코치 피드백을 받아 두었다가 홈에서 말한다 (-184)
+      const notificationId = pushNotificationId(data);
+      if (toPushDataType(data) === "BUDGET_ALERT" && notificationId !== null) void announceCoachFeedback(notificationId);
     };
 
     const start = async () => {

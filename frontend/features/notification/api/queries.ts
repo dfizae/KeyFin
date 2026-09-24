@@ -9,9 +9,11 @@ import {
   NOTIFICATION_PAGE_SIZE,
   registerPushDevice,
 } from "@/features/notification/api/notification.api";
+import { announceCoachFeedback } from "@/features/notification/coachFeedback";
 import { isRetryablePushError } from "@/features/notification/errors";
 import {
   markNotificationReadInPage,
+  pushNotificationId,
   pushSpeechText,
   shouldShowPushBanner,
   toPushDataType,
@@ -197,6 +199,9 @@ export function usePushForegroundDisplay(enabled: boolean) {
         // 배너로 띄우는 알림이면 홈의 코치 고양이도 말풍선으로 한 번 알린다 (사용자 요청 2026-09-23)
         const speech = pushSpeechText(type, text);
         if (shouldShowPushBanner(type) && speech !== null) useCoachSpeechStore.getState().announce(speech);
+        // 예산 알림이면 이어서 코치 피드백을 말한다 (-184)
+        const notificationId = pushNotificationId(data);
+        if (type === "BUDGET_ALERT" && notificationId !== null) void announceCoachFeedback(notificationId);
       });
       if (!active) {
         stop();

@@ -1,5 +1,5 @@
 import { MessageCircleMore } from "lucide-react-native";
-import { Pressable, View } from "react-native";
+import { Pressable, ScrollView, View } from "react-native";
 import Animated, { FadeIn, useAnimatedStyle, ZoomIn } from "react-native-reanimated";
 
 import { Icon } from "@/components/ui/icon";
@@ -23,6 +23,8 @@ const SPEECH_GAP = 4;
 /** 접힌 대화 아이콘 버튼 크기(pt). 누르기 쉽게 hitSlop 을 더한다 */
 const SPEECH_ICON_SIZE = 36;
 const SPEECH_APPEAR_MS = 180;
+/** 말풍선 위아래 여백(py-2)의 합. 긴 문장(코치 피드백)은 남는 높이 안에서 말풍선 안쪽이 스크롤된다 */
+const SPEECH_PADDING_Y = 16;
 
 type CoachTargetProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
@@ -82,10 +84,11 @@ function CoachTarget({ width, hasPending = false, speech = null, onPress }: Coac
  * 고양이 쪽(왼쪽 아래) 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다. 누르면 대화 아이콘으로 접힌다.
  */
 function CoachSpeech({ text, scale, onPress }: { text: string; scale: number; onPress?: () => void }) {
+  const height = COACH_CAT_RECT.y * scale - SPEECH_GAP;
   return (
     <View
       className="absolute justify-end"
-      style={{ left: COACH_CAT_RECT.x * scale, top: 0, height: COACH_CAT_RECT.y * scale - SPEECH_GAP, maxWidth: SPEECH_MAX_WIDTH }}
+      style={{ left: COACH_CAT_RECT.x * scale, top: 0, height, maxWidth: SPEECH_MAX_WIDTH }}
       pointerEvents="box-none"
     >
       <Animated.View entering={ZoomIn.duration(SPEECH_APPEAR_MS)}>
@@ -97,7 +100,9 @@ function CoachSpeech({ text, scale, onPress }: { text: string; scale: number; on
           onPress={onPress}
           className="self-start rounded-2xl rounded-bl-sm bg-card px-3 py-2 shadow-md shadow-black/20 active:opacity-80 dark:border dark:border-border dark:shadow-none"
         >
-          <Text className="text-body-sm text-foreground">{text}</Text>
+          <ScrollView style={{ maxHeight: Math.max(0, height - SPEECH_PADDING_Y) }} showsVerticalScrollIndicator={false} bounces={false}>
+            <Text className="text-body-sm text-foreground">{text}</Text>
+          </ScrollView>
         </Pressable>
       </Animated.View>
     </View>

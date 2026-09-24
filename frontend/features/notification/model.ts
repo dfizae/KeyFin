@@ -285,6 +285,29 @@ export function pushNotificationHref(data: unknown): string | null {
   }
 }
 
+/** 푸시 data 의 알림 id. 코치 피드백 조회 키다(서버는 모든 푸시에 notificationId 를 넣는다) */
+export function pushNotificationId(data: unknown): number | null {
+  if (typeof data !== "object" || data === null) return null;
+  const raw = (data as Record<string, unknown>).notificationId;
+  return typeof raw === "string" && POSITIVE_ID.test(raw) ? Number(raw) : null;
+}
+
+/**
+ * GET /notifications/{id}/coach-feedback 계약 (-182). 예산 구간 알림마다 서버가 AI 봉투 평가를 비동기로 받아 24시간 둔다.
+ * 모든 상태가 200 이고 없거나 만료·남의 알림은 NONE 이다. 모르는 status 와 문장 없는 READY 는 NONE 으로 흡수한다 (규칙 90).
+ */
+export const COACH_FEEDBACK_STATUSES = ["PENDING", "READY", "FAILED", "NONE"] as const;
+export type CoachFeedbackStatus = (typeof COACH_FEEDBACK_STATUSES)[number];
+export type CoachFeedbackDto = { status: string; text: string | null };
+export type CoachFeedback = { status: CoachFeedbackStatus; text: string | null };
+
+export function toCoachFeedback(dto: CoachFeedbackDto): CoachFeedback {
+  const status = (COACH_FEEDBACK_STATUSES as readonly string[]).includes(dto.status) ? (dto.status as CoachFeedbackStatus) : "NONE";
+  const text = dto.text?.trim() ?? "";
+  if (status === "READY" && text === "") return { status: "NONE", text: null };
+  return { status, text: status === "READY" ? text : null };
+}
+
 /** 고양이 말풍선에 한 번에 담을 최대 글자 수. 넘치면 말줄임표로 줄인다 */
 const PUSH_SPEECH_MAX = 80;
 

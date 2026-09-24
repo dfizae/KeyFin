@@ -9,6 +9,7 @@ import { Screen, ScreenFlatList } from "@/components/ui/screen";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Text } from "@/components/ui/text";
 import { flattenNotifications, useMarkNotificationRead, useNotifications } from "@/features/notification/api/queries";
+import { announceCoachFeedback } from "@/features/notification/coachFeedback";
 import { notificationIcon } from "@/features/notification/catalog";
 import {
   groupNotificationsByDate,
@@ -41,6 +42,8 @@ function NotificationInboxScreen() {
 
   const open = (notification: InboxNotification) => {
     if (!notification.isRead) markRead.mutate(notification.id);
+    // 예산 알림은 코치 피드백을 받아 홈 말풍선으로 전한다 (-184)
+    if (notification.type === "BUDGET_ALERT") void announceCoachFeedback(notification.id);
     const href = notificationHref(notification);
     if (href !== null) router.push(href);
   };

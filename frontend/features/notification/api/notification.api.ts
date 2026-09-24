@@ -1,13 +1,17 @@
 import { api, isMocked } from "@/api/client";
 import { withMockLatency } from "@/api/mocks/latency";
 import {
+  coachFeedbackMock,
   markNotificationReadMock,
   notificationListMock,
   registerPushDeviceMock,
   unregisterPushDeviceMock,
 } from "@/api/mocks/notification";
 import {
+  toCoachFeedback,
   toNotificationPage,
+  type CoachFeedback,
+  type CoachFeedbackDto,
   type NotificationListDto,
   type NotificationPage,
   type PushDeviceRequest,
@@ -42,6 +46,15 @@ export async function markNotificationRead(notificationId: number): Promise<void
     return;
   }
   await api.patch(`/notifications/${notificationId}/read`);
+}
+
+/**
+ * GET /notifications/{id}/coach-feedback — 예산 구간 알림의 코치 피드백 (-182). 상태는 모두 200, 남의 알림·만료는 NONE.
+ */
+export async function getCoachFeedback(notificationId: number, signal?: AbortSignal): Promise<CoachFeedback> {
+  if (isMocked("notification")) return toCoachFeedback(await withMockLatency(coachFeedbackMock(notificationId), signal));
+  const { data } = await api.get<CoachFeedbackDto>(`/notifications/${notificationId}/coach-feedback`, { signal });
+  return toCoachFeedback(data);
 }
 
 /**
