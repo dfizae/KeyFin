@@ -7,6 +7,7 @@ import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.payment.dto.request.FixedExpenseCardRequest;
 import com.finset.key_fin.payment.dto.request.FixedExpenseRequest;
 import com.finset.key_fin.payment.dto.response.FixedExpenseIdResponse;
 import com.finset.key_fin.payment.dto.response.FixedExpenseResponse;
@@ -55,6 +57,16 @@ public class FixedExpenseController implements FixedExpenseControllerDocs {
 			@Valid @RequestBody FixedExpenseRequest request
 	) {
 		return BaseResponse.ok(fixedExpenseService.update(userId, fixedExpenseId, request));
+	}
+
+	@PatchMapping("/{fixedExpenseId}/card")
+	@Override
+	public BaseResponse<FixedExpenseIdResponse> assignCard(
+			@AuthenticationPrincipal Long userId,
+			@PathVariable long fixedExpenseId,
+			@Valid @RequestBody FixedExpenseCardRequest request
+	) {
+		return BaseResponse.ok(fixedExpenseService.assignCard(userId, fixedExpenseId, request.cardId()));
 	}
 
 	@DeleteMapping("/{fixedExpenseId}")

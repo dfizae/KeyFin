@@ -5,6 +5,7 @@ import static org.springframework.http.MediaType.APPLICATION_JSON_VALUE;
 import java.util.List;
 
 import com.finset.key_fin.global.base.BaseResponse;
+import com.finset.key_fin.payment.dto.request.FixedExpenseCardRequest;
 import com.finset.key_fin.payment.dto.request.FixedExpenseRequest;
 import com.finset.key_fin.payment.dto.response.FixedExpenseIdResponse;
 import com.finset.key_fin.payment.dto.response.FixedExpenseResponse;
@@ -150,6 +151,54 @@ public interface FixedExpenseControllerDocs {
 			)
 	})
 	BaseResponse<FixedExpenseIdResponse> update(Long userId, long fixedExpenseId, FixedExpenseRequest request);
+
+	@Operation(
+			summary = "카드 정기결제 결제 카드 지정",
+			description = "금융망 정기결제 조회에는 결제 카드가 없어, 관리 카드가 2장 이상이면 새 구독마다 사용자가 한 번 지정합니다"
+					+ "(SUBSCRIPTION_CARD 알림, refId=고정지출 ID). 지정한 카드는 AI 코칭 예측에 반영됩니다. "
+					+ "금융망 동기화 항목만 대상이며, 다시 호출하면 카드를 바꿉니다.",
+			security = @SecurityRequirement(name = "bearerAuth")
+	)
+	@ApiResponses({
+			@ApiResponse(
+					responseCode = "200",
+					description = "지정 성공",
+					content = @Content(
+							mediaType = APPLICATION_JSON_VALUE,
+							schema = @Schema(implementation = BaseResponse.class),
+							examples = @ExampleObject(
+									name = "지정 성공",
+									value = "{\"success\":true,\"code\":\"SUCCESS\",\"message\":\"요청이 성공했습니다.\",\"data\":{\"id\":8}}"
+							)
+					)
+			),
+			@ApiResponse(
+					responseCode = "400",
+					description = "입력값 오류(COMMON_001)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "401",
+					description = "Access Token이 없거나 유효하지 않음",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "404",
+					description = "고정지출이 본인 소유가 아니거나 없거나 삭제됨(PAY_001), 카드가 본인 소유가 아니거나 없음(PAY_013)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "409",
+					description = "금융망 정기결제가 아닌 항목(PAY_014) 또는 관리 대상이 아닌 카드(PAY_015)",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			),
+			@ApiResponse(
+					responseCode = "500",
+					description = "서버 내부 오류",
+					content = @Content(schema = @Schema(implementation = BaseResponse.class))
+			)
+	})
+	BaseResponse<FixedExpenseIdResponse> assignCard(Long userId, long fixedExpenseId, FixedExpenseCardRequest request);
 
 	@Operation(
 			summary = "고정지출 삭제",

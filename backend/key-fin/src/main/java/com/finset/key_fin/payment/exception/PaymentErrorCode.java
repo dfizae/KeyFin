@@ -24,7 +24,9 @@ public enum PaymentErrorCode implements ErrorCode {
 	TRANSFER_ACCOUNT_INELIGIBLE(HttpStatus.FORBIDDEN, "PAY_010", "출금 계좌가 수입 계좌·관리 대상이 아닙니다."),
 	TRANSFER_INSUFFICIENT_BALANCE(HttpStatus.UNPROCESSABLE_ENTITY, "PAY_011", "출금 계좌 잔액이 부족해 이체에 실패했습니다."),
 	TRANSFER_BANK_LIMIT(HttpStatus.UNPROCESSABLE_ENTITY, "PAY_012", "은행 이체 한도를 초과해 이체에 실패했습니다."),
-	CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "PAY_013", "카드를 찾을 수 없습니다.");
+	CARD_NOT_FOUND(HttpStatus.NOT_FOUND, "PAY_013", "카드를 찾을 수 없습니다."),
+	FIXED_EXPENSE_NOT_SUBSCRIPTION(HttpStatus.CONFLICT, "PAY_014", "카드 정기결제 항목만 결제 카드를 지정할 수 있습니다."),
+	CARD_NOT_MANAGED(HttpStatus.CONFLICT, "PAY_015", "관리 중인 카드만 결제 카드로 지정할 수 있습니다.");
 
 	private final HttpStatus httpStatus;
 	private final String code;
