@@ -17,9 +17,11 @@ import {
   notificationHref,
   notificationTimeLabel,
   pushNotificationHref,
+  pushNotificationId,
   budgetAlertCopy,
   pushSpeechText,
   shouldShowPushBanner,
+  toCoachFeedback,
   toInboxNotification,
   toNotificationPage,
   toPushDataType,
@@ -357,5 +359,21 @@ describe("toInboxNotification 예산 알림 표기", () => {
       title: "외식 봉투를 초과했어요",
       body: null,
     });
+  });
+});
+
+describe("코치 피드백 (-182 계약 · -184)", () => {
+  it("READY 는 문장을 다듬어 두고, 문장 없는 READY 와 모르는 상태는 NONE 으로 흡수한다", () => {
+    expect(toCoachFeedback({ status: "READY", text: " 멈추는 편이 좋다냥. " })).toEqual({ status: "READY", text: "멈추는 편이 좋다냥." });
+    expect(toCoachFeedback({ status: "READY", text: "  " })).toEqual({ status: "NONE", text: null });
+    expect(toCoachFeedback({ status: "PENDING", text: null })).toEqual({ status: "PENDING", text: null });
+    expect(toCoachFeedback({ status: "EXPIRED", text: "x" })).toEqual({ status: "NONE", text: null });
+  });
+
+  it("푸시 data 의 notificationId 는 양수 문자열일 때만 쓴다", () => {
+    expect(pushNotificationId({ notificationId: "41", type: "BUDGET_ALERT" })).toBe(41);
+    expect(pushNotificationId({ notificationId: "0" })).toBeNull();
+    expect(pushNotificationId({ notificationId: 41 })).toBeNull();
+    expect(pushNotificationId(null)).toBeNull();
   });
 });
