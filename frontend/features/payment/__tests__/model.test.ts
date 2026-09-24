@@ -1,5 +1,6 @@
 import { ApiError } from "@/api/error";
 import {
+  assignFixedExpenseCardMock,
   cardBillingDetailMock,
   cardBillingsMock,
   createFixedExpenseMock,
@@ -17,7 +18,7 @@ import {
   transferDetailMock,
   transferListMock,
 } from "@/api/mocks/transfer";
-import { isCardNotFoundError } from "@/features/payment/errors";
+import { fixedExpenseCardErrorMessage, isCardNotFoundError, isStaleCardError } from "@/features/payment/errors";
 import {
   EMPTY_FIXED_EXPENSE_FORM,
   billingStatusLabel,
@@ -307,12 +308,20 @@ describe("고정지출 목록 (toFixedExpenses · splitFixedExpenses · paymentD
       paymentDay: 15,
       withdrawalAccountId: 3,
       synced: false,
+      cardId: null,
     });
     expect(expenses[1]).toMatchObject({ synced: true, withdrawalAccountId: null });
     expect(expenses[2].amount).toBeNull();
     expect(expenses[3].expenseType).toBeNull();
     expect(findFixedExpense(expenses, 8)?.name).toBe("FLO 개인");
     expect(findFixedExpense(expenses, 99)).toBeNull();
+  });
+
+  it("동기화 항목의 결제 카드를 옮기고, cardId 를 보내지 않는 서버에서는 null 로 둔다", () => {
+    const [assigned, legacy] = toFixedExpenses([fixedExpenseDto({ id: 8, synced: true, cardId: 2 }), fixedExpenseDto({ id: 9, synced: true })]);
+
+    expect(assigned.cardId).toBe(2);
+    expect(legacy.cardId).toBeNull();
   });
 
   it("출금일이 1~31 밖이면 ContractMismatchError 를 던진다", () => {
@@ -438,6 +447,17 @@ describe("고정지출 목 — 서버처럼 반영하고 거절한다", () => {
     createFixedExpenseMock(gym);
     expect(errorCodeOf(() => createFixedExpenseMock(gym))).toBe("PAY_003");
     expect(errorCodeOf(() => createFixedExpenseMock({ ...gym, expenseType: "CARD_BILL" } as unknown as FixedExpenseRequest))).toBe("PAY_004");
+  });
+
+  it("결제 카드는 동기화 항목에만 지정되고 목록에 cardId 로 나온다", () => {
+    expect(fixedExpenseListMock().find((expense) => expense.id === 12)?.cardId).toBeNull();
+
+    assignFixedExpenseCardMock(12, 1);
+    expect(fixedExpenseListMock().find((expense) => expense.id === 12)?.cardId).toBe(1);
+
+    expect(errorCodeOf(() => assignFixedExpenseCardMock(11, 1))).toBe("PAY_014");
+    expect(errorCodeOf(() => assignFixedExpenseCardMock(999, 1))).toBe("PAY_001");
+    expect(errorCodeOf(() => assignFixedExpenseCardMock(12, 99))).toBe("PAY_013");
   });
 
   it("출금일이 없는 달은 캘린더에서 말일로 보정하고 목록은 저장값을 그대로 준다", () => {
@@ -755,5 +775,18 @@ describe("카드 청구 상세 (GET /cards/{cardId}/billings)", () => {
     expect(parseCardId("0")).toBeNull();
     expect(parseCardId("3abc")).toBeNull();
     expect(parseCardId(undefined)).toBeNull();
+  });
+});
+
+describe("결제 카드 지정 오류 (PAY_001·013·014·015)", () => {
+  it("계약 코드는 화면 문구로, 카드 목록이 낡은 오류는 다시 받을 대상으로 본다", () => {
+    const apiError = (code: string) => new ApiError(409, code, "서버 문구");
+
+    expect(fixedExpenseCardErrorMessage(apiError("PAY_015"))).toContain("연결을 해제한 카드");
+    expect(fixedExpenseCardErrorMessage(apiError("PAY_999"))).toBe("서버 문구");
+    expect(fixedExpenseCardErrorMessage(new Error("boom"))).toContain("지정하지 못했어요");
+    expect(isStaleCardError(apiError("PAY_013"))).toBe(true);
+    expect(isStaleCardError(apiError("PAY_015"))).toBe(true);
+    expect(isStaleCardError(apiError("PAY_014"))).toBe(false);
   });
 });

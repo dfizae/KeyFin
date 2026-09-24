@@ -74,6 +74,8 @@ describe("notificationHref — 종류별 이동 (frontend-spec §3)", () => {
     expect(notificationHref({ type: "BUDGET_ALERT", refId: "1" })).toBe("/budget/1");
     expect(notificationHref({ type: "CLEANUP", refId: null })).toBe("/transaction/pending");
     expect(notificationHref({ type: "WARNING", refId: "11" })).toBe("/payment/calendar");
+    expect(notificationHref({ type: "SUBSCRIPTION_CARD", refId: "12" })).toBe("/payment/fixed-expense/12");
+    expect(notificationHref({ type: "SUBSCRIPTION_CARD", refId: null })).toBe("/payment/fixed-expense");
     // 서버의 COACHING 은 "새로 정리할 거래가 있어요" 이고 refId 가 거래 id 다 — 미확정 정리에서 그 거래의 분류 창을 연다
     expect(notificationHref({ type: "COACHING", refId: "31" })).toBe("/transaction/pending?focus=31");
     expect(notificationHref({ type: "COACHING", refId: null })).toBe("/");
@@ -260,6 +262,8 @@ describe("푸시 탭 딥링크 (frontend-spec §3 · 푸시 전용 4종은 2026-
     expect(pushNotificationHref(server("COACHING", "77"))).toBe("/transaction/pending?focus=77");
     expect(pushNotificationHref(server("COACHING"))).toBe("/");
     expect(pushNotificationHref(server("BUDGET_ALERT", "3"))).toBe("/budget/3");
+    expect(pushNotificationHref(server("SUBSCRIPTION_CARD", "12"))).toBe("/payment/fixed-expense/12");
+    expect(pushNotificationHref(server("SUBSCRIPTION_CARD", "../x"))).toBe("/payment/fixed-expense");
     expect(pushNotificationHref(server("CLEANUP"))).toBe("/transaction/pending");
     expect(pushNotificationHref(server("WARNING", "11"))).toBe("/payment/calendar");
   });
