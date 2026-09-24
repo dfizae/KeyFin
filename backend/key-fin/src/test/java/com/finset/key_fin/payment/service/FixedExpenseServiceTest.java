@@ -36,6 +36,9 @@ class FixedExpenseServiceTest extends SpringIntegrationTestSupport {
 	private static final long MANUAL_RENT = 9601L;
 	private static final long SYNCED_SUBSCRIPTION = 9602L;
 	private static final long DELETED_GYM = 9603L;
+	private static final long MANAGED_CARD = 9701L;
+	private static final long UNMANAGED_CARD = 9702L;
+	private static final long OTHERS_CARD = 9703L;
 
 	@Autowired
 	private FixedExpenseService fixedExpenseService;
@@ -145,6 +148,31 @@ class FixedExpenseServiceTest extends SpringIntegrationTestSupport {
 	@DisplayName("타인의 고정지출은 존재를 드러내지 않고 FIXED_EXPENSE_NOT_FOUND")
 	void rejectOtherUsersExpense() {
 		assertError(() -> fixedExpenseService.delete(OTHER_USER, MANUAL_RENT), PaymentErrorCode.FIXED_EXPENSE_NOT_FOUND);
+	}
+
+	@Test
+	@DisplayName("금융망 정기결제에 본인 관리 카드를 지정하면 저장되고 목록에 cardId로 나온다")
+	void assignCardToSyncedSubscription() {
+		fixedExpenseService.assignCard(OWNER, SYNCED_SUBSCRIPTION, MANAGED_CARD);
+
+		assertThat(fixedExpenseRepository.findById(SYNCED_SUBSCRIPTION).orElseThrow().getCardId()).isEqualTo(MANAGED_CARD);
+		assertThat(fixedExpenseService.list(OWNER))
+				.filteredOn(FixedExpenseResponse::synced)
+				.extracting(FixedExpenseResponse::cardId)
+				.containsExactly(MANAGED_CARD);
+	}
+
+	@Test
+	@DisplayName("결제 카드 지정은 본인 활성 정기결제와 본인 관리 카드만 허용한다")
+	void rejectInvalidCardAssignment() {
+		assertError(() -> fixedExpenseService.assignCard(OWNER, MANUAL_RENT, MANAGED_CARD),
+				PaymentErrorCode.FIXED_EXPENSE_NOT_SUBSCRIPTION);
+		assertError(() -> fixedExpenseService.assignCard(OTHER_USER, SYNCED_SUBSCRIPTION, OTHERS_CARD),
+				PaymentErrorCode.FIXED_EXPENSE_NOT_FOUND);
+		assertError(() -> fixedExpenseService.assignCard(OWNER, SYNCED_SUBSCRIPTION, OTHERS_CARD),
+				PaymentErrorCode.CARD_NOT_FOUND);
+		assertError(() -> fixedExpenseService.assignCard(OWNER, SYNCED_SUBSCRIPTION, UNMANAGED_CARD),
+				PaymentErrorCode.CARD_NOT_MANAGED);
 	}
 
 	private static FixedExpenseRequest request(String name, ExpenseType type, Long amount, boolean variable,
