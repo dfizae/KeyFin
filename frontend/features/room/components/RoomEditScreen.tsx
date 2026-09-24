@@ -2,7 +2,7 @@ import { useRouter } from "expo-router";
 import { usePreventRemove } from "expo-router/react-navigation";
 import { Archive, ChevronUp, CircleAlert, FlipHorizontal2, Sofa } from "lucide-react-native";
 import * as React from "react";
-import { FlatList, Image, Pressable, View, type LayoutChangeEvent } from "react-native";
+import { FlatList, Pressable, View, type LayoutChangeEvent } from "react-native";
 
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,8 @@ import { Icon } from "@/components/ui/icon";
 import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
-import { roomItemName, roomItemThumbnail, isWallItemId } from "@/features/room/catalog";
+import { roomItemName, roomItemThumbnail, roomItemThumbnailGeometry, isWallItemId } from "@/features/room/catalog";
+import { FurnitureThumbnail } from "@/features/room/components/FurnitureThumbnail";
 import { RoomView } from "@/features/room/components/RoomView";
 import {
   storeAwayBlock,
@@ -49,7 +50,7 @@ const STORE_AWAY_BLOCK_TEXT: Record<StoreAwayBlock, string> = {
 const HOME_ROUTE = "/";
 const LOAD_ERROR = "방 정보를 불러오지 못했어요.";
 /** 보관함 타일 그림. 64pt 타일 안의 4px 스케일 밖 크기라 style 로 준다(상점 타일과 같은 방식) */
-const TRAY_SPRITE_STYLE = { width: 48, height: 48 } as const;
+const TRAY_SPRITE_SIZE = 48;
 const TRAY_COLUMNS = 4;
 /** 말풍선 크기를 재기 전 첫 렌더에서 쓰는 어림값. 잰 뒤에는 실제 크기로 자리를 다시 잡는다 */
 const BUBBLE_SIZE_GUESS: SceneSize = { width: 236, height: 60 };
@@ -388,8 +389,10 @@ function StorageSheet({ stored, pending, failed, retrying, disabled, onRetry, on
           data={stored}
           numColumns={TRAY_COLUMNS}
           keyExtractor={(furniture) => String(furniture.userFurnitureId)}
-          columnWrapperClassName="gap-3"
-          contentContainerClassName="gap-3 px-6"
+          columnWrapperClassName="gap-3 overflow-visible"
+          contentContainerClassName="gap-3 overflow-visible px-6"
+          // 그림자가 셀의 원래 경계 밖으로 나가므로 Android에서도 셀 경계로 그림을 제거하지 않는다.
+          removeClippedSubviews={false}
           renderItem={({ item }) => <StoredTile furniture={item} disabled={disabled} onPress={onPlace} />}
         />
       )}
@@ -410,13 +413,13 @@ function StoredTile({ furniture, disabled, onPress }: { furniture: StoredFurnitu
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => onPress(furniture)}
-      className="w-16 items-center gap-1 active:opacity-80"
+      className="w-16 items-center gap-1 overflow-visible active:opacity-80"
     >
-      <View className="h-16 w-16 items-center justify-center rounded-xl bg-muted" accessible={false}>
+      <View className="h-16 w-16 items-center justify-center overflow-visible rounded-xl bg-muted" accessible={false}>
         {thumbnail === null ? (
           <Icon as={Sofa} size={24} className="text-card-foreground" />
         ) : (
-          <Image source={thumbnail} style={TRAY_SPRITE_STYLE} resizeMode="contain" accessible={false} />
+          <FurnitureThumbnail source={thumbnail} geometry={roomItemThumbnailGeometry(furniture.assetKey)} size={TRAY_SPRITE_SIZE} />
         )}
         {furniture.stickerAttached ? <Text className="absolute bottom-0 rounded bg-destructive px-1 text-caption text-white">압류</Text> : null}
       </View>

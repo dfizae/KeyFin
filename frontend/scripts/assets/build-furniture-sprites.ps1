@@ -18,6 +18,9 @@
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File scripts/assets/build-furniture-sprites.ps1 -Source C:\Users\SSAFY\Desktop\Room_Matched_PNG_146\room_matched_png -Target assets/sprites/furniture
+.EXAMPLE
+  powershell -ExecutionPolicy Bypass -File scripts/assets/build-furniture-sprites.ps1 -Source C:\art\shadow_v4\sprites -ReferenceSource C:\art\original -Target C:\staging\furniture -GeometryTarget C:\staging\furniture-geometry.generated.ts
+  Stage and verify the PNGs and geometry together before copying them into the app.
 #>
 param(
   # <asset_key>__left_wall.png · __right_wall.png 가 있는 원본 폴더
@@ -33,10 +36,21 @@ param(
   # 잘라낸 경계 바깥에 남길 여백(px). 밉맵 가장자리가 잘리지 않게 한다
   [int]$Padding = 2,
   # 이 값보다 알파가 큰 픽셀만 내용으로 본다(안티에일리어싱 가장자리 제외)
-  [int]$AlphaFloor = 8
+  [int]$AlphaFloor = 8,
+  # Optional pair: recover the existing crop/scale from shadow-free source PNGs,
+  # and expand only the canvas to contain every non-transparent shadow pixel.
+  [string]$ReferenceSource,
+  # Generated TypeScript containing new PNG size and the old canvas rectangle.
+  [string]$GeometryTarget
 )
 
 $ErrorActionPreference = 'Stop'
+if ([bool]$ReferenceSource -ne [bool]$GeometryTarget) {
+  throw 'ReferenceSource and GeometryTarget must be specified together.'
+}
+if ($SceneScale -le 0 -or $ShopSize -le 0 -or $Padding -lt 0 -or $AlphaFloor -lt 0 -or $AlphaFloor -gt 254) {
+  throw 'Invalid scale, size, padding, or alpha threshold.'
+}
 Add-Type -AssemblyName System.Drawing
 
 # 146장을 PowerShell 반복문으로 훑으면 몇십 분이 걸려 경계 찾기만 C# 로 돌린다.
@@ -47,6 +61,32 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
 public static class FurnitureAlphaBounds {
+  public static void CopyPixels(Bitmap source, Bitmap target, int x, int y) {
+    var src = source.LockBits(new Rectangle(0,0,source.Width,source.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+    var dst = target.LockBits(new Rectangle(0,0,target.Width,target.Height), ImageLockMode.ReadWrite, PixelFormat.Format32bppArgb);
+    try {
+      var row = new byte[source.Width * 4];
+      for(int sy=0; sy<source.Height; sy++) {
+        Marshal.Copy(IntPtr.Add(src.Scan0, sy*src.Stride), row, 0, row.Length);
+        Marshal.Copy(row, 0, IntPtr.Add(dst.Scan0, (sy+y)*dst.Stride+x*4), row.Length);
+      }
+    } finally { source.UnlockBits(src); target.UnlockBits(dst); }
+  }
+  public static Bitmap PaddedCopy(Bitmap source, Rectangle crop) {
+    var result = new Bitmap(crop.Width, crop.Height, PixelFormat.Format32bppArgb);
+    var src = source.LockBits(new Rectangle(0,0,source.Width,source.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+    var dst = result.LockBits(new Rectangle(0,0,result.Width,result.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+    try {
+      var pixels = new byte[src.Stride * source.Height];
+      var padded = new byte[dst.Stride * result.Height];
+      Marshal.Copy(src.Scan0, pixels, 0, pixels.Length);
+      var overlap = Rectangle.Intersect(new Rectangle(0,0,source.Width,source.Height), crop);
+      for(int y=overlap.Top; y<overlap.Bottom; y++)
+        Buffer.BlockCopy(pixels, y*src.Stride+overlap.X*4, padded, (y-crop.Y)*dst.Stride+(overlap.X-crop.X)*4, overlap.Width*4);
+      Marshal.Copy(padded, 0, dst.Scan0, padded.Length);
+    } finally { source.UnlockBits(src); result.UnlockBits(dst); }
+    return result;
+  }
   public static Rectangle Find(Bitmap bitmap, int floor) {
     var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
     var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
@@ -96,6 +136,109 @@ function Save-Canvas {
   $Canvas.Bitmap.Dispose()
 }
 
+function Write-ExpandedSprite {
+  param([string]$SourceFile, [string]$ReferenceFile, [string]$TargetFile, [string]$Mode)
+
+  $src = [System.Drawing.Bitmap]::FromFile((Resolve-Path $SourceFile).Path)
+  $reference = [System.Drawing.Bitmap]::FromFile((Resolve-Path $ReferenceFile).Path)
+  try {
+    if ($src.Size -ne $reference.Size) { throw "Source and reference canvas differ: $SourceFile" }
+    $box = [FurnitureAlphaBounds]::Find($reference, $AlphaFloor)
+    if ($Mode -eq 'scene') {
+      $x = [Math]::Max(0, $box.X - $Padding)
+      $y = [Math]::Max(0, $box.Y - $Padding)
+      $crop = New-Object System.Drawing.Rectangle $x, $y, ([Math]::Min($src.Width, $box.Right + $Padding) - $x), ([Math]::Min($src.Height, $box.Bottom + $Padding) - $y)
+      $outW = [Math]::Max(1, [int][Math]::Round($crop.Width * $SceneScale))
+      $outH = [Math]::Max(1, [int][Math]::Round($crop.Height * $SceneScale))
+    } else {
+      $crop = $box
+      $ratio = $ShopSize / [Math]::Max($box.Width, $box.Height)
+      $outW = [Math]::Max(1, [int][Math]::Round($box.Width * $ratio))
+      $outH = [Math]::Max(1, [int][Math]::Round($box.Height * $ratio))
+    }
+
+    # Keep the two ORIGINAL rounded scale factors, including their pixel phase.
+    # Integer multiples of the old source/destination rectangles avoid a second
+    # rounded resize and avoid subpixel drift from RectangleF/float transforms.
+    $sx = $outW / [double]$crop.Width
+    $sy = $outH / [double]$crop.Height
+    $shadow = [FurnitureAlphaBounds]::Find($src, 0)
+    $haloX = [int][Math]::Ceiling(2 * [Math]::Max(1, $sx)) + 2
+    $haloY = [int][Math]::Ceiling(2 * [Math]::Max(1, $sy)) + 2
+    $minX = [int][Math]::Min(0, [Math]::Floor(($shadow.X - $crop.X) * $sx)) - $haloX
+    $minY = [int][Math]::Min(0, [Math]::Floor(($shadow.Y - $crop.Y) * $sy)) - $haloY
+    $maxX = [int][Math]::Max($outW, [Math]::Ceiling(($shadow.Right - $crop.X) * $sx)) + $haloX
+    $maxY = [int][Math]::Max($outH, [Math]::Ceiling(($shadow.Bottom - $crop.Y) * $sy)) + $haloY
+    $tilesLeft = [int][Math]::Ceiling(-$minX / [double]$outW)
+    $tilesTop = [int][Math]::Ceiling(-$minY / [double]$outH)
+    $tilesRight = [int][Math]::Ceiling($maxX / [double]$outW)
+    $tilesBottom = [int][Math]::Ceiling($maxY / [double]$outH)
+    $canvas = New-Canvas -Width ($maxX - $minX) -Height ($maxY - $minY)
+    try {
+      $dest = New-Object System.Drawing.Rectangle (-$minX - $tilesLeft * $outW), (-$minY - $tilesTop * $outH), (($tilesLeft + $tilesRight) * $outW), (($tilesTop + $tilesBottom) * $outH)
+      $virtualCrop = New-Object System.Drawing.Rectangle ($crop.X - $tilesLeft * $crop.Width), ($crop.Y - $tilesTop * $crop.Height), (($tilesLeft + $tilesRight) * $crop.Width), (($tilesTop + $tilesBottom) * $crop.Height)
+      # GDI+ rounds again when a source rectangle crosses the bitmap boundary.
+      # Materialize transparent padding first so that it cannot auto-clip it.
+      $padded = [FurnitureAlphaBounds]::PaddedCopy($src, $virtualCrop)
+      try {
+        $canvas.Graphics.DrawImage($padded, $dest, 0, 0, $padded.Width, $padded.Height, [System.Drawing.GraphicsUnit]::Pixel)
+      } finally { $padded.Dispose() }
+      $canvas.Graphics.Dispose()
+      $canvas.Graphics = $null
+
+      # GDI+ uses fixed-point sampling internally; changing the whole draw size
+      # can alter a channel by 1-2 even at the same mathematical scale/phase.
+      # Preserve the old canvas pixel-for-pixel with the exact legacy draw call.
+      # Copy raw RGBA, not SourceOver, to avoid applying the shadow twice.
+      $original = New-Canvas -Width $outW -Height $outH
+      try {
+        $oldDest = New-Object System.Drawing.Rectangle 0, 0, $outW, $outH
+        $original.Graphics.DrawImage($src, $oldDest, $crop.X, $crop.Y, $crop.Width, $crop.Height, [System.Drawing.GraphicsUnit]::Pixel)
+        $original.Graphics.Dispose()
+        $original.Graphics = $null
+        [FurnitureAlphaBounds]::CopyPixels($original.Bitmap, $canvas.Bitmap, -$minX, -$minY)
+      } finally {
+        if ($original.Graphics) { $original.Graphics.Dispose() }
+        $original.Bitmap.Dispose()
+      }
+
+      # Trim excess temporary overscan, preserving the complete old PNG canvas
+      # and at least TWO transparent output pixels around the rendered shadow.
+      $rendered = [FurnitureAlphaBounds]::Find($canvas.Bitmap, 0)
+      $trimX = [int][Math]::Min(-$minX, $rendered.X - 2)
+      $trimY = [int][Math]::Min(-$minY, $rendered.Y - 2)
+      $trimRight = [int][Math]::Max(-$minX + $outW, $rendered.Right + 2)
+      $trimBottom = [int][Math]::Max(-$minY + $outH, $rendered.Bottom + 2)
+      # Very faint alpha can quantize to zero during downsampling. Still retain
+      # its complete source extent instead of relying only on output alpha.
+      $trimX = [int][Math]::Min($trimX, [Math]::Floor(-$minX + ($shadow.Left - $crop.Left) * $sx))
+      $trimY = [int][Math]::Min($trimY, [Math]::Floor(-$minY + ($shadow.Top - $crop.Top) * $sy))
+      $trimRight = [int][Math]::Max($trimRight, [Math]::Ceiling(-$minX + ($shadow.Right - $crop.Left) * $sx))
+      $trimBottom = [int][Math]::Max($trimBottom, [Math]::Ceiling(-$minY + ($shadow.Bottom - $crop.Top) * $sy))
+      if ($trimX -lt 0 -or $trimY -lt 0 -or $trimRight -gt $canvas.Bitmap.Width -or $trimBottom -gt $canvas.Bitmap.Height) {
+        throw "Insufficient transparent overscan: $SourceFile"
+      }
+      $trim = New-Object System.Drawing.Rectangle $trimX, $trimY, ($trimRight - $trimX), ($trimBottom - $trimY)
+      $result = $canvas.Bitmap.Clone($trim, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+      try {
+        $dir = Split-Path $TargetFile -Parent
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+        $result.Save($TargetFile, [System.Drawing.Imaging.ImageFormat]::Png)
+        return [ordered]@{
+          pixelSize = [ordered]@{ width = $result.Width; height = $result.Height }
+          contentRect = [ordered]@{ x = -$minX - $trimX; y = -$minY - $trimY; width = $outW; height = $outH }
+        }
+      } finally { $result.Dispose() }
+    } finally {
+      if ($canvas.Graphics) { $canvas.Graphics.Dispose() }
+      $canvas.Bitmap.Dispose()
+    }
+  } finally {
+    $reference.Dispose()
+    $src.Dispose()
+  }
+}
+
 # 'scene' = 여백을 잘라낸 뒤 SceneScale 로 줄임, 'tile' = 긴 변을 ShopSize 로 줄임
 function Write-Sprite {
   param([string]$SourceFile, [string]$TargetFile, [string]$Mode)
@@ -141,13 +284,47 @@ $EXCLUDED = @(
 
 $keys = Get-ChildItem -Path $sourceRoot -Filter '*__left_wall.png' | ForEach-Object { $_.Name -replace '__left_wall\.png$', '' } |
   Where-Object { $EXCLUDED -notcontains $_ } | Sort-Object
+$geometry = [ordered]@{}
+if ($ReferenceSource) { $referenceRoot = (Resolve-Path $ReferenceSource).Path }
 foreach ($key in $keys) {
   $left = Join-Path $sourceRoot "${key}__left_wall.png"
   $right = Join-Path $sourceRoot "${key}__right_wall.png"
   if (-not (Test-Path $right)) { throw "$key 의 right_wall 그림이 없다" }
   Write-Output "[$key]"
+  if ($ReferenceSource) {
+    $geometry[$key] = [ordered]@{}
+    foreach ($view in @('left', 'right', 'shop')) {
+      $filename = if ($view -eq 'right') { "${key}__right_wall.png" } else { "${key}__left_wall.png" }
+      $mode = if ($view -eq 'shop') { 'tile' } else { 'scene' }
+      $geometry[$key][$view] = Write-ExpandedSprite -SourceFile (Join-Path $sourceRoot $filename) -ReferenceFile (Join-Path $referenceRoot $filename) -TargetFile (Join-Path $Target "$key\$view.png") -Mode $mode
+      $size = $geometry[$key][$view].pixelSize
+      Write-Output ("  {0,-9} {1,4}x{2,-4}" -f "$view.png", $size.width, $size.height)
+    }
+    continue
+  }
   Write-Sprite -SourceFile $left -TargetFile (Join-Path $Target "$key\left.png") -Mode 'scene'
   Write-Sprite -SourceFile $right -TargetFile (Join-Path $Target "$key\right.png") -Mode 'scene'
   Write-Sprite -SourceFile $left -TargetFile (Join-Path $Target "$key\shop.png") -Mode 'tile'
+}
+if ($GeometryTarget) {
+  $geometryDir = Split-Path $GeometryTarget -Parent
+  if ($geometryDir -and -not (Test-Path $geometryDir)) { New-Item -ItemType Directory -Force -Path $geometryDir | Out-Null }
+  $lines = @(
+    '// Generated by scripts/assets/build-furniture-sprites.ps1. Do not edit.',
+    '// contentRect is the original PNG canvas inside the expanded transparent PNG.',
+    'import type { FurnitureSpriteGeometry } from ''./sprite-geometry'';',
+    '',
+    'export const FURNITURE_GEOMETRY = {'
+  )
+  foreach ($key in $geometry.Keys) {
+    $lines += "  $($key): {"
+    foreach ($view in @('left', 'right', 'shop')) {
+      $item = $geometry[$key][$view]
+      $lines += "    $($view): { pixelSize: { width: $($item.pixelSize.width), height: $($item.pixelSize.height) }, contentRect: { x: $($item.contentRect.x), y: $($item.contentRect.y), width: $($item.contentRect.width), height: $($item.contentRect.height) } },"
+    }
+    $lines += '  },'
+  }
+  $lines += '} satisfies Record<string, FurnitureSpriteGeometry>;'
+  [System.IO.File]::WriteAllLines($ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($GeometryTarget), $lines, (New-Object System.Text.UTF8Encoding $false))
 }
 Write-Output ("{0} 종 완료" -f $keys.Count)

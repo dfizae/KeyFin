@@ -13,8 +13,9 @@ import { ScreenHeader } from "@/components/ui/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Text } from "@/components/ui/text";
 import { roomKeys } from "@/features/room/api/queries";
-import { furnitureGroupOf, isFurnitureGroup } from "@/features/room/catalog";
+import { furnitureGroupOf, isFurnitureGroup, roomItemThumbnailGeometry } from "@/features/room/catalog";
 import type { FurnitureGroup } from "@/features/room/catalog";
+import { FurnitureThumbnail } from "@/features/room/components/FurnitureThumbnail";
 import { EDIT_FROM_SHOP } from "@/features/room/components/RoomEditScreen";
 import { isOutfitKey } from "@/features/room/outfits";
 import { FilterSelect, type SelectOption } from "@/features/transaction/components/FilterSelect";
@@ -40,7 +41,7 @@ const WARDROBE_ROUTE = "/character/wardrobe";
 /** 산 뒤 가구를 놓는 곳 */
 const ROOM_EDIT_ROUTE = "/room/edit";
 /** 그림은 4px 스케일 밖 크기라 style 로 준다 (BankLogoTile 과 같은 방식) */
-const SPRITE_STYLE = { width: 72, height: 72 } as const;
+const SPRITE_SIZE = 72;
 /** 의상 세트 그림은 상·하의·신발이 가로로 놓여 있어(512×208) 정사각 자리에 넣으면 옷이 너무 작아진다 */
 const OUTFIT_SPRITE_STYLE = { width: "100%", height: 72 } as const;
 const GROUP_TITLE = "분류";
@@ -285,21 +286,23 @@ function ShopItemCard({ item, balance, onPress, onOpenOwned }: ShopItemCardProps
       disabled={!item.owned && !buyable}
       onPress={() => (item.owned ? onOpenOwned(item) : onPress(item))}
       className={cn(
-        "flex-1 gap-2 rounded-2xl bg-card p-3 shadow shadow-black/10 active:opacity-80 dark:border dark:border-border dark:shadow-none",
+        "flex-1 gap-2 overflow-visible rounded-2xl bg-card p-3 shadow shadow-black/10 active:opacity-80 dark:border dark:border-border dark:shadow-none",
         // 코인이 모자라 못 사는 것만 흐리게 둔다 — 보유한 상품은 눌러서 쓰러 갈 수 있으므로 흐리면 안 눌린다고 읽힌다.
         shortage && "opacity-60"
       )}
     >
-      <View className="h-24 items-center justify-center rounded-xl bg-muted" accessible={false}>
+      <View className="h-24 items-center justify-center overflow-visible rounded-xl bg-muted" accessible={false}>
         {sprite === null ? (
           <Icon as={shopCategoryIcon(item.category)} size={28} className="text-card-foreground" />
-        ) : (
+        ) : isOutfitKey(item.assetKey) ? (
           <Image
             source={sprite}
-            style={isOutfitKey(item.assetKey) ? OUTFIT_SPRITE_STYLE : SPRITE_STYLE}
+            style={OUTFIT_SPRITE_STYLE}
             resizeMode="contain"
             accessible={false}
           />
+        ) : (
+          <FurnitureThumbnail source={sprite} geometry={roomItemThumbnailGeometry(item.assetKey)} size={SPRITE_SIZE} />
         )}
       </View>
       <Text className="text-body-sm text-foreground" numberOfLines={1}>

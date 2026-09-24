@@ -479,7 +479,7 @@ type ItemSpriteProps = { placed: PlacedItem; scale: number; highlighted?: boolea
 function ItemSprite({ placed, scale, highlighted = false, ringColor, images }: ItemSpriteProps) {
   const image = images.get(placed.item.sprite);
   const rect = React.useMemo(
-    () => sceneRectToCanvas(getSpriteRect(placed.anchor, placed.item.size, placed.item.anchor), scale),
+    () => sceneRectToCanvas(getSpriteRect(placed.anchor, placed.item.renderSize, placed.item.renderAnchor), scale),
     [placed, scale]
   );
   const ring = React.useMemo(() => outlinePath(SURFACES[placed.surface], placed.item.grid, scale, placed.anchor), [placed, scale]);
@@ -532,7 +532,7 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
   const image = images.get(placed.item.sprite);
   const { item } = placed;
   const rect = useDerivedValue(() =>
-    sceneRectToCanvas(getSpriteRect({ x: anchorX.value, y: anchorY.value }, item.size, item.anchor), scale)
+    sceneRectToCanvas(getSpriteRect({ x: anchorX.value, y: anchorY.value }, item.renderSize, item.renderAnchor), scale)
   );
   const x = useDerivedValue(() => rect.value.x);
   const y = useDerivedValue(() => rect.value.y);
@@ -559,8 +559,8 @@ function DraggingSprite({ placed, scale, anchorX, anchorY, valid, ringColor, blo
         image={image}
         x={x}
         y={y}
-        width={item.size.width * scale}
-        height={item.size.height * scale}
+        width={item.renderSize.width * scale}
+        height={item.renderSize.height * scale}
         fit="contain"
         sampling={SPRITE_SAMPLING}
         opacity={spriteOpacity}

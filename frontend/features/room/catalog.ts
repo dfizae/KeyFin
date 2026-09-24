@@ -1,6 +1,10 @@
 import { HALF_PER_CELL, type GridFootprint } from "@/features/room/grid";
 import { FURNITURE_SPRITES, type FurnitureAssetKey, type FurnitureSpriteSet } from "@/features/room/furniture-sprites";
+import { FURNITURE_GEOMETRY } from "@/features/room/furniture-geometry.generated";
 import type { AnchorRatio, PlacementDirection, SceneSize, Surface } from "@/features/room/model";
+import { spriteRenderView, type FurnitureSpriteGeometry, type SpriteGeometry } from "@/features/room/sprite-geometry";
+
+const SPRITE_GEOMETRY: Partial<Record<FurnitureAssetKey, FurnitureSpriteGeometry>> = FURNITURE_GEOMETRY;
 
 /**
  * 가구 정의 (2026-09-21 새 가구로 교체 — 사용자 결정). 서버 items.asset_key 가 곧 가구 id 다.
@@ -16,7 +20,8 @@ import type { AnchorRatio, PlacementDirection, SceneSize, Surface } from "@/feat
  *   상자형 가구는 맨 아래 점을 발자국 앞 꼭짓점으로 보고 좌우 끝에서 평행사변형을 복원했고,
  *   화분·소품은 바닥 쪽 띠(높이의 10% 이상)의 가운데와 그 폭으로 만든 타원의 중심을 썼다. 벽 장식은 그림 중심이다.
  * - grid: FRONT_RIGHT 기준 발자국. 잰 길이가 반 칸 경계를 0.15칸 넘게 넘으면 반 칸을 더한다. FRONT_LEFT 는 가로·세로가 바뀐다.
- * 같은 종류의 색상 4종은 원본 경계까지 같아서 종류(SHAPES)에 한 번만 적는다. 원본을 다시 만들면 scripts/assets/build-furniture-sprites.ps1 로 잘라 다시 잰다.
+ * - renderSize/renderAnchor: 그림자를 포함한 PNG 표시 영역. 생성 메타데이터로 기존 contain 배율과 중심을 보존한다.
+ * 같은 종류의 색상 4종은 원본 경계까지 같아서 본체 기준(SHAPES)에 한 번만 적는다. 그림자 여백이 늘어도 이 값은 바꾸지 않는다.
  */
 
 /** 상점 선택창의 가구 분류. 서버에는 없는 클라이언트 분류이며 이름은 shop/catalog.ts 가 붙인다 */
@@ -32,7 +37,13 @@ export function isFurnitureGroup(value: string): value is FurnitureGroup {
 export type FurnitureSlot = "FLOOR" | "WALL";
 
 /** 가구 한 방향의 그림 */
-export type FurnitureView = { sprite: number; size: SceneSize; anchor: AnchorRatio };
+export type FurnitureView = {
+  sprite: number;
+  size: SceneSize;
+  anchor: AnchorRatio;
+  renderSize: SceneSize;
+  renderAnchor: AnchorRatio;
+};
 
 export type FurnitureItem = {
   id: FurnitureId;
@@ -44,6 +55,8 @@ export type FurnitureItem = {
   views: Record<PlacementDirection, FurnitureView>;
   /** 상점 타일용 축소 그림 */
   shop: number;
+  /** 상점·보관함에서 기존 본체 크기와 중심을 유지하기 위한 확장 캔버스 정보 */
+  shopGeometry?: SpriteGeometry;
   /**
    * FRONT_RIGHT 로 놓였을 때 차지하는 칸(반 칸 단위). 배치 스냅·겹침 판정의 근거다.
    * 바닥은 cells(가로, 깊이), 벽은 wallCells(벽 따라, 아래로) 로 적는다.
@@ -63,7 +76,7 @@ const cells = (across: number, deep: number): GridFootprint => ({ w: deep * HALF
 /** 벽 칸은 col 이 벽을 따라가는 가로, row 가 세로다(바닥과 달리 축을 바꾸지 않는다) */
 const wallCells = (along: number, down: number): GridFootprint => ({ w: along * HALF_PER_CELL, d: down * HALF_PER_CELL });
 
-type ViewShape = Omit<FurnitureView, "sprite">;
+type ViewShape = Pick<FurnitureView, "size" | "anchor">;
 const view = (width: number, height: number, x: number, y: number): ViewShape => ({ size: { width, height }, anchor: { x, y } });
 
 type Shape = {
@@ -178,7 +191,7 @@ export type DefaultFurnitureId = keyof typeof DEFAULT_ITEMS;
 
 export type FurnitureId = FurnitureAssetKey | DefaultFurnitureId;
 
-function furnitureItem(id: FurnitureId, name: string, shape: Shape, sprites: FurnitureSpriteSet): FurnitureItem {
+function furnitureItem(id: FurnitureId, name: string, shape: Shape, sprites: FurnitureSpriteSet, geometry?: FurnitureSpriteGeometry): FurnitureItem {
   return {
     id,
     assetKey: id,
@@ -188,9 +201,10 @@ function furnitureItem(id: FurnitureId, name: string, shape: Shape, sprites: Fur
     grid: shape.grid,
     flat: shape.flat ?? false,
     shop: sprites.shop,
+    shopGeometry: geometry?.shop,
     views: {
-      FRONT_RIGHT: { sprite: sprites.left, ...shape.FRONT_RIGHT },
-      FRONT_LEFT: { sprite: sprites.right, ...shape.FRONT_LEFT },
+      FRONT_RIGHT: { sprite: sprites.left, ...shape.FRONT_RIGHT, ...spriteRenderView(shape.FRONT_RIGHT.size, shape.FRONT_RIGHT.anchor, geometry?.left) },
+      FRONT_LEFT: { sprite: sprites.right, ...shape.FRONT_LEFT, ...spriteRenderView(shape.FRONT_LEFT.size, shape.FRONT_LEFT.anchor, geometry?.right) },
     },
   };
 }
@@ -198,15 +212,15 @@ function furnitureItem(id: FurnitureId, name: string, shape: Shape, sprites: Fur
 const coloredItems = (Object.keys(COLORED_KINDS) as ColoredKind[]).flatMap((kind) =>
   (Object.keys(COLORS) as FurnitureColor[]).map((color) => {
     const id = `${kind}_${color}` as const;
-    return furnitureItem(id, `${COLORED_KINDS[kind]} (${COLORS[color]})`, SHAPES[kind], FURNITURE_SPRITES[id]);
+    return furnitureItem(id, `${COLORED_KINDS[kind]} (${COLORS[color]})`, SHAPES[kind], FURNITURE_SPRITES[id], SPRITE_GEOMETRY[id]);
   })
 );
 const singleItems = (Object.keys(SINGLE_ITEMS) as SingleItem[]).map((id) =>
-  furnitureItem(id, SINGLE_ITEMS[id], SHAPES[id], FURNITURE_SPRITES[id])
+  furnitureItem(id, SINGLE_ITEMS[id], SHAPES[id], FURNITURE_SPRITES[id], SPRITE_GEOMETRY[id])
 );
 const defaultItems = (Object.keys(DEFAULT_ITEMS) as DefaultFurnitureId[]).map((id) => {
   const { name, kind, sprites } = DEFAULT_ITEMS[id];
-  return furnitureItem(id, name, SHAPES[kind], sprites);
+  return furnitureItem(id, name, SHAPES[kind], sprites, SPRITE_GEOMETRY[`${kind}_original`]);
 });
 
 /** id 로 찾는 가구 정의. 모든 FurnitureId 가 들어 있는지는 catalog 테스트가 확인한다 */
@@ -304,4 +318,10 @@ export function roomItemThumbnail(assetKey: string): number | null {
   const id = roomItemIdByAssetKey(assetKey);
   if (id === undefined) return null;
   return isWallItemId(id) ? WALL_ITEMS[id].sprite : FURNITURE[id].shop;
+}
+
+/** 기존 썸네일의 본체 영역. 모르는 키·벽 기능 오브젝트·미확장 에셋은 기존 contain 표시를 유지한다. */
+export function roomItemThumbnailGeometry(assetKey: string): SpriteGeometry | undefined {
+  const id = roomItemIdByAssetKey(assetKey);
+  return id === undefined || isWallItemId(id) ? undefined : FURNITURE[id].shopGeometry;
 }

@@ -4,6 +4,7 @@ import {
   isWallItemId,
   type FurnitureId,
   type FurnitureItem,
+  type FurnitureView,
   type RoomItemId,
   type WallItemId,
   type WallSurface,
@@ -27,7 +28,6 @@ import {
   distance,
   getSpriteRect,
   isPointInPolygon,
-  type AnchorRatio,
   type PlacementDirection,
   type ScenePoint,
   type ScenePolygon,
@@ -62,7 +62,7 @@ export function facingOf(placement: Placement): PlacementDirection {
 }
 
 /** 배치를 그리고 판정하는 데 필요한 것. 가구는 방향에 따라 그림과 발자국이 바뀐다 */
-export type PlacementView = { sprite: number; size: SceneSize; anchor: AnchorRatio; grid: GridFootprint; flat: boolean };
+export type PlacementView = FurnitureView & { grid: GridFootprint; flat: boolean };
 
 /** 바닥 가구는 돌면 발자국의 가로·세로가 바뀐다. 벽 장식은 어느 벽에 걸어도 벽 칸 모양이 같다 */
 function footprintFacing(item: FurnitureItem, facing: PlacementDirection): GridFootprint {
@@ -73,7 +73,7 @@ function footprintFacing(item: FurnitureItem, facing: PlacementDirection): GridF
 export function placementView(placement: Placement): PlacementView {
   if (isWallItemId(placement.itemId)) {
     const item = WALL_ITEMS[placement.itemId];
-    return { sprite: item.sprite, size: item.size, anchor: item.anchor, grid: item.grid, flat: false };
+    return { sprite: item.sprite, size: item.size, anchor: item.anchor, renderSize: item.size, renderAnchor: item.anchor, grid: item.grid, flat: false };
   }
   const item = FURNITURE[placement.itemId];
   const facing = facingOf(placement);
