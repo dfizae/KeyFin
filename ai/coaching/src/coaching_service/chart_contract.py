@@ -125,7 +125,8 @@ class ChartMeta(BudgetPeriod):
     daily_note: str = "분류된 변동소비의 관측 기록입니다. 미분류 소비와 미래 일별 구성은 제공하지 않습니다."
     daily_forecast_statistic: Literal["empirical_path_mean"] | None = None
     aggregation_note: str = (
-        "고정비 제외·미분류 포함 구매시점 변동소비입니다. 전체 P50은 봉투별 P50의 합이 아닙니다. "
+        "고정비는 빼고 미분류 소비는 넣은, 결제한 날 기준 변동소비입니다. "
+        "전체 예상 금액은 항목별 예상 금액을 더한 값과 다를 수 있습니다. "
         "거래가 없는 날은 입력 자료 안에서 0으로 처리하며, 거래 누락 여부는 확인되지 않았습니다."
     )
     calibrated: Literal[False] = False

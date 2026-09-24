@@ -309,6 +309,18 @@ _PURCHASE_VERB_STRICT: Final = re.compile(
 # counts as a purchase (see ``natural_purchase``). "장만하" was dropped entirely:
 # "장만하다 뜻" / "집 장만" are definition/goal, not purchase.
 _PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까")
+# Future-tense plans ("내일 70만원 스위치 사려는데"). These collide with saving goals
+# ("노트북 사려는데 200만원 모을 수 있을까"), financial products ("주식 사려는데"),
+# 살다 = live ("부산에 살건데 월세 50만원") and hearsay ("사려는 사람"), so they
+# count only with an amount AND an item alias AND none of those signals.
+_PURCHASE_VERB_FUTURE: Final = re.compile(
+    r"사려는데|사려는중|사려해|구매하려는데|구입하려고|구입하려는데|지르려는데"
+    r"|살건데|살거야|살거예요|살예정|살생각이"
+)
+_PURCHASE_FUTURE_BLOCK: Final = re.compile(
+    r"모으|모을|모아|모이|저축|적금|예금|주식|코인|펀드|채권|etf"
+    r"|월세|전세|관리비|생활비|동네|자취|원룸|에살|에서살|혼자살|오래살"
+)
 _PURCHASE_VERB: Final = re.compile(
     _PURCHASE_VERB_STRICT.pattern + r"|" + _PURCHASE_VERB_CASUAL.pattern
 )
@@ -345,6 +357,25 @@ _PURCHASE_ENVELOPE_ALIASES: Final[dict[str, str]] = {
 }
 
 
+def _has_purchase_intent(normalized: str) -> bool:
+    """Decide whether the whitespace-free text is a purchase question at all.
+
+    Strict buy verbs count on their own. Casual verbs ("사고싶"/"사볼까"/"사둘까")
+    collide with finance/definition/goal questions, so they need an amount or a
+    known item/envelope alias. Future-tense plans need both, and none of the
+    saving-goal, financial-product or 살다 (=live) signals.
+    """
+    if _PURCHASE_VERB_STRICT.search(normalized) is not None:
+        return True
+    has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
+    has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
+    if _PURCHASE_VERB_CASUAL.search(normalized) is not None:
+        return has_amount or has_alias
+    if _PURCHASE_VERB_FUTURE.search(normalized) is None or _PURCHASE_FUTURE_BLOCK.search(normalized):
+        return False
+    return has_amount and has_alias
+
+
 def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clarify-vs-admit boundary.
     question: str,
 ) -> NaturalPurchase | str | None:
@@ -361,17 +392,8 @@ def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clari
     snapshot and can still fail closed there.
     """
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
-    if not normalized or _PURCHASE_VERB.search(normalized) is None:
+    if not normalized or not _has_purchase_intent(normalized):
         return None
-    if _PURCHASE_VERB_STRICT.search(normalized) is None:
-        # Only a casual verb ("사고싶"/"사볼까"/"사둘까") matched. These collide
-        # with finance/definition/goal questions, so demand a concrete purchase
-        # signal — an amount or a known item/envelope alias — before hijacking the
-        # turn into a purchase clarify. Otherwise fall through to normal routing.
-        has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
-        has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
-        if not has_amount and not has_alias:
-            return None
     if _PURCHASE_INSTALLMENT.search(normalized) is not None:
         # Multi-installment purchases need a payment schedule the FDT contract
         # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).
@@ -451,6 +473,39 @@ def _purchase_date_token(normalized: str, *, exclude: str | None) -> str | None:
 _TWIN_BACKED_TOPICS: Final[frozenset[str]] = frozenset(
     {"accounts", "assets", "debts", "payments", "budget"}
 )
+
+
+# A balance check asks how much is left in the envelopes now ("봉투 잔액 보여줘",
+# "소비 잔액 확인해줘", "예산 괜찮아?", "예산 초과한 봉투 있어?"). It is answered by
+# the envelope table plus a short summary, never by the forecast/risk simulation.
+_BALANCE_SUBJECT: Final = re.compile(r"봉투|예산|소비|지출")
+_BALANCE_ASK: Final = re.compile(r"잔액|잔고|남은|남았|남아|여유|초과|넘은|넘었|넘어|괜찮")
+_BALANCE_EXCLUDE: Final = re.compile(
+    r"예측|전망|앞으로|다음달|다음주|내일|모레|월말|말까지|말에|위험|부족|하면|되면|줄이|늘리"
+    r"|계좌|통장|현금|카드|대출|빚|부채|자산|보험|소득|월급|목표|지난|작년|썼|쓴|내역|기간"
+)
+# The balance check answers from the ledger alone, so anything that needs a future
+# point ("30일 뒤", "향후", "이번달 말까지"), an outcome ("남을까", "괜찮을까"), or a
+# purchase review ("3만원짜리 책 살 건데") keeps its forecast/purchase route instead.
+_BALANCE_NOT_NOW: Final = re.compile(
+    r"뒤|후|향후|(?<!지금)까지|동안|달말|말일|을까|될까|할까"
+    r"|살(?:건|거|게|까|래|려|예정)|사려|사면|사도|사고싶|구매|구입|결제할|결제하려"
+    r"|\d[\d,]*(?:만|천|백)?원"
+)
+
+
+def balance_check_question(question: str) -> bool:
+    """Admit a current envelope-balance check; forecasts, lookups and purchases stay out."""
+    normalized = compact(question)
+    if (
+        not normalized
+        or _DEFINITION_LANGUAGE.search(normalized) is not None
+        or _BALANCE_EXCLUDE.search(normalized) is not None
+        or _BALANCE_NOT_NOW.search(normalized) is not None
+        or natural_purchase(question) is not None
+    ):
+        return False
+    return _BALANCE_SUBJECT.search(normalized) is not None and _BALANCE_ASK.search(normalized) is not None
 
 
 def deterministic_lookup_route(question: str) -> LookupRoute | None:

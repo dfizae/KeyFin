@@ -94,6 +94,25 @@ class CoachingCore:
             period=period,
         )
 
+    async def balance_receipt(self, twin: JsonDocument, on_date: date, *, replay: bool) -> Receipt:
+        """Answer "how much is left now" from the ledger; no FDT simulation runs.
+
+        A balance check has no future window, so the request carries no
+        ``through_date`` and the result carries no projection or ``next_action``.
+        """
+        request = JsonDocument(
+            {"operation": "balance_check", "on_date": on_date.isoformat(), "replay": replay}
+        )
+        result = await anyio.to_thread.run_sync(self.engine.balance, twin, request)
+        identity = await anyio.to_thread.run_sync(self.engine.identity, twin)
+        return Receipt(
+            engine_commit=ENGINE_COMMIT,
+            identity=identity,
+            request=request,
+            result=result,
+            trigger="balance_check",
+        )
+
     async def numeric_receipt(
         self,
         twin: JsonDocument,
@@ -218,7 +237,7 @@ def authoritative_fdt_wording(receipt: Receipt) -> Wording | None:
                 source="template",
                 model="not_called",
             )
-    if receipt.trigger == "requested_review" and receipt.payment is None:
+    if receipt.trigger in {"requested_review", "balance_check"} and receipt.payment is None:
         return Wording(
             text=_REVIEW_FOLLOW_UP,
             source="template",

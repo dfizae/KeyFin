@@ -27,6 +27,7 @@ from coaching_service.fast_routes import (
     NaturalGoal,
     NaturalPurchase,
     NaturalWhatIf,
+    balance_check_question,
     deterministic_analysis_route,
     deterministic_lookup_route,
     merged_purchase_question,
@@ -134,6 +135,22 @@ def chart_purchase_hint(change: JsonDocument, period: ResolvedPeriod) -> ChartPu
     if not window.as_of < on_date <= window.horizon_end:
         return None
     return ChartPurchaseHint(envelope=envelope, amount_krw=amount, on_date=on_date)
+
+
+def balance_turn(
+    request: TurnRequest,
+    parsed_goal: NaturalGoal | None,
+    parsed_what_if: NaturalWhatIf | None,
+    parsed_purchase: NaturalPurchase | None,
+) -> bool:
+    """Admit a current envelope-balance check: no typed analysis, goal, branch, or purchase."""
+    return (
+        request.analysis is None
+        and parsed_goal is None
+        and parsed_what_if is None
+        and parsed_purchase is None
+        and balance_check_question(request.question)
+    )
 
 
 def forecast_chart_hint(
@@ -673,6 +690,12 @@ class Dialogue:
                 receipt = await self.core.numeric_receipt(
                     twin, identity, numeric_request, period, replay=reference != today
                 )
+            elif route.mode == "review" and balance_turn(
+                request, parsed_goal, parsed_what_if, parsed_purchase
+            ):
+                # A balance check asks what is left now. The review's Monte-Carlo
+                # projection would only add future-path actions and caveats to it.
+                receipt = await self.core.balance_receipt(twin, reference, replay=reference != today)
             else:
                 changes: tuple[JsonDocument, ...] = ()
                 if parsed_purchase is not None:
@@ -755,6 +778,11 @@ class Dialogue:
             # validated calendar result below. ``review`` is the existing route
             # label for entering a typed numeric operation without asking a
             # model to invent an FDT parameter.
+            return Routing(mode="review", source="template"), None
+        if balance_turn(request, parsed_goal, parsed_what_if, parsed_purchase):
+            # "봉투 잔액 보여줘"/"예산 괜찮아?" is the envelope table plus a short
+            # summary on the review route, not a sentence list or a finance concept.
+            # The turn below answers it from the ledger without an FDT simulation.
             return Routing(mode="review", source="template"), None
         lookup_route = deterministic_lookup_route(request.question)
         if lookup_route is not None:

@@ -83,6 +83,9 @@ def test_chart_contains_every_future_day_and_preserves_observed_consumption(tmp_
         assert sum(sum(row["amounts_krw"]) for row in future) > 0
         assert sum(sum(row["amounts_krw"]) for row in daily if row not in future) == 10000
         assert chart["meta"]["daily_forecast_statistic"] == "empirical_path_mean"
+        # The app shows these notes as-is, so statistics jargon must not appear in them.
+        notes = chart["meta"]["daily_note"] + chart["meta"]["aggregation_note"]
+        assert not any(term in notes for term in ("P50", "경로", "FDT"))
         assert result["receipt"]["daily_forecast"]["points"] == future
 
 

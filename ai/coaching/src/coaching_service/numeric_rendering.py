@@ -22,10 +22,6 @@ Number: TypeAlias = int | float
 Text = Annotated[str, Field(min_length=1, max_length=2000)]
 
 _INVALID_RESULT = "수치 분석 결과의 계약을 확인할 수 없어 금액·비율을 표시하지 않습니다."
-_LIMIT = (
-    "이 수치는 입력 자료와 조건부 모델 경로에 따른 추정이며, "
-    "실제 미래를 보장하거나 외부 검증된 확률을 뜻하지 않습니다."
-)
 
 
 class StrictContract(BaseModel):
@@ -356,7 +352,7 @@ def _short_account_sentence(result: NumericResult, dataset: str, *, total_cash_o
     label, share = short[0]
     # Every label ends in "계좌", so the topic particle is always "는".
     target = label if len(short) == 1 else f"{label} 등 {len(short)}개 계좌"
-    sentence = f"{target}는 예정된 결제 때 잔액이 모자랄 수 있어요(부족 경로 {_percent_text(share)})."
+    sentence = f"{target}는 예정된 결제 때 잔액이 모자랄 수 있어요(예측한 경우 중 {_percent_text(share)})."
     if total_cash_ok:
         return [
             "모든 계좌를 합친 현금은 부족해지지 않아요. 다만 " + sentence
@@ -368,35 +364,36 @@ def _short_account_sentence(result: NumericResult, dataset: str, *, total_cash_o
 def _common(result: NumericResult) -> list[str]:
     pieces: list[str] = []
     if result.status == "partial":
-        pieces.append("일부 자료 제약이 있어 수치는 조건부로 확인해야 합니다.")
+        pieces.append("일부 자료가 빠져 있어 수치가 달라질 수 있어요.")
     elif result.status == "insufficient_data":
-        pieces.append("필수 자료가 부족해 지원되는 일부 수치를 계산하지 못했습니다.")
+        pieces.append("꼭 필요한 자료가 부족해 일부 수치는 계산하지 못했어요.")
     if result.required_inputs:
         pieces.append("필요 자료: " + ", ".join(result.required_inputs) + ".")
-    pieces.append(_LIMIT)
     return pieces
 
 
 def _forecast(result: ForecastResult) -> list[str]:
-    average = _required_money(result, "expected_expense_krw")
-    expense = _required_money_triplet(result, "total_expense")
+    # The mean stays a required contract field even though the sentence below leads with the typical value.
+    _ = _required_money(result, "expected_expense_krw")
+    low, typical, high = _required_money_triplet(result, "total_expense")
     pieces = [
-        "조건부 모형에서 이 예측 구간의 변동소비 평균은 "
-        f"{_money_text(average)}이고 P10·P50·P90은 "
-        + "·".join(_money_text(value) for value in expense)
-        + "입니다."
+        (
+            f"이 예측 구간 변동소비는 보통 {_money_text(typical)} 정도로 예상돼요. "
+            f"적게 쓰면 {_money_text(low)}, 많이 쓰면 {_money_text(high)}까지 볼 수 있어요."
+        )
     ]
     cash = _money_triplet(result, "terminal_cash")
     if all(value is not None for value in cash):
-        definite_cash = _required_money_triplet(result, "terminal_cash")
+        cash_low, cash_typical, cash_high = _required_money_triplet(result, "terminal_cash")
         pieces.append(
-            "기간말 현금 P10·P50·P90은 " + "·".join(_money_text(value) for value in definite_cash) + "입니다."
+            f"기간 말 현금은 보통 {_money_text(cash_typical)}, 적게 남으면 {_money_text(cash_low)}, "
+            f"많이 남으면 {_money_text(cash_high)}으로 예상돼요."
         )
     else:
         resource_p50 = _required_money(result, "terminal_resource_change_p50_krw")
         pieces.append(
-            f"구매시점 자금 여력 변화 P50은 {_money_text(resource_p50)}입니다. "
-            "현재 잔액 자료가 없어 이 값은 현금 잔액이나 순자산이 아닙니다."
+            f"이 기간에 들어오고 나가는 돈을 합치면 보통 {_money_text(resource_p50)}으로 예상돼요. "
+            "현재 잔액 자료가 없어 이 값은 통장 잔액이나 순자산이 아니에요."
         )
     return pieces
 
@@ -406,19 +403,21 @@ def _risk(result: RiskResult) -> list[str]:
     total_cash = _probability(result, "p_total_cash_shortfall")
     below_reserve = _probability(result, "p_liquid_below_reserve")
     if any_account is None or total_cash is None or below_reserve is None:
-        return ["현재 잔액 자료가 없어 계좌 부족 경로 비율과 부족액을 계산하지 못했습니다."]
+        return ["현재 잔액 자료가 없어 잔액이 부족해질 가능성과 모자라는 돈을 계산하지 못했어요."]
     pieces = [
         # Plain-language first: which account runs short, and whether combined cash is fine.
         *_short_account_sentence(result, "account_shortfall", total_cash_ok=total_cash == 0),
         (
-            f"조건부 모형 경로에서 계좌 하나라도 잔액 부족이 생긴 경로는 {_percent_text(any_account)}이고, "
-            f"합산 현금 부족 경로는 {_percent_text(total_cash)}입니다."
+            f"예측한 여러 경우 중 계좌 하나라도 잔액이 부족해지는 경우는 {_percent_text(any_account)}, "
+            f"모든 계좌를 합쳐도 부족해지는 경우는 {_percent_text(total_cash)}예요."
         ),
-        f"보관액 아래로 내려간 경로는 {_percent_text(below_reserve)}입니다.",
+        f"비상금(보관액) 아래로 내려간 경우는 {_percent_text(below_reserve)}예요.",
     ]
     shortage = _optional_money(result, "maximum_total_cash_shortage_p50_krw")
     if shortage is not None:
-        pieces.append(f"최대 합산 현금 부족액 P50은 {_money_text(shortage)}입니다.")
+        pieces.append(
+            f"모든 계좌를 합친 현금이 가장 많이 부족할 때 모자라는 돈은 보통 {_money_text(shortage)}이에요."
+        )
     return pieces
 
 
@@ -428,21 +427,21 @@ def _goal(result: GoalResult) -> list[str]:
     joint = _probability(result, "p_goal_and_no_shortfall")
     if reached is None or joint is None:
         message = (
-            f"목표 {_money_text(target)}은 확인했지만 현재 자료로 목표 도달 경로 비율은 계산하지 못했습니다."
+            f"목표 {_money_text(target)}은 확인했지만 현재 자료로는 목표에 닿을 가능성을 계산하지 못했어요."
         )
         return [message]
     pieces = [
         (
-            f"조건부 모형에서 목표 {_money_text(target)}에 도달한 경로는 {_percent_text(reached)}이고, "
-            f"계좌 부족 없이 도달한 경로는 {_percent_text(joint)}입니다."
+            f"예측한 여러 경우 중 목표 {_money_text(target)}에 닿은 경우는 {_percent_text(reached)}, "
+            f"계좌 잔액이 부족해지지 않고 닿은 경우는 {_percent_text(joint)}예요."
         )
     ]
     gap = _required_money(result, "goal_gap_p50_krw")
     external = _required_money(result, "additional_external_income_each_30d_krw")
-    pieces.append(f"목표 부족액 P50은 {_money_text(gap)}입니다.")
+    pieces.append(f"목표까지 모자라는 돈은 보통 {_money_text(gap)}이에요.")
     pieces.append(
-        f"목표 조건에서 계산된 30일마다의 가상 외부자금은 {_money_text(external)}입니다. "
-        "절약으로 자동 생성되는 금액이 아닙니다."
+        f"목표를 채우려면 30일마다 {_money_text(external)}이 더 들어와야 해요. "
+        "아껴서 저절로 생기는 돈이 아니라 따로 더 필요한 돈이에요."
     )
     return pieces
 
@@ -459,29 +458,26 @@ def _what_if(result: WhatIfResult) -> list[str]:
             and not isinstance(fraction, bool)
             and 0 < fraction < 1
         ):
-            pieces.append(f"가정은 {envelope} 소비를 {_percent_text(float(fraction))} 줄이는 조건입니다.")
+            pieces.append(f"{envelope} 소비를 {_percent_text(float(fraction))} 줄인다고 가정했어요.")
     multiplier = intervention.get("expense_multiplier")
     if not pieces and isinstance(multiplier, (int, float)) and not isinstance(multiplier, bool):
         reduction = 1 - float(multiplier)
         if 0 < reduction < 1:
-            pieces.append(f"가정은 변동 소비를 {_percent_text(reduction)} 줄이는 조건입니다.")
-    pieces.append(
-        f"동일 난수 경로에서 가정 분기와 기준 분기를 비교한 소비 감소 P50은 {_money_text(saving)}입니다."
-    )
+            pieces.append(f"변동 소비를 {_percent_text(reduction)} 줄인다고 가정했어요.")
+    pieces.append(f"지금처럼 쓸 때와 비교하면 소비는 보통 {_money_text(saving)} 줄어들 것으로 예상돼요.")
     cash = _money(result, "paired_terminal_cash_delta_p50_krw")
     if cash is not None:
-        pieces.append(f"가정 분기의 기간말 현금 차이 P50은 {_money_text(cash)}입니다.")
+        pieces.append(f"지금처럼 쓸 때와 비교한 기간 말 현금 차이는 보통 {_money_text(cash)}이에요.")
     else:
         resource = _required_money(result, "paired_terminal_resource_delta_p50_krw")
         pieces.append(
-            f"가정 분기의 구매시점 자금 여력 차이 P50은 {_money_text(resource)}입니다. "
-            "현재 잔액과 순자산의 차이가 아닙니다."
+            "지금처럼 쓸 때와 비교해 이 기간에 들어오고 나가는 돈의 차이는 "
+            f"보통 {_money_text(resource)}이에요. 통장 잔액이나 순자산의 차이는 아니에요."
         )
     branch_risk = _probability(result, "branch_p_any_account_shortfall")
     if branch_risk is not None:
-        pieces.append(f"가정 분기에서 계좌 부족이 생긴 경로는 {_percent_text(branch_risk)}입니다.")
+        pieces.append(f"이 가정에서 계좌 하나라도 잔액이 부족해지는 경우는 {_percent_text(branch_risk)}예요.")
         pieces.extend(_short_account_sentence(result, "branch_account_shortfall", total_cash_ok=False))
-    pieces.append("요청한 가정의 경로 비교이며 인과 효과나 실제 절감을 보장하지 않습니다.")
     return pieces
 
 
@@ -585,7 +581,7 @@ def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: PLR0911 - eac
     if isinstance(terminal, dict):
         p50 = terminal.get("p50_krw")
         if isinstance(p50, int) and not isinstance(p50, bool):
-            pieces.append(f"구매 후 기간말 예상 현금 P50은 {p50:,}원입니다.")
+            pieces.append(f"구매 후 기간 말 현금은 보통 {p50:,}원으로 예상돼요.")
     pieces.append("부족 예측 있음." if planned_fraction > 0 else "부족 예측 없음.")
     return pieces
 

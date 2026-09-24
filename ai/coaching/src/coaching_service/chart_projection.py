@@ -234,10 +234,9 @@ def project_chart(  # noqa: C901, PLR0912, PLR0915 - one deterministic pass over
             purchase_note=purchase_note,
             daily_forecast_statistic=daily_prediction.statistic if daily_prediction is not None else None,
             daily_note=(
-                "기준일까지는 관측 소비, 이후 연한 막대는 "
-                "같은 FDT 시뮬레이션 경로의 일별 평균 예상 소비입니다. "
+                "기준일까지는 실제 소비, 이후 연한 막대는 하루 평균 예상 소비입니다. "
                 "분류된 변동소비만 포함하며 미분류 소비와 고정비는 제외합니다. "
-                "누적선·기간말 금액은 P50이므로 일별 평균 막대의 합과 다를 수 있으며, "
+                "누적선과 기간 말 금액은 보통 수준의 예상값이라 하루 평균 막대를 더한 값과 다를 수 있으며, "
                 "각 칸은 원 단위로 반올림합니다."
                 if daily_prediction is not None
                 else "분류된 변동소비의 관측 기록입니다. 미분류 소비와 고정비는 제외합니다."

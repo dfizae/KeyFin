@@ -24,7 +24,7 @@ def authoritative_fdt(receipt: Receipt) -> bool:
     return (
         receipt.numeric_request is not None
         and receipt.numeric_result is not None
-    ) or (receipt.trigger == "requested_review" and receipt.payment is None)
+    ) or (receipt.trigger in {"requested_review", "balance_check"} and receipt.payment is None)
 
 
 class ScenarioIO:
