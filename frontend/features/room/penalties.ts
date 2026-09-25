@@ -41,14 +41,3 @@ export function penaltyGeometry(placement: Placement, overEnvelopeIds: readonly 
     ...effect.rect, x: furniture.x + effect.rect.x, y: furniture.y + effect.rect.y,
   } };
 }
-
-export type VisiblePenalty = { envelopeId: number; itemId: Placement["itemId"] };
-
-/** 지금 방에 실제로 그려지는 부스러기(초과 봉투에 걸린 식탁·커피 테이블). 코치 말풍선이 어느 가구가 어질러졌는지 말할 때 쓴다 */
-export function visiblePenalties(placements: readonly Placement[], overEnvelopeIds: readonly number[]): VisiblePenalty[] {
-  return placements.flatMap((placement) => {
-    if (penaltyGeometry(placement, overEnvelopeIds) === null) return [];
-    const kind = placement.itemId.replace(/_(original|black|pink|sunset)$/, "") as keyof typeof PENALTIES;
-    return [{ envelopeId: PENALTIES[kind].envelopeId, itemId: placement.itemId }];
-  });
-}

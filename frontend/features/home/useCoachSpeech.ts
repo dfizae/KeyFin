@@ -22,7 +22,7 @@ export type CoachSpeechView = {
  * 아이콘으로 직접 연 말풍선은 저절로 접지 않고 X로 닫는다 — 긴 코치 피드백을 끝까지 읽게 (-184, 사용자 결정 2026-09-24).
  * paused(방 대기 화면·안내·보드·딱지 창이 떠 있는 동안)에는 가리고, 끝나면 못 보여 준 문장을 다시 펼친다.
  * inactive(홈 밖·앱 백그라운드)에서는 펼침만 해제한다. 읽음이나 자동 표시 기록은 유지하고, 복귀 후에는 새 문장만 펼친다.
- * onRead 는 문장을 직접 열거나 X로 닫을 때 부른다 — 알림 문장은 이때 치워지고, 상황 문장은 남아 아이콘으로 계속 볼 수 있다.
+ * onRead 는 AI 코칭을 직접 열거나 X로 닫을 때 부른다. 저장소에서 지워져도 이미 펼친 본문은 닫을 때까지 유지한다.
  */
 export function useCoachSpeech(
   message: CoachSpeech | null,
@@ -37,7 +37,7 @@ export function useCoachSpeech(
   const [pinnedKey, setPinnedKey] = React.useState<string | null>(null);
   /** 오버레이에 가려져 다시 보여 줄 미읽음 문장. 홈을 떠나면 재표시 예약만 취소한다 */
   const [resumeKey, setResumeKey] = React.useState<string | null>(null);
-  /** X의 읽음 처리로 푸시가 지워진 뒤 드러나는 문장까지, 다음 렌더에서 아이콘으로 남긴다 */
+  /** X로 닫을 때 도착해 있던 다음 AI 코칭은 다음 렌더에서 자동으로 펼치지 않고 아이콘으로 남긴다 */
   const [closing, setClosing] = React.useState(false);
 
   if (closing) {
@@ -45,7 +45,7 @@ export function useCoachSpeech(
     if (message !== null && !seenKeys.includes(message.key)) setSeenKeys([...seenKeys, message.key]);
   }
 
-  // 화면 이탈은 오버레이 가림보다 우선한다. onRead는 호출하지 않아 미읽음 푸시를 지우지 않는다.
+  // 화면 이탈은 오버레이 가림보다 우선한다. onRead는 호출하지 않아 미읽음 AI 코칭을 지우지 않는다.
   if (!active) {
     if (opened !== null) setOpened(null);
     if (pinnedKey !== null) setPinnedKey(null);

@@ -5,14 +5,13 @@ import { useCoachSpeechStore, type CoachSpeech } from "@/features/notification/s
 
 const feedback = { key: "feedback-a", text: "외식 예산을 넘었다냥. 이번 주기에는 외식을 멈추는 편이 좋다냥." };
 const nextFeedback = { key: "feedback-b", text: "교통비도 확인해 봐요." };
-const situation = { key: "situation:crumbs", text: "봉투에 잔액이 다시 생기면 치워져요." };
 const visible = { active: true, paused: false };
 
-/** HomeScreen처럼 전역 푸시를 구독하고, 읽음 처리에서 동기 clear 후 상황 문장으로 돌아간다. */
+/** HomeScreen처럼 AI 코칭만 구독하고, 읽음 처리에서 동기 clear 한다. */
 function useStoreSpeech(options: typeof visible, onRead: (key: string) => void) {
-  const pushSpeech = useCoachSpeechStore((state) => state.latest);
+  const aiSpeech = useCoachSpeechStore((state) => state.latest);
   const clear = useCoachSpeechStore((state) => state.clear);
-  return useCoachSpeech(pushSpeech ?? situation, options, (key) => {
+  return useCoachSpeech(aiSpeech, options, (key) => {
     onRead(key);
     clear(key);
   });
@@ -131,14 +130,14 @@ describe("useCoachSpeech — 말풍선 펼침·접힘", () => {
     expect(onRead).not.toHaveBeenCalled();
   });
 
-  it("X로 푸시를 지운 직후 드러난 상황 문장은 읽음 처리 없이 아이콘으로 남기고 이후 새 키는 자동 표시한다", async () => {
+  it("X로 AI 코칭을 지우면 아이콘도 없애고 이후 새 코칭은 자동 표시한다", async () => {
     useCoachSpeechStore.setState({ latest: feedback });
     const onRead = jest.fn();
     const hook = await renderHook(() => useStoreSpeech(visible, onRead));
 
     await act(async () => { hook.result.current?.onClose(); });
     expect(useCoachSpeechStore.getState().latest).toBeNull();
-    expect(hook.result.current).toMatchObject({ text: situation.text, open: false, unread: true });
+    expect(hook.result.current).toBeNull();
     expect(onRead.mock.calls).toEqual([[feedback.key]]);
     expect(speechTimers()).toHaveLength(1);
     expect(clearTimeoutSpy).toHaveBeenCalledWith(speechTimers()[0]);
@@ -159,18 +158,17 @@ describe("useCoachSpeech — 말풍선 펼침·접힘", () => {
     expect(hook.result.current).toMatchObject({ text: nextFeedback.text, open: false, unread: true });
     expect(onRead.mock.calls).toEqual([[feedback.key]]);
 
-    // B를 직접 읽으면 store는 상황 문장으로 바뀌지만 열린 B 스냅샷은 유지된다.
+    // B를 직접 읽으면 저장소는 비워지지만 열린 B 스냅샷은 유지된다.
     await act(async () => { hook.result.current?.onPressIcon(); });
     expect(useCoachSpeechStore.getState().latest).toBeNull();
     expect(hook.result.current).toMatchObject({ text: nextFeedback.text, open: true });
     await act(async () => { jest.advanceTimersByTime(COACH_SPEECH_OPEN_MS * 4); });
     expect(hook.result.current?.open).toBe(true);
     await act(async () => { hook.result.current?.onClose(); });
-    expect(hook.result.current).toMatchObject({ text: situation.text, open: false, unread: true });
-    expect(onRead).not.toHaveBeenCalledWith(situation.key);
+    expect(hook.result.current).toBeNull();
   });
 
-  it("홈을 떠나도 전역 푸시는 읽거나 삭제하지 않는다", async () => {
+  it("홈을 떠나도 미읽음 AI 코칭은 읽거나 삭제하지 않는다", async () => {
     useCoachSpeechStore.setState({ latest: feedback });
     const onRead = jest.fn();
     const hook = await renderHook((options: typeof visible) => useStoreSpeech(options, onRead), { initialProps: visible });

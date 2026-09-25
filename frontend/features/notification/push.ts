@@ -66,15 +66,11 @@ export async function setForegroundPushHandler(): Promise<void> {
   });
 }
 
-/** 받은 푸시의 제목·본문. 홈의 코치 고양이가 말풍선으로 옮겨 말한다(2026-09-23) */
-export type PushText = { title: string | null; body: string | null };
-
-/** 앱을 보고 있는 동안 푸시를 받을 때마다 data 와 제목·본문을 넘긴다. 반환값으로 구독을 끊는다 */
-export async function subscribePushReceived(onReceived: (data: unknown, text: PushText) => void): Promise<() => void> {
+/** 앱을 보고 있는 동안 푸시를 받을 때마다 data 를 넘긴다. 제목·본문은 OS 알림에서만 표시한다. 반환값으로 구독을 끊는다 */
+export async function subscribePushReceived(onReceived: (data: unknown) => void): Promise<() => void> {
   const Notifications = await import("expo-notifications");
   const subscription = Notifications.addNotificationReceivedListener((notification) => {
-    const { data, title, body } = notification.request.content;
-    onReceived(data, { title: title ?? null, body: body ?? null });
+    onReceived(notification.request.content.data);
   });
   return () => subscription.remove();
 }

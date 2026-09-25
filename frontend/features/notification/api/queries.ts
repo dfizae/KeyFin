@@ -14,8 +14,6 @@ import { isRetryablePushError } from "@/features/notification/errors";
 import {
   markNotificationReadInPage,
   pushNotificationId,
-  pushSpeechText,
-  shouldShowPushBanner,
   toPushDataType,
   toPushDeviceRequest,
   type InboxNotification,
@@ -34,7 +32,6 @@ import {
   subscribeFcmTokenRefresh,
   subscribePushReceived,
 } from "@/features/notification/push";
-import { useCoachSpeechStore } from "@/features/notification/store";
 import { paymentKeys } from "@/features/payment/api/queries";
 import { roomKeys } from "@/features/room/api/queries";
 import { shopKeys } from "@/features/shop/api/queries";
@@ -192,14 +189,11 @@ export function usePushForegroundDisplay(enabled: boolean) {
 
     const start = async () => {
       await setForegroundPushHandler();
-      const stop = await subscribePushReceived((data, text) => {
+      const stop = await subscribePushReceived((data) => {
         const type = toPushDataType(data);
         const keys: QueryKey[] = [notificationKeys.all, ...affectedQueryKeys(type)];
         for (const queryKey of keys) queryClient.invalidateQueries({ queryKey });
-        // 배너로 띄우는 알림이면 홈의 코치 고양이도 말풍선으로 한 번 알린다 (사용자 요청 2026-09-23)
-        const speech = pushSpeechText(type, text);
-        if (shouldShowPushBanner(type) && speech !== null) useCoachSpeechStore.getState().announce(speech);
-        // 예산 알림이면 이어서 코치 피드백을 말한다 (-184)
+        // 푸시 문구는 OS 알림에서 보여 주고, 홈 말풍선에는 API가 준비한 AI 코칭만 담는다.
         const notificationId = pushNotificationId(data);
         if (type === "BUDGET_ALERT" && notificationId !== null) void announceCoachFeedback(notificationId);
       });

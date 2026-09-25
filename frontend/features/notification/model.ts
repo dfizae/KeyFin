@@ -308,28 +308,6 @@ export function toCoachFeedback(dto: CoachFeedbackDto): CoachFeedback {
   return { status, text: status === "READY" ? text : null };
 }
 
-/** 고양이 말풍선에 한 번에 담을 최대 글자 수. 넘치면 말줄임표로 줄인다 */
-const PUSH_SPEECH_MAX = 80;
-
-/**
- * 포그라운드 푸시를 코치 고양이 말풍선 문장으로 바꾼다 (사용자 요청 2026-09-23).
- * 예산 잔액 알림은 앱 표기(budgetAlertCopy)로 바꿔 "제목." 다음 줄에 본문을 둔다. 그 밖의 알림은 본문이 있으면 본문, 없으면 제목.
- * 둘 다 비었으면 말할 것이 없다(null). 밖에서 온 값이라 앞뒤 공백을 떼고 길이를 자른다 (규칙 50).
- */
-export function pushSpeechText(type: PushDataType, text: { title: string | null; body: string | null }): string | null {
-  const title = text.title?.trim() ?? "";
-  const body = text.body?.trim() ?? "";
-  const picked = type === "BUDGET_ALERT" && title !== "" ? budgetAlertSpeech(title, body === "" ? null : body) : body || title;
-  if (picked === "") return null;
-  return picked.length > PUSH_SPEECH_MAX ? `${picked.slice(0, PUSH_SPEECH_MAX - 1)}…` : picked;
-}
-
-function budgetAlertSpeech(title: string, body: string | null): string {
-  const copy = budgetAlertCopy(title, body);
-  const sentence = copy.title.endsWith(".") ? copy.title : `${copy.title}.`;
-  return copy.body === null ? sentence : `${sentence}\n${copy.body}`;
-}
-
 const BUDGET_REMAINING_TITLE = /^(.+?) 봉투가 \d+% 남았어요\.?$/;
 const BUDGET_EXCEEDED_TITLE = /봉투를 초과했어요\.?$/;
 const ZERO_REMAINING_BODY = /^남은 금액 0원/;

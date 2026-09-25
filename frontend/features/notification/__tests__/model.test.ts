@@ -19,7 +19,6 @@ import {
   pushNotificationHref,
   pushNotificationId,
   budgetAlertCopy,
-  pushSpeechText,
   shouldShowPushBanner,
   toCoachFeedback,
   toInboxNotification,
@@ -287,25 +286,6 @@ describe("푸시 탭 딥링크 (frontend-spec §3 · 푸시 전용 4종은 2026-
   });
 });
 
-describe("pushSpeechText (코치 고양이 말풍선)", () => {
-  it("본문이 있으면 본문, 없으면 제목을 쓴다", () => {
-    expect(pushSpeechText("COACHING", { title: "월세 결제 준비", body: "내일 월세 550,000원이 나가요." })).toBe("내일 월세 550,000원이 나가요.");
-    expect(pushSpeechText("COACHING", { title: "월세 결제 준비", body: null })).toBe("월세 결제 준비");
-    expect(pushSpeechText("COACHING", { title: "  제목  ", body: "   " })).toBe("제목");
-  });
-
-  it("둘 다 비었으면 말하지 않는다", () => {
-    expect(pushSpeechText("COACHING", { title: null, body: null })).toBeNull();
-    expect(pushSpeechText("COACHING", { title: "", body: " " })).toBeNull();
-  });
-
-  it("너무 긴 문장은 80자로 줄이고 말줄임표를 붙인다", () => {
-    const text = pushSpeechText("COACHING", { title: null, body: "가".repeat(100) });
-    expect(text).toHaveLength(80);
-    expect(text?.endsWith("…")).toBe(true);
-  });
-});
-
 describe("budgetAlertCopy (예산 잔액 알림 표기, 2026-09-23 결정)", () => {
   it("50·20·5% 단계는 제목과 남은 금액을 그대로 둔다", () => {
     expect(budgetAlertCopy("외식 봉투가 20% 남았어요", "남은 금액 32,000원")).toEqual({
@@ -332,19 +312,6 @@ describe("budgetAlertCopy (예산 잔액 알림 표기, 2026-09-23 결정)", () 
   it("모르는 모양(복구 알림 등)은 그대로 둔다", () => {
     const recovery = { title: "결제가 취소돼 외식 봉투가 돌아왔어요", body: "12,000원이 복구돼 남은 금액 20,000원이에요" };
     expect(budgetAlertCopy(recovery.title, recovery.body)).toEqual(recovery);
-  });
-});
-
-describe("pushSpeechText 예산 알림", () => {
-  it("'남았어요.' 다음 줄에 남은 금액을 둔다", () => {
-    expect(pushSpeechText("BUDGET_ALERT", { title: "외식 봉투가 20% 남았어요", body: "남은 금액 32,000원" })).toBe(
-      "외식 봉투가 20% 남았어요.\n남은 금액 32,000원"
-    );
-  });
-
-  it("0원과 초과는 한마디로 말한다", () => {
-    expect(pushSpeechText("BUDGET_ALERT", { title: "외식 봉투가 0% 남았어요", body: "남은 금액 0원" })).toBe("외식 봉투를 딱 다 썼어요.");
-    expect(pushSpeechText("BUDGET_ALERT", { title: "외식 봉투를 초과했어요", body: "8,000원 초과했어요" })).toBe("외식 봉투를 초과했어요.");
   });
 });
 
