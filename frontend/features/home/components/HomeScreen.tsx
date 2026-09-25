@@ -191,6 +191,7 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
                 <HomeCalendar width={width} month={month} onOpen={openCalendar} />
                 <HomeCoachTarget
                   width={width}
+                  viewport={roomWidth > 0 ? box : undefined}
                   onOpen={guide.finish}
                   speech={coachSpeech}
                   hasPending={hasPending}

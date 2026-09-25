@@ -222,6 +222,10 @@ describe("HomeScreen", () => {
 
     expect(screen.getByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeTruthy();
     expect(mockRoomLock).toHaveBeenLastCalledWith(true);
+    // 실제 홈 크기가 코치까지 전달되어, 넓은 방 캔버스의 숨겨진 부분에 X가 놓이지 않게 한다.
+    await fireEvent(screen.getByTestId(HOME_ROOM_BOX_TEST_ID), "layout", { nativeEvent: { layout: { width: 280, height: 680 } } });
+    const placement = screen.getByTestId("coach-speech-placement").props.style;
+    expect(placement.left + placement.width + 12 * (379 / 327) - (379 - 280) / 2).toBeCloseTo(272);
     await setHomeFocused(false);
     expect(screen.queryByRole("button", { name: COACH_SPEECH_CLOSE_LABEL })).toBeNull();
     expect(mockRoomLock).toHaveBeenLastCalledWith(false);

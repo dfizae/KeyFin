@@ -1,12 +1,13 @@
 import { MessageCircleMore, X } from "lucide-react-native";
 import { Pressable, ScrollView, View } from "react-native";
-import Animated, { FadeIn, useAnimatedStyle, ZoomIn } from "react-native-reanimated";
+import Animated, { FadeIn, useAnimatedStyle } from "react-native-reanimated";
 
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import type { CoachSpeechView } from "@/features/home/useCoachSpeech";
+import { coachSpeechLayout, COACH_SPEECH_CLOSE_SIZE } from "@/features/home/coachSpeechLayout";
 
-import { getSceneScale } from "@/features/room/model";
+import { getSceneScale, type SceneSize } from "@/features/room/model";
 import { COACH_CAT_RECT } from "@/features/room/scene";
 import { useCoachCatMotion } from "@/features/room/useCoachCatMotion";
 
@@ -17,21 +18,17 @@ export const COACH_LABEL = "코치";
 export const COACH_SPEECH_HINT = "말풍선을 접습니다";
 export const COACH_SPEECH_CLOSE_LABEL = "코치 말풍선 닫기";
 export const COACH_SPEECH_ICON_LABEL = "코치가 할 말 보기";
-/** 말풍선 최대 폭과 고양이 머리 위 간격(pt). 폭은 화면 기준이라 씬 배율을 곱하지 않는다 */
-const SPEECH_MAX_WIDTH = 230;
-const SPEECH_MAX_HEIGHT = 240;
+/** 접힌 아이콘과 고양이 머리 위 간격(pt). 펼친 말풍선의 배치는 coachSpeechLayout에서 계산한다. */
 const SPEECH_GAP = 4;
-const SPEECH_CLOSE_SIZE = 44;
 /** 접힌 대화 아이콘 버튼 크기(pt). 누르기 쉽게 hitSlop 을 더한다 */
 const SPEECH_ICON_SIZE = 36;
 const SPEECH_APPEAR_MS = 180;
-/** 닫기 버튼을 제외한 본문만 스크롤하도록 여백과 테두리까지 전체 높이 상한에 포함한다 */
-const SPEECH_PADDING_Y = 16;
-const SPEECH_BORDER_Y = 2;
 
 type CoachTargetProps = {
   /** 캔버스 폭(pt). 씬 좌표를 이 폭으로 환산한다 */
   width: number;
+  /** 실제 홈 표시 영역. 생략하면 캔버스 전체가 보이는 것으로 계산한다. */
+  viewport?: SceneSize;
   /** 미확정 결제가 있으면 대화 아이콘에 빨간 점을 단다. 메시지가 없으면 아이콘도 없다. */
   hasPending?: boolean;
   /** 고양이가 머리 위로 하는 말. 펼치면 말풍선, 접으면 대화 아이콘이다. null 이면 둘 다 없다 */
@@ -46,7 +43,7 @@ const FILL = { position: "absolute", left: 0, top: 0, right: 0, bottom: 0 } as c
  * 고양이 그림 위의 투명한 탭 영역. 씬 레이어(sceneObjects)에 놓아야 확대·이동해도 그림과 같이 움직인다.
  * 고양이가 둥둥 떠서 오가므로(useCoachCatMotion) 탭 영역과 점도 같은 오프셋으로 따라간다.
  */
-function CoachTarget({ width, hasPending = false, speech = null, onPress }: CoachTargetProps) {
+function CoachTarget({ width, viewport, hasPending = false, speech = null, onPress }: CoachTargetProps) {
   const scale = getSceneScale(width);
   const offset = useCoachCatMotion();
   const follow = useAnimatedStyle(() => ({
@@ -70,7 +67,7 @@ function CoachTarget({ width, hasPending = false, speech = null, onPress }: Coac
         }}
       />
       {speech?.open ? (
-        <CoachSpeech text={speech.text} scale={scale} onClose={speech.onClose} />
+        <CoachSpeech text={speech.text} width={width} viewport={viewport} onClose={speech.onClose} />
       ) : speech !== null ? (
         <CoachSpeechIcon scale={scale} unread={speech.unread || hasPending} onPress={speech.onPressIcon} />
       ) : null}
@@ -80,39 +77,28 @@ function CoachTarget({ width, hasPending = false, speech = null, onPress }: Coac
 
 /**
  * 고양이 머리 위 말풍선 (사용자 요청 2026-09-23 — 예산 초과로 딱지·부스러기가 생겼을 때 상황을 알린다).
- * 고양이 윗변에 아래쪽을 붙이려고, 방 맨 위부터 고양이 윗변까지의 칸을 만들고 그 바닥에 말풍선을 둔다.
+ * 고양이 머리 기준점 위의 칸 바닥에 왼쪽 아래 모서리를 붙인다. 부모의 이동 변환으로 고양이를 따라간다.
  * 고양이 쪽(왼쪽 아래) 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다. 닫기 버튼을 누르면 대화 아이콘으로 접힌다.
  */
-function CoachSpeech({ text, scale, onClose }: { text: string; scale: number; onClose: () => void }) {
-  const height = Math.max(0, COACH_CAT_RECT.y * scale - SPEECH_GAP);
-  const maxHeight = Math.min(SPEECH_MAX_HEIGHT, height);
-  const contentMaxHeight = Math.max(0, maxHeight - SPEECH_CLOSE_SIZE - SPEECH_PADDING_Y - SPEECH_BORDER_Y);
+function CoachSpeech({ text, width, viewport, onClose }: { text: string; width: number; viewport?: SceneSize; onClose: () => void }) {
+  const layout = coachSpeechLayout(width, viewport);
   return (
     <View
+      testID="coach-speech-placement"
       className="absolute justify-end"
-      style={{ left: COACH_CAT_RECT.x * scale, top: 0, height, maxWidth: SPEECH_MAX_WIDTH }}
+      style={{ left: layout.left, top: layout.top, height: layout.maxHeight, width: layout.maxWidth }}
       pointerEvents="box-none"
     >
-      <Animated.View entering={ZoomIn.duration(SPEECH_APPEAR_MS)}>
+      <Animated.View entering={FadeIn.duration(SPEECH_APPEAR_MS)}>
         <View
           testID="coach-speech-bubble"
-          style={{ maxHeight }}
-          className="self-start rounded-2xl rounded-bl-sm border border-transparent bg-card px-3 py-2 shadow-md shadow-black/20 dark:border-border dark:shadow-none"
+          style={{ maxWidth: layout.maxWidth, maxHeight: layout.maxHeight }}
+          className="self-start flex-row items-start gap-1 rounded-2xl rounded-bl-sm border border-transparent bg-card px-3 py-2 shadow-md shadow-black/20 dark:border-border dark:shadow-none"
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={COACH_SPEECH_CLOSE_LABEL}
-            accessibilityHint={COACH_SPEECH_HINT}
-            onPress={onClose}
-            style={{ width: SPEECH_CLOSE_SIZE, height: SPEECH_CLOSE_SIZE, flexShrink: 0 }}
-            className="self-end items-center justify-center rounded-full active:opacity-80"
-          >
-            <Icon as={X} size={20} className="text-foreground" />
-          </Pressable>
-          {/* ScrollView 는 기본이 flexGrow 1 이라 짧은 문장에도 남는 높이를 다 채운다 — 내용 높이만 쓰고 넘칠 때만 스크롤 */}
+          {/* 세로 공간을 채우지 않고, 짧은 본문만 44pt 닫기 영역의 중앙에 맞춘다. */}
           <ScrollView
             testID="coach-speech-content"
-            style={{ flexGrow: 0, maxHeight: contentMaxHeight }}
+            style={{ flexGrow: 0, flexShrink: 1, alignSelf: "center", maxWidth: layout.contentMaxWidth, maxHeight: layout.contentMaxHeight }}
             showsVerticalScrollIndicator
             bounces={false}
           >
@@ -120,6 +106,16 @@ function CoachSpeech({ text, scale, onClose }: { text: string; scale: number; on
               {text}
             </Text>
           </ScrollView>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={COACH_SPEECH_CLOSE_LABEL}
+            accessibilityHint={COACH_SPEECH_HINT}
+            onPress={onClose}
+            style={{ width: COACH_SPEECH_CLOSE_SIZE, height: COACH_SPEECH_CLOSE_SIZE, flexShrink: 0 }}
+            className="items-center justify-center rounded-full active:opacity-80"
+          >
+            <Icon as={X} size={20} className="text-foreground" />
+          </Pressable>
         </View>
       </Animated.View>
     </View>

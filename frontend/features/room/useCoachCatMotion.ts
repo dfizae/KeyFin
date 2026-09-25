@@ -1,6 +1,7 @@
 import { useFrameCallback, useReducedMotion, useSharedValue, type SharedValue } from "react-native-reanimated";
 
 import type { ScenePoint } from "@/features/room/model";
+import { COACH_CAT_FLOAT_HEIGHT, COACH_CAT_STROLL_RANGE } from "@/features/room/scene";
 
 /**
  * 코치 고양이의 둥둥 뜨기 + 느린 산책 (사용자 요청 2026-09-23). 고양이는 코칭 대화로 가는 버튼이라
@@ -10,17 +11,16 @@ import type { ScenePoint } from "@/features/room/model";
  * 같은 프레임에서는 두 쪽이 같은 값을 얻어 어긋나지 않는다. 동작 줄이기 설정이면 제자리에 가만히 있다.
  */
 
-/** 떠오르는 높이(씬 단위)와 한 번 오르내리는 주기 */
-const FLOAT_HEIGHT = 3;
+/** 한 번 오르내리는 주기 */
 const FLOAT_PERIOD_MS = 2600;
 
-/** 산책 지점(제자리 기준 씬 단위 오프셋). 차례로 돌고 처음으로 돌아온다. 범위를 바꾸면 scene.ts COACH_CAT_STROLL_RANGE 도 맞춘다 */
+/** 산책 지점(제자리 기준 씬 단위 오프셋). 차례로 돌고 처음으로 돌아온다. */
 const HOME: ScenePoint = { x: 0, y: 0 };
 const STROLL_POINTS: readonly ScenePoint[] = [
   HOME,
-  { x: 12, y: 3 },
+  { x: COACH_CAT_STROLL_RANGE.right, y: COACH_CAT_STROLL_RANGE.down },
   HOME,
-  { x: -10, y: 2 },
+  { x: -COACH_CAT_STROLL_RANGE.left, y: 2 },
 ];
 /** 한 지점에 머무는 시간과 다음 지점까지 옮겨 가는 시간 */
 const STROLL_REST_MS = 4000;
@@ -30,7 +30,7 @@ const STROLL_LEG_MS = STROLL_REST_MS + STROLL_MOVE_MS;
 /** 제자리(COACH_CAT_ANCHOR) 기준 오프셋. y 는 음수가 위쪽이다 */
 export function coachCatOffsetAt(timeMs: number): ScenePoint {
   "worklet";
-  const float = -FLOAT_HEIGHT * (0.5 - 0.5 * Math.cos((2 * Math.PI * timeMs) / FLOAT_PERIOD_MS));
+  const float = -COACH_CAT_FLOAT_HEIGHT * (0.5 - 0.5 * Math.cos((2 * Math.PI * timeMs) / FLOAT_PERIOD_MS));
 
   const leg = Math.floor(timeMs / STROLL_LEG_MS);
   const within = timeMs - leg * STROLL_LEG_MS;

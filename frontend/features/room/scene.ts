@@ -415,6 +415,13 @@ export const COACH_CAT_SIZE: SceneSize = { width: 60, height: 60 };
 export const COACH_CAT_ANCHOR: ScenePoint = { x: 78, y: 552 };
 /** 코치 고양이 그림이 놓이는 씬 사각형. 홈의 탭 영역·말풍선·첫 진입 안내가 같은 값을 쓴다 */
 export const COACH_CAT_RECT: SceneRect = getSpriteRect(COACH_CAT_ANCHOR, COACH_CAT_SIZE);
+/** 기울어진 고양이 머리 위. 말풍선의 왼쪽 아래 모서리를 이 점에 맞춘다. */
+export const COACH_SPEECH_ANCHOR: ScenePoint = {
+  x: COACH_CAT_RECT.x + COACH_CAT_RECT.width * 0.6,
+  y: COACH_CAT_RECT.y,
+};
+/** 고양이가 떠오르는 최대 높이(씬 단위). 그림의 모션과 말풍선의 화면 여유 계산이 공유한다. */
+export const COACH_CAT_FLOAT_HEIGHT = 3;
 /** 고양이가 제자리 둘레를 오가는 범위(씬 단위, useCoachCatMotion 의 산책 지점과 맞춘다) */
 export const COACH_CAT_STROLL_RANGE = { left: 10, right: 12, down: 3 } as const;
 /** 캐릭터가 고양이를 밟고 지나가지 않게 막는 발자국. 발끝 둘레의 작은 사각형을 산책 범위만큼 넓혔다 */
