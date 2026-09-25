@@ -26,7 +26,7 @@ describe("CoachTarget", () => {
 
   it.each([
     "이번 달 예산을 확인해 주세요.",
-    "복돈이 가마솥 순대국 강남본점 10,000원을 분류해 주세요.",
+    "외식 지출이 예산을 넘었어요. 남은 기간에는 식비 계획을 조정해 보세요.",
     "카드별 결제 내역과 이번 달 예산을 차근차근 확인해 주세요. ".repeat(30),
   ])("본문을 눌러도 접히지 않고 별도 닫기 버튼으로 접는다", async (text) => {
     const speech = makeSpeech({ text });
@@ -44,21 +44,21 @@ describe("CoachTarget", () => {
     expect(onPressCat).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])("접힌 아이콘은 미확정 결제 유무와 관계없이 말풍선만 펼친다 (미확정: %s)", async (hasPending) => {
-    const speech = makeSpeech({ open: false, unread: false });
+  it.each([false, true])("접힌 아이콘은 AI 코칭의 읽음 상태를 표시하고 말풍선만 펼친다 (미읽음: %s)", async (unread) => {
+    const speech = makeSpeech({ open: false, unread });
     const onPressCat = jest.fn();
-    await render(<CoachTarget width={327} speech={speech} hasPending={hasPending} onPress={onPressCat} />);
+    await render(<CoachTarget width={327} speech={speech} onPress={onPressCat} />);
 
     expect(screen.queryByText(speech.text)).toBeNull();
     expect(screen.queryByRole("button", { name: "코치 말풍선 닫기" })).toBeNull();
-    await fireEvent.press(screen.getByRole("button", { name: hasPending ? "코치가 할 말 보기, 새 메시지" : "코치가 할 말 보기" }));
+    await fireEvent.press(screen.getByRole("button", { name: unread ? "코치가 할 말 보기, 새 메시지" : "코치가 할 말 보기" }));
     expect(speech.onPressIcon).toHaveBeenCalledTimes(1);
     expect(speech.onClose).not.toHaveBeenCalled();
     expect(onPressCat).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])("표시할 메시지가 없으면 이동용 아이콘을 만들지 않는다 (미확정: %s)", async (hasPending) => {
-    await render(<CoachTarget width={327} speech={null} hasPending={hasPending} onPress={jest.fn()} />);
+  it("AI 코칭이 없으면 고양이 탭 영역만 남긴다", async () => {
+    await render(<CoachTarget width={327} speech={null} onPress={jest.fn()} />);
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "코치" })).toBeTruthy();

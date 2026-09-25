@@ -11,9 +11,8 @@ import { getSceneScale, type SceneSize } from "@/features/room/model";
 import { COACH_CAT_RECT } from "@/features/room/scene";
 import { useCoachCatMotion } from "@/features/room/useCoachCatMotion";
 
-// 코치 = 방에 앉아 있는 고양이(AI 챗봇). 그림은 Skia 씬이 스프라이트(assets COACH_CAT)로 그리고, 여기에는 그 위에 얹는 탭 영역만 있다.
-// 옛 Pencil CoachAvatar (Qxnt5) 32pt 원형 아이콘 버튼과 임시 "?" 말풍선(CoachBubble o3byv)을 대신한다 —
-// 2026-09-22 사용자 요청으로 탭하면 코칭 대화 화면(PAGE-31)이 열리므로 말풍선은 없앴고, 미확정 정리 링크는 그 화면 상단으로 옮겼다.
+// 고양이 그림은 Skia 씬이 그리고, 여기에는 탭 영역과 AI 코칭 말풍선을 얹는다.
+// 고양이를 누르면 코칭 대화 화면으로 이동하고, 말풍선 아이콘은 코칭 내용만 펼친다.
 export const COACH_LABEL = "코치";
 export const COACH_SPEECH_HINT = "말풍선을 접습니다";
 export const COACH_SPEECH_CLOSE_LABEL = "코치 말풍선 닫기";
@@ -29,9 +28,7 @@ type CoachTargetProps = {
   width: number;
   /** 실제 홈 표시 영역. 생략하면 캔버스 전체가 보이는 것으로 계산한다. */
   viewport?: SceneSize;
-  /** 미확정 결제가 있으면 대화 아이콘에 빨간 점을 단다. 메시지가 없으면 아이콘도 없다. */
-  hasPending?: boolean;
-  /** 고양이가 머리 위로 하는 말. 펼치면 말풍선, 접으면 대화 아이콘이다. null 이면 둘 다 없다 */
+  /** 준비된 AI 코칭. 펼치면 말풍선, 접으면 대화 아이콘이다. null 이면 둘 다 없다 */
   speech?: CoachSpeechView | null;
   onPress: () => void;
 };
@@ -43,7 +40,7 @@ const FILL = { position: "absolute", left: 0, top: 0, right: 0, bottom: 0 } as c
  * 고양이 그림 위의 투명한 탭 영역. 씬 레이어(sceneObjects)에 놓아야 확대·이동해도 그림과 같이 움직인다.
  * 고양이가 둥둥 떠서 오가므로(useCoachCatMotion) 탭 영역과 점도 같은 오프셋으로 따라간다.
  */
-function CoachTarget({ width, viewport, hasPending = false, speech = null, onPress }: CoachTargetProps) {
+function CoachTarget({ width, viewport, speech = null, onPress }: CoachTargetProps) {
   const scale = getSceneScale(width);
   const offset = useCoachCatMotion();
   const follow = useAnimatedStyle(() => ({
@@ -69,16 +66,16 @@ function CoachTarget({ width, viewport, hasPending = false, speech = null, onPre
       {speech?.open ? (
         <CoachSpeech text={speech.text} width={width} viewport={viewport} onClose={speech.onClose} />
       ) : speech !== null ? (
-        <CoachSpeechIcon scale={scale} unread={speech.unread || hasPending} onPress={speech.onPressIcon} />
+        <CoachSpeechIcon scale={scale} unread={speech.unread} onPress={speech.onPressIcon} />
       ) : null}
     </Animated.View>
   );
 }
 
 /**
- * 고양이 머리 위 말풍선 (사용자 요청 2026-09-23 — 예산 초과로 딱지·부스러기가 생겼을 때 상황을 알린다).
+ * 고양이 머리 위에 준비된 AI 코칭을 표시하는 말풍선.
  * 고양이 머리 기준점 위의 칸 바닥에 왼쪽 아래 모서리를 붙인다. 부모의 이동 변환으로 고양이를 따라간다.
- * 고양이 쪽(왼쪽 아래) 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다. 닫기 버튼을 누르면 대화 아이콘으로 접힌다.
+ * 고양이 쪽(왼쪽 아래) 모서리만 덜 둥글게 해 말하는 쪽을 가리킨다. X는 현재 코칭을 닫고 읽음 처리한다.
  */
 function CoachSpeech({ text, width, viewport, onClose }: { text: string; width: number; viewport?: SceneSize; onClose: () => void }) {
   const layout = coachSpeechLayout(width, viewport);
@@ -124,8 +121,7 @@ function CoachSpeech({ text, width, viewport, onClose }: { text: string; width: 
 
 /**
  * 말풍선을 접으면 남는 대화 아이콘 버튼. 고양이 머리 위 가운데에 두고, 누르면 말풍선을 다시 펼친다.
- * 아직 직접 열어 보지 않은 말이 있거나 정리할 미확정 결제가 있으면 오른쪽 위에 빨간 점을 달아 눌러 보도록 강조한다 —
- * 예전에 고양이 귀 옆에 따로 있던 미확정 결제 점을 이 점 하나로 합쳤다(사용자 요청 2026-09-23).
+ * 아직 직접 열어 보지 않은 AI 코칭이 있으면 오른쪽 위에 빨간 점을 단다.
  */
 function CoachSpeechIcon({
   scale,

@@ -9,14 +9,12 @@ import { Icon } from "@/components/ui/icon";
 import { Screen, useTopInset } from "@/components/ui/screen";
 import { Text } from "@/components/ui/text";
 import { needsConfirmation, useCurrentBudget } from "@/features/budget/api/queries";
-import { envelopeName } from "@/features/budget/catalog";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
 import { AttendanceToast } from "@/features/home/components/AttendanceToast";
 import { CharacterRoom } from "@/features/home/components/CharacterRoom";
 import { MOVING_IN_COPY, RoomWaiting, pickReturningCopy } from "@/features/room/components/RoomWaiting";
 import { HomeCalendar } from "@/features/home/components/HomeCalendar";
 import { HomeCoachTarget } from "@/features/home/components/HomeCoach";
-import { coachSituationMessage } from "@/features/home/model";
 import { useCoachSpeech } from "@/features/home/useCoachSpeech";
 import { HomeBoardPanel, HomeWallBoard } from "@/features/home/components/HomeWallBoard";
 import { RoomGuideOverlay } from "@/features/home/components/RoomGuideOverlay";
@@ -29,11 +27,8 @@ import { RoomStickerTargets, StickerRemovalDialog } from "@/features/room/compon
 import { coverSceneWidth, getCanvasSize, getSceneScale, type SceneRect } from "@/features/room/model";
 import { COACH_CAT_RECT, getWallItemRect, type Placement } from "@/features/room/scene";
 import { useCoachSpeechStore } from "@/features/notification/store";
-import { roomItemName } from "@/features/room/catalog";
-import { visiblePenalties } from "@/features/room/penalties";
 import { selectPlacements, useRoomStore } from "@/features/room/store";
 import { useRoomLayoutSync } from "@/features/room/useRoomLayout";
-import { flattenPending, usePendingTransactions } from "@/features/transaction/api/queries";
 import { currentMonthKey } from "@/lib/date";
 import { formatKRW } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -57,9 +52,6 @@ const ERROR_TOP_GAP = 24;
  * "다 그렸다"는 신호가 영영 오지 않아 홈이 통째로 막힌다. 넘기면 덮개를 걷고 방이 스스로 보여 주는 상태(스켈레톤)에 맡긴다.
  */
 const SCENE_WAIT_LIMIT_MS = 10_000;
-
-/** 건수나 목록이 바뀌어도 같은 홈에서는 반복해서 자동 표시하지 않는 리마인드. */
-const PENDING_COACH_SPEECH = { key: "pending-transactions", text: "정리할 결제가 있어요" };
 
 type HomeScreenProps = {
   /** 입주 연출(PAGE-08)에서 막 넘어왔다. 방을 다 그릴 때까지 입주 문구를 이어서 보여 준다 */
@@ -93,27 +85,13 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
   const [box, setBox] = React.useState({ width: 0, height: 0 });
   const guide = useRoomGuide(roomData !== undefined && sceneReady);
   const placements = useRoomStore(selectPlacements);
-  const coachMessage = room.data
-    ? coachSituationMessage({
-        stickerCount: room.data.stickers?.count ?? 0,
-        removableToday: room.data.stickers?.removableToday ?? false,
-        penalties: visiblePenalties(placements, room.data.overEnvelopeIds).map((penalty) => ({
-          envelopeName: envelopeName(penalty.envelopeId),
-          furnitureName: roomItemName(penalty.itemId),
-        })),
-      })
-    : null;
-  const pending = usePendingTransactions();
-  const hasPending = flattenPending(pending.data).length > 0;
-  // 알림 → 방 상황(딱지·부스러기) → 미확정 결제 순으로 안내한다. 아이콘은 내용만 다시 펼친다.
+  // 준비된 AI 코칭만 표시한다. 푸시 문구·방 상태·미확정 결제는 말풍선으로 반복하지 않는다.
   // 방 대기 화면·안내·보드·딱지 창이 떠 있는 동안에는 겹치지 않게 가린다.
-  const pushSpeech = useCoachSpeechStore((state) => state.latest);
-  const clearPushSpeech = useCoachSpeechStore((state) => state.clear);
-  const situationSpeech = coachMessage === null ? null : { key: `situation:${coachMessage}`, text: coachMessage };
-  const coachLine = pushSpeech ?? situationSpeech ?? (hasPending ? PENDING_COACH_SPEECH : null);
+  const aiSpeech = useCoachSpeechStore((state) => state.latest);
+  const clearAiSpeech = useCoachSpeechStore((state) => state.clear);
   const coachSpeechPaused = !sceneReady || guide.step !== null || panel !== null || selectedSticker !== null;
   const homeActive = useHomeActive();
-  const coachSpeech = useCoachSpeech(coachLine, { paused: coachSpeechPaused, active: homeActive }, clearPushSpeech);
+  const coachSpeech = useCoachSpeech(aiSpeech, { paused: coachSpeechPaused, active: homeActive }, clearAiSpeech);
   // 방 밖(화면)에 떠 있는 버튼은 씬 좌표가 없어 실제로 그려진 자리를 재 둔다
   const [buttonRects, setButtonRects] = React.useState<Partial<Record<GuideTargetId, SceneRect>>>({});
   const measureButton = React.useCallback((id: GuideTargetId, rect: SceneRect) => {
@@ -194,7 +172,6 @@ function HomeScreen({ arriving = false }: HomeScreenProps) {
                   viewport={roomWidth > 0 ? box : undefined}
                   onOpen={guide.finish}
                   speech={coachSpeech}
-                  hasPending={hasPending}
                 />
               </>
             )}

@@ -8,7 +8,7 @@ import { authUserMock } from "@/api/mocks/auth";
 import { budgetConfirmedMock, budgetProposedMock } from "@/api/mocks/budget";
 import { paymentCalendarEmptyMock, paymentCalendarMock } from "@/api/mocks/payment";
 import { attendanceMock, roomMock } from "@/api/mocks/room";
-import { pendingTransactionsMock, subcategoriesMock } from "@/api/mocks/transaction";
+import { pendingTransactionsMock } from "@/api/mocks/transaction";
 import { useAuthStore } from "@/features/auth/store";
 import { getCurrentBudget } from "@/features/budget/api/budget.api";
 import { PROPOSAL_FROM_HOME_HREF } from "@/features/budget/components/BudgetProposalScreen";
@@ -27,17 +27,15 @@ import { checkAttendance, getRoom } from "@/features/room/api/room.api";
 import { roomKeys } from "@/features/room/api/queries";
 import { ROOM_VIEW_TEST_ID } from "@/features/room/components/RoomView";
 import { toAttendance, toRoom, type Room } from "@/features/room/model";
-import { classifyTransaction, getPendingTransactions, getSubcategories } from "@/features/transaction/api/transaction.api";
+import { getPendingTransactions } from "@/features/transaction/api/transaction.api";
 import { transactionKeys } from "@/features/transaction/api/queries";
-import { toPendingTransactions, toSubcategories } from "@/features/transaction/model";
+import { toPendingTransactions } from "@/features/transaction/model";
 
 jest.mock("@/features/room/api/room.api", () => ({ getRoom: jest.fn(), checkAttendance: jest.fn() }));
 jest.mock("@/features/budget/api/budget.api", () => ({ getCurrentBudget: jest.fn() }));
 jest.mock("@/features/payment/api/payment.api", () => ({ getPaymentCalendar: jest.fn() }));
 jest.mock("@/features/transaction/api/transaction.api", () => ({
   getPendingTransactions: jest.fn(),
-  getSubcategories: jest.fn(),
-  classifyTransaction: jest.fn(),
 }));
 
 // 테스트에는 그림을 읽어 주는 Skia 가 없어 방 씬이 영영 '준비 중'이다. 그러면 홈이 방 대기 덮개를 걷지 않으므로
@@ -118,8 +116,6 @@ const mockedGetBudget = jest.mocked(getCurrentBudget);
 const mockedCheckAttendance = jest.mocked(checkAttendance);
 const mockedGetCalendar = jest.mocked(getPaymentCalendar);
 const mockedGetPending = jest.mocked(getPendingTransactions);
-const mockedGetSubcategories = jest.mocked(getSubcategories);
-const mockedClassify = jest.mocked(classifyTransaction);
 
 /** 방 폭을 재고, 그 뒤 붙는 오버레이(보드·캘린더·코치)의 조회가 끝날 때까지 기다린다 */
 async function layoutRoom() {
@@ -191,10 +187,6 @@ describe("HomeScreen", () => {
     mockedGetCalendar.mockResolvedValue(toPaymentCalendar(paymentCalendarMock(MONTH)));
     mockedGetPending.mockReset();
     mockedGetPending.mockResolvedValue({ items: [], nextCursor: null });
-    mockedGetSubcategories.mockReset();
-    mockedGetSubcategories.mockResolvedValue(toSubcategories(subcategoriesMock));
-    mockedClassify.mockReset();
-    mockedClassify.mockResolvedValue({ confirmStatus: "CONFIRMED", subcategoryId: 102, excludeTag: "NONE", adjustedAmount: null });
     mockPush.mockReset();
     mockRedirect.mockReset();
     mockSceneMount.mockClear();
@@ -324,10 +316,10 @@ describe("HomeScreen", () => {
     await waitFor(async () => expect(await SecureStore.getItemAsync(ROOM_GUIDE_KEY)).toBe("1"));
   });
 
-  it.each([false, true])("코치(고양이)를 탭하면 코칭 대화 화면으로 간다 (미확정: %s)", async (hasPending) => {
+  it.each([false, true])("코치(고양이)를 탭하면 코칭 대화 화면으로 간다 (AI 코칭: %s)", async (hasAi) => {
     mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
     mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-    if (hasPending) mockedGetPending.mockResolvedValue(toPendingTransactions(pendingTransactionsMock()));
+    if (hasAi) useCoachSpeechStore.getState().announce("외식 지출을 확인해 보세요.");
     await renderHome();
     await screen.findByLabelText(ROOM_LABEL);
     await layoutRoom();
@@ -336,129 +328,118 @@ describe("HomeScreen", () => {
     expect(mockPush).toHaveBeenCalledWith(COACHING_CHAT_ROUTE);
   });
 
-  describe("미확정 결제 리마인드", () => {
-    const reminder = "정리할 결제가 있어요";
+  describe("AI 코칭 전용 말풍선", () => {
+    const feedback = "외식 예산을 넘었어요. 남은 기간에는 식비 계획을 조정해 보세요.";
     const icon = () => screen.getByRole("button", { name: `${COACH_SPEECH_ICON_LABEL}, 새 메시지` });
     const close = () => screen.getByRole("button", { name: COACH_SPEECH_CLOSE_LABEL });
-    const pendingItems = toPendingTransactions(pendingTransactionsMock()).items;
+    const expectNoSpeech = () => {
+      expect(screen.queryByTestId("coach-speech-bubble")).toBeNull();
+      expect(screen.queryByRole("button", { name: /코치가 할 말 보기/ })).toBeNull();
+    };
 
     beforeEach(() => {
       jest.useFakeTimers();
-      mockedGetRoom.mockResolvedValue(toRoom({ ...roomMock, attendance: { checkedToday: true } }));
       mockedGetBudget.mockResolvedValue(toBudget(budgetConfirmedMock(TODAY_KEY)));
-      mockedGetPending.mockResolvedValue({ items: pendingItems, nextCursor: null });
-    });
-
-    async function showHome() {
-      await renderHome();
-      await screen.findByLabelText(ROOM_LABEL);
-      await layoutRoom();
-    }
-
-    async function refetchPending(count: number) {
-      mockedGetPending.mockResolvedValue({ items: pendingItems.slice(0, count), nextCursor: null });
-      await act(async () => { await client.invalidateQueries({ queryKey: transactionKeys.pending() }); });
-      await waitForQueriesToSettle();
-    }
-
-    it("처음에는 2.5초 표시하고, 아이콘·본문·스크롤·X는 화면을 이동하지 않는다", async () => {
-      await showHome();
-      expect(screen.getByText(reminder)).toBeTruthy();
-      expect(mockRoomLock).toHaveBeenLastCalledWith(true);
-      await act(async () => { jest.advanceTimersByTime(COACH_SPEECH_OPEN_MS); });
-      expect(screen.queryByText(reminder)).toBeNull();
-      expect(mockRoomLock).toHaveBeenLastCalledWith(false);
-
-      await fireEvent.press(icon());
-      await act(async () => { jest.advanceTimersByTime(COACH_SPEECH_OPEN_MS * 4); });
-      await fireEvent.press(screen.getByText(reminder));
-      await fireEvent.scroll(screen.getByTestId("coach-speech-content"), { nativeEvent: { contentOffset: { x: 0, y: 10 } } });
-      expect(screen.getByText(reminder)).toBeTruthy();
-      expect(mockRoomLock).toHaveBeenLastCalledWith(true);
-      await fireEvent.press(close());
-      expect(icon()).toBeTruthy();
-      expect(mockRoomLock).toHaveBeenLastCalledWith(false);
-      expect(mockPush).not.toHaveBeenCalled();
-      expect(useCoachSpeechStore.getState().latest).toBeNull();
-    });
-
-    it("건수 변경·홈 복귀·0건 후 재발생에도 반복 자동 표시하지 않는다", async () => {
-      await showHome();
-      await act(async () => { jest.advanceTimersByTime(COACH_SPEECH_OPEN_MS); });
-      await refetchPending(1);
-      expect(icon()).toBeTruthy();
-      expect(screen.queryByText(reminder)).toBeNull();
-      await setHomeFocused(false);
-      await setHomeFocused(true);
-      expect(screen.queryByText(reminder)).toBeNull();
-
-      await refetchPending(0);
-      expect(screen.queryByRole("button", { name: /코치가 할 말 보기/ })).toBeNull();
-      await refetchPending(2);
-      expect(icon()).toBeTruthy();
-      expect(screen.queryByText(reminder)).toBeNull();
-      await fireEvent.press(icon());
-      expect(screen.getByText(reminder)).toBeTruthy();
-    });
-
-    it("읽는 중 0건이 되어도 펼친 본문은 유지하다가 X로 닫으면 아이콘도 없어진다", async () => {
-      await showHome();
-      await fireEvent.press(close());
-      await fireEvent.press(icon());
-      await refetchPending(0);
-      expect(screen.getByText(reminder)).toBeTruthy();
-      await fireEvent.press(close());
-      expect(screen.queryByText(reminder)).toBeNull();
-      expect(screen.queryByRole("button", { name: /코치가 할 말 보기/ })).toBeNull();
-      expect(mockPush).not.toHaveBeenCalled();
-    });
-
-    it("알림이 우선하고 X로 닫은 뒤 미확정 안내는 아이콘으로 대기한다", async () => {
-      useCoachSpeechStore.getState().announce("새 예산 알림");
-      await showHome();
-      expect(screen.getByText("새 예산 알림")).toBeTruthy();
-      expect(screen.queryByText(reminder)).toBeNull();
-      await fireEvent.press(close());
-      expect(useCoachSpeechStore.getState().latest).toBeNull();
-      expect(screen.queryByText(reminder)).toBeNull();
-      await fireEvent.press(icon());
-      expect(screen.getByText(reminder)).toBeTruthy();
-      expect(mockPush).not.toHaveBeenCalled();
-    });
-
-    it("알림 다음에는 기존 방 상황 문구를 미확정 안내보다 먼저 보여 준다", async () => {
       mockedGetRoom.mockResolvedValue(toRoom({
         ...roomMock,
         attendance: { checkedToday: true },
         stickers: { count: 1, total: 1, removableToday: true },
+        overEnvelopes: [1],
       }));
-      useCoachSpeechStore.getState().announce("새 예산 알림");
-      await showHome();
-      expect(screen.getByText("새 예산 알림")).toBeTruthy();
-      await fireEvent.press(close());
-      await fireEvent.press(icon());
-      expect(screen.getByText("예산을 모두 넘겨서 가구에 압류 딱지가 1개 붙었어요. 딱지를 누르면 오늘 하나를 뗄 수 있어요.")).toBeTruthy();
-      expect(screen.queryByText(reminder)).toBeNull();
     });
 
-    it("처음 조회가 실패해도 아이콘 없이 홈을 표시하고, 재조회로 결제가 확인되면 안내한다", async () => {
-      mockedGetPending.mockRejectedValue(new Error("network"));
+    async function showHome() {
+      await renderHome();
+      // 다른 화면이 받은 미확정 결제가 캐시에 있어도 코치가 안내하지 않는다.
+      await act(async () => {
+        client.setQueryData(transactionKeys.pending(), {
+          pages: [toPendingTransactions(pendingTransactionsMock())], pageParams: [null],
+        });
+      });
+      await screen.findByLabelText(ROOM_LABEL);
+      await layoutRoom();
+    }
+
+    it.each([
+      { name: "미확정 결제", stickerCount: 0, overEnvelopes: [] },
+      { name: "압류 딱지", stickerCount: 1, overEnvelopes: [] },
+      { name: "어질러진 식탁", stickerCount: 0, overEnvelopes: [1] },
+      { name: "미확정 결제·딱지·어질러짐", stickerCount: 1, overEnvelopes: [1] },
+    ])("$name 상태만 있으면 말풍선과 아이콘을 만들지 않는다", async ({ stickerCount, overEnvelopes }) => {
+      mockedGetRoom.mockResolvedValue(toRoom({
+        ...roomMock, attendance: { checkedToday: true },
+        stickers: { count: stickerCount, total: stickerCount, removableToday: true }, overEnvelopes,
+      }));
       await showHome();
-      expect(screen.queryByRole("button", { name: /코치가 할 말 보기/ })).toBeNull();
-      expect(screen.queryByText(reminder)).toBeNull();
-      await refetchPending(2);
-      expect(screen.getByText(reminder)).toBeTruthy();
+
+      expectNoSpeech();
+      expect(mockedGetPending).not.toHaveBeenCalled();
+      expect(useCoachSpeechStore.getState().latest).toBeNull();
+      // 방 데이터는 그대로 남아 딱지와 어질러짐 렌더링에 전달된다.
+      expect(client.getQueryData<Room>(roomKeys.home())).toMatchObject({
+        stickers: { count: stickerCount }, overEnvelopeIds: overEnvelopes,
+      });
+      await setHomeFocused(false);
+      await setHomeFocused(true);
+      expectNoSpeech();
     });
 
-    it("재조회가 실패해도 캐시에 남은 미확정 결제 안내를 유지한다", async () => {
+    it("식비 초과 상태에서도 AI가 도착할 때만 표시하고 X로 닫으면 아이콘도 사라진다", async () => {
       await showHome();
+      expectNoSpeech();
+
+      await act(async () => { useCoachSpeechStore.getState().announce(feedback); });
+      expect(screen.getByText(feedback)).toBeTruthy();
+      expect(mockRoomLock).toHaveBeenLastCalledWith(true);
       await fireEvent.press(close());
-      mockedGetPending.mockRejectedValue(new Error("network"));
-      await act(async () => { await client.invalidateQueries({ queryKey: transactionKeys.pending() }); });
-      await waitForQueriesToSettle();
-      await fireEvent.press(icon());
-      expect(screen.getByText(reminder)).toBeTruthy();
+
+      expectNoSpeech();
+      expect(useCoachSpeechStore.getState().latest).toBeNull();
+      expect(mockRoomLock).toHaveBeenLastCalledWith(false);
+      await setHomeFocused(false);
+      await setHomeFocused(true);
+      expectNoSpeech();
       expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("자동 접힘 뒤 직접 연 AI는 유지하고 본문·스크롤·X는 화면을 이동하지 않는다", async () => {
+      useCoachSpeechStore.getState().announce(feedback);
+      await showHome();
+      await act(async () => { jest.advanceTimersByTime(COACH_SPEECH_OPEN_MS); });
+      expect(screen.queryByText(feedback)).toBeNull();
+      expect(mockRoomLock).toHaveBeenLastCalledWith(false);
+
+      await fireEvent.press(icon());
+      await act(async () => { jest.advanceTimersByTime(COACH_SPEECH_OPEN_MS * 4); });
+      await fireEvent.press(screen.getByText(feedback));
+      await fireEvent.scroll(screen.getByTestId("coach-speech-content"), { nativeEvent: { contentOffset: { x: 0, y: 10 } } });
+      expect(screen.getByText(feedback)).toBeTruthy();
+      expect(mockRoomLock).toHaveBeenLastCalledWith(true);
+      await fireEvent.press(close());
+
+      expectNoSpeech();
+      expect(mockRoomLock).toHaveBeenLastCalledWith(false);
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("A를 닫으면 새 AI B만 아이콘으로 남고 B를 닫은 뒤 일반 안내가 나타나지 않는다", async () => {
+      useCoachSpeechStore.getState().announce(feedback);
+      await showHome();
+      const next = "다음 주에는 집밥 횟수를 늘려 보세요.";
+      await act(async () => { useCoachSpeechStore.getState().announce(next); });
+      expect(screen.getByText(feedback)).toBeTruthy();
+      expect(screen.queryByText(next)).toBeNull();
+
+      await fireEvent.press(close());
+      expect(screen.queryByTestId("coach-speech-bubble")).toBeNull();
+      expect(icon()).toBeTruthy();
+      expect(useCoachSpeechStore.getState().latest?.text).toBe(next);
+      await fireEvent.press(icon());
+      expect(screen.getByText(next)).toBeTruthy();
+      await fireEvent.press(close());
+
+      expectNoSpeech();
+      expect(useCoachSpeechStore.getState().latest).toBeNull();
     });
   });
 
