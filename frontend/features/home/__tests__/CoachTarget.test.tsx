@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, within } from "@testing-library/react-native";
 import * as React from "react";
 
 import { CoachTarget } from "@/features/home/components/CoachTarget";
@@ -28,17 +28,21 @@ describe("CoachTarget", () => {
     "이번 달 예산을 확인해 주세요.",
     "외식 지출이 예산을 넘었어요. 남은 기간에는 식비 계획을 조정해 보세요.",
     "카드별 결제 내역과 이번 달 예산을 차근차근 확인해 주세요. ".repeat(30),
-  ])("본문을 눌러도 접히지 않고 별도 닫기 버튼으로 접는다", async (text) => {
+  ])("본문을 누르거나 스크롤해도 접히지 않고 모서리의 닫기 버튼으로 접는다", async (text) => {
     const speech = makeSpeech({ text });
     const onPressCat = jest.fn();
     await render(<CoachTarget width={327} speech={speech} onPress={onPressCat} />);
 
     await fireEvent.press(screen.getByText(text));
+    await fireEvent.scroll(screen.getByTestId("coach-speech-content"), {
+      nativeEvent: { contentOffset: { x: 0, y: 100 } },
+    });
     expect(speech.onClose).not.toHaveBeenCalled();
     expect(onPressCat).not.toHaveBeenCalled();
 
     const close = screen.getByRole("button", { name: "코치 말풍선 닫기" });
-    expect(close).toHaveStyle({ width: 44, height: 44, flexShrink: 0 });
+    expect(within(screen.getByTestId("coach-speech-bubble")).queryByRole("button", { name: "코치 말풍선 닫기" })).toBeNull();
+    expect(close).toHaveStyle({ position: "absolute", top: 0, right: 0, width: 44, height: 44, zIndex: 1 });
     await fireEvent.press(close);
     expect(speech.onClose).toHaveBeenCalledTimes(1);
     expect(onPressCat).not.toHaveBeenCalled();
@@ -66,25 +70,26 @@ describe("CoachTarget", () => {
 
   // Jest는 네이티브 레이아웃을 계산하지 않으므로 높이 제한과 스크롤 설정의 계약을 검사한다.
   it.each([
-    { width: 327, bubbleLimit: 240, contentLimit: 222 },
-    { width: 163.5, bubbleLimit: 230, contentLimit: 212 },
-  ])("폭 $width에서 닫기 영역을 포함한 높이 상한과 본문 스크롤을 유지한다", async ({ width, bubbleLimit, contentLimit }) => {
+    { width: 327, totalLimit: 180, bubbleLimit: 150, contentLimit: 122 },
+    { width: 109, totalLimit: 148, bubbleLimit: 118, contentLimit: 90 },
+  ])("폭 $width에서 바깥 닫기 영역을 포함한 높이 상한과 본문 스크롤을 유지한다", async ({ width, totalLimit, bubbleLimit, contentLimit }) => {
     await render(<CoachTarget width={width} speech={makeSpeech()} onPress={jest.fn()} />);
 
-    expect(screen.getByTestId("coach-speech-bubble")).toHaveStyle({ maxHeight: bubbleLimit });
+    expect(screen.getByTestId("coach-speech-placement")).toHaveStyle({ height: totalLimit });
+    expect(screen.getByTestId("coach-speech-bubble")).toHaveStyle({ maxHeight: bubbleLimit, paddingTop: 18 });
     const content = screen.getByTestId("coach-speech-content");
-    expect(content).toHaveStyle({ flexGrow: 0, flexShrink: 1, alignSelf: "center", maxHeight: contentLimit });
+    expect(content).toHaveStyle({ flexGrow: 0, flexShrink: 1, maxHeight: contentLimit });
     expect(content.props.showsVerticalScrollIndicator).toBe(true);
     expect(content.props.bounces).toBe(false);
   });
 
-  it("실제 표시 영역의 오른쪽 여백에 맞춰 본문과 X의 가용 폭을 제한한다", async () => {
+  it("화면 오른쪽 여백을 남기면서 본문은 X 열 없이 말풍선 내부 폭을 사용한다", async () => {
     await render(<CoachTarget width={379} viewport={{ width: 280, height: 680 }} speech={makeSpeech()} onPress={jest.fn()} />);
 
     const placement = screen.getByTestId("coach-speech-placement");
     const rightAtStrollEnd = placement.props.style.left + placement.props.style.width + 12 * (379 / 327) - (379 - 280) / 2;
     expect(rightAtStrollEnd).toBeCloseTo(272); // 화면 오른쪽 8pt를 남긴다.
     const content = screen.getByTestId("coach-speech-content");
-    expect(content.props.style.maxWidth + 44 + 4 + 24 + 2).toBeCloseTo(placement.props.style.width);
+    expect(content.props.style.maxWidth + 24 + 2 + 8).toBeCloseTo(placement.props.style.width);
   });
 });

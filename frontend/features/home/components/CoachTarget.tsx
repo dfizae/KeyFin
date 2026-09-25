@@ -5,7 +5,7 @@ import Animated, { FadeIn, useAnimatedStyle } from "react-native-reanimated";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import type { CoachSpeechView } from "@/features/home/useCoachSpeech";
-import { coachSpeechLayout, COACH_SPEECH_CLOSE_SIZE } from "@/features/home/coachSpeechLayout";
+import { coachSpeechLayout, COACH_SPEECH_CLOSE_SIZE, COACH_SPEECH_CLOSE_VISUAL_SIZE } from "@/features/home/coachSpeechLayout";
 
 import { getSceneScale, type SceneSize } from "@/features/room/model";
 import { COACH_CAT_RECT } from "@/features/room/scene";
@@ -86,16 +86,26 @@ function CoachSpeech({ text, width, viewport, onClose }: { text: string; width: 
       style={{ left: layout.left, top: layout.top, height: layout.maxHeight, width: layout.maxWidth }}
       pointerEvents="box-none"
     >
-      <Animated.View entering={FadeIn.duration(SPEECH_APPEAR_MS)}>
+      <Animated.View
+        entering={FadeIn.duration(SPEECH_APPEAR_MS)}
+        style={{
+          alignSelf: "flex-start",
+          maxWidth: layout.maxWidth,
+          maxHeight: layout.maxHeight,
+          paddingTop: layout.closeTopSpace,
+          paddingRight: layout.closeRightSpace,
+        }}
+        pointerEvents="box-none"
+      >
         <View
           testID="coach-speech-bubble"
-          style={{ maxWidth: layout.maxWidth, maxHeight: layout.maxHeight }}
-          className="self-start flex-row items-start gap-1 rounded-2xl rounded-bl-sm border border-transparent bg-card px-3 py-2 shadow-md shadow-black/20 dark:border-border dark:shadow-none"
+          style={{ maxWidth: layout.bubbleMaxWidth, maxHeight: layout.bubbleMaxHeight, paddingTop: layout.contentPaddingTop }}
+          className="self-start rounded-2xl rounded-bl-sm border border-transparent bg-card px-3 pb-2 shadow-md shadow-black/20 dark:border-border dark:shadow-none"
         >
-          {/* 세로 공간을 채우지 않고, 짧은 본문만 44pt 닫기 영역의 중앙에 맞춘다. */}
+          {/* 본문은 내부 폭 전체를 쓰고, 짧으면 필요한 높이만 사용한다. */}
           <ScrollView
             testID="coach-speech-content"
-            style={{ flexGrow: 0, flexShrink: 1, alignSelf: "center", maxWidth: layout.contentMaxWidth, maxHeight: layout.contentMaxHeight }}
+            style={{ flexGrow: 0, flexShrink: 1, maxWidth: layout.contentMaxWidth, maxHeight: layout.contentMaxHeight }}
             showsVerticalScrollIndicator
             bounces={false}
           >
@@ -103,17 +113,23 @@ function CoachSpeech({ text, width, viewport, onClose }: { text: string; width: 
               {text}
             </Text>
           </ScrollView>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={COACH_SPEECH_CLOSE_LABEL}
-            accessibilityHint={COACH_SPEECH_HINT}
-            onPress={onClose}
-            style={{ width: COACH_SPEECH_CLOSE_SIZE, height: COACH_SPEECH_CLOSE_SIZE, flexShrink: 0 }}
-            className="items-center justify-center rounded-full active:opacity-80"
-          >
-            <Icon as={X} size={20} className="text-foreground" />
-          </Pressable>
         </View>
+        {/* 원형 X를 우측 상단에 반쯤 겹친다. 44pt 터치 영역은 본문보다 위에 둔다. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={COACH_SPEECH_CLOSE_LABEL}
+          accessibilityHint={COACH_SPEECH_HINT}
+          onPress={onClose}
+          style={{ position: "absolute", top: 0, right: 0, width: COACH_SPEECH_CLOSE_SIZE, height: COACH_SPEECH_CLOSE_SIZE, zIndex: 1 }}
+          className="items-center justify-end active:opacity-80"
+        >
+          <View
+            style={{ width: COACH_SPEECH_CLOSE_VISUAL_SIZE, height: COACH_SPEECH_CLOSE_VISUAL_SIZE }}
+            className="items-center justify-center rounded-full bg-card shadow-md shadow-black/20 dark:border dark:border-border dark:shadow-none"
+          >
+            <Icon as={X} size={16} className="text-foreground" />
+          </View>
+        </Pressable>
       </Animated.View>
     </View>
   );

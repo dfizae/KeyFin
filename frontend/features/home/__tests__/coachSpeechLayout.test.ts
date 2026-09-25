@@ -9,7 +9,14 @@ describe("coachSpeechLayout", () => {
     const layout = coachSpeechLayout(327);
     expect(layout.left).toBe(84);
     expect(layout.top + layout.maxHeight).toBe(487);
-    expect(layout.contentMaxHeight).toBe(222); // 위쪽의 44pt 닫기 줄이 없어졌다.
+    expect(layout.maxHeight).toBe(180);
+    expect(layout.bubbleMaxHeight).toBe(150); // 겹쳐진 X의 위쪽 터치 영역 30pt만 별도로 확보한다.
+    expect(layout.contentMaxHeight).toBe(122);
+    expect(layout.contentMaxWidth).toBe(layout.bubbleMaxWidth - 24 - 2); // 본문 옆에 X 열을 남기지 않는다.
+    // 원의 위아래 절반이 말풍선 윗변에 걸치고, 터치 영역 아래에 본문 여백을 둔다.
+    expect(44 - 28 / 2).toBe(layout.closeTopSpace);
+    expect(layout.closeTopSpace + layout.contentPaddingTop).toBeGreaterThan(44);
+    expect(layout.closeRightSpace).toBe(8);
   });
 
   it.each([
@@ -27,7 +34,10 @@ describe("coachSpeechLayout", () => {
     const insetY = Math.max(0, (canvas.height - viewport.height) / 2);
     const layout = coachSpeechLayout(width, viewport);
     expect(layout.maxWidth).toBeLessThanOrEqual(230);
-    expect(layout.maxHeight).toBeLessThanOrEqual(240);
+    expect(layout.maxHeight).toBeLessThanOrEqual(180);
+    expect(layout.bubbleMaxWidth + layout.closeRightSpace).toBe(layout.maxWidth);
+    expect(layout.bubbleMaxHeight + layout.closeTopSpace).toBe(layout.maxHeight);
+    expect(layout.contentMaxHeight + layout.contentPaddingTop + 8 + 2).toBe(layout.bubbleMaxHeight);
     expect(layout.contentMaxWidth).toBeGreaterThan(100);
 
     // 4구간의 산책 전체를 검사한다. 모션을 바꿔도 실제 이동값이 예약 범위를 넘으면 실패한다.
@@ -46,16 +56,18 @@ describe("coachSpeechLayout", () => {
   });
 
   it("고양이 위 공간이 작으면 최대 떠오름을 포함해 높이를 줄인다", () => {
-    const layout = coachSpeechLayout(163.5);
-    expect(layout.maxHeight).toBe(230);
-    expect(layout.top - 3 * 0.5).toBe(8);
-    expect(layout.contentMaxHeight).toBe(212);
+    const layout = coachSpeechLayout(109);
+    expect(layout.maxHeight).toBe(148);
+    expect(layout.top - 3 / 3).toBe(8);
+    expect(layout.bubbleMaxHeight).toBe(118);
+    expect(layout.contentMaxHeight).toBe(90);
   });
 
   it("캔버스 위아래가 잘리면 보이는 화면의 위쪽 경계로 높이를 제한한다", () => {
-    const viewport = { width: 327, height: 100 };
-    const layout = coachSpeechLayout(327, viewport);
-    expect(layout.maxHeight).toBe(233);
-    expect(layout.top - (586 - 100) / 2 - 3).toBe(8);
+    const viewport = { width: 163.5, height: 80 };
+    const layout = coachSpeechLayout(163.5, viewport);
+    expect(layout.maxHeight).toBe(123.5);
+    expect(layout.bubbleMaxHeight).toBe(93.5);
+    expect(layout.top - (293 - 80) / 2 - 3 * 0.5).toBe(8);
   });
 });
