@@ -37,6 +37,7 @@ from coaching_service.fast_routes import (
     natural_purchase,
     natural_what_if,
     stored_coaching_followup,
+    unanswerable_turn_code,
 )
 from coaching_service.finance_knowledge import (
     deterministic_finance_status,
@@ -600,6 +601,17 @@ class Dialogue:
             parsed_purchase: NaturalPurchase | None = (
                 parsed_purchase_outcome if isinstance(parsed_purchase_outcome, NaturalPurchase) else None
             )
+            missing = (
+                unanswerable_turn_code(request.question)
+                if request.analysis is None and parsed_purchase_outcome is None
+                else None
+            )
+            if missing is not None:
+                # A clear goal/what-if/spending question missing one piece is asked for
+                # that piece; the router would only turn it into the generic review.
+                asked = period_clarification_answer(missing)
+                if asked is not None:
+                    return save_turn(session, request.question, asked)
             route, finance = await self._route_for_turn(
                 request, session, history, parsed_goal, parsed_what_if, parsed_purchase,
             )

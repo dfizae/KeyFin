@@ -32,8 +32,13 @@ _ENVELOPE_FIRST: Final = re.compile(
 )
 
 
+# Emoticon jamo and decorative marks ("ㅠㅠ", "ㅋㅋ", "~", "^^") carry no query meaning;
+# the exact grammar below must not fail on them ("이번달 외식 얼마 썼어 ㅠㅠ").
+_DECORATION: Final = re.compile(r"\s+|[\u3131-\u318e~^;…♡♥]+")
+
+
 def _canonical(question: str) -> str:
-    compact = re.sub(r"\s+", "", question)
+    compact = _DECORATION.sub("", question)
     found = _ENVELOPE_FIRST.fullmatch(compact)
     if found is None:
         return compact

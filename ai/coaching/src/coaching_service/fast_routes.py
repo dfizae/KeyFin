@@ -107,6 +107,16 @@ _RISK_DEPRIORITIZED_FOR_PATH: Final[tuple[str, ...]] = (
     "위험만이아니라",
     "위험보다",
 )
+# "예산 괜찮을까요?", "향후 예산 괜찮아?", "남은 기간 돈 버틸 수 있을까?" ask how the
+# budget holds up from here on: the period review answers that. The model router sent
+# them anywhere from the budgeting concept to out of scope. A future marker is needed
+# for the present tense ("예산 괜찮아?" is the ledger balance check).
+_BUDGET_OUTCOME: Final = re.compile(
+    r"(?:예산|봉투|생활비|돈)(?:이|은|는|가|으로|로)?.{0,10}"
+    r"(?:괜찮을까|괜찮을지|괜찮겠|버틸수있을까|버틸까|버틸수있을지|버틸수있겠)"
+    r"|(?:향후|앞으로|남은기간|월말까지|이번달말까지|이달말까지|말까지).{0,10}"
+    r"(?:예산|봉투|생활비|돈)(?:이|은|는|가)?.{0,6}(?:괜찮아|괜찮나|괜찮은|버틸수있어|여유있어)"
+)
 # A review must name both the user's own observed finances and an FDT review action.
 # This intentionally excludes broad prompts such as "소비 습관을 점검하는 방법" and
 # calendar phrases such as "내년 소비"; those retain the model route.
@@ -663,6 +673,57 @@ _BALANCE_ENVELOPE_WORDS: Final[dict[str, str]] = {
 }
 
 
+_WHAT_IF_REDUCE: Final = re.compile(r"줄이면|줄인다면|줄여서|줄여도|아끼면|아낀다면|덜쓰면")
+_SPENDING_ASK: Final = re.compile(
+    r"얼마(?:나)?(?:썼|쓴|지출|소비)|(?:썼|쓴|지출했|소비했).{0,6}(?:얼마|몇)|(?:지출|소비)(?:은|는|이|가)?얼마"
+)
+# Calendar words the spending parser does not take (it takes 지난달·이번 달·오늘·어제·현재까지).
+_UNSUPPORTED_SPENDING_PERIOD: Final = re.compile(
+    r"이번주|지난주|저번주|주말|올해|작년|지난해|상반기|하반기|분기|최근\d+일|지난\d+일|\d+월"
+)
+
+
+def unanswerable_turn_code(question: str) -> str | None:
+    """Name the one missing piece of an otherwise clear goal, what-if or spending question.
+
+    "100만원 모을 수 있을까?" has no deadline, "외식비 3만원 줄이면?" gives an amount
+    where the what-if branch takes a percentage, and "이번 주에 얼마 썼어?" names a
+    period the ledger query does not support. Each used to reach the router and come
+    back as the generic envelope review; asking for the missing piece keeps the intent.
+    """
+    normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
+    if not normalized or natural_goal(question) is not None or natural_what_if(question) is not None:
+        return None
+    if INVESTMENT_PRODUCT.search(normalized) is not None:
+        return None
+    if (
+        any(word in normalized for word in _GOAL_WORDS)
+        and _GOAL_FEASIBILITY.search(normalized) is not None
+        and _GOAL_PERIOD.search(normalized) is None
+        and _GOAL_DISALLOWED.search(normalized) is None
+        and len(purchase_amounts(question)) == 1
+    ):
+        return "goal_period_required"
+    if (
+        _WHAT_IF_REDUCE.search(normalized) is not None
+        and purchase_amounts(question)
+        and "%" not in normalized
+        and "퍼센트" not in normalized
+        and (
+            any(alias in normalized for alias in _WHAT_IF_ENVELOPE_ALIASES)
+            or _WHAT_IF_GENERIC_EXPENSE.search(normalized) is not None
+        )
+    ):
+        return "what_if_percent_required"
+    if (
+        not supports_spending_question(question)
+        and _SPENDING_ASK.search(normalized) is not None
+        and _UNSUPPORTED_SPENDING_PERIOD.search(normalized) is not None
+    ):
+        return "period_unsupported_calendar"
+    return None
+
+
 def balance_envelope(question: str) -> str | None:
     """Return the single envelope a balance question names ("외식 예산 얼마 남았어"), if any."""
     normalized = compact(question)
@@ -707,7 +768,7 @@ def deterministic_lookup_route(question: str) -> LookupRoute | None:
     return None
 
 
-def deterministic_analysis_route(question: str) -> AnalysisRoute | None:
+def deterministic_analysis_route(question: str) -> AnalysisRoute | None:  # noqa: PLR0911 - one return per admitted route.
     """Return a route only when the text unambiguously asks about this user's FDT.
 
     This is a latency shortcut, not an intent model.  Any unsupported, product,
@@ -769,6 +830,8 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:
         if _PERSONAL_REVIEW_TARGET.search(normalized) is not None and any(
             action in normalized for action in _REVIEW_ACTIONS
         ):
+            return "review"
+        if _BUDGET_OUTCOME.search(normalized) is not None and re.search(r"\d", normalized) is None:
             return "review"
     if _artifact_review(normalized):
         return "review"

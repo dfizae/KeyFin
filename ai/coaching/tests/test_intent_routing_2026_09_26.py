@@ -30,8 +30,14 @@ from coaching_service.fast_routes import (
     natural_purchase,
     purchase_amounts,
     purchase_envelopes,
+    unanswerable_turn_code,
 )
-from coaching_service.finance_knowledge import deterministic_finance_status, finance_evidence
+from coaching_service.finance_knowledge import (
+    deterministic_finance_status,
+    deterministic_finance_wording,
+    finance_evidence,
+    model_selected_finance_evidence,
+)
 from coaching_service.numeric_rendering import purchase_verdict_text
 from coaching_service.rendering import deterministic_advice
 from coaching_service.schemas import Bootstrap, Envelope, JsonDocument, Receipt, TwinIdentity
@@ -369,6 +375,9 @@ _FAMILY_CASES = (
     ("외식 예산 얼마 남았어", "balance"), ("월말 잔액 얼마 남을까", "numeric:forecast"),
     ("월말에 돈 얼마 남을까?", "numeric:forecast"), ("이번 달 위험을 알려줘", "numeric:risk"),
     ("이번달 외식 얼마 썼어", "history"), ("통장 잔고 얼마야", "personal"),
+    ("예산 괜찮을까요?", "review"), ("이번달 외식 얼마 썼어 ㅠㅠ", "history"),
+    ("통장 잔고 얼마야~", "personal"),
+    ("100만원 모을 수 있을까?", "period_review"), ("카드값 얼마 나와?", "personal"),
     ("100만원 리조트 이번 주에 현금 결제해도 괜찮아?", "purchase"),
     ("3만원짜리 책 살 건데 예산 괜찮아?", "purchase_clarify"),
 )
@@ -431,3 +440,63 @@ async def test_each_question_keeps_its_family_after_any_prior_turn(
             if _family(reply.json()) != family:
                 mismatches.append((question, family, _family(reply.json())))
         assert mismatches == []
+
+
+# --- a clear question missing one piece asks for it instead of the generic review ------
+
+
+@pytest.mark.parametrize(("question", "code"), [
+    ("100만원 모을 수 있을까?", "goal_period_required"),
+    ("노트북 사려는데 200만원 모을 수 있을까?", "goal_period_required"),
+    ("외식비 3만원 줄이면 어떻게 돼?", "what_if_percent_required"),
+    ("이번달 외식 3만원 줄이면 괜찮아?", "what_if_percent_required"),
+    ("이번 주에 얼마 썼어?", "period_unsupported_calendar"),
+    ("지난주 외식 얼마 썼어?", "period_unsupported_calendar"),
+    ("9월에 쇼핑 얼마 썼어?", "period_unsupported_calendar"),
+])
+def test_the_missing_piece_is_named(question: str, code: str) -> None:
+    assert unanswerable_turn_code(question) == code
+
+
+@pytest.mark.parametrize("question", [
+    "다음달 50만원 모을 수 있을까",  # a complete goal
+    "이번 달 식비를 20% 줄이면 어떻게 될까?",  # a complete what-if
+    "이번달 외식 얼마 썼어",  # a supported spending period
+    "이번 주말에 얼마 쓸까?",  # a forecast, not a ledger query
+    "비트코인 100만원 모을 수 있을까?",  # investment wording keeps its own route
+])
+def test_complete_questions_are_not_asked_again(question: str) -> None:
+    assert unanswerable_turn_code(question) is None
+
+
+def test_card_bill_wording_is_a_scheduled_payment_lookup() -> None:
+    assert deterministic_lookup_route("카드값 얼마 나와?") == "personal"
+    assert deterministic_lookup_route("카드대금 얼마야") == "personal"
+
+
+# --- chat decoration and the budget from here on ----------------------------------------
+
+
+@pytest.mark.parametrize(("question", "route"), [
+    ("이번달 외식 얼마 썼어 ㅠㅠ", "history"), ("이번 달 소비 얼마야?~", "history"),
+    ("통장 잔고 얼마야~", "personal"), ("계좌 잔액 보여줘 ㅋㅋ", "personal"),
+    ("내 계좌 잔액 알려줘^^", "personal"),
+])
+def test_emoticons_and_tildes_do_not_break_a_lookup(question: str, route: str) -> None:
+    assert deterministic_lookup_route(question) == route
+
+
+@pytest.mark.parametrize("question", [
+    "예산 괜찮을까요?", "이번 달 예산 괜찮을까?", "향후 예산 괜찮아?", "남은 기간 돈 버틸 수 있을까?",
+    "생활비 이번 달 버틸 수 있을까?", "월말까지 예산 괜찮아?",
+])
+def test_the_budget_from_here_on_is_a_period_review(question: str) -> None:
+    assert deterministic_analysis_route(question) == "review"
+    evidence = finance_evidence(question)
+    assert deterministic_finance_wording(evidence) is None
+    assert model_selected_finance_evidence(evidence) is None
+
+
+@pytest.mark.parametrize("question", ["예산 괜찮아?", "300만원 노트북 사면 예산 괜찮을까?", "예산이 뭐야?"])
+def test_present_balance_purchases_and_definitions_are_not_period_reviews(question: str) -> None:
+    assert deterministic_analysis_route(question) != "review"

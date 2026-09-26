@@ -184,6 +184,12 @@ _STATEFUL_FINANCE_REQUEST: Final = re.compile(
 # an authenticated user's "월 고정비 합계 보여줘"). These lookup verbs must
 # retain the personal/FDT routing contract rather than letting catalog retrieval
 # turn them into a general-knowledge selection.
+# "예산 괜찮을까요?" / "돈 버틸 수 있을까" ask about the user's own budget even with no
+# possessive or time word; they must never be answered with the budgeting concept.
+_PERSONAL_BUDGET_STATE: Final = re.compile(
+    r"(?:예산|잔액|잔고|봉투|생활비|카드값|용돈|통장|돈)\s*(?:이|은|는|가|을|를|으로|로)?\s*.{0,12}"
+    r"(?:괜찮|여유|버틸|버티|남을|남아|남았|부족|모자|넉넉|빠듯)"
+)
 _PERSONAL_DATA_LOOKUP: Final = re.compile(
     r"(?:계좌|잔액|소비|지출|결제|예산|자산|부채|보험료|소득|고정비|금융\s*목표).{0,24}"
     r"(?:얼마|합계|보여|조회|내역|현황|목록|알려)"
@@ -337,6 +343,7 @@ def model_selected_finance_evidence(evidence: EvidenceInput) -> EvidenceInput | 
         or _PERSONAL_MARKER.search(evidence.question) is not None
         or _STATEFUL_FINANCE_REQUEST.search(evidence.question) is not None
         or _PERSONAL_DATA_LOOKUP.search(evidence.question) is not None
+        or _PERSONAL_BUDGET_STATE.search(evidence.question) is not None
         or _VOLATILE_OR_DECISION_REQUEST.search(evidence.question) is not None
     ):
         return None
@@ -812,6 +819,7 @@ def _stable_catalog_facts(
         )
         or _PERSONAL_MARKER.search(evidence.question) is not None
         or _STATEFUL_FINANCE_REQUEST.search(evidence.question) is not None
+        or _PERSONAL_BUDGET_STATE.search(evidence.question) is not None
         or (
             _VOLATILE_OR_DECISION_REQUEST.search(evidence.question) is not None
             and _QUALITATIVE_AMOUNT_GUIDE_REQUEST.search(evidence.question) is None
