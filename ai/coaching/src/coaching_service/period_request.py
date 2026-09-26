@@ -42,6 +42,15 @@ _MODIFIED: Final = re.compile(
     r"|전(?:[\s,.?!]|$|에|의)|초(?:순|[\s,.?!]|$|에|의)|중(?:순|[\s,.?!]|$|에|의))"
 )
 _UNSUPPORTED_CALENDAR: Final = re.compile(r"윤달|음력|영업일|공휴일")
+# "주말에 뭐하지?" / "오늘 뭐 먹지?" ask what to do, not a period.
+_ACTIVITY_TIME: Final = re.compile(
+    r"(?:주말|오늘|내일|이번\s*주말)\s*(?:에|에는)?\s*뭐\s*(?:하지|할까|해|하니|먹지|먹을까)"
+)
+# "다음 주부터 매일 택시 타면 이번 달 적자야?": the start of a habit, not the period asked about.
+_HABIT_START: Final = re.compile(
+    r"(?:오늘|내일|모레|다음\s*주|이번\s*주|주말)\s*부터"
+    r"(?=.{0,20}?(?:타면|시키면|먹으면|가면|쓰면|하면|사면|내면|다니면|마시면))"
+)
 
 
 def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:  # noqa: C901 - 지원 기간 표현이 하나씩 늘며 분기가 누적된 단일 파서; 분해보다 한 곳 유지가 안전하다.
@@ -52,6 +61,7 @@ def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:  # n
     """
     if _UNSUPPORTED_CALENDAR.search(question):
         raise ServiceError("period_unsupported_calendar")
+    question = _ACTIVITY_TIME.sub(" ", _HABIT_START.sub(" ", question))
     matches = list(_PERIOD.finditer(question))
     if len(matches) > 1 and not all(match.group("month") for match in matches):
         # "이번 달 … 월말 잔액" names this month end twice; different periods still conflict.

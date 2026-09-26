@@ -1050,7 +1050,7 @@ async def test_the_final_template_sweep_leftovers_answer_as_intended(
 
 
 @pytest.mark.parametrize(("question", "outcome"), [
-    ("잔액 5만원인데 오늘 치킨 시켜도 돼?", None),
+    ("잔액 5만원인데 오늘 치킨 시켜도 돼?", "purchase_amount_required"),
     ("월말까지 5만원으로 버텨야 하는데 오늘 치킨 시켜도 돼?", None),
     ("지난달 교통비 8만원 들었는데 오늘 택시 타도 돼?", None),
     ("잔액 5만원인데 노트북 오늘 현금으로 사도 돼?", "purchase_amount_required"),
@@ -1215,3 +1215,49 @@ async def test_the_seventh_review_reproductions_answer_as_intended(
 ) -> None:
     answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
     assert (_family(answers[-1]) == family) is same, answers[-1].get("text")
+
+
+# --- leftovers from the reviews (2026-09-27) --------------------------------------------
+
+
+@pytest.mark.parametrize(("question", "outcome"), [
+    ("잔액 3만원이야. 오늘 치킨 시켜도 돼?", "purchase_amount_required"),
+    ("남은 돈 5만원! 오늘 치킨 현금으로 시켜도 돼?", "purchase_amount_required"),
+    ("잔액 5만원 남았는데 노트북 사도 돼?", "purchase_amount_required"),
+])
+def test_a_stated_balance_leaves_the_price_to_ask(question: str, outcome: str) -> None:
+    assert natural_purchase(question) == outcome
+
+
+@pytest.mark.parametrize("question", [
+    "지난달부터 사고 싶던 노트북 150만원인데 오늘 현금으로 사도 돼?",
+    "잔액 100만원 넘는데 노트북 50만원 오늘 현금으로 사도 돼?",
+])
+def test_a_price_is_read_past_an_earlier_balance_or_period_word(question: str) -> None:
+    assert isinstance(natural_purchase(question), NaturalPurchase)
+
+
+@pytest.mark.parametrize(("mode", "question", "family"), [
+    ("risk", "다음 주부터 매일 택시 타면 이번 달 적자야?", "numeric:risk"),
+    ("risk", "내일부터 매일 배달 시키면 월말에 적자 날까?", "numeric:risk"),
+    ("forecast", "다음 주부터 택시 타면 월말 잔액 얼마 남아?", "numeric:forecast"),
+    ("review", "이번 달 버틸 수 있을까?", "review"),
+    ("finance", "월말까지 버틸 수 있을까?", "review"),
+    ("review", "주말에 뭐하지? 이번 달 버틸 수 있을까", "review"),
+    ("review", "주말에 뭐하지?", "out_of_scope"),
+])
+@pytest.mark.anyio
+async def test_habits_starting_later_and_holding_out_are_this_months_analysis(
+    tmp_path: Path, mode: str, question: str, family: str,
+) -> None:
+    answers = await _conversation(tmp_path, (question,), one_session=True, router=_Mode(mode))
+    assert _family(answers[0]) == family, answers[0].get("text")
+
+
+@pytest.mark.anyio
+async def test_a_loan_interest_ask_is_named_as_unanswered_not_the_principal(tmp_path: Path) -> None:
+    answers = await _conversation(
+        tmp_path, ("카드값, 대출 이자 얼마야?",), one_session=True, router=_Mode("personal"),
+    )
+    assert "대출 원금" not in answers[0]["text"]
+    assert "이 조회로는 답하지 않" in answers[0]["text"]

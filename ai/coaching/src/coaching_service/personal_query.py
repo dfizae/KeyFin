@@ -165,12 +165,17 @@ _COMPARISON_MARKER: Final = re.compile(r"비교|차이")
 _TOPIC_KEYS_BY_LENGTH: Final = tuple(sorted(_TOPICS, key=len, reverse=True))
 
 
+_INTEREST_ASK: Final = re.compile(r"이자|금리|이율")
+
+
 def _topic_in_fragment(fragment: str) -> PersonalTopic | None:
     """조각 하나에서 가장 긴 등록 주제어를 찾는다. 짧은 부분 문자열의 오탐을 줄인다."""
     compact = re.sub(r"\s+", "", fragment)
     for key in _TOPIC_KEYS_BY_LENGTH:
         if key in compact:
-            return _TOPICS[key]
+            topic = _TOPICS[key]
+            # "대출 이자 얼마야?" asks the interest; the debt snapshot holds only the principal.
+            return None if topic == "debts" and _INTEREST_ASK.search(compact) is not None else topic
     return None
 
 

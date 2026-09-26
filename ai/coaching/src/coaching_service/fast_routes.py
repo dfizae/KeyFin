@@ -120,6 +120,8 @@ _RISK_OUTCOME_TERMS: Final[tuple[str, ...]] = ("부족", "모자라", "모자란
 # user's own period risk, even with 뭐 (listing, not a definition).
 _PERIOD_RISK: Final = re.compile(r"(?:이번달|이달|월말|앞으로|남은기간).{0,12}(?:위험|리스크|적자)")
 _LISTING: Final = re.compile(r"뭐(?:가)?있(?:어|나|을까|는지|지)")
+# "주말에 뭐하지?" asks what to do, not what something means.
+_ACTIVITY_ASK: Final = re.compile(r"뭐(?:하지|할까|하니|해|먹지|먹을까|사지)")
 _INVESTMENT_SUBJECT: Final = re.compile(r"위험자산|안전자산|투자|자산배분|포트폴리오")
 _OWN_BUDGET_SUBJECT: Final = re.compile(
     r"이번달|이달|월말|남은기간|적자|잔액|예산|생활비|봉투|카드값|부족|모자라|모자랄|버틸|버티|남은돈|가진돈"
@@ -157,6 +159,8 @@ _BUDGET_OUTCOME: Final = re.compile(
     r"|(?:향후|앞으로|남은기간|월말까지|이번달말까지|이달말까지|말까지)(?:예산|봉투|생활비|돈)(?:이|은|는|가)?"
     r"(?:괜찮아|괜찮나|괜찮은|여유있어|" + _OUTCOME_VERB[3:-1] + r")"
     r"|버틸(?:수있을)?(?:만큼의?|정도의?)?(?:예산|돈|생활비)(?:이|은|는|가)?(?:있어|있을까|남았어|될까)"
+    # "이번 달 버틸 수 있을까?", "월말까지 버틸 수 있을까?": the period alone names this budget.
+    rf"|(?:이번달|이달|남은기간|월말까지|이번달말까지|이달말까지)(?:은|는|도)?{_OUTCOME_VERB}"
 )
 _OUTCOME_BLOCK: Final = re.compile(r"대출|빌려|빌리|넣어|넣으|먹어|사도|사면|투자")
 # A review must name both the user's own observed finances and an FDT review action.
@@ -437,6 +441,10 @@ _PRICE_NEXT: Final = re.compile(
 _WORD_EDGE_MARKS: Final = "?!.,~^;:()[]\"'"
 _BALANCE_WORD: Final = re.compile(r"잔액|잔고|남은돈|가진돈|예산")
 _HELD_MONEY_WORD: Final = re.compile(r"잔액|잔고|남은돈|가진돈")
+_BALANCE_STATEMENT: Final = re.compile(
+    r"(?:잔액|잔고|남은\s*돈|가진\s*돈)\s*(?:이|은|는|가|도|만)?\s*(?:딱|겨우|고작|약|대략)?\s*"
+    r"[0-9][0-9,.]*\s*(?:[십백천만억]\s*)*원\s*(?:이야|이지|이에요|예요|인데|이라|뿐|밖에|정도|남짓|쯤)?"
+)
 _BUDGET_AFTER: Final = re.compile(r"^예산(?:으로|인데|이라|이야|이면|밖에|뿐|만)")
 
 
@@ -487,6 +495,7 @@ def _price_shaped(question: str) -> bool:
         start -= 1
     token = tokens[index].lstrip(_WORD_EDGE_MARKS)
     run = next((m for m in _AMOUNT_RUN.finditer(token) if token[m.end() : m.end() + 1] == "원"), None)
+    start = max(start, index - 2)
     before = compact(" ".join(tokens[start:index] + ([token[: run.start()]] if run else [])))
     after_tokens: list[str] = []
     if _CLAUSE_END.search(tokens[index]) is None:
@@ -983,9 +992,7 @@ def _has_purchase_intent(normalized: str, question: str) -> bool:  # noqa: PLR09
     return False
 
 
-def natural_purchase(  # noqa: PLR0911 - each branch is one explicit clarify-vs-admit boundary.
-    question: str,
-) -> NaturalPurchase | str | None:
+def natural_purchase(question: str) -> NaturalPurchase | str | None:
     """Admit one clear, single-payment Korean purchase question without a model call.
 
     Returns ``None`` when the text shows no clear purchase intent at all (the
@@ -998,6 +1005,15 @@ def natural_purchase(  # noqa: PLR0911 - each branch is one explicit clarify-vs-
     the text alone. Account/card selection may still need the caller's Twin
     snapshot and can still fail closed there.
     """
+    text = unicodedata.normalize("NFKC", question).lower()
+    balance = _BALANCE_STATEMENT.search(text)
+    if balance is not None:
+        # "잔액 3만원이야. 오늘 치킨 시켜도 돼?" states what is left; the price is still missing.
+        return natural_purchase(text[: balance.start()] + " " + text[balance.end() :])
+    return _admit_purchase(question)
+
+
+def _admit_purchase(question: str) -> NaturalPurchase | str | None:  # noqa: PLR0911 - one return per clarify boundary.
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
     if not normalized or not _has_purchase_intent(normalized, question):
         return None
@@ -1418,7 +1434,7 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:  # noqa
     if not normalized:
         return None
     # "이번 달 위험 요소 뭐 있어?" lists items; that 뭐 is not a definition request.
-    if _DEFINITION_LANGUAGE.search(_LISTING.sub("", normalized)) is None:
+    if _DEFINITION_LANGUAGE.search(_ACTIVITY_ASK.sub("", _LISTING.sub("", normalized))) is None:
         has_future_marker = (
             any(marker in normalized for marker in _FUTURE_MARKERS)
             or any(marker in normalized for marker in _STRONG_FUTURE_MARKERS)
