@@ -1031,3 +1031,16 @@ async def test_the_fourth_review_reproductions_answer_as_intended(
 ) -> None:
     answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
     assert (_family(answers[-1]) == family) is same, answers[-1].get("text")
+
+
+@pytest.mark.parametrize(("question", "family"), [
+    ("내일100만원노트북카드로사면결제일2026-10-15인데괜찮아?", "purchase"),  # 내일's 일 is not a numeral
+    ("지금코인사도될까?", "fin_out_of_scope"),
+    ("오늘 몇 일이야?", "out_of_scope"),
+])
+@pytest.mark.anyio
+async def test_the_final_template_sweep_leftovers_answer_as_intended(
+    tmp_path: Path, question: str, family: str,
+) -> None:
+    answers = await _conversation(tmp_path, (question,), one_session=True, router=_Mode("review"))
+    assert _family(answers[0]) == family, answers[0].get("text")

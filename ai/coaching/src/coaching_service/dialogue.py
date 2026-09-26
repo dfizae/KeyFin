@@ -193,7 +193,7 @@ def forecast_chart_hint(
 # present they settle the turn as out of scope whatever the router picked.
 _OFF_TOPIC_SUBJECT: Final = re.compile(
     r"날씨|비와|비가|눈와|눈이와|미세먼지|메뉴|노래|음악|영화추천|드라마|게임추천|코드|코딩|파이썬|번역"
-    r"|농담|재밌는|재미있는|심심|이름이뭐|몇시야"
+    r"|농담|재밌는|재미있는|심심|이름이뭐|몇시야|며칠|몇일"
     r"|무슨요일|잠이|졸려|배고"
     r"|사랑|연애|여자친구|남자친구|여친|남친|썸남|썸녀|썸타|권태기|화해|헤어진|전애인|애인"
     r"|축구|야구|경기결과|주말에뭐|뭐하지|좋아해|너몇살|넌몇살|생일"

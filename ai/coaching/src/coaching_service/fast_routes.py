@@ -470,6 +470,9 @@ _INVESTMENT_BRANDS: Final[frozenset[str]] = frozenset({
 _INVESTMENT_CONTEXT: Final = re.compile(
     r"주식|주가|종목|매수|매도|손절|익절|물렸|팔까|팔아|팔면|팔고|투자|배당|상장|주주"
 )
+_GLUED_ASSET_DECISION: Final = re.compile(
+    r"(?:주식|코인|etf|펀드)(?:을|를|은|는|좀|지금|더)?(?:사도|살까|사야|팔까|팔아도|매수|매도)"
+)
 _TOKEN_PARTICLE: Final = re.compile(r"(?:은|는|이|가|을|를|도|만|의|에|로|으로|주식|주가|주)$")
 # A bare company name asked as a buy decision ("카카오 지금 사도 될까?", "네이버 50만원어치
 # 사도 돼?") is a share. Followed by a product ("애플 워치", "구글 기프트카드", "기아 차") it is not.
@@ -523,7 +526,8 @@ def investment_product(question: str) -> bool:
             share_talk or _brand_bought(tokens, index, words)
         ):
             return True
-    return False
+    # "지금코인사도될까?" typed without spaces still names the asset right before the verb.
+    return _GLUED_ASSET_DECISION.search(words) is not None
 
 
 # A completed/past-tense purchase statement ("커피 3만원 샀어", "노트북 구매했어")
@@ -638,6 +642,10 @@ def purchase_amounts(question: str) -> tuple[int, ...]:
             continue
         number = match.group(0)
         before = text[match.start() - 1] if match.start() > 0 else " "
+        digit = re.search(r"[0-9]", number)
+        if not number[0].isdigit() and before.isalnum() and digit is not None:
+            # "내일100만원": the 일 of 내일 is part of the word; the amount starts at the digits.
+            before, number = number[digit.start() - 1], number[digit.start() :]
         if number[0].isdigit():
             if before.isdigit() or before in ".,":
                 continue
