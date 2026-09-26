@@ -21,7 +21,12 @@ from test_engine import fixture
 from coaching_service.dialogue import _select_card, _select_cash_account
 from coaching_service.fast_routes import NaturalPurchase, natural_purchase
 from coaching_service.llm_contract import EvidenceInput, Routing
-from coaching_service.numeric_rendering import _PURCHASE_OK, _PURCHASE_RISK, purchase_verdict_text
+from coaching_service.numeric_rendering import (
+    _PURCHASE_CASH_OK,
+    _PURCHASE_OK,
+    _PURCHASE_RISK,
+    purchase_verdict_text,
+)
 from coaching_service.schemas import Bootstrap, JsonDocument, Receipt, Session, TwinIdentity
 
 
@@ -265,8 +270,11 @@ async def test_clear_cash_purchase_reaches_review_with_expense_change_and_no_mod
             }
         ]
         # A cash lump sum of 3,000,000 against a 1,000,000 balance must trip the
-        # existing shortfall signal: the binary verdict renders as "risk".
-        assert "구매 후 예측상 예산을 넘겨 이번 기간이 어려울 수 있어요." in answer["text"]
+        # existing shortfall signal: the binary verdict renders as "risk", and the
+        # answer opens with it, followed by the envelope overage (기타 holds 100,000).
+        lines = answer["text"].split("\n")
+        assert lines[0] == "구매 후 예측상 계좌 잔액이 부족해질 수 있어요."
+        assert lines[1] == "기타 봉투 예산도 2,900,000원 초과해요."
         assert "부족 예측 있음." in answer["text"]
         assert answer["wording_source"] == "template"
         assert answer["model"] == "not_called"
@@ -565,7 +573,13 @@ async def test_card_purchase_defers_cash_outflow_to_payment_date(tmp_path: Path)
         # effect is zero and the verdict must not read as a shortfall.
         effect = receipt["result"]["comparison"]["effect"]
         assert effect["terminal_cash_change"]["p50_krw"] == 0
-        assert "예측상 예산 안에 들어와 괜찮아요." in answer["text"]
+        # No account shortfall, but a 3,000,000 laptop does not fit the 100,000 left
+        # in 기타: the verdict must say so instead of "괜찮아요" (2026-09-26 live).
+        assert answer["text"].split("\n")[0] == (
+            "계좌 잔액으로는 결제할 수 있지만 기타 봉투에 남은 100,000원보다 많아 "
+            "봉투 예산을 2,900,000원 초과해요."
+        )
+        assert "괜찮" not in answer["text"].split("\n")[0]
         assert "부족 예측 없음." in answer["text"]
         assert model.writes == 0
         assert model.routes == 0
@@ -619,7 +633,8 @@ def test_purchase_verdict_uses_absolute_shortfall_when_partially_over_budget() -
 
 
 def test_purchase_verdict_stays_ok_when_no_shortfall_before_or_after() -> None:
+    # This minimal receipt names no envelope, so only the account check is claimed.
     pieces = purchase_verdict_text(_verdict_receipt(baseline_fraction=0.0, planned_fraction=0.0))
-    assert _PURCHASE_OK in pieces
+    assert pieces[0] == _PURCHASE_CASH_OK
     assert _PURCHASE_RISK not in pieces
     assert "부족 예측 없음." in pieces

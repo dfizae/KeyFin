@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from hashlib import sha256
 from math import isfinite
 from typing import TYPE_CHECKING, Annotated, ClassVar, Final, Literal, TypeAlias
@@ -538,11 +539,51 @@ def _ensure_receipt_match(result: ParsedResult, receipt: Receipt) -> None:
         raise ValueError("numeric result does not belong to this receipt")
 
 
-_PURCHASE_RISK: Final = "구매 후 예측상 예산을 넘겨 이번 기간이 어려울 수 있어요."
-_PURCHASE_OK: Final = "예측상 예산 안에 들어와 괜찮아요."
+_PURCHASE_RISK: Final = "구매 후 예측상 계좌 잔액이 부족해질 수 있어요."
+_PURCHASE_OK: Final = "{env} 봉투 예산 안이고 예측상 계좌도 부족해지지 않아 괜찮아요."
+# Used only when the purchase envelope is absent from the ledger: the account check
+# still holds, but nothing is claimed about an envelope we could not read.
+_PURCHASE_CASH_OK: Final = "예측상 계좌 잔액은 부족해지지 않아요."
+_PURCHASE_OVER: Final = (
+    "계좌 잔액으로는 결제할 수 있지만 {env} 봉투에 남은 {left:,}원보다 많아 "
+    "봉투 예산을 {over:,}원 초과해요."
+)
+_PURCHASE_OVER_ALREADY: Final = (
+    "계좌 잔액으로는 결제할 수 있지만 {env} 봉투는 이미 예산을 넘어서 "
+    "이번 구매 {amount:,}원이 그대로 초과 금액이 돼요."
+)
+_PURCHASE_OVER_WITH_RISK: Final = "{env} 봉투 예산도 {over:,}원 초과해요."
 
 
-def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: PLR0911 - each shape guard is one explicit fail-closed boundary.
+@dataclass(frozen=True, slots=True)
+class PurchaseEnvelope:
+    """The purchase change against its envelope's current ledger balance."""
+
+    envelope: str
+    amount_krw: int
+    left_krw: int | None
+
+    @property
+    def over_krw(self) -> int:
+        if self.left_krw is None or self.amount_krw <= self.left_krw:
+            return 0
+        return self.amount_krw - max(self.left_krw, 0)
+
+
+def purchase_envelope(receipt: Receipt) -> PurchaseEnvelope | None:
+    """Read the single purchase change and what its envelope still holds right now."""
+    changes = receipt.request.root.get("changes")
+    if not isinstance(changes, list) or len(changes) != 1 or not isinstance(changes[0], dict):
+        return None
+    change = changes[0]
+    envelope, amount = change.get("envelope"), change.get("amount_krw")
+    if not isinstance(envelope, str) or not isinstance(amount, int) or isinstance(amount, bool):
+        return None
+    left = next((row.balance_krw for row in receipt.current_envelopes if row.envelope == envelope), None)
+    return PurchaseEnvelope(envelope=envelope, amount_krw=amount, left_krw=left)
+
+
+def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: C901, PLR0911, PLR0912 - each shape guard is one explicit fail-closed boundary.
     """Render one binary purchase verdict, reusing the review engine's own shortfall signal.
 
     No new probability threshold is invented here. A ``changes:[expense]``
@@ -576,7 +617,23 @@ def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: PLR0911 - eac
         return []
     if not isinstance(baseline_fraction, (int, float)) or not isinstance(planned_fraction, (int, float)):
         return []
-    pieces = [_PURCHASE_RISK if planned_fraction > 0 else _PURCHASE_OK]
+    # The account projection alone cannot say a 300만원 laptop fits a 50,000원 기타
+    # envelope (2026-09-26 live), so the verdict also weighs the purchase against what
+    # its envelope holds now. The first line always answers the question asked.
+    purchase = purchase_envelope(receipt)
+    over = 0 if purchase is None else purchase.over_krw
+    if planned_fraction > 0:
+        pieces = [_PURCHASE_RISK]
+        if purchase is not None and over:
+            pieces.append(_PURCHASE_OVER_WITH_RISK.format(env=purchase.envelope, over=over))
+    elif purchase is None or purchase.left_krw is None:
+        pieces = [_PURCHASE_CASH_OK]
+    elif over and purchase.left_krw <= 0:
+        pieces = [_PURCHASE_OVER_ALREADY.format(env=purchase.envelope, amount=purchase.amount_krw)]
+    elif over:
+        pieces = [_PURCHASE_OVER.format(env=purchase.envelope, left=purchase.left_krw, over=over)]
+    else:
+        pieces = [_PURCHASE_OK.format(env=purchase.envelope)]
     terminal = planned_cash.get("terminal_balance")
     if isinstance(terminal, dict):
         p50 = terminal.get("p50_krw")

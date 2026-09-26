@@ -55,6 +55,10 @@ class NaturalWhatIf:
 # will change.
 _DEFINITION_LANGUAGE: Final = re.compile(r"(?:뭐|무엇|뜻|의미|설명|차이|원리|방법|특징|장단점|왜)")
 _FORECAST_TARGETS: Final[tuple[str, ...]] = ("잔액", "잔고", "소비", "지출", "현금흐름", "남을현금")
+# "월말에 돈 얼마 남을까?" asks the same end-of-month balance as "월말 잔액 얼마 남을까".
+# "돈" is too common to be a forecast noun on its own ("향후 흐름이 아니라 … 돈으로"),
+# so it counts only with a strong future marker and a remaining-amount verb.
+_MONEY_LEFT_TERMS: Final[tuple[str, ...]] = ("남을", "남아", "남는", "남겠")
 _FUTURE_MARKERS: Final[tuple[str, ...]] = ("앞으로", "이번달", "이달", "월말", "다음달")
 _STRONG_FUTURE_MARKERS: Final[tuple[str, ...]] = (
     "앞으로", "월말", "이번달말", "이달말", "다음달", "향후", "말까지", "다음급여전",
@@ -297,32 +301,59 @@ class NaturalPurchase:
 # a 4xx code, not a fabricated financial answer.
 # Strict buy verbs: an unambiguous purchase signal on their own.
 _PURCHASE_VERB_STRICT: Final = re.compile(
-    r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|"
-    r"지르면|질러도|지르려고|구입하면|구입해서"
+    r"사면|사도|살까|사려고|사서|구매하면|구매하려고|구매해도|구매해서|구매할까|"
+    r"지르면|질러도|지르려고|구입하면|구입해서|구입해도|구입할까"
 )
 # Casual buy phrasings. Whitespace is already stripped before matching, so
 # "사고 싶어" -> "사고싶어" and "사고싶" covers both. Deliberately excluded:
 # "사자" (=lion), bare "살래"/"살라" (살다=live), and "사고파" (collides with
 # 사고팔다 buy-and-sell); "살까봐" is redundant since "살까" already matches.
 # These collide with finance/definition/goal questions ("예금 사고싶은데 뭐가
-# 좋아"), so a casual-only match needs a concrete amount or item alias before it
+# 좋아"), so a casual-only match needs a concrete amount or item word before it
 # counts as a purchase (see ``natural_purchase``). "장만하" was dropped entirely:
 # "장만하다 뜻" / "집 장만" are definition/goal, not purchase.
 _PURCHASE_VERB_CASUAL: Final = re.compile(r"사고싶|사볼까|사둘까")
 # Future-tense plans ("내일 70만원 스위치 사려는데"). These collide with saving goals
 # ("노트북 사려는데 200만원 모을 수 있을까"), financial products ("주식 사려는데"),
 # 살다 = live ("부산에 살건데 월세 50만원") and hearsay ("사려는 사람"), so they
-# count only with an amount AND an item alias AND none of those signals.
+# count only with an amount AND an item word AND none of those signals.
 _PURCHASE_VERB_FUTURE: Final = re.compile(
     r"사려는데|사려는중|사려해|구매하려는데|구입하려고|구입하려는데|지르려는데"
-    r"|살건데|살거야|살거예요|살예정|살생각이"
+    r"|살건데|살거야|살거예요|살예정|살생각이|살려고|살려는데"
+    r"|구매할건데|구입할건데|구매할예정|구입할예정"
 )
+# 살다 (=live) is recognised by a place before 에/에서 ("부산에 살건데", "역 근처에서
+# 살 건데"), not by any 에살: "다음 주에 살 건데" and "통장에서 살 예정" are purchases.
 _PURCHASE_FUTURE_BLOCK: Final = re.compile(
     r"모으|모을|모아|모이|저축|적금|예금|주식|코인|펀드|채권|etf"
-    r"|월세|전세|관리비|생활비|동네|자취|원룸|에살|에서살|혼자살|오래살"
+    r"|월세|전세|관리비|생활비|동네|자취|원룸|혼자살|오래살|같이살|따로살"
+    r"|(?:시|도|구|군|동|읍|면|리|역|근처|쪽|집|아파트|빌라|오피스텔|기숙사|고향|서울|부산|지방)(?:에|에서)살"
+)
+# Spending verbs that are not buying words on their own ("결제해도", "예약해도",
+# "먹어도", "타도"). "결제" is also a card-bill word and "먹어도"/"가도" are everyday
+# verbs, so like the future tense they count only with an amount AND a named item
+# AND no bill/debt/saving signal ("카드값 30만원 결제해도 돼?" moves money to pay a
+# bill; it is not a purchase).
+_PURCHASE_VERB_SPEND: Final = re.compile(
+    r"결제하면|결제해도|결제할(?:건데|거야|거예요|예정|까|래)|결제하려|결제하고싶"
+    r"|예약하면|예약해도|예약할(?:건데|거야|예정|까|래)|예약하려"
+    r"|예매하면|예매해도|예매할(?:건데|거야|예정|까|래)|예매하려"
+    r"|먹어도|먹으면|먹을(?:건데|거야|예정|까|래)|먹으려"
+    r"|시켜도|시켜먹어도|시키면|시킬(?:건데|거야|까|래)"
+    r"|타도|타면|탈(?:건데|거야|까|래)|끊어도|끊으면|끊을(?:건데|거야|까|래)"
+    r"|등록해도|등록하면|등록할(?:건데|거야|까|래)"
+    r"|가도|가면|갈(?:건데|거야|까|래)|써도|쓰면|쓸(?:건데|거야|예정|까|래)"
+)
+_PURCHASE_SPEND_BLOCK: Final = re.compile(
+    r"카드값|카드대금|청구|대출|이자|보험료|세금|공과금|송금|할부금|고정비|용돈"
 )
 _PURCHASE_VERB: Final = re.compile(
     _PURCHASE_VERB_STRICT.pattern + r"|" + _PURCHASE_VERB_CASUAL.pattern
+)
+# Securities, funds and crypto. Buying them is an investment decision the coach does
+# not make, so they are excluded from the envelope purchase grammar entirely.
+INVESTMENT_PRODUCT: Final = re.compile(
+    r"주식|종목|코인|비트코인|이더리움|리플|도지|etf|펀드|채권|증권|주가|코스피|코스닥|나스닥|s&p|공모주|청약"
 )
 # A completed/past-tense purchase statement ("커피 3만원 샀어", "노트북 구매했어")
 # is a fresh independent turn, not a bare field answering a pending clarification.
@@ -331,9 +362,68 @@ _PURCHASE_VERB: Final = re.compile(
 # or they would be force-merged into the stale pending purchase context.
 _PURCHASE_VERB_COMPLETE: Final = re.compile(r"샀|구매했|구입했|질렀")
 _PURCHASE_INSTALLMENT: Final = re.compile(r"할부")
-_PURCHASE_AMOUNT: Final = re.compile(
-    r"(?<![\d,.])(?P<amount>(?:\d{1,3}(?:,\d{3})+|\d+))(?P<unit>만원|원)"
+# One won amount as people type it: "30만원", "15,000원", "5천원", "2.5만원",
+# "1만 5천원", "백만원", "3만 원". A Hangul numeral must start its own word so the
+# particle in "치킨이 만원" is never read as 이(=2); digits may follow a word
+# directly ("노트북300만원"). A Hangul-only token needs a unit so "구원" is not 9원.
+_AMOUNT_PART: Final = (
+    r"(?:[0-9][0-9,]*(?:\.[0-9]+)?|[일이삼사오육칠팔구])?[십백천만억]|[0-9][0-9,]*(?:\.[0-9]+)?"
 )
+_AMOUNT_TOKEN: Final = re.compile(rf"(?P<num>(?:{_AMOUNT_PART})+)원")
+_AMOUNT_JOIN_UNIT: Final = re.compile(
+    r"(?<=[만억])\s+(?=(?:[0-9][0-9,]*|[일이삼사오육칠팔구])?[천백십]|[0-9][0-9,]*\s*원)"
+)
+_AMOUNT_JOIN_WON: Final = re.compile(r"(?<=[0-9십백천만억])\s+(?=원)")
+_AMOUNT_WORD: Final = re.compile(r"[0-9][0-9,]*(?:\.[0-9]+)?|[일이삼사오육칠팔구십백천만억]")
+_HANGUL_DIGITS: Final[dict[str, int]] = {
+    "일": 1, "이": 2, "삼": 3, "사": 4, "오": 5, "육": 6, "칠": 7, "팔": 8, "구": 9,
+}
+_SMALL_UNITS: Final[dict[str, int]] = {"십": 10, "백": 100, "천": 1_000}
+_BIG_UNITS: Final[dict[str, int]] = {"만": 10_000, "억": 100_000_000}
+
+
+def _krw(number: str) -> int | None:
+    """Read one Korean/Arabic mixed amount ("1만5천", "2.5만", "3백만") as whole won."""
+    total = 0.0
+    section = 0.0
+    pending: float | None = None
+    for token in (match.group(0) for match in _AMOUNT_WORD.finditer(number)):
+        if token[0].isdigit() or token in _HANGUL_DIGITS:
+            if pending is not None:
+                return None
+            pending = float(token.replace(",", "")) if token[0].isdigit() else float(_HANGUL_DIGITS[token])
+        elif token in _SMALL_UNITS:
+            section += (1.0 if pending is None else pending) * _SMALL_UNITS[token]
+            pending = None
+        else:
+            section += 0.0 if pending is None else pending
+            total += (section or 1.0) * _BIG_UNITS[token]
+            section = 0.0
+            pending = None
+    value = total + section + (0.0 if pending is None else pending)
+    return int(value) if value > 0 and value == int(value) else None
+
+
+def purchase_amounts(question: str) -> tuple[int, ...]:
+    """Every won amount stated in the question, in order; an unreadable token is skipped."""
+    text = unicodedata.normalize("NFKC", question).lower()
+    text = _AMOUNT_JOIN_WON.sub("", _AMOUNT_JOIN_UNIT.sub("", text))
+    found: list[int] = []
+    for match in _AMOUNT_TOKEN.finditer(text):
+        number = match.group("num")
+        before = text[match.start() - 1] if match.start() > 0 else " "
+        if number[0].isdigit():
+            if before.isdigit() or before in ".,":
+                continue
+        elif before.isalnum() or re.search(r"[십백천만억]", number) is None:
+            # ``str.isalnum`` is true for Hangul syllables, so "치킨이만원" is skipped.
+            continue
+        value = _krw(number)
+        if value is not None:
+            found.append(value)
+    return tuple(found)
+
+
 _PURCHASE_DATE_TOMORROW: Final = re.compile(r"내일")
 # "다음주" is a distinct string from "이번주" (no substring overlap), but it is checked
 # before "이번주" in ``_purchase_date_token`` so the ordering stays unambiguous.
@@ -347,36 +437,110 @@ _PURCHASE_PAYMENT_DATE: Final = re.compile(
     r"(?:결제일|카드값|출금)\D{0,10}(?P<date>\d{4}-\d{2}-\d{2})"
     r"|(?P<date2>\d{4}-\d{2}-\d{2})\D{0,10}(?:결제|출금)"
 )
-_PURCHASE_ENVELOPE_ALIASES: Final[dict[str, str]] = {
-    "노트북": "기타", "랩탑": "기타", "맥북": "기타", "폰": "기타", "휴대폰": "기타",
-    "스마트폰": "기타", "아이폰": "기타", "갤럭시": "기타", "태블릿": "기타", "아이패드": "기타",
-    "가전": "기타", "전자제품": "기타", "카메라": "기타",
-    "닌텐도": "기타", "스위치": "기타", "게임기": "기타", "에어팟": "기타",
-    "티비": "기타", "tv": "기타", "청소기": "기타", "에어컨": "기타", "냉장고": "기타",
-    "옷": "쇼핑", "신발": "쇼핑", "가방": "쇼핑", "의류": "쇼핑",
+# Item word -> the KeyFin envelope its backend subcategory belongs to (V1__init.sql
+# 세분류: 음식점·카페·배달·주점 / 대중교통·택시·주유 / 병원·약국·운동·헬스 /
+# 영화·공연·전시·스포츠 관람·게임·콘텐츠·여행·숙박 / 패션·잡화·뷰티·온라인 쇼핑 /
+# 편의점·마트·생활용품 / 교육·해외 결제·경조사·기타). Durable electronics keep the
+# original 기타 mapping. Words that are also everyday non-item words are left out
+# on purpose: 약(=about, 예약), 모자(모자라다), 반지(반지하), 술(기술·수술), 밥(밥솥),
+# 저녁/점심(time of day), 운동(운동화), 경기(경기도). A shorter word inside a longer
+# matched word is ignored ("스마트폰" is not 마트, "게임기" is not 게임).
+_PURCHASE_ITEMS: Final[dict[str, tuple[str, ...]]] = {
+    "기타": (
+        "노트북", "랩탑", "맥북", "폰", "휴대폰", "핸드폰", "스마트폰", "아이폰", "갤럭시", "태블릿",
+        "아이패드", "가전", "전자제품", "카메라", "닌텐도", "스위치", "게임기", "플스", "플레이스테이션",
+        "에어팟", "이어폰", "헤드폰", "헤드셋", "티비", "tv", "청소기", "에어컨", "냉장고", "세탁기",
+        "건조기", "전자레인지", "모니터", "키보드", "마우스", "스마트워치", "애플워치", "컴퓨터",
+        "데스크탑", "학원", "강의", "수강료", "교재", "인강", "자격증", "축의금", "부조금", "조의금",
+        "경조사", "직구", "책상", "의자", "침대", "가구", "소파",
+    ),
+    "외식": (
+        "음식점", "식당", "외식", "카페", "커피", "음료", "배달", "주점", "술값", "술자리", "맥주",
+        "소주", "와인", "치킨", "피자", "햄버거", "버거", "짜장면", "짬뽕", "국밥", "초밥", "스시",
+        "오마카세", "삼겹살", "고기", "회식", "저녁밥", "점심밥", "저녁식사", "점심식사", "식사",
+        "밥값", "떡볶이", "브런치", "디저트", "케이크", "빵", "마라탕", "라멘", "파스타", "스테이크",
+        "뷔페", "족발", "보쌈",
+    ),
+    "교통비": (
+        "대중교통", "버스", "지하철", "택시", "기차", "ktx", "srt", "비행기", "항공권", "주유",
+        "기름값", "주차비", "톨비", "통행료", "교통카드", "렌터카", "킥보드",
+    ),
+    "의료·건강": (
+        "병원", "약국", "약값", "감기약", "두통약", "진통제", "영양제", "비타민", "진료", "치과",
+        "한의원", "안과", "피부과", "검진", "안경", "렌즈", "헬스", "pt", "필라테스", "요가", "수영장",
+    ),
+    "취미·여가": (
+        "영화", "콘서트", "공연", "뮤지컬", "연극", "전시", "티켓", "야구", "축구", "여행", "호텔",
+        "리조트", "숙소", "숙박", "펜션", "에어비앤비", "캠핑", "게임", "스팀", "웹툰", "책", "도서",
+        "만화책", "노래방", "pc방", "볼링", "놀이공원", "테마파크", "취미",
+    ),
+    "쇼핑": (
+        "옷", "신발", "가방", "의류", "운동화", "구두", "패딩", "코트", "청바지", "바지", "셔츠",
+        "티셔츠", "원피스", "자켓", "재킷", "니트", "후드티", "시계", "지갑", "액세서리", "악세사리",
+        "목걸이", "귀걸이", "화장품", "향수", "립스틱", "선크림", "뷰티", "명품",
+    ),
+    "편의점·마트·잡화": (
+        "편의점", "마트", "대형마트", "이마트", "홈플러스", "코스트코", "생필품", "생활용품", "장보기",
+        "장바구니", "식료품", "식재료", "휴지", "화장지", "세제", "샴푸", "치약", "칫솔", "물티슈",
+        "라면", "과일", "우유", "간식",
+    ),
 }
 
 
-def _has_purchase_intent(normalized: str) -> bool:
+def purchase_envelopes(question: str) -> frozenset[str]:
+    """Envelopes named by item words, each found inside one typed word.
+
+    Matching per word keeps "택시 계좌이체" from reading 시계 across the space.
+    """
+    named: set[str] = set()
+    for token in unicodedata.normalize("NFKC", question).lower().split():
+        spans: list[tuple[int, int, str]] = []
+        for envelope, words in _PURCHASE_ITEMS.items():
+            for word in words:
+                start = token.find(word)
+                while start != -1:
+                    spans.append((start, start + len(word), envelope))
+                    start = token.find(word, start + 1)
+        named.update(
+            envelope
+            for start, end, envelope in spans
+            if not any(
+                other_start <= start and end <= other_end and other_end - other_start > end - start
+                for other_start, other_end, _ in spans
+            )
+        )
+    return frozenset(named)
+
+
+def _has_purchase_intent(normalized: str, question: str) -> bool:  # noqa: PLR0911 - one return per verb tier.
     """Decide whether the whitespace-free text is a purchase question at all.
 
     Strict buy verbs count on their own. Casual verbs ("사고싶"/"사볼까"/"사둘까")
     collide with finance/definition/goal questions, so they need an amount or a
-    known item/envelope alias. Future-tense plans need both, and none of the
-    saving-goal, financial-product or 살다 (=live) signals.
+    known item. Future-tense plans and spending verbs ("결제해도", "먹어도") need
+    both, and none of the saving-goal, financial-product, 살다 (=live) or bill signals.
     """
+    if INVESTMENT_PRODUCT.search(normalized) is not None:
+        # "비트코인 사도 돼?" / "삼성전자 주식 30만원어치 사도 될까?" asks for an
+        # investment decision, not a spending check against an envelope.
+        return False
     if _PURCHASE_VERB_STRICT.search(normalized) is not None:
         return True
-    has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
-    has_alias = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
+    has_amount = bool(purchase_amounts(question))
+    has_item = bool(purchase_envelopes(question))
     if _PURCHASE_VERB_CASUAL.search(normalized) is not None:
-        return has_amount or has_alias
-    if _PURCHASE_VERB_FUTURE.search(normalized) is None or _PURCHASE_FUTURE_BLOCK.search(normalized):
+        return has_amount or has_item
+    if _PURCHASE_FUTURE_BLOCK.search(normalized) is not None:
         return False
-    return has_amount and has_alias
+    if _PURCHASE_VERB_FUTURE.search(normalized) is not None:
+        return has_amount and has_item
+    spend_verb = _PURCHASE_VERB_SPEND.search(normalized) is not None
+    if spend_verb and _PURCHASE_SPEND_BLOCK.search(normalized) is None:
+        return has_amount and has_item
+    return False
 
 
-def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clarify-vs-admit boundary.
+def natural_purchase(  # noqa: PLR0911 - each branch is one explicit clarify-vs-admit boundary.
     question: str,
 ) -> NaturalPurchase | str | None:
     """Admit one clear, single-payment Korean purchase question without a model call.
@@ -392,25 +556,19 @@ def natural_purchase(  # noqa: C901, PLR0911 - each branch is one explicit clari
     snapshot and can still fail closed there.
     """
     normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
-    if not normalized or not _has_purchase_intent(normalized):
+    if not normalized or not _has_purchase_intent(normalized, question):
         return None
     if _PURCHASE_INSTALLMENT.search(normalized) is not None:
         # Multi-installment purchases need a payment schedule the FDT contract
         # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).
         return "purchase_installment_unsupported"
-    amounts = tuple(_PURCHASE_AMOUNT.finditer(normalized))
+    amounts = purchase_amounts(question)
     if len(amounts) != 1:
         return "purchase_amount_required"
-    try:
-        amount = int(amounts[0].group("amount").replace(",", ""))
-    except ValueError:
-        return "purchase_amount_required"
-    amount_krw = amount * 10_000 if amounts[0].group("unit") == "만원" else amount
+    amount_krw = amounts[0]
     if not 0 < amount_krw <= _MAX_NATURAL_GOAL_KRW:
         return "purchase_amount_required"
-    envelopes = {
-        envelope for alias, envelope in _PURCHASE_ENVELOPE_ALIASES.items() if alias in normalized
-    }
+    envelopes = purchase_envelopes(question)
     if len(envelopes) != 1:
         return "purchase_envelope_required"
     is_card = _PURCHASE_CARD.search(normalized) is not None
@@ -494,6 +652,24 @@ _BALANCE_NOT_NOW: Final = re.compile(
 )
 
 
+_BALANCE_ENVELOPE_WORDS: Final[dict[str, str]] = {
+    **_WHAT_IF_ENVELOPE_ALIASES,
+    "교통": "교통비",
+    "의료": "의료·건강",
+    "건강": "의료·건강",
+    "취미": "취미·여가",
+    "여가": "취미·여가",
+    "잡화": "편의점·마트·잡화",
+}
+
+
+def balance_envelope(question: str) -> str | None:
+    """Return the single envelope a balance question names ("외식 예산 얼마 남았어"), if any."""
+    normalized = compact(question)
+    named = {envelope for word, envelope in _BALANCE_ENVELOPE_WORDS.items() if compact(word) in normalized}
+    return next(iter(named)) if len(named) == 1 else None
+
+
 def balance_check_question(question: str) -> bool:
     """Admit a current envelope-balance check; forecasts, lookups and purchases stay out."""
     normalized = compact(question)
@@ -569,10 +745,16 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:
             and any(term in normalized for term in _SPEND_FORECAST_TERMS)
             and any(signal in normalized for signal in ("얼마", "돈", "소비", "지출"))
         )
+        money_left_forecast = (
+            has_strong_future_marker
+            and "돈" in normalized
+            and any(term in normalized for term in _MONEY_LEFT_TERMS)
+        )
         if (
             (
                 (has_forecast_target and (explicit_forecast or implicit_forecast or path_forecast))
                 or spend_forecast
+                or money_left_forecast
             )
             and (not has_explicit_risk or risk_is_deprioritized)
         ):
@@ -645,7 +827,7 @@ def is_bare_purchase_fragment(question: str) -> bool:
         # it is a fresh independent statement, not a bare field answering the pending
         # question; discard the stale context and handle it fresh.
         return False
-    has_amount = _PURCHASE_AMOUNT.search(normalized) is not None
+    has_amount = bool(purchase_amounts(question))
     has_date = any(
         pattern.search(normalized) is not None
         for pattern in (
@@ -659,8 +841,39 @@ def is_bare_purchase_fragment(question: str) -> bool:
     has_payment = (
         _PURCHASE_CARD.search(normalized) is not None or _PURCHASE_CASH.search(normalized) is not None
     )
-    has_envelope = any(alias in normalized for alias in _PURCHASE_ENVELOPE_ALIASES)
-    return has_amount or has_date or has_payment or has_envelope
+    has_envelope = bool(purchase_envelopes(question))
+    if not (has_amount or has_date or has_payment or has_envelope):
+        return False
+    # A field answer is the field plus particles ("30만원이요", "현금으로 할게요",
+    # "카드, 결제일은 2026-10-15"). A new question that merely contains a field word
+    # ("오늘 날씨 어때", "현금흐름이 뭐야", "영화 추천해줘") has words left over and
+    # is handled fresh instead of being merged into the stale purchase.
+    return len(_fragment_residue(question, normalized)) <= _FRAGMENT_RESIDUE_MAX
+
+
+_FRAGMENT_RESIDUE_MAX: Final = 2
+_FRAGMENT_FILLER: Final = re.compile(
+    r"결제일|출금일|결제예정일|결제|출금|일시불|신용|체크|할게요|할께요|할게|할께|할래요|할래|"
+    r"이에요|입니다|예요|이요|으로|로|이고|이랑|하고|짜리|정도|쯤|에|은|는|이|가|을|를|요|고|네|응|"
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}|[?!.,~\uff1f\u3002]"
+)
+
+
+def _fragment_residue(question: str, normalized: str) -> str:
+    """Return what remains after removing every purchase field and filler from the text."""
+    text = unicodedata.normalize("NFKC", question).lower()
+    text = _AMOUNT_JOIN_WON.sub("", _AMOUNT_JOIN_UNIT.sub("", text))
+    text = re.sub(r"\s+", "", _AMOUNT_TOKEN.sub("", text))
+    for pattern in (
+        _PURCHASE_DATE_TOMORROW, _PURCHASE_DATE_NEXT_WEEK, _PURCHASE_DATE_THIS_WEEK,
+        _PURCHASE_DATE_TODAY, _PURCHASE_CARD, _PURCHASE_CASH,
+    ):
+        text = pattern.sub("", text)
+    for words in _PURCHASE_ITEMS.values():
+        for word in sorted(words, key=len, reverse=True):
+            if word in normalized:
+                text = text.replace(word, "")
+    return _FRAGMENT_FILLER.sub("", text)
 
 
 def spending_period_fragment(question: str) -> str | None:

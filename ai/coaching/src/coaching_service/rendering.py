@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Final
 
-from coaching_service.numeric_rendering import numeric_text, purchase_verdict_text
+from coaching_service.numeric_rendering import numeric_text, purchase_envelope, purchase_verdict_text
 from coaching_service.periods import period_text
 from coaching_service.schemas import Envelope, JsonDocument, Receipt, Tone
 
@@ -60,6 +60,14 @@ _BALANCE_TABLE_NOTE: Final = (
 )
 
 
+def is_purchase_review(receipt: Receipt) -> bool:
+    changes = receipt.request.root.get("changes")
+    return isinstance(changes, list) and bool(changes)
+
+
+BALANCE_TABLE_NOTE: Final = _BALANCE_TABLE_NOTE
+
+
 def _is_balance_check(receipt: Receipt) -> bool:
     changes = receipt.request.root.get("changes")
     return bool(envelope_balance_table(receipt)) and not (isinstance(changes, list) and changes)
@@ -80,10 +88,19 @@ def _with_ro(word: str) -> str:
     return word + "(으)로"
 
 
-def _balance_summary(envelopes: tuple[Envelope, ...]) -> str:
+def _balance_summary(envelopes: tuple[Envelope, ...], focus: str | None = None) -> str:
     total = sum(envelope.balance_krw for envelope in envelopes)
     lowest = min(envelopes, key=lambda envelope: envelope.balance_krw)
     head = f"봉투 잔액 합계는 {total:,}원이에요."
+    named = next((envelope for envelope in envelopes if envelope.envelope == focus), None)
+    if named is not None:
+        # "외식 예산 얼마 남았어" is answered about 외식 first, then the whole table.
+        own = (
+            f"{named.envelope} 봉투는 예산을 {-named.balance_krw:,}원 넘었어요."
+            if named.balance_krw < 0
+            else f"{named.envelope} 봉투는 {named.balance_krw:,}원 남았어요."
+        )
+        return own + " " + head
     if lowest.balance_krw < 0:
         return head  # 초과 봉투는 가장 크게 넘은 순서로 조언 문장이 짚는다
     return head + f" 가장 적게 남은 봉투는 {_with_ro(lowest.envelope)} {lowest.balance_krw:,}원이 남았어요."
@@ -133,10 +150,15 @@ def historical_text(receipt: Receipt) -> list[str]:
     if receipt.numeric_result is not None and past is None:
         return pieces
     if envelope_balance_table(receipt):
+        if is_purchase_review(receipt):
+            # A purchase answer leads with its verdict; ``compose`` places the table
+            # note after it instead of opening with every envelope's balance.
+            return pieces
         # The per-envelope balances ship as the structured ``envelope_balances`` table
         # the app renders below the answer; the text only explains that table.
         pieces.append(_BALANCE_TABLE_NOTE)
-        pieces.append(_balance_summary(receipt.current_envelopes))
+        focus = receipt.request.root.get("envelope")
+        pieces.append(_balance_summary(receipt.current_envelopes, focus if isinstance(focus, str) else None))
         return pieces
     pieces.extend(
         f"현재 수신 이벤트까지 반영한 {envelope.envelope} 봉투 장부 잔액은 {envelope.balance_krw:,}원입니다."
@@ -162,6 +184,8 @@ _SHORTFALL_ENCOURAGING: Final = "이번 기간 현금이 부족할 수 있어요
 _SHORTFALL_DIRECT: Final = "이번 기간 현금이 부족할 수 있어요. **큰 지출은 미루세요.**"
 _SHORTFALL_MARKER: Final = "부족 예측 있음."
 _NEAR_LIMIT_MAX_PERCENT: Final = 10
+_PURCHASE_OVER_ENCOURAGING: Final = "**이 구매는 미루거나 다른 봉투에서 예산을 옮겨 보면 좋아요.**"
+_PURCHASE_OVER_DIRECT: Final = "**구매를 미루거나 다른 봉투 예산을 옮기세요.**"
 _HEALTHY_ENCOURAGING: Final = (
     "{env} 예산에 여유가 있어요. **남는 만큼은 저축이나 비상금으로 옮겨 두면 좋아요.**"
 )
@@ -326,7 +350,9 @@ def _healthy_envelope(receipt: Receipt) -> str | None:
     return max(healthy, key=lambda band: band[1])[0] if healthy else None
 
 
-def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str | None:
+def deterministic_advice(  # noqa: PLR0911 - one return per advice precedence level.
+    receipt: Receipt, *, tone: Tone | None = None,
+) -> str | None:
     """Return one server-templated advice sentence, or ``None`` when no engine concern fires.
 
     This never calls the language model and contains no digits of its own; every
@@ -343,6 +369,16 @@ def deterministic_advice(receipt: Receipt, *, tone: Tone | None = None) -> str |
     remaining (``_observed_budget_bands``) with the identical thresholds; a
     payment-event receipt keeps its established single-envelope payment path.
     """
+    if is_purchase_review(receipt):
+        # Advice on a purchase question is about that purchase only: other envelopes'
+        # overage or a savings nudge ("교통비 예산에 여유가 있어요… 저축") right after
+        # "can I buy this?" reads as a contradiction.
+        if _SHORTFALL_MARKER in purchase_verdict_text(receipt):
+            return _SHORTFALL_DIRECT if tone == "direct" else _SHORTFALL_ENCOURAGING
+        purchase = purchase_envelope(receipt)
+        if purchase is not None and purchase.over_krw:
+            return _PURCHASE_OVER_DIRECT if tone == "direct" else _PURCHASE_OVER_ENCOURAGING
+        return None
     over = _over_budget_envelopes(receipt)
     if len(over) > 1:
         template = _OVER_BUDGET_MANY_DIRECT if tone == "direct" else _OVER_BUDGET_MANY_ENCOURAGING

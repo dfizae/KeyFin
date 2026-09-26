@@ -28,6 +28,7 @@ from coaching_service.fast_routes import (
     NaturalPurchase,
     NaturalWhatIf,
     balance_check_question,
+    balance_envelope,
     deterministic_analysis_route,
     deterministic_lookup_route,
     merged_purchase_question,
@@ -41,6 +42,7 @@ from coaching_service.finance_knowledge import (
     deterministic_finance_status,
     deterministic_finance_wording,
     finance_evidence,
+    has_catalog_subject,
     model_selected_finance_evidence,
     selected_finance_wording,
 )
@@ -178,6 +180,34 @@ def forecast_chart_hint(
 
 # Any money/finance word. Only used to tell an off-topic question that happened to
 # contain a period word ("오늘") from a finance question with an ambiguous period.
+# Words that only appear in chit-chat or other assistants' jobs. With no money word
+# present they settle the turn as out of scope whatever the router picked.
+_OFF_TOPIC_SUBJECT: Final = re.compile(
+    r"날씨|비와|비가|눈와|눈이와|미세먼지|메뉴|노래|음악|영화추천|드라마|게임추천|코드|코딩|파이썬|번역"
+    r"|농담|재밌는|재미있는|심심|안녕|반가|누구|이름이|몇시|몇일|며칠|무슨요일|잠이|졸려|배고"
+    r"|사랑|연애|여자친구|남자친구|축구|야구|경기결과|선물|주말에뭐|뭐하지|좋아해|고마워|감사"
+)
+# Words that point back at the previous answer. With history, the router keeps such
+# a turn even without a money word ("왜?", "그럼 괜찮아?", "더 자세히").
+_BACK_REFERENCE: Final = re.compile(
+    r"그거|그것|그건|그게|그걸|이거|이건|이게|이걸|저거|왜|어떻게|자세히|자세하게|다시|무슨뜻|이유|근거"
+    r"|설명|그럼|그러면|그래서|요약|정리|계속|방금|아까|위에|괜찮|될까|돼|가능|어때|해도|하면|할까"
+)
+_ROUTED_ON_DATA: Final = frozenset({"review", "risk", "forecast", "personal", "history", "finance"})
+
+
+def off_topic_route(question: str, mode: str, *, has_history: bool, catalog_subject: bool) -> bool:
+    """Tell whether a router decision would answer a no-money question from the user's data."""
+    if mode not in _ROUTED_ON_DATA or catalog_subject:
+        return False
+    text = compact(question)
+    if _FINANCE_SIGNAL.search(text) is not None:
+        return False
+    if _OFF_TOPIC_SUBJECT.search(text) is not None:
+        return True
+    return not (has_history and _BACK_REFERENCE.search(text) is not None)
+
+
 _FINANCE_SIGNAL: Final = re.compile(
     r"돈|원|얼마|소비|지출|예산|잔액|잔고|결제|카드|계좌|통장|현금|저축|적금|예금|이자|대출|빚|부채|자산"
     r"|수입|소득|월급|급여|용돈|봉투|구매|샀|살까|사도|쓴|썼|쓸|비용|요금|가격|청구|할부|투자|주식|보험|세금"
@@ -695,7 +725,9 @@ class Dialogue:
             ):
                 # A balance check asks what is left now. The review's Monte-Carlo
                 # projection would only add future-path actions and caveats to it.
-                receipt = await self.core.balance_receipt(twin, reference, replay=reference != today)
+                receipt = await self.core.balance_receipt(
+                    twin, reference, replay=reference != today, envelope=balance_envelope(request.question),
+                )
             else:
                 changes: tuple[JsonDocument, ...] = ()
                 if parsed_purchase is not None:
@@ -829,22 +861,36 @@ class Dialogue:
     ) -> tuple[Routing, FinanceWording | None]:
         """Use a catalog definition only when its full question grammar is satisfied."""
         finance_input = finance_evidence(request.question, chat_history(session, include_subject=True))
+        # The catalog shortcuts judge the question text alone. A complete question
+        # ("복리가 뭐야?", "지금 가장 금리가 높은 예금은?") means the same thing after
+        # any earlier turn; letting a previous purchase or balance answer disable them
+        # handed every later question to the router, which kept answering with the
+        # envelope review (2026-09-26 live). A follow-up that needs the history
+        # ("그럼 그건?") retrieves no subject on its own and still falls through.
+        standalone = finance_evidence(request.question) if finance_input.history else finance_input
         # A structured analysis may be goal/what-if/optimization even when its
         # prose resembles a general concept.  Preserve its original route and
         # numeric-operation observation instead of taking a knowledge shortcut.
         shortcut_allowed = request.analysis is None and self._direct_finance_enabled()
-        direct = deterministic_finance_wording(finance_input) if shortcut_allowed else None
-        if direct is not None:
-            # This strict grammar cannot choose FDT routes or construct values; it
-            # supplies one pinned catalog definition only.
-            return Routing(mode="finance", source="template"), direct
-        bounded_status = deterministic_finance_status(finance_input) if shortcut_allowed else None
+        # A current-rate or tax question is checked before the concept shortcut:
+        # "요즘 정기예금 금리 몇 %야?" names the 예금 concept but asks today's rate,
+        # which the catalog definition must not pretend to answer.
+        bounded_status = deterministic_finance_status(standalone) if shortcut_allowed else None
         if bounded_status is not None:
             # The question explicitly requires current external material or
             # individual tax/calculation conditions. Returning that gap is
             # safer than making a model infer a catalog status from prose.
             return Routing(mode="finance", source="template"), bounded_status
-        fast_selection = model_selected_finance_evidence(finance_input) if shortcut_allowed else None
+        direct = deterministic_finance_wording(standalone) if shortcut_allowed else None
+        if direct is not None:
+            # This strict grammar cannot choose FDT routes or construct values; it
+            # supplies one pinned catalog definition only.
+            return Routing(mode="finance", source="template"), direct
+        fast_selection = (
+            model_selected_finance_evidence(standalone)
+            if shortcut_allowed and not is_followup(request.question)
+            else None
+        )
         if fast_selection is not None:
             # A non-exact general concept still needs the model to choose approved facts,
             # but it does not need a preceding route call or any Twin/FDT lookup.
@@ -865,6 +911,14 @@ class Dialogue:
             ),
             finance_input,
         )
+        if off_topic_route(
+            request.question, decision.routing.mode,
+            has_history=bool(history), catalog_subject=has_catalog_subject(standalone),
+        ):
+            # The router may still pick an FDT or personal mode for a question with no
+            # money word at all ("너 누구야?", "잠이 안 와"); that answered with the
+            # envelope review. Such a turn gets the fixed out-of-scope sentence instead.
+            return Routing(mode="other", source="template", fallback_reason="no_finance_signal"), None
         return decision.routing, decision.finance
 
     def _direct_finance_enabled(self) -> bool:

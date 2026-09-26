@@ -218,8 +218,11 @@ _QUALITATIVE_AMOUNT_GUIDE_REQUEST: Final = re.compile(
     r"비상금.{0,12}(?:얼마|적정|적당|알맞)"
 )
 _LATEST_STATUS_REQUEST: Final = re.compile(
-    r"(?:최신|오늘|지금|현재|이번\s*주|가장|최고|최저|높은|낮은).{0,32}"
-    r"(?:금리|규정|규제|한도|조건|상품|수익률|예금|적금)"
+    r"(?:최신|오늘|지금|현재|요즘|최근|이번\s*주|이번\s*달|올해|가장|제일|최고|최저|높은|낮은).{0,32}"
+    r"(?:금리|이자율|규정|규제|한도|조건|상품|수익률|예금|적금|파킹\s*통장|환율|시세|이자\s*(?:를\s*)?(?:많이|제일|가장))"
+    # A rate named first and its current level asked after ("적금 금리 제일 높은 곳",
+    # "환율 얼마야"). Only rate words lead here, so "예금 가장 쉽게 설명해줘" stays a concept.
+    r"|(?:금리|이자율|환율|수익률|시세).{0,20}(?:얼마|몇\s*(?:%|퍼센트|프로)|제일|가장|최고|최저|높은|낮은)"
 )
 _TAX_CALCULATION_STATUS_REQUEST: Final = re.compile(
     r"(?:세후|세금).{0,32}(?:정확|계산|얼마|수익)"
@@ -229,6 +232,14 @@ _TAX_CALCULATION_STATUS_REQUEST: Final = re.compile(
 # concept catalog. Their payoff and early-redemption conditions depend on the
 # individual issuer document, so they must never be captured by the generic
 # loan early-repayment record merely because both contain ``조기상환``.
+_INVESTMENT_DECISION: Final = re.compile(
+    r"(?:주식|종목|코인|비트코인|이더리움|리플|도지|etf|펀드|채권|주가|공모주).{0,24}"
+    r"(?:사도|살까|사면|사야|사볼까|사고싶|매수|팔까|팔아|팔면|매도|들어가도|넣어도|투자해도|투자할까|담아도|담을까)"
+)
+_INVESTMENT_DECISION_TEXT: Final = (
+    "특정 주식·펀드·코인을 사거나 팔지는 판단해 드리지 않아요. "
+    "분산투자·ETF·채권 같은 개념 설명이나 이번 기간 예산·소비 확인은 도와드릴 수 있어요."
+)
 _UNREVIEWED_COMPLEX_PRODUCT_REQUEST: Final = re.compile(
     r"(?:els|주가연계증권|녹인|녹아웃)", re.IGNORECASE,
 )
@@ -939,6 +950,15 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
     pretending to answer the current value.  Personal-state language remains
     excluded because its answer belongs to the existing Twin/FDT route.
     """
+    if evidence.purpose == "finance" and _INVESTMENT_DECISION.search(compact(evidence.question or "")):
+        # Whether to buy or sell a stock, fund or coin is a decision this coach does not
+        # make; say so with the nearest registered concepts instead of a purchase check.
+        return FinanceWording(
+            text=_INVESTMENT_DECISION_TEXT,
+            source="template",
+            model="not_called",
+            answer_status="out_of_scope",
+        )
     if (
         evidence.purpose != "finance"
         or evidence.history
@@ -961,6 +981,15 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
     if wording.answer_status != "needs_source" or wording.reference_ids:
         return None
     return wording.model_copy(update={"source": "template"})
+
+
+def has_catalog_subject(evidence: EvidenceInput) -> bool:
+    """Whether retrieval found at least one approved concept for this question."""
+    try:
+        supplied = JsonDocument.model_validate_json(evidence.facts_json).root.get("knowledge_facts")
+    except ValueError:
+        return False
+    return isinstance(supplied, list) and bool(supplied)
 
 
 def reference_document(keys: tuple[str, ...]) -> str:

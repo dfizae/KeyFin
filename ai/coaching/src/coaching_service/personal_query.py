@@ -8,6 +8,10 @@ from coaching_service.personal_contract import PersonalTopic
 _TOPICS: Final[dict[str, PersonalTopic]] = {
     "계좌잔액": "accounts",
     "통장잔액": "accounts",
+    "계좌잔고": "accounts",
+    "통장잔고": "accounts",
+    "잔고": "accounts",
+    "통장": "accounts",
     "계좌": "accounts",
     "잔액": "accounts",
     "순자산": "assets",
