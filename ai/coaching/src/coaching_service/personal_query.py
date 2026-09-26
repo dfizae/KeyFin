@@ -63,7 +63,8 @@ _DECORATION: Final = re.compile(r"\s+|[\u3131-\u318e~^;…♡♥]+")
 # 얼마 있는지 확인해줘")은 필터 없는 단일 주제일 때만 받는다. 은행·계좌 종류·기간·비교가
 # 섞이면 그 조건을 조용히 버리지 않도록 여전히 받지 않는다.
 _LENIENT_TOPICS: Final[tuple[tuple[str, PersonalTopic], ...]] = (
-    ("카드명세서", "payments"), ("카드값", "payments"), ("카드대금", "payments"), ("카드청구", "payments"),
+    ("신용카드결제예정", "payments"), ("카드결제예정", "payments"), ("카드명세서", "payments"),
+    ("카드값", "payments"), ("카드대금", "payments"), ("카드청구", "payments"),
     ("결제예정", "payments"), ("예정결제", "payments"), ("명세서", "payments"),
     ("순자산", "assets"), ("재산", "assets"), ("자산", "assets"),
     ("부채", "debts"), ("빚", "debts"), ("대출", "debts"),
@@ -82,31 +83,51 @@ _LENIENT_ASK: Final = re.compile(
 # Everything else a lenient lookup may contain; any other word ("리볼빙으로", "받을 수",
 # "흘러갈지", "엄마") leaves a residue and keeps the exact grammar's refusal.
 _LENIENT_WORDS: Final = tuple(sorted({
-    "얼마나왔어", "얼마나왔", "얼마나갔어", "얼마청구됐어", "얼마쌓였어", "얼마인지", "얼마나",
+    "원금", "얼마나왔어", "얼마나왔", "얼마나갔어", "얼마청구됐어", "얼마쌓였어", "얼마인지", "얼마나",
     "얼마", "알려주실래요", "알려줄래", "알려줄수있어", "알려주세요", "알려줘", "알려",
     "보여주세요", "보여줘", "보여", "확인해줘", "확인", "알수있을까", "알수있어", "궁금해",
     "합치면", "합쳐서", "합친", "전부", "모든", "모두", "한번에", "전체", "혹시", "좀", "지금",
     "현재", "이번에", "이번", "총", "다", "내", "나의", "제", "계좌별", "별", "남아있어", "남아있",
     "남았는지", "남았어", "남았지", "남은", "남아", "남았", "쌓였어", "쌓였", "나왔어", "나왔",
     "청구됐어", "청구됐", "청구된", "들어있어", "들어", "있는지", "있어", "모였어", "해줘", "줘",
-    "줄래", "금액", "보유", "목록", "이랑", "랑", "하고", "신용", "카드", "돈", "의", "에", "이",
+    "줄래", "금액", "보유", "목록", "이랑", "랑", "하고", "돈", "의", "에", "이",
     "가", "은", "는", "을", "를", "야", "요", "지", "어", "해",
 }, key=len, reverse=True))
+
+# Lenient wording must split completely into allowed words, each followed only by particles
+# or endings. Erasing words anywhere let a filter hide ("요가에" lost 가·에 and read as a
+# total); a leftover syllable now keeps the exact grammar's refusal.
+_LENIENT_PARTICLES: Final = (
+    "에서", "으로", "이었어", "였는지", "였더라", "였어", "였지", "인지", "는지",
+    "은", "는", "이", "가", "을", "를", "에", "로", "의", "도", "만", "요", "야", "지", "어", "해", "한",
+)
+_LENIENT_MAX: Final = 60
+
+
+def _segment_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
+    alternatives = "|".join(re.escape(word) for word in sorted(set(words), key=len, reverse=True))
+    particles = "|".join(re.escape(word) for word in _LENIENT_PARTICLES)
+    # One particle or ending per word, optionally followed by a topic marker ("외식비로는").
+    return re.compile(rf"(?:(?:{alternatives})(?:{particles})?(?:는|은|도|만)?)+")
+
+
+_LENIENT_FULL: Final = _segment_pattern(
+    tuple(word for word, _ in _LENIENT_TOPICS)
+    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES)
+)
 
 
 def _lenient_topic(compact: str) -> PersonalTopic | None:
     if _LENIENT_FILTER.search(compact) is not None or _LENIENT_ASK.search(compact) is None:
         return None
-    found: set[PersonalTopic] = set()
-    for word, topic in _LENIENT_TOPICS:
-        if word in compact:
-            found.add(topic)
-            compact = compact.replace(word, " ")
-    rest = compact
-    for word in _LENIENT_WORDS:
-        rest = rest.replace(word, " ")
-    if rest.strip():
+    if len(compact) > _LENIENT_MAX or _LENIENT_FULL.fullmatch(compact) is None:
         return None
+    found: set[PersonalTopic] = set()
+    rest = compact
+    for word, topic in _LENIENT_TOPICS:
+        if word in rest:
+            found.add(topic)
+            rest = rest.replace(word, " ")
     # "대출 잔액" is the debt balance; "카드값 잔액" the card bill.
     for owner in ("debts", "payments"):
         if owner in found:

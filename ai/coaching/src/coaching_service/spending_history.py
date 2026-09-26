@@ -77,8 +77,31 @@ _LENIENT_WORDS: Final = tuple(sorted({
     "지", "어", "해", "한", "?", "!", ".", ",",
 }, key=len, reverse=True))
 
+# Lenient wording must split completely into allowed words, each followed only by particles
+# or endings. Erasing words anywhere let a filter hide ("요가에" lost 가·에 and read as a
+# total); a leftover syllable now keeps the exact grammar's refusal.
+_LENIENT_PARTICLES: Final = (
+    "에서", "으로", "이었어", "였는지", "였더라", "였어", "였지", "인지", "는지",
+    "은", "는", "이", "가", "을", "를", "에", "로", "의", "도", "만", "요", "야", "지", "어", "해", "한",
+)
+_LENIENT_MAX: Final = 60
 
-def _lenient(compact: str) -> str | None:
+
+def _segment_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
+    alternatives = "|".join(re.escape(word) for word in sorted(set(words), key=len, reverse=True))
+    particles = "|".join(re.escape(word) for word in _LENIENT_PARTICLES)
+    # One particle or ending per word, optionally followed by a topic marker ("외식비로는").
+    return re.compile(rf"(?:(?:{alternatives})(?:{particles})?(?:는|은|도|만)?)+")
+
+
+_LENIENT_FULL: Final = _segment_pattern(
+    tuple(word for word, _ in _LENIENT_PERIODS)
+    + tuple(word for word, _ in _LENIENT_ENVELOPES)
+    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES and word not in "?!.,")
+)
+
+
+def _lenient(compact: str) -> str | None:  # noqa: PLR0911 - one return per refusal.
     if _LENIENT_SPEND.search(compact) is None or _LENIENT_ASK.search(compact) is None:
         return None
     periods = {canonical for word, canonical in _LENIENT_PERIODS if word in compact}
@@ -96,9 +119,10 @@ def _lenient(compact: str) -> str | None:
             rest = rest.replace(word, " ")
     if len(envelopes) > 1:
         return None
-    for word in _LENIENT_WORDS:
-        rest = rest.replace(word, " ")
-    if rest.strip():
+    if "하루" in compact and not periods & {"오늘", "어제"}:
+        return None  # "하루에 얼마 썼어" asks a daily average, not a period total
+    plain = re.sub(r"[?!.,]", "", compact)
+    if len(plain) > _LENIENT_MAX or _LENIENT_FULL.fullmatch(plain) is None:
         return None
     candidate = next(iter(periods)) + next(iter(envelopes), "") + "소비얼마야"
     return candidate if _QUERY.fullmatch(candidate) is not None else None

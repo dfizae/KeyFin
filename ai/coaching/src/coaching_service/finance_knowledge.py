@@ -191,6 +191,17 @@ _PERSONAL_BUDGET_STATE: Final = re.compile(
     r"(?:괜찮|여유|버틸|버티|남을|남아|남았|부족|모자|넉넉|빠듯)"
     r"|(?:버틸|버티).{0,12}(?:예산|잔액|잔고|생활비|돈)"
 )
+_BUDGET_STATE_NOT_OWN: Final = re.compile(r"뭐|뜻|방법|어떻게|설명|때|하면|이면|으면|해도|쓰는\s*게")
+
+
+def _own_budget_state(question: str) -> bool:
+    """Tell whether the question asks about the user's own budget ("예산 괜찮을까요?")."""
+    return (
+        _PERSONAL_BUDGET_STATE.search(question) is not None
+        and _BUDGET_STATE_NOT_OWN.search(question) is None
+    )
+
+
 _PERSONAL_DATA_LOOKUP: Final = re.compile(
     r"(?:계좌|잔액|소비|지출|결제|예산|자산|부채|보험료|소득|고정비|금융\s*목표).{0,24}"
     r"(?:얼마|합계|보여|조회|내역|현황|목록|알려)"
@@ -233,11 +244,17 @@ _LATEST_STATUS_REQUEST: Final = re.compile(
     # "요즘", "최근", "올해", "이번 달", "제일" mark a current value only before a rate or
     # price ("요즘 적금 금리"); "요즘 적금이 뭐야?" stays the 적금 concept.
     r"|(?:요즘|최근|올해|이번\s*달|제일).{0,32}(?:금리|이자율|수익률|환율|시세|매매기준율|이자\s*(?:를\s*)?(?:많이|제일|가장))"
-    # A rate named first and its current level asked after ("적금 금리 제일 높은 곳",
-    # "환율 얼마야"). Only rate words lead here, so "예금 가장 쉽게 설명해줘" stays a concept.
-    r"|(?:금리|이자율|환율|수익률|시세|매매기준율).{0,20}(?:얼마|몇\s*(?:%|퍼센트|프로)|제일|가장|최고|최저|높은|낮은)"
+    # A rate named first and its current level asked after ("환율 얼마야", "적금 금리 제일
+    # 높은 곳 어디야"). A comparative alone ("금리가 높은 이유") is a concept question.
+    r"|(?:금리|이자율|환율|수익률|시세|매매기준율).{0,20}(?:얼마|몇\s*(?:%|퍼센트|프로))(?!\s*면)"
+    r"|(?:금리|이자율|환율|수익률|시세|매매기준율).{0,20}(?:제일|가장|최고|최저|높은|낮은).{0,12}"
+    r"(?:곳|데|은행|상품|어디|어느|추천|알려)"
     # Today's exchange rate named by currency ("오늘 달러 얼마야", "엔화 100엔에 얼마야").
-    r"|(?:달러|엔화|유로|위안|원\s*달러).{0,16}(?:얼마|몇|환율|시세|기준율)"
+    r"|(?:달러|엔화|유로|위안|원\s*달러).{0,16}(?:얼마|몇|시세|기준율)"
+)
+# Why/whether a rate matters is explained by the catalog, never a current-rate request.
+_RATE_REASON: Final = re.compile(
+    r"이유|왜|항상|무조건|좋은\s*거|좋은\s*게|유리|오르면|내리면|떨어지면|올라가면|내려가면|되면|두\s*배"
 )
 
 
@@ -353,7 +370,7 @@ def model_selected_finance_evidence(evidence: EvidenceInput) -> EvidenceInput | 
         or _PERSONAL_MARKER.search(evidence.question) is not None
         or _STATEFUL_FINANCE_REQUEST.search(evidence.question) is not None
         or _PERSONAL_DATA_LOOKUP.search(evidence.question) is not None
-        or _PERSONAL_BUDGET_STATE.search(evidence.question) is not None
+        or _own_budget_state(evidence.question)
         or _VOLATILE_OR_DECISION_REQUEST.search(evidence.question) is not None
     ):
         return None
@@ -829,7 +846,7 @@ def _stable_catalog_facts(
         )
         or _PERSONAL_MARKER.search(evidence.question) is not None
         or _STATEFUL_FINANCE_REQUEST.search(evidence.question) is not None
-        or _PERSONAL_BUDGET_STATE.search(evidence.question) is not None
+        or _own_budget_state(evidence.question)
         or (
             _VOLATILE_OR_DECISION_REQUEST.search(evidence.question) is not None
             and _QUALITATIVE_AMOUNT_GUIDE_REQUEST.search(evidence.question) is None
@@ -979,7 +996,10 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
     missing: tuple[MissingInformation, ...] | None = None
     if _UNREVIEWED_COMPLEX_PRODUCT_REQUEST.search(evidence.question) is not None:
         missing = ()
-    elif _LATEST_STATUS_REQUEST.search(evidence.question) is not None:
+    elif (
+        _LATEST_STATUS_REQUEST.search(evidence.question) is not None
+        and _RATE_REASON.search(evidence.question) is None
+    ):
         missing = ("latest_source",)
     elif _TAX_CALCULATION_STATUS_REQUEST.search(evidence.question) is not None:
         missing = ("tax_terms", "calculation")
@@ -996,6 +1016,20 @@ def investment_decision_wording() -> FinanceWording:
     """Decline a buy/sell decision on a named investment and say what the coach can do."""
     return FinanceWording(
         text=_INVESTMENT_DECISION_TEXT, source="template", model="not_called", answer_status="out_of_scope",
+    )
+
+
+def names_catalog_subject(question: str) -> bool:
+    """Whether the question itself names a catalog concept ("ETF", "신용점수", "리볼빙").
+
+    Retrieval alone is no evidence: a generic how-to ("잠이 안 오는데 어떻게 해?") retrieves
+    the whole catalog.
+    """
+    text = compact(question)
+    return any(
+        len(alias) >= 2 and alias in text
+        for fact in _BY_ID.values()
+        for alias in (compact(name) for name in (fact.title, *fact.aliases))
     )
 
 

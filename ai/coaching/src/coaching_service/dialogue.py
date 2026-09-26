@@ -49,9 +49,9 @@ from coaching_service.finance_knowledge import (
     deterministic_finance_status,
     deterministic_finance_wording,
     finance_evidence,
-    has_catalog_subject,
     investment_decision_wording,
     model_selected_finance_evidence,
+    names_catalog_subject,
     selected_finance_wording,
 )
 from coaching_service.history import historical_context
@@ -192,16 +192,17 @@ def forecast_chart_hint(
 # present they settle the turn as out of scope whatever the router picked.
 _OFF_TOPIC_SUBJECT: Final = re.compile(
     r"날씨|비와|비가|눈와|눈이와|미세먼지|메뉴|노래|음악|영화추천|드라마|게임추천|코드|코딩|파이썬|번역"
-    r"|농담|재밌는|재미있는|심심|안녕|반가|누구|이름이|몇시|몇일|며칠|무슨요일|잠이|졸려|배고"
+    r"|농담|재밌는|재미있는|심심|누구야|누구니|넌누구|너누구|이름이뭐|몇시야|무슨요일|잠이|졸려|배고"
     r"|사랑|연애|여자친구|남자친구|여친|남친|썸남|썸녀|썸타|권태기|화해|헤어진|전애인|애인"
-    r"|축구|야구|경기결과|선물|주말에뭐|뭐하지|좋아해|고마워|감사|몇살|생일"
-    r"|git|깃허브|깃에서|브랜치|자바스크립트|비동기|스트레칭|영어공부|공부법|음식추천|먹기좋은|맛집추천|우산챙"
+    r"|축구|야구|경기결과|주말에뭐|뭐하지|좋아해|너몇살|넌몇살|생일"
+    r"|git|깃허브|깃에서|브랜치|자바스크립트|비동기|스트레칭|영어공부|음식추천|먹기좋은|맛집추천|우산챙"
     r"|sql|리액트|react|useeffect|백준|알고리즘|프로그래밍|강아지|고양이|꿈꿔|소개팅|뭐먹|먹을지|끓이는|레시피|요리법"
     r"|소스뭐|기온|몇도|기분|꿀꿀|우울|비온|야식으로뭐|저녁에뭐|점심에뭐"
 )
 _ROUTED_ON_DATA: Final = frozenset({"review", "risk", "forecast", "personal", "history", "finance"})
 _NEEDS_HISTORY: Final = re.compile(
     r"차이|비교|랑|그거|그것|그건|그게|이거|이건|저거|그럼|그러면|둘|반대|다른점|같은점|아까|방금|위에"
+    r"|달라|다른|대비|보다|어때|도그래|는요|은요|도요"
 )
 
 
@@ -228,6 +229,7 @@ _FINANCE_SIGNAL: Final = re.compile(
     r"|수입|소득|월급|급여|용돈|봉투|구매|샀|살까|사도|쓴|썼|쓸|비용|요금|가격|청구|할부|투자|주식|보험|세금"
     r"|환율|금리|펀드|연금|위험|예측|전망|목표|모으|절약|아끼|줄이|코칭|가계|재정|금융"
     r"|외식|식비|교통|쇼핑|편의점|마트|잡화|의료|취미|여가|생활비|장보|구독|결제일|출금"
+    r"|etf|isa|dsr|재테크|연말정산|청약|옵션|신용|리볼빙|코인|채권|배당|주가|증권|복리|비상금"
 )
 
 
@@ -473,11 +475,9 @@ _ASKED_PIECE_KINDS: Final[dict[str, Literal["goal", "what_if", "spending"]]] = {
 
 
 def _previous_spending_question(session: Session) -> str | None:
-    return next(
-        (row.content for row in reversed(session.messages)
-         if row.role == "user" and supports_spending_question(row.content)),
-        None,
-    )
+    """Return the previous user turn when it was a spending lookup; an older one is not the topic."""
+    previous = next((row.content for row in reversed(session.messages) if row.role == "user"), None)
+    return previous if previous is not None and supports_spending_question(previous) else None
 
 
 def _spending_question(session: Session, question: str) -> str:
@@ -648,6 +648,13 @@ class Dialogue:
                 if request.analysis is None and parsed_goal is None and parsed_what_if is None
                 else None
             )
+            if isinstance(parsed_purchase_outcome, str) and (
+                deterministic_analysis_route(request.question) is not None
+                or deterministic_lookup_route(request.question) is not None
+            ):
+                # "앞으로 배달 시키면 이번 달 잔액 얼마 남을까?" is a forecast, not a purchase
+                # missing its amount.
+                parsed_purchase_outcome = None
             if isinstance(parsed_purchase_outcome, str):
                 clarification = purchase_clarification_answer(parsed_purchase_outcome)
                 if clarification is None:
@@ -894,6 +901,10 @@ class Dialogue:
             # summary on the review route, not a sentence list or a finance concept.
             # The turn below answers it from the ledger without an FDT simulation.
             return Routing(mode="review", source="template"), None
+        if parsed_purchase is not None:
+            # A complete purchase ("적자 안 나게 노트북 100만원 오늘 현금으로 사도 돼?") is the
+            # purchase review; a risk or lookup word in it must not drop the expense change.
+            return Routing(mode="review", source="template"), None
         lookup_route = deterministic_lookup_route(request.question)
         if lookup_route is not None:
             # Both the current-snapshot and historical-spending parsers accept
@@ -906,11 +917,6 @@ class Dialogue:
             # This narrow grammar chooses only an unambiguous personal FDT mode.  Calculation,
             # period validation, and final grounded wording still use the existing path below.
             return Routing(mode=direct_route, source="template"), None
-        if parsed_purchase is not None:
-            # A purchase change rides the same "review" route as any other
-            # engine.review call; it is checked last so it can never pre-empt
-            # an existing forecast/risk/personal-review/lookup grammar above.
-            return Routing(mode="review", source="template"), None
         return await self._route_or_direct_finance(request, session, history)
 
     async def _explicit_analysis_route(
@@ -950,9 +956,6 @@ class Dialogue:
         # prose resembles a general concept.  Preserve its original route and
         # numeric-operation observation instead of taking a knowledge shortcut.
         shortcut_allowed = request.analysis is None and self._direct_finance_enabled()
-        if shortcut_allowed and chit_chat(request.question):
-            # "잠이 안 오는데 어떻게 해?" needs neither a model call nor a catalog fact.
-            return Routing(mode="other", source="template", fallback_reason="no_finance_signal"), None
         bounded_status = deterministic_finance_status(standalone) if shortcut_allowed else None
         direct = deterministic_finance_wording(standalone) if shortcut_allowed else None
         # A current-rate question is answered with its source gap before a concept that
@@ -967,6 +970,9 @@ class Dialogue:
             # This strict grammar cannot choose FDT routes or construct values; it
             # supplies one pinned catalog definition only.
             return Routing(mode="finance", source="template"), direct
+        if shortcut_allowed and not names_catalog_subject(request.question) and chit_chat(request.question):
+            # "잠이 안 오는데 어떻게 해?" needs neither a model call nor a catalog fact.
+            return Routing(mode="other", source="template", fallback_reason="no_finance_signal"), None
         # The model's fact selection keeps the conversation: "신용카드랑 차이가 뭐야?"
         # after "체크카드가 뭐야?" needs both subjects, and the helper refuses history.
         # A self-contained paraphrase ("ETF가 뭔지 하나도 모르겠어") is judged on its own;
@@ -999,7 +1005,7 @@ class Dialogue:
             finance_input,
         )
         if off_topic_route(
-            request.question, decision.routing.mode, catalog_subject=has_catalog_subject(standalone),
+            request.question, decision.routing.mode, catalog_subject=names_catalog_subject(request.question),
         ):
             # The router may still pick an FDT or personal mode for a question with no
             # money word at all ("너 누구야?", "잠이 안 와"); that answered with the
