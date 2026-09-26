@@ -44,11 +44,11 @@ _MODIFIED: Final = re.compile(
 _UNSUPPORTED_CALENDAR: Final = re.compile(r"윤달|음력|영업일|공휴일")
 # "주말에 뭐하지?" / "오늘 뭐 먹지?" ask what to do, not a period.
 _ACTIVITY_TIME: Final = re.compile(
-    r"(?:주말|오늘|내일|이번\s*주말)\s*(?:에|에는)?\s*뭐\s*(?:하지|할까|해|하니|먹지|먹을까)"
+    r"(?:주말|오늘|내일|이번\s*주말)\s*(?:에|에는)?\s*뭐\s*(?:하지|할까|해|하니|먹지|먹을까)(?![가-힣])"
 )
 # "다음 주부터 매일 택시 타면 이번 달 적자야?": the start of a habit, not the period asked about.
 _HABIT_START: Final = re.compile(
-    r"(?:오늘|내일|모레|다음\s*주|이번\s*주|주말)\s*부터"
+    r"(?:오늘|내일|모레|다음\s*주|이번\s*주|주말)\s*부터(?!\s*\d{1,3}\s*일)"
     r"(?=.{0,20}?(?:타면|시키면|먹으면|가면|쓰면|하면|사면|내면|다니면|마시면))"
 )
 

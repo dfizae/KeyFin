@@ -165,7 +165,11 @@ _COMPARISON_MARKER: Final = re.compile(r"비교|차이")
 _TOPIC_KEYS_BY_LENGTH: Final = tuple(sorted(_TOPICS, key=len, reverse=True))
 
 
-_INTEREST_ASK: Final = re.compile(r"이자|금리|이율")
+# "금리 높은 대출", "고금리 대출" describe the loan; "대출 이자 얼마야?" asks the interest.
+_INTEREST_ASK: Final = re.compile(
+    r"(?<![고저])(?:이자|금리|이율)(?!(?:가|이)?(?:높|낮|붙|포함|싼|비싼|센|쎈))"
+)
+_PRINCIPAL: Final = re.compile(r"잔액|원금|잔고|남은")
 
 
 def _topic_in_fragment(fragment: str) -> PersonalTopic | None:
@@ -175,7 +179,8 @@ def _topic_in_fragment(fragment: str) -> PersonalTopic | None:
         if key in compact:
             topic = _TOPICS[key]
             # "대출 이자 얼마야?" asks the interest; the debt snapshot holds only the principal.
-            return None if topic == "debts" and _INTEREST_ASK.search(compact) is not None else topic
+            asks_interest = _INTEREST_ASK.search(compact) is not None and _PRINCIPAL.search(compact) is None
+            return None if topic == "debts" and asks_interest else topic
     return None
 
 

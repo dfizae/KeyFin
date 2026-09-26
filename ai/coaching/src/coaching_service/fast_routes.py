@@ -121,11 +121,12 @@ _RISK_OUTCOME_TERMS: Final[tuple[str, ...]] = ("부족", "모자라", "모자란
 _PERIOD_RISK: Final = re.compile(r"(?:이번달|이달|월말|앞으로|남은기간).{0,12}(?:위험|리스크|적자)")
 _LISTING: Final = re.compile(r"뭐(?:가)?있(?:어|나|을까|는지|지)")
 # "주말에 뭐하지?" asks what to do, not what something means.
-_ACTIVITY_ASK: Final = re.compile(r"뭐(?:하지|할까|하니|해|먹지|먹을까|사지)")
+_ACTIVITY_ASK: Final = re.compile(r"뭐(?:하지|할까|하니|해(?![야줘주서도봐보라])|먹지|먹을까|사지)")
 _INVESTMENT_SUBJECT: Final = re.compile(r"위험자산|안전자산|투자|자산배분|포트폴리오")
 _OWN_BUDGET_SUBJECT: Final = re.compile(
     r"이번달|이달|월말|남은기간|적자|잔액|예산|생활비|봉투|카드값|부족|모자라|모자랄|버틸|버티|남은돈|가진돈"
     r"|(?<!주식)(?<!증권)(?<!투자용)(?<!투자)(?<!코인)(?<!isa)(?:통장|계좌)|(?:내|제|우리|나의|저의)돈"
+    r"|(?<!투자할)(?<!투자용)(?<!주식)(?<!코인)(?<!투자)돈(?!(?:이|을)?(?:되|버|벌))"
 )
 # A user can contrast an earlier risk-only view with the requested balance path.
 # These compacted phrases are an admission condition for the no-model forecast
@@ -159,8 +160,11 @@ _BUDGET_OUTCOME: Final = re.compile(
     r"|(?:향후|앞으로|남은기간|월말까지|이번달말까지|이달말까지|말까지)(?:예산|봉투|생활비|돈)(?:이|은|는|가)?"
     r"(?:괜찮아|괜찮나|괜찮은|여유있어|" + _OUTCOME_VERB[3:-1] + r")"
     r"|버틸(?:수있을)?(?:만큼의?|정도의?)?(?:예산|돈|생활비)(?:이|은|는|가)?(?:있어|있을까|남았어|될까)"
-    # "이번 달 버틸 수 있을까?", "월말까지 버틸 수 있을까?": the period alone names this budget.
-    rf"|(?:이번달|이달|남은기간|월말까지|이번달말까지|이달말까지)(?:은|는|도)?{_OUTCOME_VERB}"
+)
+# "이번 달 버틸 수 있을까?", "월말까지 버틸 수 있을까?": the period alone names this budget,
+# unless a purchase is being asked about ("치킨 시키면 이번 달 괜찮을까?").
+_PERIOD_ONLY_OUTCOME: Final = re.compile(
+    rf"(?:이번달|이달|남은기간|월말까지|이번달말까지|이달말까지)(?:은|는|도)?{_OUTCOME_VERB}"
 )
 _OUTCOME_BLOCK: Final = re.compile(r"대출|빌려|빌리|넣어|넣으|먹어|사도|사면|투자")
 # A review must name both the user's own observed finances and an FDT review action.
@@ -424,7 +428,8 @@ _PURCHASE_SPEND_BLOCK: Final = re.compile(
 _AMOUNT_NOT_PRICE: Final = re.compile(
     r"(?<=[0-9십백천만억])원(?:이|은|가|을|를|도|만|정도|쯤|밖에|넘게)?(?:남았|남아|남은|썼|쓴|나갔|나간|부족|있는데|있어서"
     r"|써서|들었|들어서|나와서|이었|였|뿐|밖에없|나왔(?!.*(?:결제|내도|내면|낼까|낼게|사도|사면|살까))"
-    r"|(?:만|정도|쯤)?(?:갖고있|가지고있|들고있|들어있|남기고|남겨|남짓있|(?:으로|로)(?:만)?(?:버텨|버티|버틸|살아야|지내야)))"
+    r"|(?:만|정도|쯤)?(?:갖고있|가지고있|들고있|들어있|남기고|남겨|남짓있|(?:으로|로)(?:만)?(?:버텨|버티|버틸|살아야|지내야))"
+    r"|들어오면|들어오는데|들어와|들어왔|받으면|받았|받기로|받는데|벌었|먹었|샀는데|탔는데|냈는데)"
 )
 _PURCHASE_HABIT: Final = re.compile(
     r"(?:타|시키|가|먹으|쓰|내|사먹으)면서|(?:부터.{0,12}|(?:계속|앞으로).{0,10})"
@@ -441,6 +446,10 @@ _PRICE_NEXT: Final = re.compile(
 _WORD_EDGE_MARKS: Final = "?!.,~^;:()[]\"'"
 _BALANCE_WORD: Final = re.compile(r"잔액|잔고|남은돈|가진돈|예산")
 _HELD_MONEY_WORD: Final = re.compile(r"잔액|잔고|남은돈|가진돈")
+_BALANCE_DUE: Final = re.compile(
+    r"\s*(?:을|를)?\s*(?:오늘|내일|이번\s*주|다음\s*주|지금)?\s*(?:(?:현금|카드|체크카드|계좌이체|이체)\s*(?:으로|로)?\s*)?"
+    r"(?:결제|치르|치러|갚|송금|입금|내도|내면|낼)"
+)
 _BALANCE_STATEMENT: Final = re.compile(
     r"(?:잔액|잔고|남은\s*돈|가진\s*돈)\s*(?:이|은|는|가|도|만)?\s*(?:딱|겨우|고작|약|대략)?\s*"
     r"[0-9][0-9,.]*\s*(?:[십백천만억]\s*)*원\s*(?:이야|이지|이에요|예요|인데|이라|뿐|밖에|정도|남짓|쯤)?"
@@ -456,6 +465,10 @@ def _amount_reads_as_price(normalized: str, question: str) -> bool:
 
 
 _CLAUSE_END: Final = re.compile(r"[?!.,]$")
+
+
+def _first_amount_index(tokens: list[str]) -> int | None:
+    return next((i for i, raw in enumerate(tokens) if purchase_amounts(raw.strip(_WORD_EDGE_MARKS))), None)
 
 
 def _strict_price_shape(tokens: list[str], index: int) -> bool:
@@ -487,7 +500,7 @@ def _price_shaped(question: str) -> bool:
     버텨야") needs the strict shape; "노트북 150만원인데 사도 돼? 월말에 괜찮을까?" keeps its price.
     """
     tokens = _joined_amounts(unicodedata.normalize("NFKC", question).lower()).split()
-    index = next((i for i, raw in enumerate(tokens) if purchase_amounts(raw.strip(_WORD_EDGE_MARKS))), None)
+    index = _first_amount_index(tokens)
     if index is None:
         return False
     start = index
@@ -495,8 +508,9 @@ def _price_shaped(question: str) -> bool:
         start -= 1
     token = tokens[index].lstrip(_WORD_EDGE_MARKS)
     run = next((m for m in _AMOUNT_RUN.finditer(token) if token[m.end() : m.end() + 1] == "원"), None)
-    start = max(start, index - 2)
-    before = compact(" ".join(tokens[start:index] + ([token[: run.start()]] if run else [])))
+    head = [token[: run.start()]] if run else []
+    before = compact(" ".join(tokens[start:index] + head))
+    near_before = compact(" ".join(tokens[max(start, index - 2) : index] + head))
     after_tokens: list[str] = []
     if _CLAUSE_END.search(tokens[index]) is None:
         for following in tokens[index + 1 : index + 3]:
@@ -510,11 +524,15 @@ def _price_shaped(question: str) -> bool:
         or _HELD_MONEY_WORD.search(after) is not None
         or (bool(after_tokens) and _BUDGET_AFTER.match(after_tokens[0].strip(_WORD_EDGE_MARKS)) is not None)
     )
-    if _PURCHASE_SPEND_CONTEXT.search(before + after) is None and not labelled:
+    if _PURCHASE_SPEND_CONTEXT.search(near_before + after) is None and not labelled:
         return True
     return _strict_price_shape(tokens, index)
 
 
+# Asking permission for one spend ("시켜도 돼?", "타도 될까?") rather than what a habit leads to.
+_SPEND_PERMISSION: Final = re.compile(
+    r"(?:먹어|시켜|시켜먹어|사먹어|타|가|예약해|예매해|등록해|결제해|내|써)도(?:돼|될까|되나|되니|되냐|괜찮)"
+)
 _PURCHASE_SPEND_CONTEXT: Final = re.compile(
     r"계속|앞으로|월말|잔액|예측|위험|부족|남을|남아|남았|들까|얼마들|나올지|얼마나올|썼|쓴|나갔|나간|지난달|면서"
 )
@@ -946,7 +964,7 @@ def purchase_envelopes(question: str) -> frozenset[str]:
     return frozenset(named)
 
 
-def _has_purchase_intent(normalized: str, question: str) -> bool:  # noqa: PLR0911 - one return per verb tier.
+def _has_purchase_intent(normalized: str, question: str) -> bool:
     """Decide whether the whitespace-free text is a purchase question at all.
 
     Strict buy verbs count on their own. Casual verbs ("사고싶"/"사볼까"/"사둘까")
@@ -969,11 +987,18 @@ def _has_purchase_intent(normalized: str, question: str) -> bool:  # noqa: PLR09
         return False
     if _PURCHASE_VERB_FUTURE.search(normalized) is not None:
         return has_amount and has_item
-    if (
-        _PURCHASE_SPEND_BLOCK.search(normalized) is not None
-        or _AMOUNT_NOT_PRICE.search(normalized) is not None
-        or _PURCHASE_HABIT.search(normalized) is not None
-    ):
+    return _spend_intent(normalized, question, has_item=has_item, has_amount=has_amount)
+
+
+def _spend_intent(normalized: str, question: str, *, has_item: bool, has_amount: bool) -> bool:  # noqa: PLR0911
+    """Decide the everyday-spend tier ("치킨 시켜도 돼?", "택시 타도 될까?", "결제해도 돼?")."""
+    if _PURCHASE_SPEND_BLOCK.search(normalized) is not None or _PURCHASE_HABIT.search(normalized) is not None:
+        return False
+    if has_item and _SPEND_PERMISSION.search(normalized) is not None:
+        # "잔액 5만원 남았는데 오늘 치킨 시켜도 돼?" asks permission for a purchase whose price
+        # is still missing; the stated balance or past spend is asked about, not booked.
+        return True
+    if _AMOUNT_NOT_PRICE.search(normalized) is not None:
         return False
     if _PURCHASE_SPEND_CONTEXT.search(normalized) is not None and not (
         len(purchase_amounts(question)) == 1
@@ -1007,10 +1032,23 @@ def natural_purchase(question: str) -> NaturalPurchase | str | None:
     """
     text = unicodedata.normalize("NFKC", question).lower()
     balance = _BALANCE_STATEMENT.search(text)
-    if balance is not None:
-        # "잔액 3만원이야. 오늘 치킨 시켜도 돼?" states what is left; the price is still missing.
-        return natural_purchase(text[: balance.start()] + " " + text[balance.end() :])
-    return _admit_purchase(question)
+    if balance is None or _BALANCE_DUE.match(text, balance.end()) is not None:
+        return _admit_purchase(question)
+    # "잔액 3만원이야. 오늘 치킨 시켜도 돼?" states what is left; the price is read from the rest,
+    # and only a price-shaped amount counts there ("월급 250만원 들어오면" is not the price).
+    rest = text[: balance.start()] + " " + text[balance.end() :]
+    result = natural_purchase(rest)
+    if isinstance(result, NaturalPurchase):
+        tokens = _joined_amounts(rest).split()
+        index = _first_amount_index(tokens)
+        if index is None or not _strict_price_shape(tokens, index):
+            return "purchase_amount_required"
+    return result
+
+
+def _asks_purchase(question: str) -> bool:
+    """Whether the text asks about a purchase at all, priced or not."""
+    return _has_purchase_intent(re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower()), question)
 
 
 def _admit_purchase(question: str) -> NaturalPurchase | str | None:  # noqa: PLR0911 - one return per clarify boundary.
@@ -1492,7 +1530,10 @@ def deterministic_analysis_route(question: str) -> AnalysisRoute | None:  # noqa
         ):
             return "review"
         if (
-            _BUDGET_OUTCOME.search(normalized) is not None
+            (
+                _BUDGET_OUTCOME.search(normalized) is not None
+                or (_PERIOD_ONLY_OUTCOME.search(normalized) is not None and not _asks_purchase(question))
+            )
             and re.search(r"\d", normalized) is None
             and _OUTCOME_BLOCK.search(normalized) is None
             and not investment_product(question)
