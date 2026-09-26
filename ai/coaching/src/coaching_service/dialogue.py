@@ -194,6 +194,7 @@ def forecast_chart_hint(
 _OFF_TOPIC_SUBJECT: Final = re.compile(
     r"날씨|비와|비가|눈와|눈이와|미세먼지|메뉴|노래|음악|영화추천|드라마|게임추천|코드|코딩|파이썬|번역"
     r"|농담|재밌는|재미있는|심심|이름이뭐|몇시야|며칠|몇일"
+    r"|넌누구|너누구|너는누구|당신은누구|당신누구|누구야너|누구니너|누구냐너|누구냐넌"
     r"|무슨요일|잠이|졸려|배고"
     r"|사랑|연애|여자친구|남자친구|여친|남친|썸남|썸녀|썸타|권태기|화해|헤어진|전애인|애인"
     r"|축구|야구|경기결과|주말에뭐|뭐하지|좋아해|너몇살|넌몇살|생일"
@@ -212,7 +213,8 @@ _NEEDS_HISTORY: Final = re.compile(
 # "안녕하세요 이번 달 괜찮을까요?" still ask about money, and "피부양자는 누구예요?" is a concept.
 _GREETING_ONLY: Final = re.compile(
     r"(?:냥냥(?:아|이)?|안녕(?:하세요|하십니까)?|반가워(?:요)?|반갑습니다|고마워(?:요)?|고맙습니다"
-    r"|감사(?:합니다|해요|해)?|뭐해(?:요)?|뭐하니|뭐하세요"
+    r"|감사(?:합니다|해요|해)?|뭐해(?:요)?|뭐하니|뭐하세요|하이|굿모닝|좋은아침|잘자(?:요)?|잘지냈어(?:요)?"
+    r"|수고했어(?:요)?|수고하셨습니다|수고많았어(?:요)?"
     r"|(?:너|넌|니|당신)?(?:는|은)?(?:누구(?:야|니|세요|예요|에요|신가요|신지|냐)|몇살(?:이야|이에요|이세요|이니|인가요|이냐)?))+"
 )
 _GREETING_NOISE: Final = re.compile(r"[\u3131-\u318e~!?.,^;…♡♥]+")
@@ -222,10 +224,13 @@ _GREETING_MAX: Final = 30
 def chit_chat(question: str) -> bool:
     """Whether the turn names a chit-chat subject and no money word at all."""
     text = compact(question)
-    if _FINANCE_SIGNAL.search(text) is not None:
+    off_topic = _OFF_TOPIC_SUBJECT.search(text) is not None
+    money_outcome = _MONEY_OUTCOME.search(text) is not None and not off_topic
+    if _FINANCE_SIGNAL.search(text) is not None or money_outcome:
+        # "잠이 부족해" names a chit-chat subject; "이번 달 버틸 수 있을까?" does not.
         return False
     greeting = _GREETING_NOISE.sub("", text)
-    return _OFF_TOPIC_SUBJECT.search(text) is not None or (
+    return off_topic or (
         0 < len(greeting) <= _GREETING_MAX and _GREETING_ONLY.fullmatch(greeting) is not None
     )
 
@@ -248,8 +253,9 @@ _FINANCE_SIGNAL: Final = re.compile(
     r"|환율|금리|펀드|연금|위험|예측|전망|목표|모으|절약|아끼|줄이|코칭|가계|재정|금융"
     r"|외식|식비|교통|쇼핑|편의점|마트|잡화|의료|취미|여가|생활비|장보|구독|결제일|출금"
     r"|etf|isa|dsr|재테크|연말정산|청약|옵션|신용|리볼빙|코인|채권|배당|주가|증권|복리|비상금"
-    r"|적자|부족|모자라|버틸|버티"
+    r"|적자"
 )
+_MONEY_OUTCOME: Final = re.compile(r"부족|모자라|버틸|버티")
 
 
 def _select_cash_account(accounts: "list[JsonValue]") -> "dict[str, JsonValue] | None":

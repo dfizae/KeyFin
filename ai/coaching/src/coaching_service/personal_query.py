@@ -197,6 +197,11 @@ def select_personal_topics(question: str) -> tuple[PersonalTopic, ...]:
     return tuple(topics)
 
 
+def connector_fragments(question: str) -> list[str]:
+    """연결어로 나눈 조각들("계좌 잔액", "이번 달 외식 얼마 썼어?")."""
+    return [fragment for fragment in _CONNECTOR.split(question) if fragment.strip()]
+
+
 def has_unmatched_fragment(question: str) -> bool:
     """연결어로 나뉜 조각 중 등록된 주제를 찾지 못한 조각이 있으면 참이다."""
     fragments = [fragment for fragment in _CONNECTOR.split(question) if fragment.strip()]

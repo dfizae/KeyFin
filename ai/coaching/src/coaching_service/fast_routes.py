@@ -10,6 +10,7 @@ from typing import Final, Literal
 
 from coaching_service.knowledge_retrieval import compact
 from coaching_service.personal_query import (
+    connector_fragments,
     filtered_personal_topic,
     select_personal_topic,
     select_personal_topics,
@@ -120,7 +121,9 @@ _RISK_OUTCOME_TERMS: Final[tuple[str, ...]] = ("부족", "모자라", "모자란
 _PERIOD_RISK: Final = re.compile(r"(?:이번달|이달|월말|앞으로|남은기간).{0,12}(?:위험|리스크|적자)")
 _LISTING: Final = re.compile(r"뭐(?:가)?있(?:어|나|을까|는지|지)")
 _INVESTMENT_SUBJECT: Final = re.compile(r"위험자산|안전자산|투자|자산배분|포트폴리오")
-_OWN_BUDGET_SUBJECT: Final = re.compile(r"이번달|이달|월말|남은기간|적자|잔액|예산|생활비|봉투")
+_OWN_BUDGET_SUBJECT: Final = re.compile(
+    r"이번달|이달|월말|남은기간|적자|잔액|예산|생활비|봉투|돈|카드값|부족|모자라|모자랄|버틸|버티|통장|계좌"
+)
 # A user can contrast an earlier risk-only view with the requested balance path.
 # These compacted phrases are an admission condition for the no-model forecast
 # route; other mixed risk/forecast language deliberately remains model-routed.
@@ -414,11 +417,54 @@ _PURCHASE_SPEND_BLOCK: Final = re.compile(
 # The stated amount is what is left or already spent ("잔액 5만원 남았는데 치킨 시켜도 돼?"), or
 # the plan is a habit ("오늘부터 계속 택시 타면"): never a one-off purchase at that price.
 _AMOUNT_NOT_PRICE: Final = re.compile(
-    r"원(?:이|은|가|을|를|도|만|정도|쯤|밖에|넘게)?(?:남았|남아|남은|썼|쓴|나갔|나간|나왔|부족|있는데|있어서)"
+    r"원(?:이|은|가|을|를|도|만|정도|쯤|밖에|넘게)?(?:남았|남아|남은|썼|쓴|나갔|나간|부족|있는데|있어서"
+    r"|써서|들었|들어서|나와서|이었|였|뿐|밖에없|나왔(?!.*(?:결제|내도|내면|낼까|낼게|사도|사면|살까)))"
 )
 _PURCHASE_HABIT: Final = re.compile(
-    r"(?:타|시키|가|먹으|쓰|내|사먹으)면서|부터|(?:계속|앞으로).{0,10}(?:타면|시키면|먹으면|가면|쓰면|내면)"
+    r"(?:타|시키|가|먹으|쓰|내|사먹으)면서|(?:부터.{0,12}|(?:계속|앞으로).{0,10})"
+    r"(?:타면|시키면|먹으면|가면|쓰면|내면)"
 )
+# Under forecast, balance or past-spend wording the one amount counts as the price only when it
+# is price-shaped: "치킨 3만원 현금으로", "3만원짜리", "3만원 시키면", not "5만원인데", "3만원밖에",
+# "5만원으로 버텨야" or "4만원, 오늘 …".
+_PRICE_SUFFIX: Final = frozenset({"", "짜리", "어치", "에", "정도", "쯤"})
+_PRICE_NEXT: Final = re.compile(
+    r"현금|카드|계좌|통장|체크|신용|이체|오늘|내일|이번주|이번|다음주|다음|시켜|시키|사먹|사도|사면|결제|내도|내면"
+    r"|써도|쓰면|타도|타면|먹어|먹으|먹을|예약|예매|등록|끊"
+)
+_WORD_EDGE_MARKS: Final = "?!.,~^;:()[]\"'"
+_BALANCE_WORD: Final = re.compile(r"잔액|잔고|남은돈|가진돈")
+
+
+def _amount_reads_as_price(normalized: str, question: str) -> bool:
+    """Under balance or forecast wording ("잔액 5만원인데 사도 돼?") the amount must be price-shaped."""
+    if _PURCHASE_SPEND_CONTEXT.search(normalized) is None and _BALANCE_WORD.search(normalized) is None:
+        return True
+    return _price_shaped(question)
+
+
+def _price_shaped(question: str) -> bool:
+    """Whether the first won amount reads as the price of the purchase being asked about."""
+    tokens = _joined_amounts(unicodedata.normalize("NFKC", question).lower()).split()
+    for index, raw in enumerate(tokens):
+        token = raw.lstrip(_WORD_EDGE_MARKS)
+        for match in _AMOUNT_RUN.finditer(token):
+            if token[match.end() : match.end() + 1] != "원":
+                continue
+            suffix = token[match.end() + 1 :]
+            core = suffix.rstrip("?!.~")
+            if core not in _PRICE_SUFFIX or suffix.endswith(","):
+                return False
+            if suffix != core:
+                return True  # "3만원?" ends the clause on the amount
+            following = index + 1
+            while following < len(tokens) and tokens[following].strip(_WORD_EDGE_MARKS) in _PRICE_SUFFIX:
+                following += 1  # "2만원 정도 현금으로"
+            word = tokens[following].strip(_WORD_EDGE_MARKS) if following < len(tokens) else ""
+            return not word or _PRICE_NEXT.match(word) is not None or bool(purchase_envelopes(word))
+    return False
+
+
 _PURCHASE_SPEND_CONTEXT: Final = re.compile(
     r"계속|앞으로|월말|잔액|예측|위험|부족|남을|남아|남았|들까|얼마들|나올지|얼마나올|썼|쓴|나갔|나간|지난달|면서"
 )
@@ -431,8 +477,14 @@ _PURCHASE_VERB: Final = re.compile(
 # item ("옷사면"). Inside another word it is 이사+도, 행사+도, 회사+면 or 사면초가, and a bare
 # 살까 is also 살다 ("혼자 살까", "몇 살까지"), so those need a named item.
 _BUY_WORD: Final = re.compile(
-    r"(?:^|(?<=\s))(?:사면(?!초가)|사도|사서|사려고|사먹|구매|구입|지르|질러|사고\s*싶|사볼까|사둘까)"
+    r"(?:(?:^|(?<=[\s.,!?~…·)\]\"'])|(?<=원)|(?<=짜리)|(?<=어치)|(?<=[거것걸건을를]))"
+    r"(?:사면(?!초가)|사도|사서|사려고|사먹|지르|질러|사고\s*싶|사볼까|사둘까)|구매|구입)"
 )
+# "집 사려고 돈 모으는 중" is a saving plan and "사서 고생" an idiom, not a purchase to price.
+_SAVING_PLAN: Final = re.compile(
+    r"(?:사려고|살려고|사기위해|사려면).{0,15}(?:모으|모을|모아|모이|저축|적금|드는)"
+)
+_BUY_IDIOM: Final = re.compile(r"사서\s*고생")
 
 
 def _buy_verb_counts(question: str) -> bool:
@@ -443,9 +495,30 @@ def _buy_verb_counts(question: str) -> bool:
 
 
 def has_buy_verb(question: str) -> bool:
-    """Whether the text uses a strict or casual buy verb ("사면", "사도", "사고 싶어")."""
-    normalized = re.sub(r"\s+", "", unicodedata.normalize("NFKC", question).lower())
-    return _PURCHASE_VERB.search(normalized) is not None and _buy_verb_counts(question)
+    """Whether the text asks about buying something ("노트북 사면", "옷사면", "노트북 살까").
+
+    An item elsewhere in the turn does not make 이사도, 회사도 or 혼자 살까 a buy verb.
+    """
+    text = unicodedata.normalize("NFKC", question).lower()
+    normalized = re.sub(r"\s+", "", text)
+    if (
+        _PURCHASE_VERB.search(normalized) is None
+        or _SAVING_PLAN.search(normalized) is not None
+        or _BUY_IDIOM.search(text) is not None
+    ):
+        return False
+    if _BUY_WORD.search(text) is not None:
+        return True
+    tokens = [raw.strip(_WORD_EDGE_MARKS) for raw in text.split()]
+    for index, token in enumerate(tokens):
+        match = _PURCHASE_VERB.search(token)
+        if match is None:
+            continue
+        head = token[: match.start()]
+        item_before = tokens[index - 1] if index > 0 else ""
+        if purchase_envelopes(head) if head else bool(item_before and purchase_envelopes(item_before)):
+            return True
+    return False
 
 # Securities, funds and crypto: buying them is an investment decision the coach does
 # not make. Matched per typed word ("이번 주 가방" is not 주가), from the word start
@@ -486,6 +559,10 @@ _BRAND_BUY_NEXT: Final = re.compile(
 # "애플 살까 삼성 살까?" compares products; 현대차·기아 with a price or payment is a car.
 _BRAND_COMPARISON: Final = re.compile(r"살까.{1,14}살까")
 _CAR_PURCHASE: Final = re.compile(r"현금|할부|카드로|리스|[0-9]+만원|보험료|취득세")
+_BRAND_TAIL: Final = re.compile(r"돼|될까|되나|되냐|되니|되겠|괜찮|말까|할까|해|좋을까|어때|맞|게$|거$")
+_MARKET_TALK: Final = re.compile(
+    r"떨어졌|떨어지|올랐|오를|내릴|내렸|반등|폭락|폭등|급등|급락|하락|상승|실적|전망|저점|고점|물타"
+)
 
 
 def _brand_bought(tokens: list[str], index: int, words: str) -> bool:
@@ -498,7 +575,16 @@ def _brand_bought(tokens: list[str], index: int, words: str) -> bool:
     rest = tokens[index + 1 :]
     while rest and rest[0] in _BRAND_TIME:
         rest = rest[1:]
-    return not rest or _BRAND_BUY_NEXT.match(rest[0]) is not None
+    if rest and _BRAND_BUY_NEXT.match(rest[0]) is None:
+        return False
+    if _MARKET_TALK.search(words) is not None:
+        return True
+    # "기아 사면 연비 좋아?" / "현대차 사도 될까? 차 바꿀 때 됐는데" talk about the car after the verb.
+    verbs = [
+        position for position in range(index + 1, len(tokens))
+        if _BRAND_BUY_NEXT.match(tokens[position]) or _BRAND_BUY.search(tokens[position])
+    ]
+    return not verbs or all(not tail or _BRAND_TAIL.match(tail) for tail in tokens[verbs[-1] + 1 :])
 # Everyday services that share a company's name are not investments.
 _INVESTMENT_NOT: Final[tuple[str, ...]] = (
     "코인노래방", "코인세탁", "코인빨래", "코인워시", "카카오페이", "카카오택시", "카카오톡", "카카오t",
@@ -712,7 +798,8 @@ _PURCHASE_ITEMS: Final[dict[str, tuple[str, ...]]] = {
     "취미·여가": (
         "영화", "콘서트", "공연", "뮤지컬", "연극", "전시", "티켓", "야구", "축구", "여행", "호텔",
         "리조트", "숙소", "숙박", "펜션", "에어비앤비", "캠핑", "게임", "스팀", "웹툰", "책", "도서",
-        "만화책", "전공책", "동화책", "그림책", "소설책", "노래방", "pc방", "볼링", "놀이공원",
+        "만화책", "전공책", "동화책", "그림책", "소설책", "영어책", "수학책", "요리책", "자기계발책",
+        "문제집", "참고서", "노래방", "pc방", "볼링", "놀이공원",
         "테마파크", "취미",
     ),
     "쇼핑": (
@@ -726,7 +813,7 @@ _PURCHASE_ITEMS: Final[dict[str, tuple[str, ...]]] = {
         "편의점", "마트", "대형마트", "이마트", "홈플러스", "코스트코", "생필품", "생활용품", "장보기",
         "장바구니", "식료품", "식재료", "휴지", "화장지", "세제", "샴푸", "치약", "칫솔", "물티슈",
         "라면", "과일", "우유", "간식", "우산", "컵라면", "진라면", "신라면", "짜장라면", "볶음라면",
-        "딸기우유", "바나나우유", "초코우유",
+        "딸기우유", "바나나우유", "초코우유", "비빔라면", "열라면", "틈새라면", "짬뽕라면",
     ),
 }
 # Short words that are also parts of everyday words count only at the start of a typed
@@ -742,7 +829,8 @@ _ITEM_NOT_START: Final[tuple[str, ...]] = ("책임", "책정", "고기압", "빵
 # ppt, 빵빵). 라면·책·폰 collide with conditionals and idioms (아니라면, 대책, 쿠폰), so their
 # compounds are listed as items instead.
 _ITEM_END_OK: Final[dict[str, str]] = {
-    "마트": "스", "요가": "필중주", "pt": "gp", "빵": "빵", "고기": "", "옷": "", "시계": "", "우유": "",
+    "마트": "스", "요가": "필중주수", "pt": "gp", "빵": "빵", "고기": "", "옷": "", "시계": "", "우유": "",
+    "폰": "쿠스",
 }
 _ITEM_TOKEN_PARTICLE: Final = re.compile(r"(?:이랑|하고|이요|으로|을|를|이|가|은|는|에|도|만|요|로|랑)$")
 
@@ -818,6 +906,7 @@ def _has_purchase_intent(normalized: str, question: str) -> bool:  # noqa: PLR09
         len(purchase_amounts(question)) == 1
         and has_item
         and _purchase_date_token(normalized, exclude=None) is not None
+        and _price_shaped(question)
     ):
         return False
     if _PURCHASE_VERB_SPEND_ITEM.search(normalized) is not None or (
@@ -853,7 +942,11 @@ def natural_purchase(  # noqa: PLR0911 - each branch is one explicit clarify-vs-
         # cannot express yet (see scratchpad/PURCHASE-SPIKE.md ``4. Installment``).
         return "purchase_installment_unsupported"
     amounts = purchase_amounts(question)
-    if len(amounts) != 1 or _AMOUNT_NOT_PRICE.search(normalized) is not None:
+    if (
+        len(amounts) != 1
+        or _AMOUNT_NOT_PRICE.search(normalized) is not None
+        or not _amount_reads_as_price(normalized, question)
+    ):
         # "잔액 5만원 남았는데 노트북 사도 돼?" names the balance, not the price.
         return "purchase_amount_required"
     amount_krw = amounts[0]
@@ -975,7 +1068,9 @@ _GOAL_AMOUNT_VERB: Final = re.compile(
     r"원(?:이라도|라도|이나|정도|쯤|까지|넘게|이상|목표|을|를|이|은|는|도|만|씩){0,3}"
     r"(?:모으|모을|모아|모이|저축|달성|만들|채우|채울)"
 )
-_GOAL_NOT_SAVING: Final = re.compile(r"넣어|예치해|예치하|연회비|대출|마이너스|한도|(?:모이|모으|모아)면")
+_GOAL_NOT_SAVING: Final = re.compile(
+    r"넣어|예치해|예치하|연회비|(?:대출|마이너스|한도).{0,12}(?:만들|채우|채울|받)|(?:모이|모으|모아)면"
+)
 _FIXED_COST: Final = re.compile(r"월세|관리비|통신비|구독|보험료|고정비")
 _SPENDING_NOT_LOOKUP: Final = re.compile(r"공제|연말정산|해야|하려면|받으려면")
 # A goal deadline the goal branch cannot compute yet ("1년 동안", "연말까지", "6개월 안에").
@@ -986,6 +1081,22 @@ _GOAL_UNSUPPORTED_PERIOD: Final = re.compile(
 _UNSUPPORTED_SPENDING_PERIOD: Final = re.compile(
     r"이번주|지난주|저번주|주말|올해|작년|지난해|상반기|하반기|분기|최근\d+일|지난\d+일|\d+월"
 )
+
+
+_ALIAS_PARTICLE: Final = re.compile(r"(?:이랑|랑|하고|와|과|을|를|은|는|이|가|도|에서|에|,)$")
+
+
+def _envelopes_before_amount(question: str) -> set[str]:
+    """Envelopes the reduction names ("외식비랑 교통비 3만원씩"), read before the amount as whole words."""
+    named: set[str] = set()
+    for raw in unicodedata.normalize("NFKC", question).lower().split():
+        token = raw.strip(_WORD_EDGE_MARKS)
+        if purchase_amounts(token):
+            break
+        core = _ALIAS_PARTICLE.sub("", token)
+        if core != "기타" and core in _WHAT_IF_ENVELOPE_ALIASES:
+            named.add(_WHAT_IF_ENVELOPE_ALIASES[core])
+    return named
 
 
 def unanswerable_turn_code(question: str) -> str | None:  # noqa: PLR0911 - one return per missing piece.
@@ -1026,12 +1137,7 @@ def unanswerable_turn_code(question: str) -> str | None:  # noqa: PLR0911 - one 
     ):
         # A week, a day count or two envelopes cannot take the percentage either
         # ("다음 주 외식비 3만원 줄이면", "외식비랑 교통비 3만원씩 줄이면").
-        tokens = unicodedata.normalize("NFKC", question).lower().split()
-        named = {
-            envelope
-            for alias, envelope in _WHAT_IF_ENVELOPE_ALIASES.items()
-            if alias != "기타" and any(token.startswith(alias) for token in tokens)
-        }
+        named = _envelopes_before_amount(question)
         if _STORED_NON_MONTH.search(normalized) is not None or len(named) > 1:
             return "what_if_scope_unsupported"
         return "what_if_percent_required"
@@ -1059,9 +1165,11 @@ _INVESTMENT_NOT_DECISION: Final = re.compile(
     r"뭐야|뭐예요|뭔가요|뭐지|뜻|의미|설명|방법|세금|수수료|공부|차이|개념"
 )
 _INVESTMENT_DECIDE: Final = re.compile(
+    r"^(?=.*(?:지금|오늘|당장|요즘|이번에|이제|언제|더사|더매수|추가로|추가매수|물타|[0-9][0-9,.]*(?:[십백천만억]*원|주)))"
+    r"(?!.*(?:까하는데|까고민|까생각|까싶은데)).*?(?:"
     r"(?:사도|팔아도|매수해도|매도해도|들어가도|넣어도|투자해도|담아도|환매해도)(?:돼|될까|되나|되는|되냐|괜찮)"
     r"|살까|팔까|사야할까|사야돼|사야해|팔아야|매수할까|매도할까|들어갈까|넣을까|투자할까|담을까"
-    r"|손절할까|손절해야|익절할까|환매할까|갈아탈까|사는게좋|사는거어때"
+    r"|손절할까|손절해야|익절할까|환매할까|갈아탈까|사는게좋|사는거어때)"
 )
 
 
@@ -1162,7 +1270,7 @@ def balance_check_question(question: str) -> bool:
 _MULTI_TOPIC_LOOKUP: Final = re.compile(r"얼마|알려|보여|확인")
 _MULTI_TOPIC_BLOCK: Final = re.compile(
     r"앞으로|향후|월말|예측|예상|흘러|될까|것같|거같|어떻게|살펴"
-    r"|은행|뱅크|증권|토스|(?:국민|신한|우리|하나|농협)(?:은행|뱅크|카드)|마이너스|학자금|전세|월급|청약|적금|예금"
+    r"|은행|뱅크|증권|토스|(?:국민|신한|우리|하나|농협)(?:은행|뱅크|카드)|마이너스|학자금|전세|월급(?!통장)|청약|적금|예금"
 )
 
 
@@ -1188,6 +1296,7 @@ def deterministic_lookup_route(question: str) -> LookupRoute | None:
     words = compact(question)
     if (
         topics
+        and not any(supports_spending_question(part) for part in connector_fragments(question))
         and _MULTI_TOPIC_LOOKUP.search(words) is not None
         and _MULTI_TOPIC_BLOCK.search(words) is None
         and all(item in _TWIN_BACKED_TOPICS for item in topics)
