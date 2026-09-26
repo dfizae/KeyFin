@@ -7,6 +7,7 @@ from typing import Final, Literal, assert_never
 
 from coaching_service.chart_projection import ENVELOPES
 from coaching_service.schemas import Frozen, TransactionView
+from coaching_service.word_segments import WordSegments
 
 # 엔진 mapping.py 는 일상어 "외식비"·"식비"를 모두 "외식" 봉투로 접는다.
 _ENVELOPE_PATTERN: Final = "|".join(re.escape(name) for name in (*ENVELOPES, "외식비", "식비"))
@@ -32,12 +33,105 @@ _ENVELOPE_FIRST: Final = re.compile(
 )
 
 
+# Emoticon jamo and decorative marks ("ㅠㅠ", "ㅋㅋ", "~", "^^") carry no query meaning;
+# the exact grammar below must not fail on them ("이번달 외식 얼마 썼어 ㅠㅠ").
+_DECORATION: Final = re.compile(r"\s+|[\u3131-\u318e~^;…♡♥]+")
+
+
+# 정확한 문법이 못 받는 일상 표현("어제 쓴 돈 총 얼마야?", "이번 달 외식비로 나간 돈 합계
+# 보여줘", "지난달 총 소비 얼마였지?")은 기간 하나와 봉투 하나(또는 전체)만 뽑아 같은 문법의
+# 표준 문장으로 바꾼다. 가맹점·결제수단·비교·예측 조건이 섞이면 바꾸지 않는다.
+_LENIENT_PERIODS: Final[tuple[tuple[str, str], ...]] = (
+    ("지난달", "지난달"), ("저번달", "지난달"), ("이번달", "이번달"), ("이달", "이번달"), ("오늘", "오늘"),
+    ("어제", "어제"), ("지금까지", "지금까지"), ("현재까지", "현재까지"),
+)
+_LENIENT_ENVELOPES: Final[tuple[tuple[str, str], ...]] = (
+    ("편의점·마트·잡화", "편의점·마트·잡화"), ("편의점마트잡화", "편의점·마트·잡화"),
+    ("의료·건강", "의료·건강"),
+    ("의료건강", "의료·건강"), ("취미·여가", "취미·여가"), ("취미여가", "취미·여가"), ("외식비", "외식"),
+    ("식비", "외식"), ("외식", "외식"), ("교통비", "교통비"), ("교통", "교통비"), ("의료", "의료·건강"),
+    ("취미", "취미·여가"), ("쇼핑", "쇼핑"), ("편의점", "편의점·마트·잡화"), ("마트", "편의점·마트·잡화"),
+    ("잡화", "편의점·마트·잡화"), ("기타", "기타"),
+)
+_LENIENT_SPEND: Final = re.compile(
+    r"썼|쓴|나간|나갔|나왔|지출|소비|사용했|사용한|결제했|결제한|했더라|찍혔|찍힌"
+)
+_LENIENT_ASK: Final = re.compile(r"얼마|총액|합계|금액|알려|보여|궁금|확인")
+_LENIENT_BLOCK: Final = re.compile(
+    r"것같|거같|될까|나올까|나올지|예측|예상|전망|위험|리스크|수준|쓸까|쓰게|갈것|남을|남았|남은|예산"
+    r"|이번주|지난주|저번주|주말|올해|작년"
+    r"|[0-9]+월|[0-9]+일|분기|비교|차이|가맹점|카드|현금|계좌|통장|제외|말고|빼고|평균|매달|매일|몇번|몇건|건수"
+)
+
+
+# Everything else a lenient spending question may contain. Anything left over (a merchant,
+# an amount condition, another person, "고정비 포함") keeps the exact grammar's refusal.
+_LENIENT_WORDS: Final = tuple(sorted({
+    "얼마나갔어", "얼마나갔", "얼마나왔어", "얼마나왔", "얼마나썼어", "썼는지", "썼어", "썼나",
+    "썼지", "썼", "쓴돈", "쓴", "나간돈", "나간", "나갔는지", "나갔어", "나갔", "나왔어", "나왔",
+    "지출", "소비한", "소비", "사용했", "사용한", "결제했", "결제한", "했더라", "했어", "찍혔어",
+    "찍혔", "찍힌", "얼마나", "얼마인지", "얼마", "총액", "합계", "금액", "알려주실래요",
+    "알려줄래", "알려주세요", "알려줘", "알려", "보여주세요", "보여줘", "보여", "궁금해", "궁금",
+    "확인해줘", "확인", "알아", "알수있어", "혹시", "좀", "총", "전부", "모두", "전체", "합쳐서",
+    "하루", "돈", "쪽으로", "쪽", "에서", "으로", "로", "에", "은", "는", "이", "가", "을", "를",
+    "의", "였는지", "였어", "였지", "였더라", "이었어", "인지", "는지", "있어", "야", "요", "줘",
+    "지", "어", "해", "한", "?", "!", ".", ",",
+}, key=len, reverse=True))
+
+# Lenient wording must split completely into allowed words, each followed only by particles
+# or endings. Erasing words anywhere let a filter hide ("요가에" lost 가·에 and read as a
+# total); a leftover syllable now keeps the exact grammar's refusal.
+_LENIENT_PARTICLES: Final = (
+    "에서", "으로", "이었어", "였는지", "였더라", "였어", "였지", "인지", "는지",
+    "은", "는", "이", "가", "을", "를", "에", "로", "의", "도", "만", "요", "야", "지", "어", "해", "한",
+)
+_LENIENT_MAX: Final = 60
+
+
+# One particle or ending per word, optionally followed by a topic marker ("외식비로는").
+_LENIENT_FULL: Final = WordSegments(
+    tuple(word for word, _ in _LENIENT_PERIODS)
+    + tuple(word for word, _ in _LENIENT_ENVELOPES)
+    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES and word not in "?!.,"),
+    _LENIENT_PARTICLES,
+)
+
+
+def _lenient(compact: str) -> str | None:  # noqa: PLR0911 - one return per refusal.
+    if _LENIENT_SPEND.search(compact) is None or _LENIENT_ASK.search(compact) is None:
+        return None
+    periods = {canonical for word, canonical in _LENIENT_PERIODS if word in compact}
+    if len(periods) != 1:
+        return None
+    rest = compact
+    for word, _ in _LENIENT_PERIODS:
+        rest = rest.replace(word, " ")
+    if _LENIENT_BLOCK.search(rest) is not None:
+        return None
+    envelopes: set[str] = set()
+    for word, envelope in _LENIENT_ENVELOPES:
+        if word in rest:
+            envelopes.add(envelope)
+            rest = rest.replace(word, " ")
+    if len(envelopes) > 1:
+        return None
+    if "하루" in compact and not periods & {"오늘", "어제"}:
+        return None  # "하루에 얼마 썼어" asks a daily average, not a period total
+    plain = re.sub(r"[?!.,]", "", compact)
+    if len(plain) > _LENIENT_MAX or not _LENIENT_FULL.covers(plain):
+        return None
+    candidate = next(iter(periods)) + next(iter(envelopes), "") + "소비얼마야"
+    return candidate if _QUERY.fullmatch(candidate) is not None else None
+
+
 def _canonical(question: str) -> str:
-    compact = re.sub(r"\s+", "", question)
+    compact = _DECORATION.sub("", question)
     found = _ENVELOPE_FIRST.fullmatch(compact)
-    if found is None:
+    if found is not None:
+        compact = found["period"] + found["envelope"] + (found["box"] or "") + found["rest"]
+    if _QUERY.fullmatch(compact) is not None:
         return compact
-    return found["period"] + found["envelope"] + (found["box"] or "") + found["rest"]
+    return _lenient(compact) or compact
 
 
 # 채팅 말풍선에 붙는 한 문장짜리 정직성 문구. 전체 근거·범위는 아래 _COVERAGE가

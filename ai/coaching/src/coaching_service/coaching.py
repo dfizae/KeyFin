@@ -6,7 +6,7 @@ from typing import Final, Protocol
 from uuid import uuid4
 
 import anyio
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 
 from coaching_service.engine import ENGINE_COMMIT, EngineAdapter
 from coaching_service.evidence import LIMITED_CONTEXT, bounded_evidence, context_limited
@@ -15,7 +15,12 @@ from coaching_service.llm_prompt import TEMPLATE_TEXT
 from coaching_service.numeric_rendering import numeric_rows_for, purchase_verdict_text
 from coaching_service.periods import ResolvedPeriod, ThroughDate, resolve_period
 from coaching_service.persona import Persona, strip_bold
-from coaching_service.rendering import authoritative_text, deterministic_advice, envelope_balance_table
+from coaching_service.rendering import (
+    BALANCE_TABLE_NOTE,
+    authoritative_text,
+    deterministic_advice,
+    envelope_balance_table,
+)
 from coaching_service.repository import Repository, write
 from coaching_service.request_timing import measure_fdt, run_measured_fdt
 from coaching_service.schemas import (
@@ -94,15 +99,22 @@ class CoachingCore:
             period=period,
         )
 
-    async def balance_receipt(self, twin: JsonDocument, on_date: date, *, replay: bool) -> Receipt:
+    async def balance_receipt(
+        self, twin: JsonDocument, on_date: date, *, replay: bool, envelope: str | None = None,
+    ) -> Receipt:
         """Answer "how much is left now" from the ledger; no FDT simulation runs.
 
         A balance check has no future window, so the request carries no
         ``through_date`` and the result carries no projection or ``next_action``.
         """
-        request = JsonDocument(
-            {"operation": "balance_check", "on_date": on_date.isoformat(), "replay": replay}
-        )
+        # ``envelope`` records which envelope the question named so the answer can say
+        # that envelope's balance first; the ledger read itself is identical.
+        payload: dict[str, JsonValue] = {
+            "operation": "balance_check", "on_date": on_date.isoformat(), "replay": replay,
+        }
+        if envelope is not None:
+            payload["envelope"] = envelope
+        request = JsonDocument(payload)
         result = await anyio.to_thread.run_sync(self.engine.balance, twin, request)
         identity = await anyio.to_thread.run_sync(self.engine.identity, twin)
         return Receipt(
@@ -171,7 +183,12 @@ class CoachingCore:
         예산 초과·근접·부족 예측 조언은 엔진 사실만으로 만든 결정형 문장이며 LLM이
         만들지 않는다. tone은 이 문장의 어투만 고르고 발동 조건은 바꾸지 않는다.
         """
-        pieces = [authoritative_text(receipt), *purchase_verdict_text(receipt)]
+        verdict = purchase_verdict_text(receipt)
+        # A purchase question is answered first; the period header and the table note
+        # follow instead of burying the verdict under the envelope balances.
+        pieces = [*verdict, authoritative_text(receipt)] if verdict else [authoritative_text(receipt)]
+        if verdict and envelope_balance_table(receipt):
+            pieces.append(BALANCE_TABLE_NOTE)
         advice = deterministic_advice(receipt, tone=tone)
         if advice is not None:
             pieces.append(advice)

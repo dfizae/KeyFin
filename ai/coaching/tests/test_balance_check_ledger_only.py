@@ -43,6 +43,9 @@ _BALANCE_QUESTIONS = (
     "지금 봉투 잔액 얼마야",
     "지금까지 남은 예산 얼마야",
 )
+# The one envelope a balance question names; it is recorded on the request and its
+# balance opens the summary line (2026-09-26: "외식 예산 얼마 남았어" had no 외식 figure).
+_FOCUS = {"외식 예산 얼마 남았어": "외식"}
 # A future point, an outcome, or a purchase is never a current balance check (review 2026-09-24).
 _NOT_BALANCE_QUESTIONS = (
     "30일 뒤 봉투 잔액 보여줘",
@@ -111,12 +114,22 @@ def _replaying() -> bool:
     return datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat() != _AS_OF
 
 
-def _expected_text(*, cat: bool = False) -> str:
+def _focus_sentence(focus: str | None, *, cat: bool) -> str:
+    if focus is None:
+        return ""
+    balance = _BALANCES[focus]
+    ending = "다냥." if cat else "어요."
+    if balance < 0:
+        return f"{focus} 봉투는 예산을 {-balance:,}원 넘었{ending} "
+    return f"{focus} 봉투는 {balance:,}원 남았{ending} "
+
+
+def _expected_text(*, cat: bool = False, focus: str | None = None) -> str:
     total = f"{sum(_BALANCES.values()):,}"
     if cat:
         lines = [
             "**봉투별 남은 잔액은 아래 표에 정리했다냥.** 지금까지 들어온 결제를 반영한 장부 잔액이다냥.",
-            f"봉투 잔액 합계는 {total}원이다냥.",
+            f"{_focus_sentence(focus, cat=True)}봉투 잔액 합계는 {total}원이다냥.",
             "잔액·카드 청구·예산에 사용자 또는 데모 가정이 포함되어 있다냥. 실제 계좌 확인 결과가 아니다냥.",
         ]
         if _replaying():
@@ -132,7 +145,7 @@ def _expected_text(*, cat: bool = False) -> str:
         return "\n".join(lines)
     lines = [
         "봉투별 남은 잔액은 아래 표에 정리했어요. 지금까지 들어온 결제를 반영한 장부 잔액이에요.",
-        f"봉투 잔액 합계는 {total}원이에요.",
+        f"{_focus_sentence(focus, cat=False)}봉투 잔액 합계는 {total}원이에요.",
         _ASSUMED["detail"],
     ]
     if _replaying():
@@ -256,14 +269,17 @@ async def test_every_balance_question_is_answered_from_the_ledger_only(
         assert set(body) == _BODY_KEYS, question
         receipt = body["receipt"]
         assert receipt["trigger"] == "balance_check", question
-        assert receipt["request"] == {"operation": "balance_check", "on_date": _AS_OF, "replay": _replaying()}
+        focus = _FOCUS.get(question)
+        assert receipt["request"] == {
+            "operation": "balance_check", "on_date": _AS_OF, "replay": _replaying(),
+        } | ({"envelope": focus} if focus is not None else {}), question
         assert set(receipt["result"]) == _RESULT_KEYS, question
         assert receipt["result"] == expected_result, question
         assert receipt["numeric_request"] is None
         assert receipt["numeric_result"] is None
         assert receipt["payment"] is None
         assert receipt["historical"] is None
-        assert body["text"] == _expected_text(), question
+        assert body["text"] == _expected_text(focus=focus), question
         assert body["envelope_balances"] == [
             {"envelope": name, "balance_krw": amount} for name, amount in _BALANCES.items()
         ], question
@@ -331,7 +347,7 @@ _FDT_QUESTIONS = (
     ("30일 뒤 봉투 잔액 보여줘", (1, 0, 0), "requested_review", False),
     ("향후 예산 괜찮아?", (1, 0, 0), "requested_review", False),
     ("이번달 말 예산 괜찮을까?", (1, 0, 0), "requested_review", False),
-    ("3만원짜리 책 살 건데 예산 괜찮아?", (1, 0, 0), "requested_review", False),
+    ("3만원짜리 책 이번 주에 현금으로 살 건데 예산 괜찮아?", (1, 0, 0), "requested_review", True),
 )
 
 
