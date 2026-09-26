@@ -23,8 +23,10 @@ from coaching_service.schemas import JsonDocument
 
 _PERIOD: Final = re.compile(
     r"(?P<date>\d{4}-\d{2}-\d{2})\s*(?:마감\s*)?까지"
-    r"|(?P<month>이번\s*달(?:\s*말(?:까지|에)?|에)?|이달(?:\s*말(?:까지|에)?|에)?|월말(?:까지|에)?)"
-    r"|(?P<next_month>다음\s*달(?:\s*말(?:까지|에)?|에)?)"
+    # "이번 달까지", "이번 달 안에", "월말 전에", "다음달까지" name the same month end.
+    r"|(?P<month>(?:이번\s*달|이달)(?:\s*말)?(?:\s*(?:까지|에|안에|내에|중에))?"
+    r"|월말(?:\s*전(?:에|까지)?)?(?:\s*(?:까지|에))?)"
+    r"|(?P<next_month>다음\s*달(?:\s*말)?(?:\s*(?:까지|에|안에|내에|중에))?)"
     r"|(?P<inclusive>기준일\s*(?:부터|포함))\s*(?P<included_days>\d{1,3})\s*일"
     r"|(?<![\d./-])(?P<ahead>앞으로\s*)?(?P<days>\d{1,3})\s*일"
     r"(?P<suffix>\s*(?:뒤|후|동안|간))?(?![\d])"
@@ -51,8 +53,11 @@ def question_period(question: str, *, explicit: bool) -> PeriodSpec | None:  # n
     if _UNSUPPORTED_CALENDAR.search(question):
         raise ServiceError("period_unsupported_calendar")
     matches = list(_PERIOD.finditer(question))
-    if len(matches) > 1:
+    if len(matches) > 1 and not all(match.group("month") for match in matches):
+        # "이번 달 … 월말 잔액" names this month end twice; different periods still conflict.
         raise ServiceError("period_clarification_required")
+    if len(matches) > 1:
+        matches = matches[:1]
     remaining = _PERIOD.sub("", question)
     modified = bool(matches and _MODIFIED.search(question[matches[0].end():]))
     if not explicit and (_UNRESOLVED.search(remaining) or modified):

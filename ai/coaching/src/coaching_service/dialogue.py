@@ -3,7 +3,7 @@
 import re
 import time
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Final, assert_never
+from typing import TYPE_CHECKING, Final, Literal, assert_never
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -31,19 +31,26 @@ from coaching_service.fast_routes import (
     balance_envelope,
     deterministic_analysis_route,
     deterministic_lookup_route,
+    investment_decision,
+    merged_goal_question,
     merged_purchase_question,
     merged_spending_question,
+    merged_what_if_question,
     natural_goal,
     natural_purchase,
     natural_what_if,
+    spending_followup_question,
+    spending_period_fragment,
     stored_coaching_followup,
     unanswerable_turn_code,
 )
 from coaching_service.finance_knowledge import (
+    asks_current_rate,
     deterministic_finance_status,
     deterministic_finance_wording,
     finance_evidence,
     has_catalog_subject,
+    investment_decision_wording,
     model_selected_finance_evidence,
     selected_finance_wording,
 )
@@ -74,7 +81,7 @@ from coaching_service.schemas import (
     TurnRequest,
     TwinIdentity,
 )
-from coaching_service.spending_history import SpendingSummary, spending_answer
+from coaching_service.spending_history import SpendingSummary, spending_answer, supports_spending_question
 from coaching_service.store import Operation
 
 if TYPE_CHECKING:
@@ -186,27 +193,34 @@ def forecast_chart_hint(
 _OFF_TOPIC_SUBJECT: Final = re.compile(
     r"날씨|비와|비가|눈와|눈이와|미세먼지|메뉴|노래|음악|영화추천|드라마|게임추천|코드|코딩|파이썬|번역"
     r"|농담|재밌는|재미있는|심심|안녕|반가|누구|이름이|몇시|몇일|며칠|무슨요일|잠이|졸려|배고"
-    r"|사랑|연애|여자친구|남자친구|축구|야구|경기결과|선물|주말에뭐|뭐하지|좋아해|고마워|감사"
-)
-# Words that point back at the previous answer. With history, the router keeps such
-# a turn even without a money word ("왜?", "그럼 괜찮아?", "더 자세히").
-_BACK_REFERENCE: Final = re.compile(
-    r"그거|그것|그건|그게|그걸|이거|이건|이게|이걸|저거|왜|어떻게|자세히|자세하게|다시|무슨뜻|이유|근거"
-    r"|설명|그럼|그러면|그래서|요약|정리|계속|방금|아까|위에|괜찮|될까|돼|가능|어때|해도|하면|할까"
+    r"|사랑|연애|여자친구|남자친구|여친|남친|썸남|썸녀|썸타|권태기|화해|헤어진|전애인|애인"
+    r"|축구|야구|경기결과|선물|주말에뭐|뭐하지|좋아해|고마워|감사|몇살|생일"
+    r"|git|깃허브|깃에서|브랜치|자바스크립트|비동기|스트레칭|영어공부|공부법|음식추천|먹기좋은|맛집추천|우산챙"
+    r"|sql|리액트|react|useeffect|백준|알고리즘|프로그래밍|강아지|고양이|꿈꿔|소개팅|뭐먹|먹을지|끓이는|레시피|요리법"
+    r"|소스뭐|기온|몇도|기분|꿀꿀|우울|비온|야식으로뭐|저녁에뭐|점심에뭐"
 )
 _ROUTED_ON_DATA: Final = frozenset({"review", "risk", "forecast", "personal", "history", "finance"})
+_NEEDS_HISTORY: Final = re.compile(
+    r"차이|비교|랑|그거|그것|그건|그게|이거|이건|저거|그럼|그러면|둘|반대|다른점|같은점|아까|방금|위에"
+)
 
 
-def off_topic_route(question: str, mode: str, *, has_history: bool, catalog_subject: bool) -> bool:
-    """Tell whether a router decision would answer a no-money question from the user's data."""
+def chit_chat(question: str) -> bool:
+    """Whether the turn names a chit-chat subject and no money word at all."""
+    text = compact(question)
+    return _FINANCE_SIGNAL.search(text) is None and _OFF_TOPIC_SUBJECT.search(text) is not None
+
+
+def off_topic_route(question: str, mode: str, *, catalog_subject: bool) -> bool:
+    """Tell whether a router decision would answer a chit-chat question from the user's data.
+
+    Only an explicit chit-chat subject overrides the router. A turn with no money word
+    can still be a legitimate follow-up ("지난달은?", "고정비 목록 보여줘", "적자야?"),
+    and those keep the router's mode.
+    """
     if mode not in _ROUTED_ON_DATA or catalog_subject:
         return False
-    text = compact(question)
-    if _FINANCE_SIGNAL.search(text) is not None:
-        return False
-    if _OFF_TOPIC_SUBJECT.search(text) is not None:
-        return True
-    return not (has_history and _BACK_REFERENCE.search(text) is not None)
+    return chit_chat(question)
 
 
 _FINANCE_SIGNAL: Final = re.compile(
@@ -417,6 +431,10 @@ def merged_clarification_question(pending: PendingClarification, followup: str) 
             return merged_purchase_question(pending.question, followup)
         case "spending":
             return merged_spending_question(pending.question, followup)
+        case "goal":
+            return merged_goal_question(pending.question, followup)
+        case "what_if":
+            return merged_what_if_question(pending.question, followup)
         case unreachable:
             assert_never(unreachable)
 
@@ -438,7 +456,38 @@ def _pending_for(question: str, answer: Coaching | ChatAnswer) -> PendingClarifi
         return PendingClarification(
             kind="spending", question=question, code=answer.fallback_reason or "spending_clarification"
         )
+    # The clarifications ``unanswerable_turn_code`` asks keep their question so the
+    # literal answer ("다음 달까지", "20%", "이번 달") completes it on the next turn.
+    kind = _ASKED_PIECE_KINDS.get(answer.fallback_reason or "")
+    if answer.answer_type == "period_review" and kind is not None:
+        return PendingClarification(kind=kind, question=question, code=answer.fallback_reason or kind)
     return None
+
+
+_ASKED_PIECE_KINDS: Final[dict[str, Literal["goal", "what_if", "spending"]]] = {
+    "goal_period_required": "goal",
+    "goal_period_unsupported": "goal",
+    "what_if_percent_required": "what_if",
+    "spending_period_unsupported": "spending",
+}
+
+
+def _previous_spending_question(session: Session) -> str | None:
+    return next(
+        (row.content for row in reversed(session.messages)
+         if row.role == "user" and supports_spending_question(row.content)),
+        None,
+    )
+
+
+def _spending_question(session: Session, question: str) -> str:
+    """Repeat the previous spending query for a bare period follow-up ("지난달은?")."""
+    if supports_spending_question(question):
+        return question
+    previous = _previous_spending_question(session)
+    if previous is None:
+        return question
+    return spending_followup_question(question, previous) or question
 
 
 def save_turn(session: Session, question: str, answer: Coaching | ChatAnswer) -> Mutation:
@@ -592,7 +641,13 @@ class Dialogue:
             # call, never a guessed expense. Agreed clarify codes return a normal
             # 200 ``needs_clarification`` turn (recorded like spending); any code
             # without an agreed sentence keeps the existing 4xx contract.
-            parsed_purchase_outcome = natural_purchase(request.question) if request.analysis is None else None
+            # A goal or what-if sentence ("외식 15% 덜 쓰면 이번 달 어떻게 될까?") is never a
+            # purchase even when it names an item and a spending verb.
+            parsed_purchase_outcome = (
+                natural_purchase(request.question)
+                if request.analysis is None and parsed_goal is None and parsed_what_if is None
+                else None
+            )
             if isinstance(parsed_purchase_outcome, str):
                 clarification = purchase_clarification_answer(parsed_purchase_outcome)
                 if clarification is None:
@@ -696,7 +751,7 @@ class Dialogue:
                 summary = spending_answer(
                     reference,
                     await anyio.to_thread.run_sync(self.core.engine.transactions, twin),
-                    request.question,
+                    _spending_question(session, request.question),
                 )
                 return save_turn(session, request.question, spending_chat_answer(identity, route, summary))
             budget_start_day = await self._budget_start_day(op.owner)
@@ -816,6 +871,17 @@ class Dialogue:
             return Routing(mode="review", source="template"), None
         if request.analysis is not None:
             return await self._explicit_analysis_route(request, session, history)
+        if (
+            request.analysis is None
+            and spending_period_fragment(request.question) is not None
+            and _previous_spending_question(session) is not None
+        ):
+            # "지난달은?" right after "이번 달 외식 얼마 썼어?" is the same ledger query.
+            return Routing(mode="history", source="template"), None
+        if investment_decision(request.question):
+            # Whether to buy or sell a named stock, fund, ETF or coin is declined with
+            # what the coach can do instead; no purchase check, review or model call.
+            return Routing(mode="finance", source="template"), investment_decision_wording()
         if parsed_goal is not None or parsed_what_if is not None:
             # A goal supplies one target and a paired branch supplies one
             # variable-expense change; the deadline remains the independently
@@ -868,7 +934,7 @@ class Dialogue:
             case _:
                 return await self._route_or_direct_finance(request, session, history)
 
-    async def _route_or_direct_finance(
+    async def _route_or_direct_finance(  # noqa: PLR0911 - one return per no-model finance boundary.
         self, request: TurnRequest, session: Session, history: tuple[ChatMessage, ...],
     ) -> tuple[Routing, FinanceWording | None]:
         """Use a catalog definition only when its full question grammar is satisfied."""
@@ -884,25 +950,34 @@ class Dialogue:
         # prose resembles a general concept.  Preserve its original route and
         # numeric-operation observation instead of taking a knowledge shortcut.
         shortcut_allowed = request.analysis is None and self._direct_finance_enabled()
-        # A current-rate or tax question is checked before the concept shortcut:
-        # "요즘 정기예금 금리 몇 %야?" names the 예금 concept but asks today's rate,
-        # which the catalog definition must not pretend to answer.
+        if shortcut_allowed and chit_chat(request.question):
+            # "잠이 안 오는데 어떻게 해?" needs neither a model call nor a catalog fact.
+            return Routing(mode="other", source="template", fallback_reason="no_finance_signal"), None
         bounded_status = deterministic_finance_status(standalone) if shortcut_allowed else None
-        if bounded_status is not None:
+        direct = deterministic_finance_wording(standalone) if shortcut_allowed else None
+        # A current-rate question is answered with its source gap before a concept that
+        # merely shares a word ("요즘 정기예금 금리 몇 %야?" is not "예금이 뭐야?"); without
+        # a rate noun the concept wins ("요즘 적금이 뭐야?").
+        if bounded_status is not None and (direct is None or asks_current_rate(request.question)):
             # The question explicitly requires current external material or
             # individual tax/calculation conditions. Returning that gap is
             # safer than making a model infer a catalog status from prose.
             return Routing(mode="finance", source="template"), bounded_status
-        direct = deterministic_finance_wording(standalone) if shortcut_allowed else None
         if direct is not None:
             # This strict grammar cannot choose FDT routes or construct values; it
             # supplies one pinned catalog definition only.
             return Routing(mode="finance", source="template"), direct
-        fast_selection = (
-            model_selected_finance_evidence(standalone)
-            if shortcut_allowed and not is_followup(request.question)
-            else None
+        # The model's fact selection keeps the conversation: "신용카드랑 차이가 뭐야?"
+        # after "체크카드가 뭐야?" needs both subjects, and the helper refuses history.
+        # A self-contained paraphrase ("ETF가 뭔지 하나도 모르겠어") is judged on its own;
+        # a comparison or pointer ("신용카드랑 차이가 뭐야?", "그건?") keeps the history, which
+        # the helper then refuses so the router sees the whole conversation.
+        selection_input = (
+            finance_input
+            if is_followup(request.question) or _NEEDS_HISTORY.search(compact(request.question)) is not None
+            else standalone
         )
+        fast_selection = model_selected_finance_evidence(selection_input) if shortcut_allowed else None
         if fast_selection is not None:
             # A non-exact general concept still needs the model to choose approved facts,
             # but it does not need a preceding route call or any Twin/FDT lookup.
@@ -924,8 +999,7 @@ class Dialogue:
             finance_input,
         )
         if off_topic_route(
-            request.question, decision.routing.mode,
-            has_history=bool(history), catalog_subject=has_catalog_subject(standalone),
+            request.question, decision.routing.mode, catalog_subject=has_catalog_subject(standalone),
         ):
             # The router may still pick an FDT or personal mode for a question with no
             # money word at all ("너 누구야?", "잠이 안 와"); that answered with the

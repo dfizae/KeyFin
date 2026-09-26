@@ -552,6 +552,10 @@ _PURCHASE_OVER_ALREADY: Final = (
     "계좌 잔액으로는 결제할 수 있지만 {env} 봉투는 이미 예산을 넘어서 "
     "이번 구매 {amount:,}원이 그대로 초과 금액이 돼요."
 )
+_PURCHASE_OVER_EMPTY: Final = (
+    "계좌 잔액으로는 결제할 수 있지만 {env} 봉투에 남은 예산이 없어 "
+    "이번 구매 {amount:,}원이 그대로 초과 금액이 돼요."
+)
 _PURCHASE_OVER_WITH_RISK: Final = "{env} 봉투 예산도 {over:,}원 초과해요."
 
 
@@ -628,8 +632,10 @@ def purchase_verdict_text(receipt: Receipt) -> list[str]:  # noqa: C901, PLR0911
             pieces.append(_PURCHASE_OVER_WITH_RISK.format(env=purchase.envelope, over=over))
     elif purchase is None or purchase.left_krw is None:
         pieces = [_PURCHASE_CASH_OK]
-    elif over and purchase.left_krw <= 0:
+    elif over and purchase.left_krw < 0:
         pieces = [_PURCHASE_OVER_ALREADY.format(env=purchase.envelope, amount=purchase.amount_krw)]
+    elif over and purchase.left_krw == 0:
+        pieces = [_PURCHASE_OVER_EMPTY.format(env=purchase.envelope, amount=purchase.amount_krw)]
     elif over:
         pieces = [_PURCHASE_OVER.format(env=purchase.envelope, left=purchase.left_krw, over=over)]
     else:

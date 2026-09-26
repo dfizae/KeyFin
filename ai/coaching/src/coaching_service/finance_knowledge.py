@@ -189,6 +189,7 @@ _STATEFUL_FINANCE_REQUEST: Final = re.compile(
 _PERSONAL_BUDGET_STATE: Final = re.compile(
     r"(?:예산|잔액|잔고|봉투|생활비|카드값|용돈|통장|돈)\s*(?:이|은|는|가|을|를|으로|로)?\s*.{0,12}"
     r"(?:괜찮|여유|버틸|버티|남을|남아|남았|부족|모자|넉넉|빠듯)"
+    r"|(?:버틸|버티).{0,12}(?:예산|잔액|잔고|생활비|돈)"
 )
 _PERSONAL_DATA_LOOKUP: Final = re.compile(
     r"(?:계좌|잔액|소비|지출|결제|예산|자산|부채|보험료|소득|고정비|금융\s*목표).{0,24}"
@@ -223,13 +224,26 @@ _VOLATILE_OR_DECISION_REQUEST: Final = re.compile(
 _QUALITATIVE_AMOUNT_GUIDE_REQUEST: Final = re.compile(
     r"비상금.{0,12}(?:얼마|적정|적당|알맞)"
 )
+_RATE_NOUN: Final = re.compile(
+    r"금리|이자율|수익률|환율|시세|매매기준율|기준율|달러|엔화|유로|위안|이자\s*(?:를\s*)?(?:많이|제일|가장)"
+)
 _LATEST_STATUS_REQUEST: Final = re.compile(
-    r"(?:최신|오늘|지금|현재|요즘|최근|이번\s*주|이번\s*달|올해|가장|제일|최고|최저|높은|낮은).{0,32}"
+    r"(?:최신|오늘|지금|현재|이번\s*주|가장|최고|최저|높은|낮은).{0,32}"
     r"(?:금리|이자율|규정|규제|한도|조건|상품|수익률|예금|적금|파킹\s*통장|환율|시세|이자\s*(?:를\s*)?(?:많이|제일|가장))"
+    # "요즘", "최근", "올해", "이번 달", "제일" mark a current value only before a rate or
+    # price ("요즘 적금 금리"); "요즘 적금이 뭐야?" stays the 적금 concept.
+    r"|(?:요즘|최근|올해|이번\s*달|제일).{0,32}(?:금리|이자율|수익률|환율|시세|매매기준율|이자\s*(?:를\s*)?(?:많이|제일|가장))"
     # A rate named first and its current level asked after ("적금 금리 제일 높은 곳",
     # "환율 얼마야"). Only rate words lead here, so "예금 가장 쉽게 설명해줘" stays a concept.
-    r"|(?:금리|이자율|환율|수익률|시세).{0,20}(?:얼마|몇\s*(?:%|퍼센트|프로)|제일|가장|최고|최저|높은|낮은)"
+    r"|(?:금리|이자율|환율|수익률|시세|매매기준율).{0,20}(?:얼마|몇\s*(?:%|퍼센트|프로)|제일|가장|최고|최저|높은|낮은)"
+    # Today's exchange rate named by currency ("오늘 달러 얼마야", "엔화 100엔에 얼마야").
+    r"|(?:달러|엔화|유로|위안|원\s*달러).{0,16}(?:얼마|몇|환율|시세|기준율)"
 )
+
+
+def asks_current_rate(question: str) -> bool:
+    """Whether the question names a rate or price whose current value it may be asking."""
+    return _RATE_NOUN.search(question) is not None
 _TAX_CALCULATION_STATUS_REQUEST: Final = re.compile(
     r"(?:세후|세금).{0,32}(?:정확|계산|얼마|수익)"
     r"|(?:정확|계산|얼마|수익).{0,32}(?:세후|세금)"
@@ -238,10 +252,6 @@ _TAX_CALCULATION_STATUS_REQUEST: Final = re.compile(
 # concept catalog. Their payoff and early-redemption conditions depend on the
 # individual issuer document, so they must never be captured by the generic
 # loan early-repayment record merely because both contain ``조기상환``.
-_INVESTMENT_DECISION: Final = re.compile(
-    r"(?:주식|종목|코인|비트코인|이더리움|리플|도지|etf|펀드|채권|주가|공모주).{0,24}"
-    r"(?:사도|살까|사면|사야|사볼까|사고싶|매수|팔까|팔아|팔면|매도|들어가도|넣어도|투자해도|투자할까|담아도|담을까)"
-)
 _INVESTMENT_DECISION_TEXT: Final = (
     "특정 주식·펀드·코인을 사거나 팔지는 판단해 드리지 않아요. "
     "분산투자·ETF·채권 같은 개념 설명이나 이번 기간 예산·소비 확인은 도와드릴 수 있어요."
@@ -958,15 +968,6 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
     pretending to answer the current value.  Personal-state language remains
     excluded because its answer belongs to the existing Twin/FDT route.
     """
-    if evidence.purpose == "finance" and _INVESTMENT_DECISION.search(compact(evidence.question or "")):
-        # Whether to buy or sell a stock, fund or coin is a decision this coach does not
-        # make; say so with the nearest registered concepts instead of a purchase check.
-        return FinanceWording(
-            text=_INVESTMENT_DECISION_TEXT,
-            source="template",
-            model="not_called",
-            answer_status="out_of_scope",
-        )
     if (
         evidence.purpose != "finance"
         or evidence.history
@@ -989,6 +990,13 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
     if wording.answer_status != "needs_source" or wording.reference_ids:
         return None
     return wording.model_copy(update={"source": "template"})
+
+
+def investment_decision_wording() -> FinanceWording:
+    """Decline a buy/sell decision on a named investment and say what the coach can do."""
+    return FinanceWording(
+        text=_INVESTMENT_DECISION_TEXT, source="template", model="not_called", answer_status="out_of_scope",
+    )
 
 
 def has_catalog_subject(evidence: EvidenceInput) -> bool:
