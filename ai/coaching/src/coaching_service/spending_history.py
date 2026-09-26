@@ -7,6 +7,7 @@ from typing import Final, Literal, assert_never
 
 from coaching_service.chart_projection import ENVELOPES
 from coaching_service.schemas import Frozen, TransactionView
+from coaching_service.word_segments import WordSegments
 
 # 엔진 mapping.py 는 일상어 "외식비"·"식비"를 모두 "외식" 봉투로 접는다.
 _ENVELOPE_PATTERN: Final = "|".join(re.escape(name) for name in (*ENVELOPES, "외식비", "식비"))
@@ -87,17 +88,12 @@ _LENIENT_PARTICLES: Final = (
 _LENIENT_MAX: Final = 60
 
 
-def _segment_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
-    alternatives = "|".join(re.escape(word) for word in sorted(set(words), key=len, reverse=True))
-    particles = "|".join(re.escape(word) for word in _LENIENT_PARTICLES)
-    # One particle or ending per word, optionally followed by a topic marker ("외식비로는").
-    return re.compile(rf"(?:(?:{alternatives})(?:{particles})?(?:는|은|도|만)?)+")
-
-
-_LENIENT_FULL: Final = _segment_pattern(
+# One particle or ending per word, optionally followed by a topic marker ("외식비로는").
+_LENIENT_FULL: Final = WordSegments(
     tuple(word for word, _ in _LENIENT_PERIODS)
     + tuple(word for word, _ in _LENIENT_ENVELOPES)
-    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES and word not in "?!.,")
+    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES and word not in "?!.,"),
+    _LENIENT_PARTICLES,
 )
 
 
@@ -122,7 +118,7 @@ def _lenient(compact: str) -> str | None:  # noqa: PLR0911 - one return per refu
     if "하루" in compact and not periods & {"오늘", "어제"}:
         return None  # "하루에 얼마 썼어" asks a daily average, not a period total
     plain = re.sub(r"[?!.,]", "", compact)
-    if len(plain) > _LENIENT_MAX or _LENIENT_FULL.fullmatch(plain) is None:
+    if len(plain) > _LENIENT_MAX or not _LENIENT_FULL.covers(plain):
         return None
     candidate = next(iter(periods)) + next(iter(envelopes), "") + "소비얼마야"
     return candidate if _QUERY.fullmatch(candidate) is not None else None

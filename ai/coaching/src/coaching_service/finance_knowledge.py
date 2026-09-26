@@ -191,7 +191,12 @@ _PERSONAL_BUDGET_STATE: Final = re.compile(
     r"(?:괜찮|여유|버틸|버티|남을|남아|남았|부족|모자|넉넉|빠듯)"
     r"|(?:버틸|버티).{0,12}(?:예산|잔액|잔고|생활비|돈)"
 )
-_BUDGET_STATE_NOT_OWN: Final = re.compile(r"뭐|뜻|방법|어떻게|설명|때|하면|이면|으면|해도|쓰는\s*게")
+# "예산이 부족할 때 뭐 해?" asks a concept; "외식 더 하면 예산 모자라?" is still this budget.
+_BUDGET_STATE_NOT_OWN: Final = re.compile(
+    r"뭐|뜻|방법|어떻게|설명|요령|대처|쓰는\s*게|법\s*(?:알려|좀)"
+    r"|(?:괜찮|여유|버틸|버티|남을|남아|남았|부족|모자|넉넉|빠듯)[가-힣]{0,3}\s*(?:때|면|해도|아도|어도|으면)"
+    r"(?![가-힣]*\?*$)"
+)
 
 
 def _own_budget_state(question: str) -> bool:
@@ -248,14 +253,33 @@ _LATEST_STATUS_REQUEST: Final = re.compile(
     # 높은 곳 어디야"). A comparative alone ("금리가 높은 이유") is a concept question.
     r"|(?:금리|이자율|환율|수익률|시세|매매기준율).{0,20}(?:얼마|몇\s*(?:%|퍼센트|프로))(?!\s*면)"
     r"|(?:금리|이자율|환율|수익률|시세|매매기준율).{0,20}(?:제일|가장|최고|최저|높은|낮은).{0,12}"
-    r"(?:곳|데|은행|상품|어디|어느|추천|알려)"
+    r"(?:곳|데|은행|상품|어디|어느|추천|알려|(?:거|것)(?:이|은|는)?\s*(?:뭐|어디|어느|알려|추천|있))"
     # Today's exchange rate named by currency ("오늘 달러 얼마야", "엔화 100엔에 얼마야").
     r"|(?:달러|엔화|유로|위안|원\s*달러).{0,16}(?:얼마|몇|시세|기준율)"
+    r"|(?:달러|엔화|유로|위안|원\s*달러)\s*환율\s*(?:좀\s*|지금\s*|오늘\s*)?(?:알려|어때|보여)"
 )
 # Why/whether a rate matters is explained by the catalog, never a current-rate request.
 _RATE_REASON: Final = re.compile(
     r"이유|왜|항상|무조건|좋은\s*거|좋은\s*게|유리|오르면|내리면|떨어지면|올라가면|내려가면|되면|두\s*배"
 )
+# "현재 기준금리 몇 %야? 오르면 대출 이자 어떻게 돼?" still asks today's level first.
+_RATE_NOW: Final = re.compile(
+    r"(?:지금|현재|오늘|요즘|최근|이번\s*주)\s*(?:의\s*)?"
+    r"(?:(?:기준|대출|예금|적금|달러|엔화|유로|위안|원\s*달러)\s*)?(?:금리|환율|이자율|수익률|시세|가장|제일)"
+)
+_RATE_LEVEL: Final = re.compile(
+    r"몇\s*(?:%|퍼센트|프로)(?!\s*(?:면|라면|이면))|얼마(?:야|예요|에요|인가|인지|지|니)|가장|제일|최고|최저"
+)
+# A rate the user supplies ("금리 5%인데 1% 오르면") is a hypothetical, not a lookup.
+_RATE_GIVEN: Final = re.compile(r"\d+(?:\.\d+)?\s*%\s*(?:인데|이면|라면|면)")
+
+
+def _asks_rate_now(question: str) -> bool:
+    return (
+        _RATE_NOW.search(question) is not None
+        and _RATE_LEVEL.search(question) is not None
+        and _RATE_GIVEN.search(question) is None
+    )
 
 
 def asks_current_rate(question: str) -> bool:
@@ -998,7 +1022,10 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
         missing = ()
     elif (
         _LATEST_STATUS_REQUEST.search(evidence.question) is not None
-        and _RATE_REASON.search(evidence.question) is None
+        and (
+            _RATE_REASON.search(evidence.question) is None
+            or _asks_rate_now(evidence.question)
+        )
     ):
         missing = ("latest_source",)
     elif _TAX_CALCULATION_STATUS_REQUEST.search(evidence.question) is not None:

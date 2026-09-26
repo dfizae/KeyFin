@@ -31,6 +31,7 @@ from coaching_service.fast_routes import (
     balance_envelope,
     deterministic_analysis_route,
     deterministic_lookup_route,
+    has_buy_verb,
     investment_decision,
     merged_goal_question,
     merged_purchase_question,
@@ -192,7 +193,8 @@ def forecast_chart_hint(
 # present they settle the turn as out of scope whatever the router picked.
 _OFF_TOPIC_SUBJECT: Final = re.compile(
     r"날씨|비와|비가|눈와|눈이와|미세먼지|메뉴|노래|음악|영화추천|드라마|게임추천|코드|코딩|파이썬|번역"
-    r"|농담|재밌는|재미있는|심심|누구야|누구니|넌누구|너누구|이름이뭐|몇시야|무슨요일|잠이|졸려|배고"
+    r"|농담|재밌는|재미있는|심심|이름이뭐|몇시야"
+    r"|무슨요일|잠이|졸려|배고"
     r"|사랑|연애|여자친구|남자친구|여친|남친|썸남|썸녀|썸타|권태기|화해|헤어진|전애인|애인"
     r"|축구|야구|경기결과|주말에뭐|뭐하지|좋아해|너몇살|넌몇살|생일"
     r"|git|깃허브|깃에서|브랜치|자바스크립트|비동기|스트레칭|영어공부|음식추천|먹기좋은|맛집추천|우산챙"
@@ -206,10 +208,26 @@ _NEEDS_HISTORY: Final = re.compile(
 )
 
 
+# "안녕", "고마워", "누구세요?" are chit-chat only as the whole message: "고마워 지난달은?" and
+# "안녕하세요 이번 달 괜찮을까요?" still ask about money, and "피부양자는 누구예요?" is a concept.
+_GREETING_ONLY: Final = re.compile(
+    r"(?:냥냥(?:아|이)?|안녕(?:하세요|하십니까)?|반가워(?:요)?|반갑습니다|고마워(?:요)?|고맙습니다"
+    r"|감사(?:합니다|해요|해)?|뭐해(?:요)?|뭐하니|뭐하세요"
+    r"|(?:너|넌|니|당신)?(?:는|은)?(?:누구(?:야|니|세요|예요|에요|신가요|신지|냐)|몇살(?:이야|이에요|이세요|이니|인가요|이냐)?))+"
+)
+_GREETING_NOISE: Final = re.compile(r"[\u3131-\u318e~!?.,^;…♡♥]+")
+_GREETING_MAX: Final = 30
+
+
 def chit_chat(question: str) -> bool:
     """Whether the turn names a chit-chat subject and no money word at all."""
     text = compact(question)
-    return _FINANCE_SIGNAL.search(text) is None and _OFF_TOPIC_SUBJECT.search(text) is not None
+    if _FINANCE_SIGNAL.search(text) is not None:
+        return False
+    greeting = _GREETING_NOISE.sub("", text)
+    return _OFF_TOPIC_SUBJECT.search(text) is not None or (
+        0 < len(greeting) <= _GREETING_MAX and _GREETING_ONLY.fullmatch(greeting) is not None
+    )
 
 
 def off_topic_route(question: str, mode: str, *, catalog_subject: bool) -> bool:
@@ -230,6 +248,7 @@ _FINANCE_SIGNAL: Final = re.compile(
     r"|환율|금리|펀드|연금|위험|예측|전망|목표|모으|절약|아끼|줄이|코칭|가계|재정|금융"
     r"|외식|식비|교통|쇼핑|편의점|마트|잡화|의료|취미|여가|생활비|장보|구독|결제일|출금"
     r"|etf|isa|dsr|재테크|연말정산|청약|옵션|신용|리볼빙|코인|채권|배당|주가|증권|복리|비상금"
+    r"|적자|부족|모자라|버틸|버티"
 )
 
 
@@ -474,10 +493,22 @@ _ASKED_PIECE_KINDS: Final[dict[str, Literal["goal", "what_if", "spending"]]] = {
 }
 
 
+_FOLLOWUP_CHAIN_LIMIT: Final = 8
+
+
 def _previous_spending_question(session: Session) -> str | None:
-    """Return the previous user turn when it was a spending lookup; an older one is not the topic."""
-    previous = next((row.content for row in reversed(session.messages) if row.role == "user"), None)
-    return previous if previous is not None and supports_spending_question(previous) else None
+    """Return the spending lookup the previous turns continue; any other turn ends the topic.
+
+    "이번 달 교통비 얼마 썼어?" → "지난달은?" → "이번 달은?": the bare period turns in
+    between keep the first question as the topic.
+    """
+    users = [row.content for row in reversed(session.messages) if row.role == "user"]
+    for content in users[:_FOLLOWUP_CHAIN_LIMIT]:
+        if supports_spending_question(content):
+            return content
+        if spending_period_fragment(content) is None:
+            return None
+    return None
 
 
 def _spending_question(session: Session, question: str) -> str:
@@ -648,12 +679,16 @@ class Dialogue:
                 if request.analysis is None and parsed_goal is None and parsed_what_if is None
                 else None
             )
-            if isinstance(parsed_purchase_outcome, str) and (
-                deterministic_analysis_route(request.question) is not None
-                or deterministic_lookup_route(request.question) is not None
+            if (
+                isinstance(parsed_purchase_outcome, str)
+                and not has_buy_verb(request.question)
+                and (
+                    deterministic_analysis_route(request.question) is not None
+                    or deterministic_lookup_route(request.question) is not None
+                )
             ):
-                # "앞으로 배달 시키면 이번 달 잔액 얼마 남을까?" is a forecast, not a purchase
-                # missing its amount.
+                # "배달 시키면 이번 달 잔액 얼마 남을까?" is a forecast, not a purchase missing
+                # its amount. "노트북 사면 월말에 돈 얼마 남을까?" still asks for the amount.
                 parsed_purchase_outcome = None
             if isinstance(parsed_purchase_outcome, str):
                 clarification = purchase_clarification_answer(parsed_purchase_outcome)

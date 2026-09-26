@@ -24,6 +24,7 @@ from test_multiturn_clarification_context import RouteTo
 
 from coaching_service.dialogue import off_topic_route
 from coaching_service.fast_routes import (
+    NaturalPurchase,
     balance_envelope,
     deterministic_analysis_route,
     deterministic_lookup_route,
@@ -43,11 +44,13 @@ from coaching_service.finance_knowledge import (
     model_selected_finance_evidence,
 )
 from coaching_service.numeric_rendering import purchase_verdict_text
+from coaching_service.personal_query import select_personal_topic
 from coaching_service.rendering import deterministic_advice
 from coaching_service.schemas import Bootstrap, Envelope, JsonDocument, Receipt, TwinIdentity
 from coaching_service.spending_history import supports_spending_question
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from coaching_service.llm_contract import EvidenceInput, Wording
@@ -755,7 +758,7 @@ def test_lenient_spending_wording_never_hides_a_filter(question: str, supported:
     ("겨울옷", {"쇼핑"}), ("소고기", {"외식"}), ("손목시계", {"쇼핑"}), ("컵라면", {"편의점·마트·잡화"}),
     ("중고폰", {"기타"}), ("핫요가를", {"의료·건강"}), ("200만원이라면", set()), ("필요가", set()),
 ])
-def test_start_only_item_words_also_end_compounds(token: str, envelopes: set[str]) -> None:
+def test_listed_compounds_name_their_item(token: str, envelopes: set[str]) -> None:
     assert purchase_envelopes(token) == frozenset(envelopes)
 
 
@@ -806,3 +809,225 @@ async def test_a_card_balance_is_never_answered_with_the_account_balance(tmp_pat
         one_session=False, router=_Mode("personal"),
     )
     assert all("계좌 잔액 합계" not in answer.get("text", "") for answer in answers)
+
+
+@pytest.mark.parametrize(("question", "family"), [
+    ("오늘 택시 12,000원 나올 것 같은데 타도 돼?", "purchase_clarify"),  # states a price, asks permission
+    ("25만원이라도 모을 수 있을까 ㅠ", "period_review"),
+    ("냥냥아 안녕 ㅋㅋ 뭐 해?", "out_of_scope"),
+])
+@pytest.mark.anyio
+async def test_real_user_wording_from_the_llm_corpus(tmp_path: Path, question: str, family: str) -> None:
+    answers = await _conversation(tmp_path, (question,), one_session=True, router=LiveRouter())
+    assert _family(answers[0]) == family
+
+
+# --- third adversarial review (2026-09-27) ----------------------------------------------
+
+
+@pytest.mark.parametrize(("check", "text"), [
+    (supports_spending_question, "지난달 얼마 " + "썼어" * 26 + "뷁"),
+    (select_personal_topic, "계좌 잔액 얼마 " + "해줘" * 26 + "뷁"),
+])
+def test_lenient_wording_is_checked_in_linear_time(check: Callable[[str], object], text: str) -> None:
+    start = time.perf_counter()
+    check(text)
+    assert time.perf_counter() - start < 0.05
+
+
+@pytest.mark.parametrize(("question", "envelopes"), [
+    ("가방 10만원짜리라면 오늘 현금으로 사도 될까?", {"쇼핑"}),
+    ("급한 거 아니라면 노트북 100만원 오늘 현금으로 사도 돼?", {"기타"}),
+    ("필요한 거라면 가방 10만원 오늘 현금으로 사도 돼?", {"쇼핑"}),
+    ("노트북 100만원 오늘 현금으로 사도 돼? 너라면 사?", {"기타"}),
+    ("대책 없이 가방 10만원 오늘 현금으로 사도 돼?", {"쇼핑"}),
+    ("쿠폰으로 가방 10만원 오늘 현금으로 사도 돼?", {"쇼핑"}),
+    ("쿠폰 써서 치킨 2만원 오늘 현금으로 시켜도 돼?", {"외식"}),
+    ("전공책", {"취미·여가"}), ("에코백", {"쇼핑"}),
+])
+def test_conditionals_and_idioms_do_not_read_as_items(question: str, envelopes: set[str]) -> None:
+    assert purchase_envelopes(question) == frozenset(envelopes)
+
+
+@pytest.mark.parametrize(("text", "amounts"), [
+    ("에코백 만원 오늘", (10_000,)), ("인천 만원 버스", (10_000,)), ("청계천 만원", (10_000,)),
+    ("커피, 만원", (10_000,)), ("토트백 십만원", (100_000,)), ("명품백 백만원", (1_000_000,)),
+    ("가방 삼십 만원", (300_000,)), ("1 만 2 천원", (12_000,)),
+])
+def test_a_word_ending_in_a_numeral_syllable_keeps_the_amount_after_it(
+    text: str, amounts: tuple[int, ...],
+) -> None:
+    assert purchase_amounts(text) == amounts
+
+
+@pytest.mark.parametrize("question", [
+    "오늘 치킨 3만원 현금으로 시켜도 돼? 잔액 괜찮아?", "오늘 택시 2만원 현금으로 타도 돼? 교통비 남았나?",
+    "계속 참다가 오늘 치킨 3만원 현금으로 시켜도 돼?", "지난달 많이 아껴서 오늘 택시 2만원 현금으로 타도 돼?",
+])
+def test_a_complete_spend_verb_purchase_may_mention_a_balance_or_past(question: str) -> None:
+    assert isinstance(natural_purchase(question), NaturalPurchase)
+
+
+@pytest.mark.parametrize(("question", "decision"), [
+    ("카카오 지금 사도 될까?", True), ("애플 지금 살까?", True), ("현대차 지금 사도 돼?", True),
+    ("카카오 지금 들어가도 돼?", True), ("네이버 50만원어치 오늘 현금으로 사도 될까?", True),
+    ("테슬라 지금 사도 되는지 설명해줘", True), ("비트코인 지금 사도 돼? 수수료는 얼마야?", True),
+    ("비트코인 지금 사도 되는 이유 설명해줘", True),
+    ("기아 차 3000만원 사도 돼?", False), ("애플 워치 50만원 사도 돼?", False),
+    ("주식 사면 세금 얼마야?", False), ("펀드 환매 수수료가 뭐야?", False),
+])
+def test_a_named_company_bought_as_a_share_is_an_investment_decision(question: str, decision: bool) -> None:
+    assert investment_decision(question) is decision
+
+
+@pytest.mark.parametrize(("question", "code"), [
+    ("100만원 정도는 모을 수 있을까?", "goal_period_required"),
+    ("100만원까지는 모을 수 있을까?", "goal_period_required"),
+    ("100만원 넘게 모을 수 있을까?", "goal_period_required"),
+    ("100만원 목표 달성 가능할까?", "goal_period_required"),
+    ("은행 적금으로 100만원 모을 수 있을까?", "goal_period_required"),
+    ("12월까지 100만원 모을 수 있을까?", "goal_period_unsupported"),
+    ("다음 주 외식비 3만원 줄이면 어떻게 돼?", "what_if_scope_unsupported"),
+    ("외식비랑 교통비 3만원씩 줄이면 어떻게 돼?", "what_if_scope_unsupported"),
+])
+def test_the_asked_piece_is_one_the_answer_can_use(question: str, code: str) -> None:
+    assert unanswerable_turn_code(question) == code
+
+
+@pytest.mark.parametrize(("mode", "turns", "family", "same"), [
+    ("review", ("노트북 사면 월말에 돈 얼마 남을까?",), "purchase_clarify", True),
+    ("review", ("노트북 사면 이번 달 적자 날까?",), "purchase_clarify", True),
+    ("review", ("에코백 만원 오늘 현금으로 사도 돼?",), "purchase", True),
+    ("review", ("네이버 50만원어치 오늘 현금으로 사도 될까?",), "fin_out_of_scope", True),
+    ("finance", ("비트코인 지금 사도 돼? 수수료는 얼마야?",), "fin_out_of_scope", True),
+    ("review", ("외식 더 하면 예산 모자라?",), "concept", False),
+    ("review", ("커피 줄이면 예산 여유 생길까?",), "concept", False),
+    ("finance", ("현재 기준금리 몇 %야? 오르면 대출 이자 어떻게 돼?",), "fin_needs_source", True),
+    ("finance", ("오늘 달러 환율 얼마야? 왜 이렇게 올랐어?",), "fin_needs_source", True),
+    ("finance", ("달러 환율 알려줘",), "fin_needs_source", True),
+    ("finance", ("적금 금리 제일 높은 거 뭐야?",), "fin_needs_source", True),
+    ("finance", ("달러 환율이 오르면 수입 물가는?",), "fin_needs_source", False),
+    ("review", ("국민은행 계좌 잔액이랑 부채 알려줘",), "personal", False),
+    ("review", ("계좌 잔액이랑 부채 알려줘",), "personal", True),
+    ("review", ("누구세요?",), "out_of_scope", True),
+    ("review", ("몇 살이야?",), "out_of_scope", True),
+    ("finance", ("앞으로 주식 리스크 어때?",), "numeric:risk", False),
+    ("finance", ("앞으로 투자할 만한 위험자산 뭐 있어?",), "numeric:risk", False),
+    ("review", ("이번 달 위험 요소 뭐 있어?",), "numeric:risk", True),
+])
+@pytest.mark.anyio
+async def test_the_third_review_reproductions_answer_as_intended(
+    tmp_path: Path, mode: str, turns: tuple[str, ...], family: str, same: bool,
+) -> None:
+    answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
+    assert (_family(answers[-1]) == family) is same, answers[-1].get("text")
+
+
+@pytest.mark.parametrize("turns", [
+    ("이번 달 교통비 얼마 썼어?", "지난달은?", "이번 달은?"),
+    ("지난달 외식 얼마 썼어?", "이번 달은?", "오늘은?"),
+])
+@pytest.mark.anyio
+async def test_a_chain_of_bare_periods_keeps_the_first_spending_question(
+    tmp_path: Path, turns: tuple[str, ...],
+) -> None:
+    answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode("history"))
+    assert _family(answers[-1]) == "history"
+    assert answers[-1]["status"] != "needs_clarification", answers[-1].get("text")
+
+
+@pytest.mark.anyio
+async def test_a_compound_lookup_names_the_part_it_does_not_answer(tmp_path: Path) -> None:
+    answers = await _conversation(
+        tmp_path, ("계좌 잔액이랑 이번 달 외식비 합계 알려줘",), one_session=True, router=_Mode("review"),
+    )
+    assert _family(answers[0]) == "personal"
+    assert "이 조회로는 답하지 않" in answers[0]["text"]
+
+
+# --- fourth adversarial review (2026-09-27) ---------------------------------------------
+
+
+@pytest.mark.parametrize(("text", "amounts"), [
+    ("노트북 3백 만원 오늘", (3_000_000,)),
+    ("노트북 1천 2백 만원", (12_000_000,)),
+    ("2 억 5천 만원", (250_000_000,)),
+    ("3 백 만 원", (3_000_000,)), ("2백 50만원", (2_500_000,)), ("3천 5백원", (3_500,)),
+    ("노트북 백 오십만원", (1_500_000,)), ("노트북 이백 오십 만원", (2_500_000,)), ("3개 만원", (10_000,)),
+])
+def test_a_digit_led_or_split_numeral_keeps_its_whole_amount(text: str, amounts: tuple[int, ...]) -> None:
+    assert purchase_amounts(text) == amounts
+
+
+@pytest.mark.parametrize(("question", "outcome"), [
+    ("잔액 5만원 남았는데 오늘 치킨 시켜도 돼?", None),
+    ("지난달 외식 30만원 썼는데 오늘 치킨 시켜도 돼?", None),
+    ("오늘 택시 타면서 2만원 썼어", None),
+    ("오늘부터 계속 택시 2만원 타면 월말에 얼마 남을까?", None),
+    ("잔액 5만원 남았는데 노트북 사도 돼?", "purchase_amount_required"),
+])
+def test_a_balance_or_past_spend_is_never_read_as_the_price(question: str, outcome: str | None) -> None:
+    assert natural_purchase(question) == outcome
+
+
+@pytest.mark.parametrize(("question", "decision"), [
+    ("애플 살까 삼성 살까?", False),
+    ("기아 현금으로 사도 돼?", False),
+    ("카카오 오늘 이모티콘 사도 돼?", False),
+    ("애플 10만원 사도 돼?", False),
+    ("해외주식 사도 수수료 붙어?", False),
+    ("주식 공부 방법 추천해줘", False),
+    ("ISA 계좌에 ETF 넣어도 세금 혜택 있어?", False), ("두산 좀 사도 돼?", True),
+])
+def test_only_a_permission_asked_about_a_share_is_an_investment_decision(
+    question: str, decision: bool,
+) -> None:
+    assert investment_decision(question) is decision
+
+
+@pytest.mark.parametrize(("question", "envelopes"), [
+    ("불고기", {"외식"}), ("신라면", {"편의점·마트·잡화"}), ("소설책", {"취미·여가"}), ("알람시계", {"쇼핑"}),
+    ("개인pt", {"의료·건강"}), ("롯데마트", {"편의점·마트·잡화"}), ("chatgpt", set()), ("ppt", set()),
+    ("아니라면", set()), ("쿠폰", set()),
+])
+def test_low_collision_item_words_end_a_compound(question: str, envelopes: set[str]) -> None:
+    assert purchase_envelopes(question) == frozenset(envelopes)
+
+
+@pytest.mark.parametrize(("question", "code"), [
+    ("앞으로 외식비 3만원 줄이면 어떻게 돼?", "what_if_percent_required"),
+    ("기타 외식비 3만원 줄이면 어때?", "what_if_percent_required"),
+    ("은행 대출로 1000만원 만들 수 있을까?", None), ("100만원이상 모이면 적금 들 수 있을까?", None),
+    ("청약 예치금 300만원 모을 수 있을까?", "goal_period_required"),
+])
+def test_the_asked_piece_matches_what_the_question_left_out(question: str, code: str | None) -> None:
+    assert unanswerable_turn_code(question) == code
+
+
+@pytest.mark.parametrize(("mode", "turns", "family", "same"), [
+    ("forecast", ("이사도 해야 하는데 월말에 잔액 얼마 남을까?",), "numeric:forecast", True),
+    ("risk", ("행사도 많은데 이번 달 적자 날까?",), "numeric:risk", True),
+    ("forecast", ("혼자 살까 고민인데 월말 잔액 얼마 남을까?",), "numeric:forecast", True),
+    ("review", ("여행 가서 기념품 사면 월말에 얼마 남아?",), "purchase_clarify", True),
+    ("history", ("지난달 외식 얼마 썼어?", "고마워! 이번 달은?"), "out_of_scope", False),
+    ("review", ("안녕하세요 이번 달 괜찮을까요?",), "out_of_scope", False),
+    ("risk", ("이번 달 적자 날까?", "적자 나면 뭐해?"), "out_of_scope", False),
+    ("finance", ("피부양자는 누구예요?",), "out_of_scope", False),
+    ("review", ("넌 누구야?",), "out_of_scope", True),
+    ("review", ("감사합니다",), "out_of_scope", True),
+    ("finance", ("달러 환율이 뭔지 알려줘",), "fin_needs_source", False),
+    ("finance", ("금리 높은 거 단점이 뭐야?",), "fin_needs_source", False),
+    ("finance", ("지금 대출 금리 5%인데 1% 오르면 이자 얼마 늘어?",), "fin_needs_source", False),
+    ("review", ("잔액이 부족하면 카드 결제 안 돼?",), "review", False),
+    ("risk", ("월말에 적금 투자 빼면 적자야?",), "numeric:risk", True),
+    ("review", ("우리 집 자산이랑 부채 알려줘",), "personal", True),
+    ("review", ("계좌 잔액, 부채 알려줘",), "personal", True),
+    ("review", ("대출 계좌 잔액 알려줘",), "personal", True),
+    ("review", ("앞으로 외식비 3만원 줄이면 어떻게 돼?", "20%"), "numeric:what_if", True),
+])
+@pytest.mark.anyio
+async def test_the_fourth_review_reproductions_answer_as_intended(
+    tmp_path: Path, mode: str, turns: tuple[str, ...], family: str, same: bool,
+) -> None:
+    answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
+    assert (_family(answers[-1]) == family) is same, answers[-1].get("text")

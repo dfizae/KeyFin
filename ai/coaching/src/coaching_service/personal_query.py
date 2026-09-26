@@ -4,6 +4,7 @@ import re
 from typing import Final
 
 from coaching_service.personal_contract import PersonalTopic
+from coaching_service.word_segments import WordSegments
 
 _TOPICS: Final[dict[str, PersonalTopic]] = {
     "계좌잔액": "accounts",
@@ -104,23 +105,21 @@ _LENIENT_PARTICLES: Final = (
 _LENIENT_MAX: Final = 60
 
 
-def _segment_pattern(words: tuple[str, ...]) -> re.Pattern[str]:
-    alternatives = "|".join(re.escape(word) for word in sorted(set(words), key=len, reverse=True))
-    particles = "|".join(re.escape(word) for word in _LENIENT_PARTICLES)
-    # One particle or ending per word, optionally followed by a topic marker ("외식비로는").
-    return re.compile(rf"(?:(?:{alternatives})(?:{particles})?(?:는|은|도|만)?)+")
-
-
-_LENIENT_FULL: Final = _segment_pattern(
+# One particle or ending per word, optionally followed by a topic marker ("외식비로는").
+_LENIENT_FULL: Final = WordSegments(
     tuple(word for word, _ in _LENIENT_TOPICS)
-    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES)
+    + tuple(word for word in _LENIENT_WORDS if word not in _LENIENT_PARTICLES),
+    _LENIENT_PARTICLES,
 )
+
+
+_ACCOUNT_TOPIC: Final = re.compile(r"(?<!대출)(?<!빚)(?<!카드값)(?<!카드대금)(?:계좌|통장)(?!대출|빚)")
 
 
 def _lenient_topic(compact: str) -> PersonalTopic | None:
     if _LENIENT_FILTER.search(compact) is not None or _LENIENT_ASK.search(compact) is None:
         return None
-    if len(compact) > _LENIENT_MAX or _LENIENT_FULL.fullmatch(compact) is None:
+    if len(compact) > _LENIENT_MAX or not _LENIENT_FULL.covers(compact):
         return None
     found: set[PersonalTopic] = set()
     rest = compact
@@ -128,9 +127,11 @@ def _lenient_topic(compact: str) -> PersonalTopic | None:
         if word in rest:
             found.add(topic)
             rest = rest.replace(word, " ")
-    # "대출 잔액" is the debt balance; "카드값 잔액" the card bill.
+    account_named = _ACCOUNT_TOPIC.search(compact) is not None
+    # "대출 잔액" is the debt balance; "카드값 잔액" the card bill. A named 계좌/통장 ("계좌
+    # 잔액이랑 부채") stays a second topic, so the lookup is not narrowed to one of them.
     for owner in ("debts", "payments"):
-        if owner in found:
+        if owner in found and not account_named:
             found.discard("accounts")
     return next(iter(found)) if len(found) == 1 else None
 
@@ -159,7 +160,7 @@ def select_personal_topic(question: str) -> PersonalTopic | None:
     return _lenient_topic(re.sub(r"[?!.,]", "", compact))
 
 
-_CONNECTOR: Final = re.compile(r"이랑|랑|하고|과|와|그리고|및|둘\s*다|모두")
+_CONNECTOR: Final = re.compile(r"이랑|랑|하고|과|와|그리고|및|둘\s*다|모두|,")
 _COMPARISON_MARKER: Final = re.compile(r"비교|차이")
 _TOPIC_KEYS_BY_LENGTH: Final = tuple(sorted(_TOPICS, key=len, reverse=True))
 
