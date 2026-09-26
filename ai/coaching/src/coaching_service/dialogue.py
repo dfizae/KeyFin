@@ -225,7 +225,9 @@ def chit_chat(question: str) -> bool:
     """Whether the turn names a chit-chat subject and no money word at all."""
     text = compact(question)
     off_topic = _OFF_TOPIC_SUBJECT.search(text) is not None
-    money_outcome = _MONEY_OUTCOME.search(text) is not None and not off_topic
+    money_outcome = _MONEY_OUTCOME.search(text) is not None and (
+        not off_topic or _MONEY_SCOPE.search(text) is not None  # "여친 생일인데 이번 달 버틸 수 있을까?"
+    )
     if _FINANCE_SIGNAL.search(text) is not None or money_outcome:
         # "잠이 부족해" names a chit-chat subject; "이번 달 버틸 수 있을까?" does not.
         return False
@@ -256,6 +258,9 @@ _FINANCE_SIGNAL: Final = re.compile(
     r"|적자"
 )
 _MONEY_OUTCOME: Final = re.compile(r"부족|모자라|버틸|버티")
+_MONEY_SCOPE: Final = re.compile(
+    r"이번달|이달|월말|다음달|남은기간|이번주|생활비|월급|용돈|카드|통장|잔액|월세"
+)
 
 
 def _select_cash_account(accounts: "list[JsonValue]") -> "dict[str, JsonValue] | None":

@@ -1121,3 +1121,97 @@ async def test_the_fifth_review_reproductions_answer_as_intended(
 ) -> None:
     answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
     assert (_family(answers[-1]) == family) is same, answers[-1].get("text")
+
+
+# --- sixth adversarial review (2026-09-27) ----------------------------------------------
+
+
+@pytest.mark.parametrize("question", [
+    "노트북 150만원인데 오늘 현금으로 사도 돼? 월말에 괜찮을까?",
+    "노트북 150만원이면 오늘 현금으로 사도 돼? 월말 잔액 괜찮아?",
+    "노트북 150만원ㅠㅠ 오늘 현금으로 사도 돼? 월말에 괜찮을까?",
+    "회사원인데 노트북 150만원 오늘 현금으로 사면 월말에 괜찮아?",
+    "치킨 2만원이면 오늘 현금으로 시켜도 돼? 월말에 괜찮을까?",
+    "병원 나와서 오늘 약국에서 약 1만원 현금으로 사도 돼?",
+])
+def test_a_price_keeps_its_amount_when_the_outcome_is_asked_in_another_clause(question: str) -> None:
+    assert isinstance(natural_purchase(question), NaturalPurchase)
+
+
+@pytest.mark.parametrize(("question", "decision"), [
+    ("세금 신경 안 쓰고 테슬라 사도 돼?", True), ("비트코인 뜻은 알겠는데 사도 되는 거야?", True),
+    ("카카오 지금 사도 될까 고민이야", True), ("카카오 사도 될까? 많이 빠졌던데", True),
+    ("ISA에서 해외 ETF 사도 되나요? 세금은?", False), ("구글 사도 돼? 유튜브 프리미엄 말하는 거야", False),
+])
+def test_a_decision_that_ends_the_sentence_is_declined(question: str, decision: bool) -> None:
+    assert investment_decision(question) is decision
+
+
+@pytest.mark.parametrize(("question", "code"), [
+    ("외식비나 교통비 3만원씩 줄이면 어떻게 돼?", "what_if_scope_unsupported"),
+    ("외식비 3만원, 교통비 2만원 줄이면 어떻게 돼?", "what_if_scope_unsupported"),
+    ("외식비 3만원 줄여서 쇼핑에 쓰면 어떻게 돼?", "what_if_percent_required"),
+])
+def test_a_reduction_of_every_named_envelope_is_out_of_scope(question: str, code: str) -> None:
+    assert unanswerable_turn_code(question) == code
+
+
+@pytest.mark.parametrize(("mode", "turns", "family", "same"), [
+    ("review", ("노트북 사면 월말에 얼마 남아?", "100만원이요 오늘 현금으로"), "purchase", True),
+    ("review", ("노트북 하나 살까? 월말에 돈 얼마 남을까?",), "purchase_clarify", True),
+    ("review", ("가족 건사도 못 하는데 이번 달 돈 얼마 남을까?",), "purchase_clarify", False),
+    ("review", ("공동구매로 회사도 같이 하는데 이번 달 돈 얼마 남을까?",), "purchase_clarify", False),
+    ("finance", ("지금 적금 금리 3%인데 제일 높은 곳 어디야?",), "fin_needs_source", True),
+    ("finance", ("기준금리 오르면 현재 대출 금리 몇 %야?",), "fin_needs_source", True),
+    ("finance", ("금리 4%면 이자 얼마야?",), "fin_needs_source", False),
+    ("review", ("여친 생일인데 이번 달 버틸 수 있을까?",), "out_of_scope", False),
+    ("finance", ("주식 투자할 돈 앞으로 위험할까?",), "numeric:risk", False),
+    ("finance", ("앞으로 주식 계좌 위험할까?",), "numeric:risk", False),
+    ("review", ("이번 달 쇼핑 예산 20만원이야. 오늘 운동화 현금으로 사도 돼?",), "purchase", False),
+])
+@pytest.mark.anyio
+async def test_the_sixth_review_reproductions_answer_as_intended(
+    tmp_path: Path, mode: str, turns: tuple[str, ...], family: str, same: bool,
+) -> None:
+    answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
+    assert (_family(answers[-1]) == family) is same, answers[-1].get("text")
+
+
+# --- seventh adversarial review (2026-09-27) --------------------------------------------
+
+
+@pytest.mark.parametrize(("question", "purchase"), [
+    ("노트북 150만원인데 예산 괜찮을까? 오늘 현금으로 사도 돼?", True),
+    ("가방 30만원이면 예산 넘어? 오늘 현금으로 사도 돼?", True),
+    ("예산 5만원인데 오늘 치킨 현금으로 시켜도 돼?", False),
+    ("현금 3만원 가지고 있는데 오늘 치킨 시켜도 월말에 안 부족해?", False),
+    ("이번 주는 3만원으로 버텨야 하는데 오늘 치킨 시켜도 돼? 월말에 괜찮을까?", False),
+])
+def test_a_budget_or_held_money_is_told_apart_from_the_price(question: str, purchase: bool) -> None:
+    assert isinstance(natural_purchase(question), NaturalPurchase) is purchase
+
+
+@pytest.mark.parametrize(("question", "decision"), [
+    ("현대차 살까 고민이야", False),
+    ("기아 사도 될지 모르겠어", False),
+    ("애플 사면 중고로 팔 때 손실 커?", False),
+    ("주식 수수료 설명해줘. 미성년자도 사도 돼?", False), ("적립식 펀드가 뭐야? 매달 넣어도 돼?", False),
+    ("카카오 사도 될지 고민이야", True), ("ETF 뜻이 뭐야? 지금 사도 돼?", True),
+])
+def test_cars_resale_and_eligibility_are_not_share_decisions(question: str, decision: bool) -> None:
+    assert investment_decision(question) is decision
+
+
+@pytest.mark.parametrize(("mode", "turns", "family", "same"), [
+    ("review", ("앞으로 주식 리스크 어때? 내 돈 괜찮아?",), "numeric:risk", True),
+    ("review", ("잠이 부족해서 생활이 힘들어",), "out_of_scope", True),
+    ("finance", ("금리 3%면 1000만원 이자 얼마야? 제일 쉽게 설명해줘",), "fin_needs_source", False),
+    ("finance", ("적금 금리 3%인데 제일 높은 곳 어디야?",), "fin_needs_source", True),
+    ("review", ("월말에 노트북 구매 해도 잔액 남을까?",), "purchase_clarify", True),
+])
+@pytest.mark.anyio
+async def test_the_seventh_review_reproductions_answer_as_intended(
+    tmp_path: Path, mode: str, turns: tuple[str, ...], family: str, same: bool,
+) -> None:
+    answers = await _conversation(tmp_path, turns, one_session=True, router=_Mode(mode))
+    assert (_family(answers[-1]) == family) is same, answers[-1].get("text")

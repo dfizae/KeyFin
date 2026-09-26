@@ -273,6 +273,18 @@ _RATE_LEVEL: Final = re.compile(
 )
 # A rate the user supplies ("금리 5%인데 1% 오르면") is a hypothetical, not a lookup.
 _RATE_GIVEN: Final = re.compile(r"\d+(?:\.\d+)?\s*%\s*(?:인데|이면|라면|면)")
+# ...unless today's best or level is still asked after it ("적금 3%인데 제일 높은 곳 어디야?").
+_LATEST_AFTER_GIVEN: Final = re.compile(
+    r"(?:제일|가장|최고|최저)\s*(?:금리가?\s*)?(?:높|낮|좋|싸|싼|저렴|유리|많이\s*주)"
+    r"|어디(?:가|야|예요|에요|인지|일까|있)|어느\s*(?:은행|곳|상품|데)|추천"
+    r"|(?:지금|현재|요즘|오늘|최근)\s*(?:의\s*)?(?:기준|대출|예금|적금|주담대|달러|엔화)?\s*(?:금리|환율|이자율|시세)"
+)
+
+
+def _rate_only_given(question: str) -> bool:
+    """Whether the user supplies the rate and asks nothing current after it."""
+    given = _RATE_GIVEN.search(question)
+    return given is not None and _LATEST_AFTER_GIVEN.search(question, given.end()) is None
 
 
 _RATE_HYPOTHETICAL: Final = re.compile(r"오르면|내리면|떨어지면|올라가면|내려가면|되면|[0-9두세]\s*배")
@@ -285,8 +297,13 @@ def _asks_rate_now(question: str) -> bool:
     return (
         _RATE_NOW.search(question) is not None
         and level is not None
-        and _RATE_GIVEN.search(question) is None
-        and (hypothetical is None or level.start() < hypothetical.start())
+        and not _rate_only_given(question)
+        and (
+            hypothetical is None
+            or level.start() < hypothetical.start()
+            # "기준금리 오르면 현재 대출 금리 몇 %야?" asks today's level after the condition.
+            or _RATE_NOW.search(question, hypothetical.end()) is not None
+        )
     )
 
 
@@ -1030,7 +1047,7 @@ def deterministic_finance_status(evidence: EvidenceInput) -> FinanceWording | No
         missing = ()
     elif (
         _LATEST_STATUS_REQUEST.search(evidence.question) is not None
-        and _RATE_GIVEN.search(evidence.question) is None
+        and not _rate_only_given(evidence.question)
         and (
             _RATE_REASON.search(evidence.question) is None
             or _asks_rate_now(evidence.question)
