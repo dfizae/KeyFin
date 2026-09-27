@@ -172,3 +172,32 @@ test('POST /api/fin/subList maps to the subscription list endpoint', async () =>
   assert.match(calls.find((c) => c.url).body.Header.apiName, /^inquireSubscriptionList$/);
   server.close();
 });
+
+test('POST /api/fin/withdraw relays the account withdrawal with the user key', async () => {
+  const { server, calls, port } = await startServer({ finResult: { Header: { responseCode: 'H0000' }, REC: { transactionUniqueNo: '1' } } });
+  try {
+    const { json } = await post(port, '/api/fin/withdraw', {
+      userKey: 'UK-9',
+      fields: { accountNo: '0111189826909096', transactionBalance: '500000', transactionSummary: '현금 출금' },
+    });
+    const finCall = calls.find((c) => c.url);
+    assert.equal(json.ok, true);
+    assert.equal(finCall.url, 'https://fin.example/api/v1/edu/demandDeposit/updateDemandDepositAccountWithdrawal');
+    assert.equal(finCall.body.Header.apiName, 'updateDemandDepositAccountWithdrawal');
+    assert.equal(finCall.body.Header.userKey, 'UK-9');
+    assert.equal(finCall.body.accountNo, '0111189826909096');
+    assert.equal(finCall.body.transactionBalance, '500000');
+  } finally {
+    server.close();
+  }
+});
+
+test('POST /api/fin/accounts relays the demand deposit account list', async () => {
+  const { server, calls, port } = await startServer({ finResult: { Header: { responseCode: 'H0000' }, REC: [] } });
+  try {
+    await post(port, '/api/fin/accounts', { userKey: 'UK-9', fields: {} });
+    assert.equal(calls.find((c) => c.url).body.Header.apiName, 'inquireDemandDepositAccountList');
+  } finally {
+    server.close();
+  }
+});
