@@ -416,7 +416,7 @@ _PURCHASE_VERB_SPEND_MONEY: Final = re.compile(
 # recurring, valuation and saving wording asks about a habit, not one purchase
 # ("매달 커피값으로 10만원 쓰면", "치킨 시키면 2만원이야?", "배달 끊으면 아낄 수 있어?").
 _PURCHASE_SPEND_BLOCK: Final = re.compile(
-    r"카드값|카드대금|청구|대출|이자|보험료|세금|공과금|송금|할부금|고정비|용돈"
+    r"카드값|카드대금|청구|대출|이자|보험료|세금|공과금|송금|할부금|고정비|용돈(?!(?:을|를|이|가)?(?:받|들어))"
     r"|매달|매일|매주|한달에|한달동안|월[0-9]|[0-9]+년|일년|적당|과소비|나올까|나오나|원이야|원이지"
     r"|아끼|아낄|아낀|절약|줄이|줄여|덜쓰|[0-9]%|퍼센트"
 )
@@ -477,12 +477,22 @@ _BALANCE_STATEMENT: Final = re.compile(
     r"(?:잔액|잔고|남은\s*돈|가진\s*돈)\s*(?:이|은|는|가|도|만)?\s*(?:딱|겨우|고작|약|대략)?\s*"
     r"[0-9][0-9,.]*\s*(?:[십백천만억]\s*)*원\s*(?:이야|이지|이에요|예요|인데|이라|뿐|밖에|정도|남짓|쯤)?"
 )
+_HELD_AFTER: Final = re.compile(r"(?:잔액|잔고|남은돈|가진돈)(?:으로|인데|이야|이라|밖에|뿐|만|남|있)")
+# A period and a spending category before the amount ("이번 달 외식 20만원인데") name a total.
+_PERIOD_TOTAL: Final = re.compile(
+    r"(?:이번달|이달|지난달|저번달|한달|이번주|지난주)(?:에|동안|간|은|는)?"
+    r"(?:외식비?|교통비|쇼핑비?|식비|생활비|편의점|마트|의료비?|취미|카페|배달비?)"
+)
 _BUDGET_AFTER: Final = re.compile(r"^예산(?:으로|인데|이라|이야|이면|밖에|뿐|만)")
 
 
 def _amount_reads_as_price(normalized: str, question: str) -> bool:
     """Under balance or forecast wording ("잔액 5만원인데 사도 돼?") the amount must be price-shaped."""
-    if _PURCHASE_SPEND_CONTEXT.search(normalized) is None and _BALANCE_WORD.search(normalized) is None:
+    if (
+        _PURCHASE_SPEND_CONTEXT.search(normalized) is None
+        and _BALANCE_WORD.search(normalized) is None
+        and _PERIOD_TOTAL.search(normalized) is None
+    ):
         return True
     return _price_shaped(question)
 
@@ -567,16 +577,17 @@ def _price_shaped(question: str) -> bool:
                 break
     after = compact(" ".join(after_tokens))
     # "노트북 150만원인데 예산 괜찮아?" asks about the budget; "5만원 예산으로" names the budget.
-    after_labelled = _HELD_MONEY_WORD.search(after) is not None or (
+    # "5만원 잔액으로" labels the amount; "치킨 3만원인데 잔액 괜찮아?" asks about the balance.
+    after_labelled = _HELD_AFTER.match(after) is not None or (
         bool(after_tokens) and _BUDGET_AFTER.match(after_tokens[0].strip(_WORD_EDGE_MARKS)) is not None
     )
+    if _PERIOD_TOTAL.search(before) is not None:
+        return _strict_price_shape(tokens, index)  # "이번 달 외식 20만원인데" is a month's total
     no_context = _PURCHASE_SPEND_CONTEXT.search(near_before + after) is None
     if no_context and _BALANCE_WORD.search(before) is None and not after_labelled:
         return True
-    if no_context and _BALANCE_WORD.search(near_before) is None and not after_labelled and _named_item_price(
-        tokens, index,
-    ):
-        return True  # a far "잔액 걱정되는데 … 노트북 150만원인데" labels nothing
+    if _BALANCE_WORD.search(near_before) is None and not after_labelled and _named_item_price(tokens, index):
+        return True  # "잔액 걱정되는데 … 노트북 150만원인데", "치킨 3만원인데 잔액 괜찮아?"
     return _strict_price_shape(tokens, index)
 
 

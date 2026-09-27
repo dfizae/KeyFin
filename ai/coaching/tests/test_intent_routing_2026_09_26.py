@@ -1345,3 +1345,19 @@ def test_received_money_still_asks_the_price(question: str) -> None:
 ])
 def test_a_permission_inside_a_lookup_or_habit_question_is_not_one_purchase(question: str) -> None:
     assert natural_purchase(question) is None
+
+
+@pytest.mark.parametrize(("question", "outcome"), [
+    ("이번 달 외식 20만원인데 오늘 치킨 시켜도 돼?", "purchase_amount_required"),  # a month's total
+    ("치킨 3만원인데 잔액 괜찮아? 오늘 현금으로 시켜도 돼?", 30_000),
+    ("이번 달 용돈 받았는데 오늘 치킨 2만원 현금으로 시켜도 돼?", 20_000),
+])
+def test_a_period_total_is_not_a_price_and_a_named_price_survives_an_outcome_ask(
+    question: str, outcome: str | int,
+) -> None:
+    result = natural_purchase(question)
+    if isinstance(outcome, int):
+        assert isinstance(result, NaturalPurchase), result
+        assert result.amount_krw == outcome
+    else:
+        assert result == outcome
