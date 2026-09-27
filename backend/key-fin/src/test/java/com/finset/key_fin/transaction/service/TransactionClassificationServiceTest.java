@@ -213,6 +213,20 @@ class TransactionClassificationServiceTest {
 	}
 
 	@Test
+	void 연결된_본인_계좌에서_들어온_이체는_입금으로_두고_SELF_TRANSFER로_변환한다() {
+		given(accountRepository.findByUserIdAndFinAccountNoAndManagedTrue(USER_ID, "0204667768182760"))
+				.willReturn(Optional.of(account));
+
+		Transaction transaction = transactionClassificationService.fromAccount(
+				user, account, accountTransaction("1", "입금(이체)", "0204667768182760")
+		);
+
+		assertThat(transaction.getTransactionType()).isEqualTo(TransactionType.DEPOSIT);
+		assertThat(transaction.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+		assertThat(transaction.getExcludeTag()).isEqualTo(ExcludeTag.SELF_TRANSFER);
+	}
+
+	@Test
 	void 타인_계좌_출금_이체는_PENDING으로_변환한다() {
 		given(accountRepository.findByUserIdAndFinAccountNoAndManagedTrue(USER_ID, "9999999999999999"))
 				.willReturn(Optional.empty());
