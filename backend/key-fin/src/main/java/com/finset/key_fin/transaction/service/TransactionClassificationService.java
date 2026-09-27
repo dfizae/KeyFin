@@ -172,11 +172,11 @@ public class TransactionClassificationService {
 		if (!hasText(transactionTypeName)) {
 			throw invalidResponse();
 		}
-		if (ownAccountTransfer || transactionTypeName.contains("출금(이체)")) {
-			return TransactionType.TRANSFER;
-		}
 		if (transactionTypeName.startsWith("입금")) {
 			return TransactionType.DEPOSIT;
+		}
+		if (ownAccountTransfer || transactionTypeName.contains("출금(이체)")) {
+			return TransactionType.TRANSFER;
 		}
 		if (transactionTypeName.startsWith("출금")) {
 			return TransactionType.WITHDRAW;

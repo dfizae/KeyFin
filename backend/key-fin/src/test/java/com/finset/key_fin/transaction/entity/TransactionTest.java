@@ -133,6 +133,19 @@ class TransactionTest {
 	}
 
 	@Test
+	void 입금을_본인_계좌_이체로_짝지으면_입금_유형을_유지한다() {
+		Transaction deposit = Transaction.collectAccount(
+				User.create("qwer@qwer.com", "password", "김예린"), 1L, "102", TransactionType.DEPOSIT, "KeyFin 결제 준비",
+				580_000L, LocalDate.of(2026, 9, 27), LocalTime.of(23, 5), ConfirmStatus.AUTO, ExcludeTag.NONE);
+
+		deposit.markAsSelfTransfer();
+
+		assertThat(deposit.getTransactionType()).isEqualTo(TransactionType.DEPOSIT);
+		assertThat(deposit.getExcludeTag()).isEqualTo(ExcludeTag.SELF_TRANSFER);
+		assertThat(deposit.getConfirmStatus()).isEqualTo(ConfirmStatus.CONFIRMED);
+	}
+
+	@Test
 	void 사용자가_확정한_거래는_본인_계좌_이체로_자동_변경하지_않는다() {
 		Transaction transaction = accountTransaction(ConfirmStatus.CONFIRMED);
 

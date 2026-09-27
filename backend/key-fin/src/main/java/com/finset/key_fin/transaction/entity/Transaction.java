@@ -251,7 +251,9 @@ public class Transaction extends BaseEntity {
 		if (confirmStatus == ConfirmStatus.CONFIRMED && excludeTag != ExcludeTag.SELF_TRANSFER) {
 			throw new BusinessException(TransactionErrorCode.CLASSIFICATION_NOT_ALLOWED);
 		}
-		this.transactionType = TransactionType.TRANSFER;
+		if (transactionType != TransactionType.DEPOSIT) {
+			this.transactionType = TransactionType.TRANSFER;
+		}
 		this.subcategoryId = null;
 		this.excludeTag = ExcludeTag.SELF_TRANSFER;
 		this.adjustedAmount = null;
