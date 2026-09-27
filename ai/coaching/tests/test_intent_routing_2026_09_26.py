@@ -1313,3 +1313,35 @@ def test_an_interest_word_that_describes_the_loan_keeps_the_debt_topic(
     question: str, topics: tuple[str, ...],
 ) -> None:
     assert select_personal_topics(question) == topics
+
+
+# --- ninth adversarial review (2026-09-27) ----------------------------------------------
+
+
+@pytest.mark.parametrize(("question", "amount"), [
+    ("잔액 10만원이야. 에어팟 케이스 3만원인데 오늘 현금으로 사도 돼?", 30_000),
+    ("잔액 20만원인데 운동화 12만원이면 오늘 현금으로 사도 돼?", 120_000),
+    ("잔액 걱정되는데 노트북 150만원인데 오늘 현금으로 사도 돼?", 1_500_000),
+    ("숙소 1박 10만원 받는데 오늘 현금으로 예약해도 돼?", 100_000),
+    ("에어컨 설치 견적 30만원 받았는데 오늘 현금으로 결제해도 돼?", 300_000),
+])
+def test_a_named_price_or_a_quote_is_read_as_the_price(question: str, amount: int) -> None:
+    result = natural_purchase(question)
+    assert isinstance(result, NaturalPurchase), result
+    assert result.amount_krw == amount
+
+
+@pytest.mark.parametrize("question", [
+    "잔액 5만원 남았는데 오늘 치킨 시켜도 돼?", "월급 250만원 받는데 오늘 노트북 현금으로 사도 돼?",
+    "엄마한테 5만원 받았는데 오늘 치킨 현금으로 시켜도 돼?",
+])
+def test_received_money_still_asks_the_price(question: str) -> None:
+    assert natural_purchase(question) == "purchase_amount_required"
+
+
+@pytest.mark.parametrize("question", [
+    "택시 타도 돼? 지난달 교통비 얼마 썼어?", "외식 가도 될까? 외식 예산 얼마 남았어?",
+    "요즘 계속 배달 시켜먹어도 괜찮을까?", "월말까지 택시 타도 괜찮을까?",
+])
+def test_a_permission_inside_a_lookup_or_habit_question_is_not_one_purchase(question: str) -> None:
+    assert natural_purchase(question) is None

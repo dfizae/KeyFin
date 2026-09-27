@@ -425,11 +425,34 @@ _PURCHASE_SPEND_BLOCK: Final = re.compile(
 # mentions them ("오늘 치킨 3만원 현금으로 시켜도 돼? 잔액 괜찮아?") still is one.
 # The stated amount is what is left or already spent ("잔액 5만원 남았는데 치킨 시켜도 돼?"), or
 # the plan is a habit ("오늘부터 계속 택시 타면"): never a one-off purchase at that price.
+_RECEIVED_AMOUNT: Final = re.compile(
+    r"(?<=[0-9십백천만억])원(?:이|은|가|을|를|도|만|정도|쯤)?(받으면|받았|받기로|받는데)"
+)
+_INCOME_SOURCE: Final = re.compile(
+    r"월급|급여|용돈|보너스|상여|알바|수당|환급|환불|캐시백|페이백|세뱃돈|한테|에게|께서|로부터|부모님|엄마|아빠|친구"
+)
+_FEE: Final = re.compile(r"배달비|배송비|배달팁|수수료|팁")
+
+
+def _amount_not_price(normalized: str) -> bool:
+    """Whether a stated amount is held, received or already spent rather than the price."""
+    if _AMOUNT_NOT_PRICE.search(normalized) is not None:
+        return True
+    for match in _RECEIVED_AMOUNT.finditer(normalized):
+        head = normalized[max(0, match.start() - 12) : match.start()]
+        if "견적" in head:
+            continue  # "견적 30만원 받았는데" is the quoted price
+        if match.group(1) == "받는데" and _INCOME_SOURCE.search(head) is None and _FEE.search(head) is None:
+            continue  # "1박 10만원 받는데" is what the seller charges
+        return True
+    return False
+
+
 _AMOUNT_NOT_PRICE: Final = re.compile(
     r"(?<=[0-9십백천만억])원(?:이|은|가|을|를|도|만|정도|쯤|밖에|넘게)?(?:남았|남아|남은|썼|쓴|나갔|나간|부족|있는데|있어서"
     r"|써서|들었|들어서|나와서|이었|였|뿐|밖에없|나왔(?!.*(?:결제|내도|내면|낼까|낼게|사도|사면|살까))"
     r"|(?:만|정도|쯤)?(?:갖고있|가지고있|들고있|들어있|남기고|남겨|남짓있|(?:으로|로)(?:만)?(?:버텨|버티|버틸|살아야|지내야))"
-    r"|들어오면|들어오는데|들어와|들어왔|받으면|받았|받기로|받는데|벌었|먹었|샀는데|탔는데|냈는데)"
+    r"|들어오면|들어오는데|들어와|들어왔|벌었|먹었|샀는데|탔는데|냈는데)"
 )
 _PURCHASE_HABIT: Final = re.compile(
     r"(?:타|시키|가|먹으|쓰|내|사먹으)면서|(?:부터.{0,12}|(?:계속|앞으로).{0,10})"
@@ -465,6 +488,31 @@ def _amount_reads_as_price(normalized: str, question: str) -> bool:
 
 
 _CLAUSE_END: Final = re.compile(r"[?!.,]$")
+
+
+_PRICE_COPULA: Final = frozenset(
+    {"인데", "이면", "이래", "이라는데", "이라던데", "이던데", "이라서", "이니까", "이라"}
+)
+_PERIOD_NEAR: Final = re.compile(r"이번|지난|저번|달|한주|매|하루|월간|주간")
+
+
+def _named_item_price(tokens: list[str], index: int) -> bool:
+    """Whether the item named right before the amount prices it ("에어팟 케이스 3만원인데")."""
+    token = tokens[index].lstrip(_WORD_EDGE_MARKS)
+    run = next((m for m in _AMOUNT_RUN.finditer(token) if token[m.end() : m.end() + 1] == "원"), None)
+    if run is None or re.sub(r"[^0-9a-z가-힣]+$", "", token[run.end() + 1 :]) not in _PRICE_COPULA:
+        return False
+    start = index
+    while start > 0 and _CLAUSE_END.search(tokens[start - 1]) is None:
+        start -= 1
+    words = [*tokens[max(start, index - 2) : index], token[: run.start()]]
+    near = compact(" ".join(words))
+    return (
+        bool(purchase_envelopes(" ".join(words)))
+        and _BALANCE_WORD.search(near) is None
+        and _PURCHASE_SPEND_CONTEXT.search(near) is None
+        and _PERIOD_NEAR.search(near) is None
+    )
 
 
 def _first_amount_index(tokens: list[str]) -> int | None:
@@ -519,13 +567,16 @@ def _price_shaped(question: str) -> bool:
                 break
     after = compact(" ".join(after_tokens))
     # "노트북 150만원인데 예산 괜찮아?" asks about the budget; "5만원 예산으로" names the budget.
-    labelled = (
-        _BALANCE_WORD.search(before) is not None
-        or _HELD_MONEY_WORD.search(after) is not None
-        or (bool(after_tokens) and _BUDGET_AFTER.match(after_tokens[0].strip(_WORD_EDGE_MARKS)) is not None)
+    after_labelled = _HELD_MONEY_WORD.search(after) is not None or (
+        bool(after_tokens) and _BUDGET_AFTER.match(after_tokens[0].strip(_WORD_EDGE_MARKS)) is not None
     )
-    if _PURCHASE_SPEND_CONTEXT.search(near_before + after) is None and not labelled:
+    no_context = _PURCHASE_SPEND_CONTEXT.search(near_before + after) is None
+    if no_context and _BALANCE_WORD.search(before) is None and not after_labelled:
         return True
+    if no_context and _BALANCE_WORD.search(near_before) is None and not after_labelled and _named_item_price(
+        tokens, index,
+    ):
+        return True  # a far "잔액 걱정되는데 … 노트북 150만원인데" labels nothing
     return _strict_price_shape(tokens, index)
 
 
@@ -533,6 +584,10 @@ def _price_shaped(question: str) -> bool:
 _SPEND_PERMISSION: Final = re.compile(
     r"(?:먹어|시켜|시켜먹어|사먹어|타|가|예약해|예매해|등록해|결제해|내|써)도(?:돼|될까|되나|되니|되냐|괜찮)"
 )
+# ...unless the turn also asks a lookup or forecast ("택시 타도 돼? 지난달 교통비 얼마 썼어?") or
+# describes a habit ("월말까지 택시 타도 괜찮을까?", "계속 2만원씩 배달 시켜도 돼?").
+_PERMISSION_LOOKUP: Final = re.compile(r"얼마|예측|비교|보여|알려")
+_PERMISSION_HABIT: Final = re.compile(r"계속|앞으로|요즘|말까지|내내|처럼|대로|씩|마다")
 _PURCHASE_SPEND_CONTEXT: Final = re.compile(
     r"계속|앞으로|월말|잔액|예측|위험|부족|남을|남아|남았|들까|얼마들|나올지|얼마나올|썼|쓴|나갔|나간|지난달|면서"
 )
@@ -994,11 +1049,18 @@ def _spend_intent(normalized: str, question: str, *, has_item: bool, has_amount:
     """Decide the everyday-spend tier ("치킨 시켜도 돼?", "택시 타도 될까?", "결제해도 돼?")."""
     if _PURCHASE_SPEND_BLOCK.search(normalized) is not None or _PURCHASE_HABIT.search(normalized) is not None:
         return False
-    if has_item and _SPEND_PERMISSION.search(normalized) is not None:
+    permission = _SPEND_PERMISSION.search(normalized)
+    if (
+        has_item
+        and permission is not None
+        and _PERMISSION_LOOKUP.search(normalized) is None
+        and (_PERMISSION_HABIT.search(normalized) is None or _amount_not_price(normalized))
+        and _PURCHASE_SPEND_CONTEXT.search(normalized, permission.end()) is None
+    ):
         # "잔액 5만원 남았는데 오늘 치킨 시켜도 돼?" asks permission for a purchase whose price
         # is still missing; the stated balance or past spend is asked about, not booked.
         return True
-    if _AMOUNT_NOT_PRICE.search(normalized) is not None:
+    if _amount_not_price(normalized):
         return False
     if _PURCHASE_SPEND_CONTEXT.search(normalized) is not None and not (
         len(purchase_amounts(question)) == 1
@@ -1041,7 +1103,7 @@ def natural_purchase(question: str) -> NaturalPurchase | str | None:
     if isinstance(result, NaturalPurchase):
         tokens = _joined_amounts(rest).split()
         index = _first_amount_index(tokens)
-        if index is None or not _strict_price_shape(tokens, index):
+        if index is None or not (_strict_price_shape(tokens, index) or _named_item_price(tokens, index)):
             return "purchase_amount_required"
     return result
 
@@ -1062,7 +1124,7 @@ def _admit_purchase(question: str) -> NaturalPurchase | str | None:  # noqa: PLR
     amounts = purchase_amounts(question)
     if (
         len(amounts) != 1
-        or _AMOUNT_NOT_PRICE.search(normalized) is not None
+        or _amount_not_price(normalized)
         or not _amount_reads_as_price(normalized, question)
     ):
         # "잔액 5만원 남았는데 노트북 사도 돼?" names the balance, not the price.
