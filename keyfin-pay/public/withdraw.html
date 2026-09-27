@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KeyFin Pay 계좌 출금</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/wanteddev/wanted-sans@v1.0.3/packages/wanted-sans/fonts/webfonts/variable/split/WantedSansVariable.min.css" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/subscriptions.css" />
+</head>
+<body>
+<div class="app">
+  <header class="topbar top cols">
+    <a class="brand" href="/pay.html">KeyFin Pay</a>
+    <nav class="nav">
+      <a href="/pay.html">결제</a>
+      <a href="/history.html">결제 내역</a>
+      <a href="/subscriptions.html">정기결제</a>
+      <a href="/withdraw.html">계좌 출금</a>
+    </nav>
+    <div class="who"><span id="who-name"></span><button type="button" id="logout-btn" class="btn btn-secondary">로그아웃</button></div>
+  </header>
+
+  <main class="main cols">
+    <div class="cats" aria-hidden="true"></div>
+
+    <section class="dir">
+      <div class="page-h"><h1>계좌 출금</h1><p>계좌에서 현금을 뽑듯 돈을 빼요. 자동이체로 채운 결제 계좌에서 빼면 잔액 부족 경고를 볼 수 있어요.</p></div>
+      <div id="err" class="note note-neg hidden" role="alert"></div>
+      <div class="svc" id="accounts" role="radiogroup" aria-label="출금할 계좌"><p class="form-msg">계좌를 불러오는 중이에요</p></div>
+    </section>
+
+    <aside class="side">
+      <form class="card card-sage" id="form" novalidate>
+        <h2>이체 금액을 입력해주세요.</h2>
+        <div class="field">
+          <label for="amount">출금 금액(원)</label>
+          <input class="input num" id="amount" type="number" min="1" step="1" inputmode="numeric" placeholder="예: 500000" required />
+        </div>
+        <div class="field">
+          <label for="memo">메모</label>
+          <input class="input" id="memo" type="text" maxlength="50" value="현금 출금" />
+        </div>
+        <div id="f-note" class="note hidden" role="status"></div>
+        <button type="submit" class="btn btn-primary btn-lg" id="submit">출금하기</button>
+      </form>
+    </aside>
+  </main>
+</div>
+<script type="module" src="/withdraw.js"></script>
+</body>
+</html>

@@ -34,6 +34,8 @@ export function createApp({ finBaseUrl, finApiKey, db, fetchImpl = fetch }) {
     subCancel: `${FIN}/edu/creditCard/cancelSubscription`,
     subToggle: `${FIN}/edu/creditCard/pauseSubscription`,
     subHistory: `${FIN}/edu/creditCard/inquireSubscriptionHistory`,
+    accounts: `${FIN}/edu/demandDeposit/inquireDemandDepositAccountList`,
+    withdraw: `${FIN}/edu/demandDeposit/updateDemandDepositAccountWithdrawal`,
   };
   const MEMBER_SEARCH = `${FIN}/member/search`;
   const MERCHANT_LIST = `${FIN}/edu/creditCard/inquireMerchantList`;
