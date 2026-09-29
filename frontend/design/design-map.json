@@ -1,0 +1,579 @@
+{
+  "$description": "화면·컴포넌트 → design.pen(Pencil) 노드 매핑. 디자인의 확정본은 Pencil이다. 화면·컴포넌트를 구현하기 전에 여기서 pencil 노드 id를 찾아 Pencil MCP `Get`(구조·프레임 자체의 fill·좌표)과 `TakeScreenshot`(시각)으로 대조한다. pencil이 '없음'이면 DESIGN.md 기준으로 구현하고 보고서에 'Pencil 미대조'로 표시한다. figma 필드는 `pnpm figma:build`로 내보내는 Figma 프레임 이름(출력물)이며 코드는 Figma를 읽지 않는다.",
+  "pencil": {
+    "file": "design.pen",
+    "importedAt": "2026-09-07",
+    "note": "Figma KeyFin(xa7rWgfvEwCLKPlvV6eFQf) 파일을 붙여넣은 작업 파일. 최상위 프레임: 와이어프레임 초안(TE2NW, 구현 기준 화면) · 갤럭시 목업(LsycU) · 유저 플로우(X6qeL) · 공통 컴포넌트(LxypZ) · 색상 & 타이포그래피(tA7Yh) · 아이콘(vnfzl, 은행 CI) · 게이미피케이션 디자인(xzNjW, 캐릭터 스프라이트·참고 이미지). 2026-08-30 킷 프레임(home, 로그인 …)은 이 가져오기로 제거됐다. 이미지 fill은 design/images/*.png 상대경로를 참조하며 harness:check가 고아 파일·깨진 참조를 잡는다.",
+    "tokenFrames": {
+      "color": "색상 & 타이포그래피 / 색상 (FL2Vg)",
+      "typography": "색상 & 타이포그래피 / 타이포그라피 (E5420p)"
+    },
+    "flowFrames": {
+      "draft": "유저 플로우 (X6qeL) — Figma 에서 가져온 기획 초안. 참고 자료로만 남긴다",
+      "spec": "유저 플로우 v2 (KeyFin 명세) (Y49l5y) — 2026-09-08 docs/frontend-spec.md §2·§3(PAGE-xx, 이동 흐름)을 옮긴 명세 기준 플로우. 레인 4개: 온보딩(t31nWg) · 결제 후 분류·코칭(zMwXJ) · 결제 준비 이체(UMyk6) · 홈 요소·코인(pFtvc). 화면 목록이 바뀌면 frontend-spec.md 를 먼저 고치고 이 프레임을 갱신한다",
+      "components": "Legend(E6Iy2K) 안의 reusable 노드를 ref 로 배치한다: Flow / Page(PDN58, $primary) · Server(aloD5, $muted) · Action(kRqCc, $positive-muted) · Decision(ScrDd, $warning-muted) · Push(bR0zF, $info-muted) · Negative(Jpsdj, $destructive-muted) · Arrow(ykC1x, lucide arrow-right) · Branch(mQh5E). 자식 이름 Label·Sub 를 descendants 로 덮어쓴다",
+      "note": "온보딩 완료 판정 기준과 분류 질문 푸시의 notiType 은 명세에 없어 플로우에 TBD 로 적었다"
+    },
+    "assetFrames": {
+      "container": "에셋 생성 (AI) (Qd6wt) — 방 씬 에셋을 Pencil AI(Generate)로 만드는 프레임. 각 프레임 fill = design/images/ai/*.jpg 원본",
+      "frames": "floor-tall-c (k4gOx, 2026-09-18 채택 — 세로 긴 방 327:586, 흰 줄 없음) · floor-tall-d (F40ht, 후보) · floor-tall-a (K5wjDt, 줄 있어 폐기) · floor-tall-b (WTOhx, 폐기) · 방 미리보기 (i2Are, 새 배경 + 기본 배치) · floor-default (I0nM1, 옛 327:404) · sofa (MVvPM) · sofa-v2 (yRVWQ, 격자 정렬용 재생성 2026-09-09) · coffee-table (Cjtco) · desk (lxnMV) · fridge (G0VC6) · plant (M5hYn7) · window (HWVe7)",
+      "floorComposite": "2026-09-18 부터 바닥은 floor-tall.jpg(= design/images/ai/floor-tall-c.jpg 원본 그대로, 768×1376 → 씬 327:586)이고 창문 합성이 없다. 같은 날 흰 타일 줄을 빼고 다시 생성했다(a→c). 아래는 옛 바닥 설명이다. floor-default.png = floor-default.jpg 크롭(코너 40%) 위에 window.jpg(마젠타 키 → 투명)를 왼쪽 벽 기울기(가로 100px당 −45px)로 기울여 합성한 것. 창문 위치·크기는 좌상단 (40,95) 폭 180. 바닥만 다시 만들 때는 창문 합성을 다시 해야 한다",
+      "pipeline": "원본(JPEG, 흰색 또는 마젠타 배경) → scripts/assets/remove-white-bg.ps1(배경 제거·발끝 크롭) → assets/sprites/furniture/*.png. 바닥은 원본을 씬 비율로 잘라 assets/sprites/floors/ (2026-09-18 부터 327:586, 새 그림은 자르지 않고 그대로 쓴다). 캐릭터는 정지 이미지(assets/sprites/char1-idle.png) + 코드 모션이며 걷기 시트는 쓰지 않는다(build-sprite-sheet.ps1 은 나중에 프레임 애니메이션이 필요할 때를 위해 남겨둠)",
+      "prompt": "공통 스타일 문구(45° 하이앵글 — 톱뷰는 아니고 홈 룸 이미지 Rectangle 415 와 같은 높이, 좌측 창문광, clay-like 3D)를 모든 프롬프트 앞에 고정한다. 바닥은 '카메라가 방 안에 있어 화면을 꽉 채움(디오라마·바닥 가장자리 금지), 코너는 왼쪽 40%, 왼쪽 벽 짧고 오른쪽 벽 길게, 바닥이 아래 2/3'로 생성한 뒤 코너가 40% 지점에 오도록 327:404 로 자른다. 창문은 생성마다 위치가 튀어 세로 크롭에서 빠질 수 있다(벽은 중요하지 않음). 흰색·크림색 물체는 마젠타(#FF00FF) 배경으로 생성해야 크로마키가 된다. 가구는 26.5° 문구로 만든 것이라 씬에 올려 각도가 튀면 45° 문구로 재생성한다"
+    },
+    "variables": "문서 변수 51개 = tokens.json semantic.color 35개(mode: light/dark) + white/black + radius-* + size-* + font-sans(Pretendard). scripts/sync-pen-tokens.cjs가 tokens.json으로 동기화하고 tokens:check가 불일치를 잡는다. 가져온 프레임은 raw hex를 쓰므로 구현 시 tokens.json 값으로 대응시킨다.",
+    "restoredAt": "2026-09-13",
+    "restoreNote": "이 파일은 .gitignore 로 로컬 보관이며(커밋 1a20872), 작업 트리에서 사라져 2026-09-13 에 `git show 1a20872^:frontend/design/design-map.json` 으로 되살린 뒤 9/11~9/13 변경분(PAGE-04~06·11·21, 예산 GET /budgets/current 교체)을 반영했다. design.pen 과 함께 백업해 둘 것.",
+    "screenRow": "프로젝트 톤 화면 아트보드는 캔버스 y=8046 한 줄에 x 470 간격으로 늘어놓는다(왼쪽부터 budget → … → character-moving-in → transaction-detail). 새 화면은 FindEmptySpace(direction:'right', nodeId: 마지막 화면)로 이어 붙인다.",
+    "sizeVariableNote": "Pencil 은 width/height 에 $size-* 변수를 적용하지 않는다(2026-09-11 확인, 2026-09-13 재확인) — 버튼 44/56, 아이콘 타일 40 처럼 숫자로 넣는다. 색·반경·간격 변수는 정상 동작한다.",
+    "artboardNaming": "아트보드 이름은 한국어 'PAGE-xx 화면명 · 상태' 로 둔다(2026-09-13 사용자 요청, Figma 로 내보냈을 때 알아보기 쉽게). design-map 의 screens 키는 라우트 기준 영문 그대로이고, 두 이름의 연결은 각 항목의 pencil 필드(한국어 이름 + 노드 id)가 맡는다. Figma 내보내기(scripts/figma/build-plugin.cjs SCREEN_IDS)는 이름이 아니라 노드 id 를 쓰므로 이름을 바꿔도 영향이 없다.",
+    "routeGroups": "2026-09-13: 로그인이 필요한 라우트를 app/(app)/ 그룹으로 옮겼다(인증 검사 한 곳, 규칙 80). 괄호 그룹이라 URL·딥링크 주소는 그대로다."
+  },
+  "components": {
+    "Text": {
+      "code": "components/ui/text.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음 (타이포그라피 E5420p 참조)"
+    },
+    "Button": {
+      "code": "components/ui/button.tsx",
+      "source": "react-native-reusables",
+      "pencil": "공통 컴포넌트 / CTA-Button (WuCJ1) 335×55"
+    },
+    "Input": {
+      "code": "components/ui/input.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Card": {
+      "code": "components/ui/card.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Badge": {
+      "code": "components/ui/badge.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음 (홈 HeaderActions 배지 MbnFb 참조)"
+    },
+    "Skeleton": {
+      "code": "components/ui/skeleton.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Separator": {
+      "code": "components/ui/separator.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "Icon": {
+      "code": "components/ui/icon.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음 (가져온 프레임의 아이콘은 path, 이름이 lucide 이름)"
+    },
+    "Dialog": {
+      "code": "components/ui/dialog.tsx",
+      "source": "react-native-reusables",
+      "pencil": "없음"
+    },
+    "AmountText": {
+      "code": "components/ui/amount-text.tsx",
+      "pencil": "없음"
+    },
+    "AmountInput": {
+      "code": "components/ui/amount-input.tsx",
+      "pencil": "없음"
+    },
+    "EmptyState": {
+      "code": "components/ui/empty-state.tsx",
+      "pencil": "없음"
+    },
+    "LottieLoop": {
+      "code": "components/ui/lottie-loop.tsx",
+      "pencil": "없음",
+      "note": "lottie-react-native 7.3.8 반복 재생 래퍼(2026-09-14). 기다림·성공 순간(분석 중·입주 연출)에만 쓰고 입력 화면에는 쓰지 않는다. 웹은 같은 패키지의 웹 구현이 @lottiefiles/dotlottie-react(0.13.5, 사용자 승인 설치)로 그린다 — wasm 을 CDN 에서 받으므로 오프라인 웹에선 안 나온다. 에셋은 assets/lottie/*.json(직접 만든 것 2개, LottieFiles 로 교체 가능·100KB 이하·라이선스 확인). Pencil 은 Lottie 를 렌더하지 못해 시안에는 정지 상태만 있다"
+    },
+    "FillBar": {
+      "code": "components/ui/fill-bar.tsx",
+      "pencil": "없음",
+      "note": "가로 진행 막대(2026-09-14). fillDelay 가 있으면 진입 시 0 에서 차오른다. 소비 분석 A·B 막대, 예산 탭 총예산 막대(0ms)·봉투 7행(80ms 간격). 홈 EnvelopeChart 세로 막대는 정적이고 여유(good)면 봉투 색, 주의·초과는 상태색"
+    },
+    "CountUpAmount": {
+      "code": "components/ui/count-up-amount.tsx · hooks/use-count-up.ts",
+      "pencil": "없음",
+      "note": "큰 금액이 0 에서 값까지 굴러 올라가는 Text(2026-09-14). 표시만 바꾸고 계산은 lib/money 정수 유틸(규칙 80). 소비 분석 요약 합계·봉투별 합계·예산 탭 잔액·봉투 상세 잔액(남음/초과 문구 포함)·예산 설정 총액(슬라이더에 따라 이어서 굴러감)·홈 예산 카드 잔액에 적용"
+    },
+    "ScreenHeader": {
+      "code": "components/ui/screen-header.tsx",
+      "pencil": "ScreenHeader (tdgU8, 공통 컴포넌트 안 reusable)",
+      "note": "Screen 안에서는 절대 위치 + 스크롤 48px 에 투명(제목·뒤로가기 포함), 상태바 영역 직접 칠함 (2026-09-16)"
+    },
+    "CoachRow": {
+      "code": "components/ui/coach-row.tsx",
+      "pencil": "CoachRow — 회원가입 (b66wKg) · 약관 (f0WyT) · 금융망 이메일 (PqGvX) 안",
+      "note": "온보딩 코치 행: Floating 캐릭터 76×112 + 말풍선 카드(bg-card border-border rounded-lg p-3.5 text-label). 홈 코치 말풍선과 같은 스타일. 문구는 임시(코치 말투 확정 전, 2026-09-14)"
+    },
+    "Floating": {
+      "code": "components/ui/floating.tsx",
+      "pencil": "없음",
+      "note": "캐릭터 정지 이미지를 Reanimated 로 둥실거리게 하는 래퍼(2026-09-14). 로그인·회원가입 코치 캐릭터에 쓴다. 동작 줄이기 설정이면 정지"
+    },
+    "Toast": {
+      "code": "components/ui/toast.tsx",
+      "pencil": "없음",
+      "note": "DESIGN.md 5-2 인벤토리에만 있고 코드 파일은 아직 없다(2026-09-13 확인)"
+    },
+    "BottomSheet": {
+      "code": "components/ui/bottom-sheet.tsx",
+      "source": "project",
+      "pencil": "없음 (동작 컴포넌트 — 스크림 페이드 + 시트 슬라이드, 2026-09-16)"
+    },
+    "ListGroup": {
+      "code": "components/ui/list-group.tsx",
+      "pencil": "없음",
+      "note": "DESIGN.md 5-2 인벤토리에만 있고 코드 파일은 아직 없다(2026-09-13 확인)"
+    },
+    "TabBar": {
+      "code": "components/ui/tab-bar.tsx",
+      "pencil": "홈 BottomTabBar (NaYk9) · 공통 컴포넌트 / BottomTabBar (vgESQ) — 탭 4개(홈·자산·예산·마이, 리포트는 2026-09-23 제외), 활성 탭 bg-accent + text-primary"
+    },
+    "CharacterRoom": {
+      "code": "features/home/components/CharacterRoom.tsx",
+      "pencil": "home/p0 CharacterRoom (oAvM4, 375×463 — 2026-09-15 좌우 여백 제거·전폭)",
+      "note": "항상 RoomScene 을 그린다. 2026-09-15 사용자 결정: 홈에서 방을 편집 화면처럼 화면 폭 가득 키우고 아래 예산 카드를 뺐다(예산은 리스트 탭 → BudgetSheet). 빈 방 상태와 등록 CTA 는 2026-09-08 결정으로 제거"
+    },
+    "RoomScene": {
+      "code": "features/room/components/RoomScene.tsx",
+      "pencil": "홈(캐릭터 활성화) CharacterRoom (Plvf1) 크기 기준 · 에셋 생성 (AI) (Qd6wt) 의 바닥·가구 원본",
+      "note": "Skia 캔버스. 씬 단위 327×586 (2026-09-18 세로 긴 방 배경으로 교체 — 홈이 하단 탭바 위 화면 전체를 채우게 되면서 327:404 로는 좌우가 잘렸다. 벽/바닥 경계는 floor-tall.jpg 를 픽셀로 재서 좌 -0.518x+371 · 우 0.518x+201 · 코너 (164,286), 바닥 격자 12×12, 두 벽 3×4, 기본 배치 칸과 캐릭터 시작 자리 재조정). 1단계: 바닥(floors/floor-default.png) + 가구 5종(catalog.ts, 기본 배치 scene.ts DEFAULT_LAYOUT)을 발끝 y 기준 painter's 정렬로 그리고, 캐릭터는 가구 경계를 넘을 때만 depthIndex 를 갱신해 사이에 끼운다. 바닥 다각형 FLOOR_POLYGON 은 바닥 이미지의 걸레받이 좌표. 2단계: 캐릭터는 정지 이미지 한 장 + 코드 모션 — useCharacterWalker 가 3~6초 쉬고 가구 발자국(getFootprintRect)을 피해 랜덤 웨이포인트로 일정 속도 이동, 이동 중 잔걸음 바운스와 진행 방향 미러링, 정지 중 호흡 스케일 2026-09-15: 벽 오브젝트(보드·캘린더)를 바닥 위·가구 앞에 스프라이트로 그리고, 편집 모드 드래그가 가구(바닥 격자)와 벽 오브젝트(자기 벽 격자, isPlaceableOnWall)를 같은 Pan 으로 처리한다 벽 격자는 좌우 모두 3×4(벽걸이 1×1 기준, 2026-09-18 코너가 가운데로 오면서 좌우 폭이 같아졌다)이고 편집 모드에 바닥과 함께 벽 격자선도 그린다. 바닥 이미지는 창문 없이 재크롭(2026-09-15)"
+    },
+    "SignupScreen": {
+      "code": "features/auth/components/SignupScreen.tsx",
+      "pencil": "PAGE-02 회원가입 · 캐릭터 대안 (b66wKg, 2026-09-14 채택) · PAGE-02 회원가입 (ZjEHu, 이전) · PAGE-02 회원가입 · 중복 이메일 (UdUD7, USER_002 이메일 중복) · PAGE-02 회원가입 · 요청 중 (b1O9sc)",
+      "note": "PAGE-02 본체. '< 회원가입' 한 줄 헤더(사용자가 시안에서 '계정 만들기'를 '회원가입'으로 바꿈, 2026-09-14) + 코치 행(손 흔드는 캐릭터 76×112 Floating + 말풍선 카드 bg-card border-border p-3.5 text-label) + 이름·이메일·비밀번호 3필드 + 가입하기 CTA + 로그인 링크. 중복 이메일 오류는 이메일 필드 아래에 붙이고 그 외 오류는 폼 아래에 둔다. 가입은 토큰을 주지 않아 성공하면 로그인 화면으로 돌아간다"
+    },
+    "LoginScreen": {
+      "code": "features/auth/components/LoginScreen.tsx",
+      "pencil": "PAGE-01 로그인 · 캐릭터 대안 (QmtGU, 2026-09-14 채택) · PAGE-01 로그인 (HUL5i, 이전) · PAGE-01 로그인 · 오류 (JF0Db) · PAGE-01 로그인 · 요청 중 (bG1FL)",
+      "note": "PAGE-01 본체. 좌상단 아이콘+워드마크(assets/brand/keyfin-wordmark.png 117×27, 태그라인 없음) + 손 흔드는 캐릭터 150×210(Floating) + '안녕하세요!' text-h1 + 설명 + 이메일·비밀번호 입력(ScrollView) + 하단 CTA + 회원가입 링크. 오류는 필드 테두리 $destructive 와 아이콘+문구(색만으로 전달하지 않는다), 요청 중에는 버튼 비활성과 '로그인 중…'. 회원가입 링크는 PAGE-02 가 없어 비활성 (TBD)"
+    },
+    "BudgetProposalScreen": {
+      "code": "features/budget/components/BudgetProposalScreen.tsx",
+      "pencil": "PAGE-07 예산 제안 · 금액 대안 (N9eU0, 2026-09-14 채택) · PAGE-07 예산 제안 (g1fhiV, 이전) · PAGE-07 예산 제안 · 전체 (VAJgp, 스크롤 전체 검토용)",
+      "note": "PAGE-07 본체. '< 이번 달 예산 설정' 한 줄 헤더(bg-card, 사용자 결정 2026-09-14 — 주기가 달과 다를 수 있는 건 TBD) · 설명 · 총 예산은 카드 없이 text-label 라벨 + text-amount-lg(합계 실시간) + 근거 ·봉투 7행(봉투 색 아이콘 타일·금액칸·봉투 색 슬라이더(Slider fillClassName)·월평균 근거, 2026-09-14)·하단 고정 CTA. 슬라이더 상한은 명세에 없어 15만원·1천원 단위 가정 (TBD)"
+    },
+    "Slider": {
+      "code": "components/ui/slider.tsx",
+      "pencil": "budget-proposal Slider (i3IyGs)",
+      "note": "트랙 h-1.5 $muted + 채움 $primary + 손잡이 18 $primary. RN 코어 responder 이벤트만 써서 웹에서도 같게 동작한다"
+    },
+    "BudgetScreen": {
+      "code": "features/budget/components/BudgetScreen.tsx",
+      "pencil": "PAGE-12 예산 탭 · 카드 정리 대안 (IiOk3, 2026-09-14 채택) · PAGE-12 예산 탭 (kvc1e, 이전) · PAGE-12 예산 탭 · 확정 전 (ZOmXC)",
+      "note": "PAGE-12 예산 탭 본체. 헤더(제목+햄버거)·총예산(카드 없이 라벨·금액·막대·총/사용, 2026-09-14)·봉투 7종 행. status=PROPOSED 는 총예산 카드 대신 BudgetUnsetBanner 와 제안 금액. 헤더 햄버거 동작과 봉투 수정 진입점은 명세에 없어 비활성 (TBD). 배너 CTA 는 PAGE-07(예산 제안·승인)이 생기면 그쪽으로 연결한다 2026-09-13: 봉투 행을 탭하면 봉투 상세(PAGE-23)로 간다 2026-09-18: 봉투 세로 목록을 원판 캐러셀(EnvelopeCarousel, Pencil 미대조)로 바꿨다 — 행은 눌러서 들어간다는 신호가 약했다(사용자 결정). 세로로 긴 카드를 원에 얹어 좌우로 돌리고, 정면 카드를 누르면 봉투 상세로 간다. 같은 날 탭 헤더(제목·햄버거)를 없애 상단은 여백(상태바+20)만 있다."
+    },
+    "BudgetCard": {
+      "code": "features/home/components/BudgetCard.tsx",
+      "pencil": "home/p0 BudgetCard (sMRC0) — 봉투 7종 사용률 세로 막대 EnvelopeChart (KZBd3) 는 홈 P0 3단계에서 구현",
+      "note": "데이터는 GET /budgets/{month} total. 상태 문구는 budgetHealth(잔여율 30% 미만 warning, 음수 over) 2026-09-15: 홈 본문에서 빠져 BudgetSheet 안에서만 그린다."
+    },
+    "WallBoard": {
+      "code": "features/room/components/WallBoard.tsx",
+      "pencil": "home/p0 WallBoard Asset (K5Ndp)",
+      "note": "보드 스프라이트(WALL_ITEMS.board, 벽걸이 1×1 칸 — Pencil AI 임시 에셋 ro06p, 사용자 제작 이미지로 교체 예정) 위에 얹는 투명 탭 영역만. 기간·잔여율·봉투 칩은 팝오버(BoardPopover)에서(사용자 결정 2026-09-15: 에셋 위 글자 없음). 자리는 방 배치(getWallItemRect)에서 온다"
+    },
+    "BoardPopover": {
+      "code": "features/budget/components/BoardPopover.tsx",
+      "pencil": "home/p0/board-open BoardPopover (HQKYe)",
+      "note": "2026-09-15 BudgetSheet 로 대체되어 미사용(삭제 승인 대기). Pencil HQKYe 도 KQLga 에서 지움"
+    },
+    "EnvelopeChart": {
+      "code": "features/budget/components/EnvelopeChart.tsx",
+      "pencil": "home/p0 EnvelopeChart (KZBd3)",
+      "note": "봉투 7종 사용률 세로 막대. 사용률 = 100 − remainingRate, 초과는 100 으로 자름. 막대를 탭하면 봉투 상세(PAGE-23)로 간다(2026-09-13, 명세 §3 홈 요소)"
+    },
+    "CalendarAsset": {
+      "code": "features/room/components/CalendarAsset.tsx",
+      "pencil": "home/p0 Calendar Asset (lrclI) · Calendar ShortageDot (Fycy2)",
+      "note": "캘린더 스프라이트(WALL_ITEMS.calendar, 벽걸이 1×1 칸 — Pencil AI 임시 에셋 yZSsm) 위의 투명 탭 영역 + 준비 부족 점(우상단). 월·날짜·이름은 팝오버에서(에셋 위 글자 없음). 자리는 방 배치에서 온다"
+    },
+    "CalendarPopover": {
+      "code": "features/payment/components/CalendarPopover.tsx",
+      "pencil": "home/p0/calendar-open CalendarPopover (ZzspU)",
+      "note": "캘린더 탭 시 씬 좌표 (64,104) 폭 250 에 열림. 날짜별 이름·금액 + 준비됨/부족 뱃지(estimated 는 이름 뒤 (예상)) + '캘린더 열기'. '캘린더 열기'는 PAGE-24(app/payment/calendar.tsx)로 간다(2026-09-13) 2026-09-15: 자리는 (64,104) 고정 대신 캘린더 스프라이트 아래(popoverBelow)"
+    },
+    "AttendanceToast": {
+      "code": "features/home/components/AttendanceToast.tsx",
+      "pencil": "home/p0 AttendanceToast (oEJOQ)",
+      "note": "방 상단 중앙 알약, POST /attendance 의 granted>0 일 때 3초 표시"
+    },
+    "CoachTarget": {
+      "code": "features/home/components/CoachTarget.tsx",
+      "pencil": "home/p0 CoachAvatar (Qxnt5) · CoachBubble (o3byv)",
+      "note": "코치 씬 좌표 (0,254) 32pt 원형 bg-accent, 말풍선 (40,262) 폭 236 bg-card. 미확정 거래 첫 건을 『가맹점 금액』 세분류 맞나냥? 으로 묻고 [세분류 확정]·[다른 카테고리]. 30초 무응답이면 말풍선만 접고 코치 탭으로 다시 편다 (FR-TXN-03). 데이터 연결은 HomeCoach.tsx 미확정이 2건 이상이면(CLEANUP_MIN_COUNT) 버튼 아래에 'n건 모아서 정리' 링크가 붙어 PAGE-22 로 간다(사용자 결정 2026-09-13). Pencil 시안에는 아직 이 링크가 없다 2026-09-15: 코치 탭 → 임시 \"?\" 말풍선(코치봇 소통창 예정) + 미확정 결제 n건 정리 링크. 분류 질문·확정 버튼은 뺐다(서버가 PENDING 에 제안 세분류를 주지 않음) 2026-09-22: 코치 = 방 씬(Skia)에 앉은 고양이 스프라이트(assets/sprites/coach-cat.png, 씬 자리 scene.ts COACH_CAT_*). 32pt 원형 아이콘 버튼은 없앴고 CoachTarget(씬 레이어 투명 탭 영역)만 남았다 — 같은 날 코칭 대화 화면(coaching-chat)을 붙이며 임시 말풍선은 없앴다. Pencil 미대조(고양이 그림은 사용자 제공)"
+    },
+    "SubcategorySheet": {
+      "code": "features/transaction/components/SubcategorySheet.tsx",
+      "pencil": "없음",
+      "note": "PAGE-20 거래 분류 시트. RN Modal 하단 시트(bg-popover · rounded-t-xl), 세분류 22종을 봉투 순서로 묶은 칩 + 예산에서 제외 태그 3종(더치페이·내 계좌 이동·비상금). 공용 BottomSheet 가 생기면 그 위로 옮긴다 2026-09-15: 비상금 칩 제거, 더치페이 칩 → 같은 시트 안 금액 입력 단계(AmountInput field, 상한 = 거래 금액, dutchAmountError)"
+    },
+    "RoomEditorOverlay": {
+      "code": "features/room/components/RoomEditorOverlay.tsx",
+      "pencil": "없음(홈 시안에 없는 요소)",
+      "note": "홈 방 씬 위 우상단 꾸미기 진입 버튼만 남았다(2026-09-15). 편집 컨트롤(안내·취소·완료)은 RoomEditScreen 으로 옮김. HomeScreen panels 레이어에서 팝오버가 닫혀 있을 때만 그린다"
+    },
+    "CoinBadge": {
+      "code": "features/home/components/HomeScreen.tsx (내부)",
+      "pencil": "홈(캐릭터 활성화) HeaderActions / CoinBadge (DsQOx)",
+      "note": "코인 색 #F5D547 은 토큰에 없어 warning 으로 대체"
+    },
+    "AccountCard": {
+      "code": "features/account/components/AccountCard.tsx",
+      "pencil": "없음 (킷 제거됨 — 자산관리 UjYhB 구현 시 재대조)"
+    },
+    "TransactionRow": {
+      "code": "features/transaction/components/TransactionRow.tsx",
+      "pencil": "공통 컴포넌트 / 최근 거래 내역 (ZJ2Rl)",
+      "note": "가맹점 + '날짜 · 분류' / 우측 금액. 입금은 + 와 $positive, 취소는 취소선. 행 전체가 거래 상세(PAGE-21)로 가는 버튼이다(2026-09-13). 자산 탭 최근 3건과 거래 내역 전체보기가 같이 쓴다"
+    },
+    "PinPad": {
+      "code": "features/auth/components/PinPad.tsx",
+      "pencil": "없음",
+      "note": "DESIGN.md 5-2 인벤토리에만 있고 코드 파일은 아직 없다(2026-09-13 확인). PIN 화면은 명세에 없어 필요해질 때 만든다"
+    },
+    "TransactionListScreen": {
+      "code": "features/transaction/components/TransactionListScreen.tsx",
+      "pencil": "없음",
+      "note": "거래 내역 전체보기(FR-TXN-09). 월 스테퍼 + 봉투/계좌·카드 선택 두 개 + 커서 페이지 목록. 필터는 검색 파라미터로 두고 다음 쪽 실패는 목록을 유지한 채 푸터에서 재시도한다"
+    },
+    "TransactionDetailScreen": {
+      "code": "features/transaction/components/TransactionDetailScreen.tsx",
+      "pencil": "PAGE-21 거래 상세 · 금액 대안 (od8Jc, 2026-09-14 채택) · PAGE-21 거래 상세 (AyD8V, 이전) · PAGE-21 거래 상세 · 저장 실패 (pcZvq) · PAGE-21 거래 상세 · 취소 거래 (oojne) · PAGE-21 거래 상세 · 못 찾음 (AqNgy)",
+      "note": "PAGE-21 본체(2026-09-13, 금액 대안 2026-09-14). 카드 없이 가맹점(text-label) · 금액(text-amount-lg 36 — 시안의 40 은 타이포 토큰이 없어 36 으로 맞춤) · 일시를 가운데 모으고, 봉투·거래 종류·메모는 border-b 구분선 목록. 봉투 행(Pressable + chevron-right)이 곧 '분류 바꾸기'라 버튼이 없고 저장 중이면 행 오른쪽에 '저장 중'. 단건 조회 API 가 없어 목록 캐시에서 거래를 찾고(useCachedTransaction), 분류 수정은 SubcategorySheet(PAGE-20) 재사용. 입금·취소 거래는 행 비활성(chevron 숨김) + 사유 문구(화면 판단, TBD)"
+    },
+    "FilterSelect": {
+      "code": "features/transaction/components/FilterSelect.tsx",
+      "pencil": "없음",
+      "note": "버튼 + RN Modal 바텀시트 선택창. 거래 내역의 봉투 / 계좌·카드 필터가 나란히 쓴다(사용자 결정 2026-09-11, 칩 두 줄에서 바꿈)"
+    },
+    "AssetsScreen": {
+      "code": "features/account/components/AssetsScreen.tsx",
+      "pencil": "자산관리 (UjYhB) — 옛 킷 기반이라 대출 탭·송금 버튼은 쓰지 않는다(사용자 결정 2026-09-11)",
+      "note": "PAGE-11 자산 탭. 총 자산(GET /accounts 잔액 합, '가장 오래된 balanceUpdatedAt 기준' 문구) + 계좌/카드 탭 + 정기결제 예정(GET /payments/calendar) + 최근 거래 3건 → 전체보기. 카드 목록은 카드 API 가 없어 금융망 후보(managed)에서 온다"
+    },
+    "QuickMenu": {
+      "code": "features/account/components/QuickMenu.tsx",
+      "pencil": "자산관리 (UjYhB) 내부 — 노드 id 미기록"
+    },
+    "IncomeAccountScreen": {
+      "code": "features/account/components/IncomeAccountScreen.tsx",
+      "pencil": "없음",
+      "note": "PAGE-05 수입 계좌 지정(2026-09-11). 목록은 candidates(managed) 계좌의 KeyFin id, 현재 수입 계좌를 미리 선택한다. PUT /accounts/{id}/income 오류 ACCOUNT_001(404)·002(409)"
+    },
+    "AssetSelectScreen": {
+      "code": "features/link/components/AssetSelectScreen.tsx",
+      "pencil": "PAGE-04 계좌·카드 연결 (WVh9e) · PAGE-04 계좌·카드 연결 · 불러오는 중 (WjG6u) · PAGE-04 계좌·카드 연결 · 빈 상태 (V4e93x) · PAGE-04 계좌·카드 연결 · 오류 (U9gpA)",
+      "note": "PAGE-04 계좌·카드 연결. 헤더는 '< 연결할 자산 선택'(text-h1 24 — 모든 뒤로가기 헤더를 예산관리와 같은 24 로 통일하면서 '전체 선택' 옆에 들어가도록 제목을 줄임, 2026-09-14) 한 줄, 아래는 설명만. 이미 연결된 항목(managed)은 선택 불가이고, 새 선택이 없으면 하단 CTA 가 '다음'으로 바뀐다(linkCtaAction, 2026-09-11). POST /links 는 {accountIds, cardIds}. 다음 화면은 NEXT_ROUTE 상수 (TBD)"
+    },
+    "CandidatesErrorState": {
+      "code": "features/link/components/CandidatesErrorState.tsx",
+      "pencil": "PAGE-04 계좌·카드 연결 · 오류 (U9gpA)",
+      "note": "LINK_002·FINANCE_005 는 '금융망 연결하기' 버튼으로 PAGE-03B 로 보낸다(사용자 결정 2026-09-11)"
+    },
+    "BankLogoTile": {
+      "code": "features/link/components/BankLogoTile.tsx",
+      "pencil": "아이콘 (vnfzl) 의 <은행>/original 80x80 심볼",
+      "note": "카드 후보 DTO 에 은행 코드가 없어 카드는 issuerName 이름 매칭(bankLogoByName)으로 로고를 붙인다"
+    },
+    "SpendingAnalyzingScreen": {
+      "code": "features/budget/components/SpendingAnalyzingScreen.tsx",
+      "pencil": "PAGE-06 소비 분석 · 분석 중 (pWPd0, 2026-09-14 오후 재채택 — 아이콘 타일 자리에 모래시계 Lottie) · PAGE-06 소비 분석 · 분석 중 · 캐릭터 대안 (LsD1Y, 이전) · PAGE-06 소비 분석 · 오류 (wcbvZ)",
+      "note": "PAGE-06 1단계. 분석 중은 모래시계 LottieLoop(assets/lottie/analyzing-hourglass.json 96×96 — LottieFiles 'Time Hourglass' 를 primary 계열로 재색칠, 사용자 선정; 웹 fallback 은 lucide hourglass 아이콘) + 제목·설명 + IndeterminateBar. 시안에는 lucide hourglass 아이콘이 자리 표시. 캐릭터는 이 화면에서 뺐다(사용자가 pWPd0 을 가리킴). 여기서만 POST /budgets/proposals 를 부르고 결과를 캐시에 넣는다. 409(BUDGET_001, 이번 주기 예산이 이미 있음)는 오류 대신 PAGE-07 로 보낸다"
+    },
+    "SpendingSummaryScreen": {
+      "code": "features/budget/components/SpendingSummaryScreen.tsx",
+      "pencil": "PAGE-06 소비 분석 · 요약 (mhzUD)",
+      "note": "PAGE-06 2단계(A 요약). 캐시만 읽고(enabled:false) 없으면 분석 중 화면으로 Redirect. '가장 많이 쓴 곳' 막대 3개는 진입 시 0 에서 차오른다(SpendingBarRow fillDelay, 900ms · 150ms 간격, 동작 줄이기면 정지 — 시안에는 없음, 2026-09-14)"
+    },
+    "SpendingEnvelopesScreen": {
+      "code": "features/budget/components/SpendingEnvelopesScreen.tsx",
+      "pencil": "PAGE-06 소비 분석 · 봉투별 (t02uSx)",
+      "note": "PAGE-06 3단계(B 봉투별). 제목은 '< 카테고리별 소비 분석' 헤더 한 줄(사용자 변경 2026-09-14 오후), Hero 는 설명만(아이콘 타일 제거). 행마다 봉투 아이콘 타일 24 + 봉투 색 막대(A 요약은 타일 28). 얇은 막대 7개는 진입 시 0 에서 차오른다(fillDelay 80ms 간격). 이력이 없으면(월평균 전부 0) A·B 를 건너뛰고 PAGE-07 로 간다"
+    },
+    "SpendingAnalysisParts": {
+      "code": "features/budget/components/SpendingAnalysisParts.tsx",
+      "pencil": "spending-analysis/* 공용 조각"
+    },
+    "MovingInScreen": {
+      "code": "features/room/components/MovingInScreen.tsx",
+      "pencil": "PAGE-08 입주 연출 (sla4v)",
+      "note": "PAGE-08 입주 연출. app/character/register.tsx 를 재활용한 결과물(2026-09-08 결정). 원(200) 둘레에 LottieLoop(assets/lottie/moving-in-sparkles.json 240×240) 별 반짝임을 겹친다(2026-09-14, 시안에는 없음)"
+    },
+    "TermsScreen": {
+      "code": "features/auth/components/TermsScreen.tsx",
+      "pencil": "PAGE-03 약관 동의 · 캐릭터 대안 (f0WyT, 2026-09-14 채택) · PAGE-03 약관 동의 (R2GYj, 이전)",
+      "note": "PAGE-03. '< 약관에 동의해 주세요' 한 줄 헤더 + CoachRow(휴대폰 보는 캐릭터) + 약관 박스 + 동의 항목. 동의는 서버가 아니라 keyfin.terms.<userId> 로 사용자별 로컬 저장"
+    },
+    "FinanceEmailScreen": {
+      "code": "features/link/components/FinanceEmailScreen.tsx",
+      "pencil": "PAGE-03B 금융망 이메일 · 캐릭터 대안 (PqGvX, 2026-09-14 채택) · PAGE-03B 금융망 이메일 (mDdag, 이전) · PAGE-03B 금융망 이메일 · 오류 (B6jV5)",
+      "note": "PAGE-03B. '< 금융망 이메일 확인' 한 줄 헤더 + CoachRow(살펴보는 캐릭터) + 이메일 입력 + 안내. FINANCE_005 복구 경로가 백엔드에 없다 (TBD, 2026-09-11)"
+    },
+    "HomeWallBoard": {
+      "code": "features/home/components/HomeWallBoard.tsx",
+      "pencil": "home/p0 WallBoard Asset (K5Ndp) · home/p0/board-open BudgetSheet (CpFXk)",
+      "note": "WallBoard(투명 탭 영역) + BudgetSheet 를 묶는다. 조회가 실패해도 보드는 눌리고 라벨이 상태를 읽어 준다"
+    },
+    "HomeCalendar": {
+      "code": "features/home/components/HomeCalendar.tsx",
+      "pencil": "home/p0 Calendar Asset (lrclI) · home/p0/calendar-open CalendarPopover (ZzspU)",
+      "note": "PAGE-24 결제 캘린더가 없어 팝오버의 '캘린더 열기'는 막아 뒀다 (TBD)"
+    },
+    "HomeCoach": {
+      "code": "features/home/components/HomeCoach.tsx",
+      "pencil": "home/p0 CoachAvatar (Qxnt5) · CoachBubble (o3byv)",
+      "note": "미확정 거래 첫 건을 묻고 SubcategorySheet 로 확정한다. 실패 문구는 features/transaction/errors.ts 의 classifyErrorMessage 를 홈·거래 상세가 같이 쓴다(2026-09-13) 2026-09-15: 분류 뮤테이션·시트 제거, 미확정 건수만 센다 2026-09-22: HomeCoachTarget 만 남아 누르면 /coaching/chat(PAGE-31)으로 간다. 미확정 결제가 있으면 고양이 귀 옆 점, 정리 링크는 대화 화면 상단"
+    },
+    "coaching-chat": {
+      "route": "app/(app)/coaching/chat.tsx",
+      "pencil": "없음",
+      "note": "PAGE-31 코칭 대화(FR-AI-04, P1). 2026-09-22 구현, Pencil 미대조. 홈 코치 고양이 탭 진입. ScreenHeader '코치' + 이력 말풍선(코치: 고양이 얼굴 36 + bg-card border-border rounded-lg p-3.5 text-label / 사용자: bg-primary rounded-2xl 오른쪽 정렬, 최대 폭 85%) + 하단 입력줄(Input multiline 2000자 + 원형 보내기 버튼 h-touch). 상단에 '미확정 결제 n건 정리'(bg-accent 칩 → PAGE-22)와 세션 만료 시각(caption). 답 기다리는 동안 코치 말풍선 '코치가 생각하고 있어요', 실패는 같은 자리 말풍선에 문구 + 다시 시도(입력값 유지). 빈 이력은 EmptyState(message-circle). 코치 문구는 전부 서버 값이고 앱은 안내 문구만 쓴다",
+      "code": "features/coaching/components/CoachingChatScreen.tsx"
+    },
+    "RoomView": {
+      "code": "features/room/components/RoomView.tsx",
+      "pencil": "home/p0 CharacterRoom (oAvM4)",
+      "note": "방 캔버스 폭을 render-prop 으로 넘겨 벽 보드·캘린더·코치 오버레이가 씬 좌표를 환산하게 한다"
+    },
+    "LogoutButton": {
+      "code": "features/auth/components/LogoutButton.tsx",
+      "pencil": "마이페이지 (n374g) 내부 — 노드 id 미기록"
+    },
+    "PendingCleanupScreen": {
+      "code": "features/transaction/components/PendingCleanupScreen.tsx",
+      "pencil": "PAGE-22 미확정 정리 (saJIU) · PAGE-22 미확정 정리 · 빈 상태 (CfREI) · PAGE-22 미확정 정리 · 오류 (rKNm2)",
+      "note": "PAGE-22 본체(2026-09-13). 미확정 거래를 카드로 펼치고 건별로 '「세분류」 확정' 또는 '다른 카테고리'(PAGE-20 시트)로 정리한다. 확정한 거래는 미확정 캐시에서 빠져 목록이 줄고 다 비우면 빈 상태가 된다. 일괄 확정(PUT /transactions/classifications)과 저녁 세션 코인은 P1 이라 넣지 않았다"
+    },
+    "EnvelopeDetailScreen": {
+      "code": "features/budget/components/EnvelopeDetailScreen.tsx",
+      "pencil": "PAGE-23 봉투 상세 · 금액 대안 (ola4D, 2026-09-14 채택) · PAGE-23 봉투 상세 (NPO6l, 이전) · PAGE-23 봉투 상세 · 초과 (mZ0RB) · PAGE-23 봉투 상세 · 빈 상태 (WVpXi) · PAGE-23 봉투 상세 · 못 찾음 (ID24Y, 봉투 못 찾음)",
+      "note": "PAGE-23 본체(2026-09-13, 금액 대안 2026-09-14). 요약은 카드 없이 기간(text-label) · 잔액(text-amount-lg) · 화면 폭 사용률 막대 · 예산/사용액 + 그 봉투의 거래 목록(커서 페이지). 행을 탭하면 거래 상세(PAGE-21). 예산과 거래를 따로 불러서 거래만 실패하면 잔액 카드는 그대로 두고 목록 자리에서만 재시도한다"
+    },
+    "PaymentCalendarScreen": {
+      "code": "features/payment/components/PaymentCalendarScreen.tsx",
+      "pencil": "PAGE-24 결제 캘린더 (LGaxv) · 빈 상태 (XGcYs) · 오류 (w5uuk) · 준비 상태 없음 (pfLbO) · 이체 제안 (cSTvK, 부족 뱃지에 셰브런 + 안내 한 줄)",
+      "note": "PAGE-24 본체(2026-09-13). 월 스테퍼 + 요약(출금 예정 n건·준비 부족 m건) + 날짜별 그룹 카드. prepared/shortage/estimated 는 서버 값 그대로 뱃지로만 표시한다. 고정지출(FIXED) 카드만 수정 화면으로 가고 카드 청구(CARD_BILL)는 버튼이 아니다. 달력 격자 대신 날짜별 목록으로 만들었다(응답이 날짜·항목 목록이고 한 달 건수가 적다) 2026-09-16: GET /transfers 를 같이 받아 부족 항목에 승인 가능한 제안이 있으면 뱃지가 PAGE-25 로 가는 버튼이 된다(findTransferForEntry, FIXED 는 fixedExpenseId+dueDate, CARD_BILL 은 dueDate+출금 계좌+이름). 제안이 없으면(출금일이 모레 이후) 뱃지만 있다"
+    },
+    "FixedExpenseFormScreen": {
+      "code": "features/payment/components/FixedExpenseFormScreen.tsx",
+      "pencil": "PAGE-26 고정지출 등록 (LpGnf, 390x920) · 수정 (v5HKz, 390x990, 삭제 포함) · 못 찾음 (fmksb) · 카드 정기결제 읽기 전용 상세 (kwEMQ)",
+      "note": "PAGE-26 본체(2026-09-13). 이름·유형 5종 칩·금액(AmountInput variant=field — 16pt 입력칸 + '원', 시안 Input / amount 와 같음; 36pt hero 를 쓰던 걸 2026-09-14 고침)·출금일(1~31)·출금 계좌(GET /accounts) + 하단 고정 CTA, 수정에는 삭제(확인 다이얼로그). 폼 아트보드는 내용이 844 를 넘어 스크롤 검토용으로 높이를 늘렸다(budget-proposal/full 과 같은 방식). 수정은 단건 조회 API 가 없어 캘린더 캐시로 채우고 유형은 응답에 없어 기본값에서 고른다 (TBD)"
+    },
+    "SettingsScreen": {
+      "code": "features/settings/components/SettingsScreen.tsx",
+      "pencil": "PAGE-27 설정 · 카드 정리 대안 (Px62H, 2026-09-14 채택) · PAGE-27 설정 (WGeTO, 이전) · PAGE-27 설정 · 동의 꺼짐 (UgUeI) · PAGE-27 설정 · 오류 (Y4hgAU)",
+      "note": "PAGE-27 본체(2026-09-13, 카드 정리 2026-09-14: 동의 블록은 카드 없이 토글 행 + 설명 + border-b 구분선). P0 범위인 이체 동의 스위치 + 1회·1일 한도(GET/PUT /settings)만 다룬다. 동의를 끄면 한도 입력도 비활성이고, 바뀐 값이 있을 때만 저장이 켜진다(한 번의 PUT). 스위치는 components/ui 에 Switch 가 없어 RN 코어 Switch + lib/theme 색을 쓴다"
+    },
+    "TransferApprovalScreen": {
+      "code": "features/payment/components/TransferApprovalScreen.tsx",
+      "pencil": "PAGE-25 이체 승인 · 카드 정리 대안 (o8TlhF, 2026-09-14 채택) · PAGE-25 이체 승인 (t1kTHP, 이전) · PAGE-25 이체 승인 · 완료 (vAcVC) · PAGE-25 이체 승인 · 실패 (KrlUZ) · PAGE-25 이체 승인 · 동의 꺼짐 (chcQ8)",
+      "note": "PAGE-25 본체(2026-09-13, 카드 정리 2026-09-14: 요약은 카드 없이 본문에 바로, 결과 블록은 카드 대신 상태 색 띠 positive-muted/destructive-muted/muted — 완료(vAcVC)·실패(KrlUZ) 시안도 2026-09-14 오후에 띠로 맞춤). 제안 요약(예정일·목적·금액·출금→결제 계좌 마스킹) + [이체하기](확인 다이얼로그)·[나중에]. 규칙 80: 동의 OFF 면 진입을 막고 설정으로, 요청 중에는 두 버튼 모두 잠그고, 자동 재시도 없이 네트워크 오류는 '상태 새로 고침'으로 서버 상태를 확정한다. 결과(EXECUTED/FAILED/APPROVED/CANCELED/UNKNOWN)는 서버 값과 failReason 을 그대로 보여준다 2026-09-16: 앱 내 진입점은 결제 캘린더(PAGE-24 cSTvK)의 부족 뱃지. 같은 날 저녁 -62 반영: 목록에서 id 를 찾는 대신 단건 조회(GET /transfers/{id})로 열고, 404 PAY_005 는 '준비할 결제가 없어요' 빈 상태. 날짜는 dueDate(대상 출금일), APPROVED 는 [다시 시도](같은 기관거래고유번호 재시도), 연기는 PROPOSED 만. 403(PAY_007~010)은 [이체 설정 열기]"
+    },
+    "FixedExpenseListScreen": {
+      "code": "features/payment/components/FixedExpenseListScreen.tsx",
+      "pencil": "PAGE-26B 고정지출 관리 (mtr9c) · 빈 상태 (riWW2) · 오류 (dETNH)",
+      "note": "PAGE-26B 본체. ExpenseRow(bg-accent 면, 모든 항목 탭 — 직접 등록은 수정, 동기화는 읽기 전용 상세) · SectionTitle(text-h2 검정 + n건)"
+    },
+    "RoomEditScreen": {
+      "code": "features/room/components/RoomEditScreen.tsx",
+      "pencil": "PAGE-10 방 꾸미기 (HTF8Q, P0 화면 홈 줄 x 1940)",
+      "note": "ScreenHeader 방 꾸미기(뒤로=취소) + RoomView(locked, 전폭) + 안내 문구 + 하단 취소(outline)·완료(primary) h-button-lg. 2026-09-21 추가(Pencil 미대조): 고른 가구 줄(이름 + secondary sm 방향 바꾸기·넣어 두기, 막힌 이유 caption) · 보관함(label 제목 + 개수, 64pt 타일 bg-muted rounded-xl 가로 목록)"
+    },
+    "BudgetSheet": {
+      "code": "features/home/components/BudgetSheet.tsx",
+      "pencil": "home/p0/board-open BudgetSheet (CpFXk, 2026-09-15 팝오버 HQKYe 를 대체)",
+      "note": "리스트(보드) 탭 → 아래서 올라오는 RN Modal 시트(SubcategorySheet 방식, 높이 최대 80%). 헤더(기간 예산 보드 + 요약 + X) + BudgetCard(봉투 막대 탭 → PAGE-23) + 봉투별 남은 금액 행 + 예산 탭 링크. 조회 상태째 받아 불러오는 중 스켈레톤·실패 시 다시 시도를 시트 안에서 보여준다(홈에 예산 영역이 없어진 뒤 유일한 재시도 경로)"
+    },
+    "Screen": {
+      "code": "components/ui/screen.tsx",
+      "source": "project",
+      "pencil": "없음 (동작 컴포넌트 — 겹치는 헤더 화면의 뿌리·스크롤 컨테이너, 2026-09-16)"
+    }
+  },
+  "screens": {
+    "$removed": "2026-09-13 확인: asset-import-result · character-register(→ PAGE-08 입주 연출로 재활용) · (auth)/onboarding · (auth)/pin · account/[accountId] · transfer/recipient·amount·confirm·complete 라우트는 더 이상 존재하지 않아 항목에서 뺐다. KeyFin 이체는 승인 기반 결제 준비 이체(PAGE-25)뿐이다",
+    "login": {
+      "route": "app/(auth)/login.tsx",
+      "pencil": "PAGE-01 로그인 (HUL5i) · PAGE-01 로그인 · 오류 (JF0Db, AUTH_001 인라인 오류) · PAGE-01 로그인 · 요청 중 (bG1FL, 요청 중)",
+      "note": "PAGE-01 로그인. 킷 원본이 제거돼 2026-09-10 프로젝트 톤으로 새로 그렸다. 상단은 킷 로고 Main Logo 1 (LfIsh) — 도형+Orbitron 조합이라 코드는 3배 PNG(assets/brand/keyfin-logo.png)로 내보내 Image 로 쓴다(태그라인 없음, 사용자 결정 2026-09-10). 이메일·비밀번호 입력(h 44, $radius-lg, 테두리 $input) + 하단 고정 CTA + 회원가입 링크. 오류는 필드 테두리 $destructive 와 인라인 문구, 요청 중에는 버튼 opacity 0.5 와 '로그인 중…'. 소셜 로그인 없음(계약에 없음)"
+    },
+    "signup": {
+      "route": "app/(auth)/signup.tsx",
+      "pencil": "PAGE-02 회원가입 (ZjEHu) · PAGE-02 회원가입 · 중복 이메일 (UdUD7) · PAGE-02 회원가입 · 요청 중 (b1O9sc)",
+      "note": "PAGE-02 회원가입. POST /auth/signup 은 userId 만 주므로 가입 후 로그인 화면으로 replace 하며 signedUpEmail 파라미터로 이메일을 넘긴다. 비밀번호 규칙은 서버(COMMON_001)가 정하므로 클라이언트는 비어 있는지만 본다"
+    },
+    "terms": {
+      "route": "app/(auth)/terms.tsx",
+      "pencil": "PAGE-03 약관 동의 (R2GYj). 킷 원본: 약관 동의 (F7eWgz) — 다른 브랜드 문구가 섞여 있어 참고만 한다",
+      "note": "PAGE-03 약관 동의. 서버 호출 없음(로컬). 약관 요약 박스 + 전체 동의 행($accent) + 필수 2·선택 1 체크 + CTA. 필수 2개를 모두 체크해야 CTA 활성. 구현 완료(2026-09-11). 다음 화면은 PAGE-03B 금융망 이메일(finance-email)"
+    },
+    "finance-email": {
+      "route": "app/(app)/onboarding/finance-email.tsx",
+      "pencil": "PAGE-03B 금융망 이메일 (mDdag) · PAGE-03B 금융망 이메일 · 오류 (B6jV5)",
+      "note": "PAGE-03B 금융망 이메일 연결(2026-09-10 추가). 약관(PAGE-03) 다음, 자산 선택(PAGE-04) 앞. 이메일 1개 + 안내 배너 + 연결하기 CTA. KeyFin 가입 이메일과 다를 수 있어 안내를 따로 둔다. 오류는 이메일 필드 아래(FINANCE_001·LINK_001·USER_004 등). 엔드포인트 URL 미확인 (TBD)"
+    },
+    "asset-select": {
+      "route": "app/(app)/onboarding/asset-select.tsx",
+      "pencil": "PAGE-04 계좌·카드 연결 (WVh9e) · PAGE-04 계좌·카드 연결 · 불러오는 중 (WjG6u) · PAGE-04 계좌·카드 연결 · 빈 상태 (V4e93x) · PAGE-04 계좌·카드 연결 · 오류 (U9gpA). 킷 원본 내 자산 선택 (xEhNa) 은 계약과 어긋나 참고만 한다",
+      "note": "PAGE-04 계좌·카드 연결. 구현 완료(2026-09-11). 계좌·카드를 각각 한 행으로 펼치고 마스킹 번호·잔액을 보여준다. managed(이미 연결)는 선택 불가이고, 이미 연결된 항목이 있고 새 선택이 없으면 CTA 가 '다음'으로 바뀐다(linkCtaAction). 다음 화면은 PAGE-05 수입 계좌(income-account). 은행 로고는 아이콘 프레임(vnfzl)의 <은행>/original 심볼, 카드는 issuerName 이름 매칭"
+    },
+    "income-account": {
+      "route": "app/(app)/onboarding/income-account.tsx · app/(app)/account/income.tsx (변경 모드)",
+      "pencil": "PAGE-05 수입 계좌 지정 (p27vK)",
+      "note": "PAGE-05 수입 계좌 지정(2026-09-11 구현, Pencil 미대조). candidates(managed) 계좌 목록에서 하나를 고르고 PUT /accounts/{id}/income. 다음은 PAGE-06 소비 분석 2026-09-16: 같은 화면의 변경 모드(mode=change) 추가 — ScreenHeader 뒤로가기, CTA '변경', 현재 수입 계좌 그대로면 비활성, 성공 시 돌아감. 진입은 자산 탭 '수입 계좌 변경'(AMSKF)과 이체 승인 PAY_010 액션. 변경 모드 시안은 아직 없음(Pencil 미대조) 2026-09-17: 온보딩 모드(헤더 없음) 위 여백을 상태바 + 40 으로 되돌리고, Pencil P0 화면 PAGE-04 줄 오른쪽(x 1940, y 4156)에 시안 p27vK 를 새로 그렸다(제목·설명 + 라디오 계좌 행 + 다음)."
+    },
+    "spending-analysis": {
+      "route": "app/(app)/onboarding/spending-analysis.tsx",
+      "pencil": "PAGE-06 소비 분석 · 분석 중 (pWPd0) · PAGE-06 소비 분석 · 오류 (wcbvZ, 분석 중 아래)",
+      "note": "PAGE-06 1단계. 흐름 확정(2026-09-11, BUDGET 백엔드 합의): 수입 계좌 → 분석 중 → A 요약 → B 봉투별 → PAGE-07. POST /budgets/proposals 는 여기서만 부르고 409(BUDGET_001)는 PAGE-07 로 넘긴다"
+    },
+    "spending-summary": {
+      "route": "app/(app)/onboarding/spending-summary.tsx",
+      "pencil": "PAGE-06 소비 분석 · 요약 (mhzUD, CTA '다음')",
+      "note": "PAGE-06 2단계(A 요약). 한 달 평균 소비 + 가장 많이 쓴 곳. 캐시만 읽고 없으면 분석 중으로 Redirect"
+    },
+    "spending-envelopes": {
+      "route": "app/(app)/onboarding/spending-envelopes.tsx",
+      "pencil": "PAGE-06 소비 분석 · 봉투별 (t02uSx, 뒤로가기 + '봉투 7개로 나눠 봤어요')",
+      "note": "PAGE-06 3단계(B 봉투별). 이력이 없으면(월평균 전부 0) A·B 를 건너뛰고 서버 기본 예산으로 PAGE-07 로 간다"
+    },
+    "budget-proposal": {
+      "route": "app/(app)/onboarding/budget-proposal.tsx",
+      "pencil": "PAGE-07 예산 제안 (g1fhiV) · PAGE-07 예산 제안 · 전체 (VAJgp)",
+      "note": "PAGE-07 예산 제안·승인. 구현 완료. 금액·budgetId 는 GET /budgets/current 에서, 월평균 근거는 같은 budgetId 의 분석 캐시에서만 읽는다. 확정은 PUT /budgets/{budgetId}/confirm(month 아님) 1회이고 확인 Dialog 를 거치며, BUDGET_003(이미 확정)은 다음 단계로 넘긴다(사용자 결정 2026-09-12). TBD: 슬라이더 상한 15만원·1천원 단위 가정, 제안 API 는 BUDGET Swagger 를 받으면 재대조"
+    },
+    "character-moving-in": {
+      "route": "app/(app)/character/moving-in.tsx",
+      "pencil": "PAGE-08 입주 연출 (sla4v). 킷 원본: 캐릭터 입주중 (PGyNo) — 구도만 참고",
+      "note": "PAGE-08. 예산 승인(PAGE-07) 뒤 GET /room 을 미리 받는 동안 보여주는 연출 화면. 200 원형($muted) + 캐릭터 + 제목/부제 + 점 3개 인디케이터. 프리페치가 끝나면 홈으로 replace. TBD: 최소 노출 시간(너무 빨리 끝나면 연출이 안 보인다), 캐릭터 이미지를 assets/sprites 로 옮겨야 함"
+    },
+    "home": {
+      "route": "app/(app)/(tabs)/index.tsx",
+      "pencil": "home/p0 (EWfx2, 확정 2026-09-08) · home/p0/budget-unset (XVFf1) · home/p0/board-open (KQLga) · home/p0/calendar-open (m2OQ5). 이전 초안: 홈 (hcONw) · 홈 (캐릭터 활성화) (zq2Xl)",
+      "figma": "와이어프레임 초안 / 홈, 홈 (캐릭터 활성화)",
+      "p0": "홈 P0 설계 (u36ocU) 의 아트보드 4장은 2026-09-14 에 P0 화면 프레임(L36Q0u) PAGE-09 홈 줄로 옮겼고 u36ocU 에는 Annotations 만 남았다 — home/p0 (EWfx2, 스크롤 펼침 375×1000: 헤더 코인·알림 벨, 방 벽의 보드 에셋(K5Ndp)·캘린더 에셋(lrclI)+부족 점, 출석 토스트, 코치 말풍선, 방 우하단 상점 버튼(P1), 봉투 7종 사용률 세로 막대 예산 카드(KZBd3), 주황 번호 마커) · home/p0/budget-unset (XVFf1, status=PROPOSED 배너) · home/p0/board-open (KQLga, 보드 에셋 탭 → 봉투별 잔액 팝오버 HQKYe) · home/p0/calendar-open (m2OQ5, 캘린더 에셋 탭 → 출금 일정 팝오버 ZzspU) · 설명 열 Annotations (f2b33). 사용자 결정 2026-09-08: 벽 보드·캘린더는 항상 떠 있는 카드가 아니라 방 에셋이 진입점이고 탭해야 활성화(팝오버). 구현 순서(2026-09-08 전부 완료): 데이터 계약 교체 → 출석 → 보드 확장 → 코치 말풍선 → 캘린더 요소. 벽 보드·캘린더 팝오버는 겹치는 자리라 HomeScreen 이 한 번에 하나만 연다 2026-09-12 변경: 예산 미설정 배너(BudgetUnsetBanner)는 삭제하고 PROPOSED 주기는 예산 확정 화면으로 강제 이동한다 — 아트보드 home/p0/budget-unset (XVFf1) 은 기록으로 보존하되 구현 기준이 아니다. 데이터는 GET /room + GET /budgets/current",
+      "note": " 2026-09-13: 코치 말풍선에 미확정 2건 이상일 때 'n건 모아서 정리'(PAGE-22) 링크를 붙였다, 캘린더 팝오버의 '캘린더 열기'도 PAGE-24 로 연결했다 2026-09-15: 방 전폭·예산 카드 제거·리스트 탭 시트(사용자 결정). Pencil EWfx2·KQLga·m2OQ5·XVFf1 의 CharacterRoom 여백 제거·BudgetSummary 삭제, KQLga 에 Scrim+BudgetSheet 추가."
+    },
+    "assets": {
+      "route": "app/(app)/(tabs)/assets.tsx",
+      "pencil": "PAGE-11 자산 탭 (g5w2Ll, 390x1142 스크롤 검토용 높이) · 수입 계좌 변경 (AMSKF, 입출금 계좌 섹션 제목 오른쪽 링크, 2026-09-16). 킷 원본 자산관리 (UjYhB, 와이어프레임 초안 안) 는 대출 탭·송금 버튼이 있어 참고만",
+      "note": "PAGE-11 자산 탭. 구현 완료(2026-09-11). 시안의 대출 탭·송금 버튼은 제거, 햄버거 비활성, 정기결제 '관리' 숨김, 거래는 최근 3건 + 전체보기(사용자 결정). 총 자산은 GET /accounts 잔액 합이고 '가장 오래된 balanceUpdatedAt 기준' 문구를 붙인다 2026-09-13: 정기결제 예정의 '관리'를 결제 캘린더(PAGE-24)로 열었다 2026-09-15: P0 화면 안에 현재 코드 기준 시안 g5w2Ll 을 새로 그렸다(총 자산·계좌/카드 탭·입출금 계좌 accent 행·정기결제 예정·최근 거래, 활성 탭 자산). 같은 날 최상위에 있던 PAGE-12 예산 탭(kvc1e)·확정 전(ZOmXC)·PAGE-07 예산 제안(g1fhiV)도 P0 화면 안 흐름 자리로 옮겼다(id 불변)"
+    },
+    "budget": {
+      "route": "app/(app)/(tabs)/budget.tsx",
+      "pencil": "PAGE-12 예산 탭 (kvc1e, 2026-09-09 명세 기준 시안) · PAGE-12 예산 탭 · 확정 전 (ZOmXC, status=PROPOSED 미승인 상태). 킷 원본: 예산관리 (K8MODs)",
+      "note": "PAGE-12 예산 탭. 조회는 GET /budgets/current(budgetId·periodFrom·periodTo)로 바꿨고(2026-09-12) 기간을 '9월 1일~30일' 로 보여준다. status=PROPOSED 면 이 탭 대신 예산 확정 화면으로 강제 이동한다 — PAGE-12 예산 탭 · 확정 전 (ZOmXC) 아트보드와 승인 배너는 더 이상 구현 기준이 아니다. 확정액 0 봉투는 빈 트랙이고 지출이 있으면 초과 색·금액. TBD: 헤더 햄버거 동작, BUDGET_ALERT 푸시의 봉투 강조 2026-09-13: 홈 봉투 막대와 이 탭의 봉투 행 둘 다 탭하면 봉투 상세(PAGE-23)로 간다(사용자 요청) 2026-09-18: 봉투 세로 목록을 원판 캐러셀(EnvelopeCarousel, Pencil 미대조)로 바꿨다 — 행은 눌러서 들어간다는 신호가 약했다(사용자 결정). 세로로 긴 카드를 원에 얹어 좌우로 돌리고, 정면 카드를 누르면 봉투 상세로 간다. 같은 날 탭 헤더(제목·햄버거)를 없애 상단은 여백(상태바+20)만 있다."
+    },
+    "report": {
+      "route": "없음 (2026-09-23 리포트 탭 제외 — 구현하지 않기로 결정)",
+      "pencil": "월간 리포트 조회 (r3Nmq)",
+      "note": "시안 있음 — 구현 전 EmptyState 플레이스홀더"
+    },
+    "my": {
+      "route": "app/(app)/(tabs)/my.tsx",
+      "pencil": "마이페이지 (n374g)",
+      "note": "PAGE-14. 로그아웃과 진입 행만 있는 '준비 중' 화면이다(2026-09-13). 2026-09-13 설정(PAGE-27), 2026-09-17 연결 관리(PAGE-32) 진입 행을 붙였다. 프로필은 준비 중"
+    },
+    "transaction-list": {
+      "route": "app/(app)/transaction/index.tsx",
+      "pencil": "없음 (자산 탭 행 모양을 따른다)",
+      "note": "거래 내역 전체보기(FR-TXN-09). 자산 탭 '전체보기'에서 들어오고 월·봉투·계좌/카드 필터를 검색 파라미터로 둔다. 행을 탭하면 거래 상세(PAGE-21). GET /transactions 는 백엔드 미구현이라 계약 사본(노션 2026-09-08) 기준 목으로만 동작한다"
+    },
+    "transaction-detail": {
+      "route": "app/(app)/transaction/[id].tsx",
+      "pencil": "PAGE-21 거래 상세 (AyD8V) · PAGE-21 거래 상세 · 저장 실패 (pcZvq, 분류 저장 실패) · PAGE-21 거래 상세 · 취소 거래 (oojne, 취소 뱃지·비활성) · PAGE-21 거래 상세 · 못 찾음 (AqNgy)",
+      "note": "PAGE-21 거래 상세(2026-09-13 구현·시안). 단건 조회 API 가 계약에 없어 목록·최근 거래·미확정 캐시에서 거래를 찾는다(캐시에 없으면 not-found). 분류 수정은 PAGE-20 세분류 시트를 재사용하고 확정하면 들어온 목록으로 돌아간다. TBD: GET /transactions/{id} 를 백엔드에 요청할지, 입금·취소 거래의 분류 변경 차단이 서버 규칙과 맞는지"
+    },
+    "transaction-pending": {
+      "route": "app/(app)/transaction/pending.tsx",
+      "pencil": "PAGE-22 미확정 정리 (saJIU) · PAGE-22 미확정 정리 · 빈 상태 (CfREI, '정리할 결제가 없어요') · PAGE-22 미확정 정리 · 오류 (rKNm2, 불러오기 실패 + 다시 시도)",
+      "note": "PAGE-22 미확정 정리(2026-09-13 구현·시안). 명세상 진입점은 저녁 21:00 CLEANUP 푸시뿐이라, 푸시 연동 전까지는 홈 코치 말풍선의 'n건 모아서 정리' 링크로 들어간다(사용자 결정 2026-09-13). 데이터는 GET /transactions/pending(파라미터 없음) — 응답 nextCursor 를 쓸 파라미터가 계약에 없어 첫 쪽만 보여준다 (TBD)"
+    },
+    "envelope-detail": {
+      "route": "app/(app)/budget/[envelopeId].tsx",
+      "pencil": "PAGE-23 봉투 상세 (NPO6l) · PAGE-23 봉투 상세 · 초과 (mZ0RB, 초과) · PAGE-23 봉투 상세 · 빈 상태 (WVpXi, 거래 0건) · PAGE-23 봉투 상세 · 못 찾음 (ID24Y, 봉투 못 찾음)",
+      "note": "PAGE-23 봉투 상세(2026-09-13 구현·시안). 진입은 홈 예산 카드의 봉투 막대(명세 §3) · 예산 탭 봉투 행(사용자 요청 2026-09-13) · BUDGET_ALERT 푸시(refId=envelopeId). 잔액은 GET /budgets/current 의 봉투 값이고 거래는 GET /transactions 의 envelopeId 필터다. 확정 전(PROPOSED) 주기는 예산 확정 화면으로 보낸다. TBD: 거래 필터의 month 가 주기 시작월이라 주기가 두 달에 걸치면 목록이 주기와 어긋난다"
+    },
+    "payment-calendar": {
+      "route": "app/(app)/payment/calendar.tsx",
+      "pencil": "PAGE-24 결제 캘린더 (LGaxv) · 빈 상태 (XGcYs) · 오류 (w5uuk) · 준비 상태 없음 (pfLbO) · 이체 제안 (cSTvK, 2026-09-16)",
+      "note": "PAGE-24 결제 캘린더(2026-09-13 구현·시안). 진입은 홈 캘린더 팝오버의 캘린더 열기와 자산 탭 정기결제의 관리, 푸시는 WARNING(refId 추정 TBD). 2026-09-15 계약 반영: 헤더 오른쪽이 + 대신 관리(→ PAGE-26B), 빈 달에 고정지출 등록 버튼, 유형 아이콘 타일, CARD_SUBSCRIPTION 은 카드 대금으로 함께 나가요 안내·버튼 아님, 준비 상태 null 이면 뱃지·모두 준비됐어요 생략. Pencil 도 같은 날 반영(헤더 관리 텍스트 · 원형 유형 타일 r20 — radius-full 변수가 없어 숫자 · 넷플릭스 카드 정기결제 안내는 뱃지 아래 줄 · 준비 상태 없음 시안 pfLbO 추가) 2026-09-15 UI 수정(사용자 피드백): 목록 항목을 흰 카드+그림자 → 자산 탭 계좌 항목과 같은 bg-accent rounded-lg p-4 + 흰 원 타일, 동기화 카드 구독도 화살표를 달고 읽기 전용 상세(kwEMQ)로 연다, 섹션·날짜 제목은 h2/h3 검정(DESIGN.md 섹션 구분 규칙)."
+    },
+    "fixed-expense": {
+      "route": "app/(app)/payment/fixed-expense/[id].tsx",
+      "pencil": "PAGE-26 고정지출 등록 (LpGnf, 390x920) · 수정 (v5HKz, 390x990, 삭제 포함) · 못 찾음 (fmksb) · 카드 정기결제 읽기 전용 상세 (kwEMQ)",
+      "note": "PAGE-26 고정지출 등록·수정·삭제(FR-PAY-07, 2026-09-13 구현·시안). /new 는 등록(POST), /{id} 는 수정(PUT, 등록과 같은 본문 전체 교체)·삭제(DELETE). 2026-09-15 계약 반영: 수정 폼은 GET /fixed-expenses 목록에서 채운다(유형·말일 보정 전 출금일), 유형 칩 4종(CARD_BILL 제외), 이름 50자, 동기화 항목(synced)은 폼 대신 잠김 안내, 로딩·오류·못 찾음 상태, PAY_001~004·ACCOUNT_001/002 문구. Pencil 도 같은 날 반영(유형 칩 4종 + 안내 문구 · 못 찾음 문구 · 카드사 관리 시안 kwEMQ). 불러오는 중·불러오기 오류 시안은 없음 2026-09-15: 동기화 항목은 잠김 안내 대신 읽기 전용 상세(SyncedExpenseDetail — 금액 가운데 크게 + 유형·출금일·결제 경로 DetailRow + muted 잠김 띠)."
+    },
+    "settings": {
+      "route": "app/(app)/my/settings.tsx",
+      "pencil": "PAGE-27 설정 (WGeTO, 동의 ON·저장 비활성) · PAGE-27 설정 · 동의 꺼짐 (UgUeI, 동의 OFF·한도 비활성) · PAGE-27 설정 · 오류 (Y4hgAU)",
+      "note": "PAGE-27 설정 상세(2026-09-13 구현·시안). 진입은 마이 탭의 '설정' 행. 이체 동의·한도(FR-PAY-04)는 P0 라 만들었고, 코치 말투·알림 on/off·방해 금지는 P1 이며 PUT /settings/notifications 가 상세 미확인이라 넣지 않았다. 1회 한도 ≤ 1일 한도 규칙은 서버 문구를 못 받아 화면 판단이다 (TBD)"
+    },
+    "my-links": {
+      "route": "app/(app)/my/links.tsx",
+      "pencil": "PAGE-32 연결 관리 (L6tS7l) · 해제 확인 (gohga, 수입 계좌면 지정 해제 경고 띠) · 불러오는 중 (gKSHA) · 빈 상태 (LjMLH) · 오류 (ksGs8, 다시 시도) · 금융망 재연결 (yuG0o, LINK_002·FINANCE_005 → PAGE-03B) — 모두 최상위 'P1 화면'(fSbUr) 안",
+      "note": "PAGE-32 연결 관리(FR-USR-05, P1). 2026-09-17 시안·구현. 진입은 마이 탭 '연결 관리' 행. GET /links/candidates 의 managed 로 '연결된 계좌'·'연결된 카드'(해제)와 '연결하지 않은 자산'(연결)을 나눈다. 사용자 결정(2026-09-17): 해제는 확인 창을 거친다 · 수입 뱃지는 GET /accounts 의 isIncome(실패해도 화면은 열고 경고는 '지정돼 있다면' 조건부) · 잔액은 표시하지 않는다 · 연결은 행마다 바로 POST /links. 해제 확인 창의 수입 계좌 경고는 이체 제안 중단까지 알린다(관리 중인 수입 계좌가 없으면 서버가 제안을 만들지 않음). 해제 404(LINK_004·005)는 '이미 목록에서 사라진' 전용 문구 + 후보 재조회, 카드 연결·해제 뒤 결제 캘린더·카드 청구 캐시도 무효화. 금융망 재연결 오류는 자산 탭과 같은 CandidatesErrorState 를 써서 온보딩 금융망 이메일(PAGE-03B)로 간다 — 연결 후 PAGE-04 로 이어지는 온보딩 흐름이라 마이 탭 복귀 경로는 TBD",
+      "code": "features/link/components/LinkManagementScreen.tsx"
+    },
+    "notification-inbox": {
+      "route": "app/(app)/notification/index.tsx",
+      "pencil": "PAGE-28 알림함 (XZ84O) · 빈 상태 (GRUCR) · 불러오는 중 (C10zu) · 오류 (G8onl0, 다시 시도) — 모두 최상위 'P1 화면'(fSbUr) 안, 라벨 Yakma · 진입 라벨 VOO5A",
+      "note": "PAGE-28 알림함(FR-NTF-02, P1). 2026-09-17 시안·구현. 진입은 홈 헤더 알림 버튼(NotificationBtn q6hfgQ, 시안 변경 없음 — 미읽음 배지 없음). GET /notifications 를 서버 순서 그대로 날짜 묶음(오늘·어제·'9월 14일 (월)'), 흰 카드 + 아이콘 타일(종류별 lucide: wallet·arrow-left-right·list-checks·message-circle·triangle-alert) + 제목(안 읽음은 600·점) · 본문 · '확인 필요' 뱃지(안 읽은 requiresAction 만) · 시각. 탭 → 낙관적 읽음 + §3 대상 화면. 명세의 requiresAction 상단 정렬은 하지 않음(서버 id 순 커서, requiresAction 안 풀림)",
+      "code": "features/notification/components/NotificationInboxScreen.tsx"
+    },
+    "card-billing-detail": {
+      "route": "app/(app)/payment/card-billing/[id].tsx",
+      "pencil": "PAGE-33 카드 청구 상세 (LsAZT) · 내역 없음·출금일 모름 (AcQNS, 경고 띠) · 불러오는 중 (H5Wkz) · 오류 (yf3NJ, 다시 시도) · 못 찾음 (u8EwPt, PAY_013·잘못된 주소 → 자산 탭) — 모두 최상위 'P1 화면'(fSbUr) 안, 라벨 GtJdg · 진입 라벨 N8Gdn",
+      "note": "PAGE-33 카드 청구 상세(FR-BGT-06, P1). 2026-09-17 시안·구현. 진입은 자산 탭 카드 행과 결제 캘린더 CARD_BILL 항목(둘 다 셰브런 추가, P0 시안에는 해당 행이 그려져 있지 않아 Pencil 변경 없음). GET /cards/{id}/billings(from·to 생략 = 전월~이번 달)의 이번 주 예정액·근거 승인·발행 청구서. 발급사·마스킹 번호는 응답에 없어 금융망 후보에서 cardId 로 찾고 실패하면 그 줄만 생략. 행은 카드가 아니라 아래 선 구분. 날짜는 요일 없이 '9월 14일'(한 줄에 여럿), 확정 안내만 formatMonthDay. 청구서 아랫줄은 결제 완료=결제일, 미결제=출금일(응답 asOf 보다 지났으면 '출금 확인 중'). 404 PAY_013 은 재시도하지 않는다",
+      "code": "features/payment/components/CardBillingDetailScreen.tsx"
+    },
+    "transfer-approval": {
+      "route": "app/(app)/payment/transfer/[id].tsx",
+      "pencil": "PAGE-25 이체 승인 (t1kTHP, 제안) · PAGE-25 이체 승인 · 완료 (vAcVC) · PAGE-25 이체 승인 · 실패 (KrlUZ) · PAGE-25 이체 승인 · 동의 꺼짐 (chcQ8)",
+      "note": "PAGE-25 이체 승인(2026-09-13 구현·시안). 명세상 진입은 07:00 TRANSFER_REQUEST 푸시(refId=이체 id)이고, 푸시(P1) 전까지는 결제 캘린더(PAGE-24 cSTvK) 부족 뱃지가 앱 안 진입점이다(사용자 결정 2026-09-16). 단건 조회가 없어 GET /transfers 목록에서 id 를 찾는다. 재시도(POST /transfers/{id}/retry)는 P1 이고 상세 미확인이라 실패 화면에 안내만 둔다. PIN·생체 인증 단계는 KeyFin 명세에 없어 넣지 않았다 (TBD) (2026-09-13 사용자 Ctrl+Z 로 사라져 x 41275 부터 다시 그림 — 처음 위치는 settings/error 와 겹쳤었다)"
+    },
+    "fixed-expense-list": {
+      "route": "app/(app)/payment/fixed-expense/index.tsx",
+      "pencil": "PAGE-26B 고정지출 관리 (mtr9c) · 빈 상태 (riWW2) · 오류 (dETNH)",
+      "note": "PAGE-26B 고정지출 관리(2026-09-15, 사용자 결정으로 추가 — Notion 목록 API 가 관리 화면용). GET /fixed-expenses. 직접 등록 묶음은 카드 행(탭 → PAGE-26), 카드 정기결제(synced) 묶음은 카드 없는 행 + 자물쇠 + 카드사에서 바꾸라는 안내. 헤더 + 는 등록. 로딩 스켈레톤·오류(다시 시도)·빈 상태(등록 버튼)·당겨서 새로 고침. 시안은 P0 화면 프레임(L36Q0u)의 PAGE-26 줄 아래 새 줄(y 15898, 라벨 r4W2I)에 있고 그 아래 줄은 1010 내렸다 2026-09-15 UI 수정(사용자 피드백): 목록 항목을 흰 카드+그림자 → 자산 탭 계좌 항목과 같은 bg-accent rounded-lg p-4 + 흰 원 타일, 동기화 카드 구독도 화살표를 달고 읽기 전용 상세(kwEMQ)로 연다, 섹션·날짜 제목은 h2/h3 검정(DESIGN.md 섹션 구분 규칙)."
+    },
+    "room-edit": {
+      "route": "app/(app)/room/edit.tsx",
+      "pencil": "PAGE-10 방 꾸미기 (HTF8Q, P0 화면 홈 줄 x 1940)",
+      "note": "방 꾸미기(2026-09-15, 사용자 결정: 홈 안 편집이 불편해 전용 화면으로). 홈 방 씬 우상단 꾸미기 → /room/edit. 씬을 화면 폭 가득 키우고 가구는 바닥 격자, 벽 보드·캘린더는 자기 벽 격자에서 드래그(RoomScene). 들어오면 startEdit, 완료는 commitEdit·취소/뒤로/언마운트는 cancelEdit 뒤 홈 복귀. 저장 API(PUT /room/layout)는 3단계에서 붙인다"
+    },
+    "coin-history": {
+      "route": "app/(app)/coin/index.tsx",
+      "pencil": "PAGE-30 코인 이력 (f7YQj) · 빈 상태 (e1UFei) · 불러오는 중 (PK3Xv) · 오류 (Gi7XY) — 모두 'P1 화면'(fSbUr) 안, 라벨 Pkdax · 진입 라벨 vxre8. ⚠ 2026-09-17 그릴 때 Pencil 이 새 노드 레이아웃을 계산하지 못해(자식 +50px, 스크린샷 빈 화면) 캔버스 확인 전",
+      "note": "PAGE-30 코인 이력(FR-GAM-08, P1). 2026-09-17 시안·구현. 진입은 홈 헤더 CoinBadge(DsQOx, 시안 변경 없음). 잔액 카드(rounded-2xl 흰 카드 + warning 원 coins 아이콘 + amount-lg) + grantDate 묶음(오늘·어제·월일, lib/date formatDateGroupLabel) 행(아이콘 타일 · reasonText · '잔액 n' · +초록/-검정). 사유 아이콘: calendar-check·list-checks·calendar-range·trophy·shopping-bag",
+      "code": "features/shop/components/CoinHistoryScreen.tsx"
+    }
+  },
+  "figmaExport": {
+    "$note": "Pencil → Figma 한 방향 내보내기(scripts/figma, pnpm figma:build). 2026-09-28 scripts/figma/build-plugin.cjs 의 SCREEN_IDS 를 최종 화면 프레임([\"MCmuX\"]) 하나로 바꿨다(2026-09-17~27 은 [\"L36Q0u\",\"n3r9i\"]). 없는 id 가 있으면 빌드가 멈춘다(예전 폴백 = 최상위 frame 전부 내보내기는 제거). 이미지 fill 은 파일을 code.js 에 심어 Figma 에서도 보인다.",
+    "최종 화면 · 주요 화면 설계도": {
+      "pencil": "MCmuX",
+      "figma": "Screens / 최종 화면 · 주요 화면 설계도",
+      "note": "2026-09-23 앱(목 데이터) 실제 화면 캡처 21장(design/pencil/final-screens/*.png, 390×844 이미지 fill)을 제목 + 섹션 3개(온보딩 8 · 홈 — 캐릭터 방 8 · 탭 · 결제 준비 5)로 묶은 설계도. 캔버스 (4900, 25313). 같은 자리의 회색 배경 사각형 wl9Qs 와 왼쪽의 홈 캡처 프레임 2장(VFMOx·y7EORN, 설계도 안 PAGE-09 두 장과 같은 이미지)은 최상위에 남아 있지만 내보내지 않는다"
+    },
+    "P0 화면": {
+      "pencil": "L36Q0u",
+      "figma": "(2026-09-28 부터 내보내기 제외)",
+      "note": "구현 기준 아트보드. PAGE-01~27 + 홈 4장 + PAGE-11 자산 탭(2026-09-15 추가) + PAGE-26B, 흐름 순 19줄. 다시 내보내려면 SCREEN_IDS 에 id 를 넣는다"
+    },
+    "P0 화면 초안": {
+      "pencil": "n3r9i",
+      "figma": "(2026-09-28 부터 내보내기 제외)",
+      "note": "2026-09-14 디자인 개선 전 스냅샷(사용자 보관용)"
+    }
+  }
+}
