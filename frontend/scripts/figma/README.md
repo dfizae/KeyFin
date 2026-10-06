@@ -1,6 +1,6 @@
 # Figma 로컬 플러그인 — 디자인 가져오기
 
-`design/tokens.json`과 `design.pen`의 `P0 화면`(L36Q0u)·`P0 화면 초안`(n3r9i) 프레임을 Figma에 **편집 가능한 노드·변수·스타일**로 재현하는 Figma Plugin API 스크립트다. 커뮤니티 플러그인 없이, Starter 플랜의 내 파일(편집 권한)에서 동작한다.
+`design/tokens.json`과 `design.pen`의 `최종 화면 · 주요 화면 설계도`(MCmuX, `SCREEN_IDS`) 프레임을 Figma에 **편집 가능한 노드·변수·스타일**로 재현하는 Figma Plugin API 스크립트다. 커뮤니티 플러그인 없이, Starter 플랜의 내 파일(편집 권한)에서 동작한다.
 
 > **역할**: Pencil(`design.pen`) → Figma **한 방향 내보내기**. 공유·열람용 출력물이며, 코드 구현·대조·토큰의 원천은 Pencil이다(`AGENTS.md` 디자인 원천 절, 규칙 70). Figma에서 고친 내용은 코드로 돌아오지 않는다 — 고칠 것은 Pencil에서 고치고 다시 빌드한다.
 

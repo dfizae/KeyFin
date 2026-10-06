@@ -106,8 +106,7 @@ function loadLucideIcon(name) {
 // 색 변수(`$primary` …)는 치환하지 않고 남겨 플러그인이 Figma 변수에 바인딩하게 하고, 숫자·문자열 변수는 값으로 치환한다.
 const PEN_PATH = path.join(ROOT, "design.pen");
 const SCREEN_IDS = [
-  "L36Q0u", // P0 화면 — 구현 기준 아트보드(흐름 순 배치)
-  "n3r9i", // P0 화면 초안 — 사용자 스냅샷 복사본
+  "MCmuX", // 최종 화면 · 주요 화면 설계도 — 편집 가능한 벡터 화면 21장 (2026-09-30). P0 화면(L36Q0u)·초안(n3r9i)을 다시 내보내려면 id 를 추가한다
 ];
 const pen = JSON.parse(fs.readFileSync(PEN_PATH, "utf8"));
 const penTop = new Map(pen.children.map((n) => [n.id, n]));

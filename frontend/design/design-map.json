@@ -559,11 +559,11 @@
     }
   },
   "figmaExport": {
-    "$note": "Pencil → Figma 한 방향 내보내기(scripts/figma, pnpm figma:build). 2026-09-28 scripts/figma/build-plugin.cjs 의 SCREEN_IDS 를 최종 화면 프레임([\"MCmuX\"]) 하나로 바꿨다(2026-09-17~27 은 [\"L36Q0u\",\"n3r9i\"]). 없는 id 가 있으면 빌드가 멈춘다(예전 폴백 = 최상위 frame 전부 내보내기는 제거). 이미지 fill 은 파일을 code.js 에 심어 Figma 에서도 보인다.",
+    "$note": "Pencil → Figma 한 방향 내보내기(scripts/figma, pnpm figma:build). SCREEN_IDS 는 최종 화면 프레임([\"MCmuX\"]) 하나다(2026-09-17~27 은 [\"L36Q0u\",\"n3r9i\"], 2026-09-28 부터 MCmuX — 2026-09-30 에 build-plugin.cjs 도 실제로 바꿨다). 없는 id 가 있으면 빌드가 멈춘다. 이미지 fill 은 파일을 code.js 에 심어 Figma 에서도 보인다.",
     "최종 화면 · 주요 화면 설계도": {
       "pencil": "MCmuX",
       "figma": "Screens / 최종 화면 · 주요 화면 설계도",
-      "note": "2026-09-23 앱(목 데이터) 실제 화면 캡처 21장(design/pencil/final-screens/*.png, 390×844 이미지 fill)을 제목 + 섹션 3개(온보딩 8 · 홈 — 캐릭터 방 8 · 탭 · 결제 준비 5)로 묶은 설계도. 캔버스 (4900, 25313). 같은 자리의 회색 배경 사각형 wl9Qs 와 왼쪽의 홈 캡처 프레임 2장(VFMOx·y7EORN, 설계도 안 PAGE-09 두 장과 같은 이미지)은 최상위에 남아 있지만 내보내지 않는다"
+      "note": "2026-09-30 앱 캡처 21장(이미지 fill, 파일은 리포에 없었음)을 편집 가능한 벡터 화면으로 전부 다시 만들었다 — Figma 에서 텍스트·색·레이아웃을 고칠 수 있다. 제목 + 섹션 3개(온보딩 8 · 홈 — 캐릭터 방 9(2026-09-30 상점 · 가구 탭 Om87J 추가 — 상점 화면 복사 후 가구 탭 활성·분류 선택창·가구 카드 6장, 스프라이트 assets/sprites/furniture/<key>/shop.png) · 탭 · 결제 준비 5), 슬롯마다 화면 이름 텍스트 + 390×844 프레임(radius 32, $border 2). 출처: 온보딩 8장·알림함·결제 캘린더·이체 승인은 P0/P1 아트보드 복사(QmtGU·f0WyT·WVh9e·p27vK·mhzUD·t02uSx·g1fhiV·sla4v·XZ84O·LGaxv·t1kTHP), 자산 탭은 g5w2Ll 복사 후 헤더 제거·TabBar 교체, 홈 3장(S6iod 기본 · Z3ldc 첫 진입 안내 · r9r50C 예산 보드)·방 꾸미기(EfW8M)·상점(ykcOQ)·옷장(jf3rZ)·코칭 대화(R59Gw)·예산 탭(L4tgM)·마이 탭(f0XOR)은 목 웹 앱 캡처를 보고 새로 그렸다. 이미지 fill 은 방 씬 두 장(design/images/room-scene-home.png · room-scene-edit.png, 목 웹 앱 Skia 캔버스 캡처)과 캐릭터·의상 스프라이트(design/images/char1-*.png, assets/sprites/outfits/*/{shop,standing}.png)뿐. 새 reusable 컴포넌트(공통 컴포넌트 LxypZ 안): TabBar / 4 (ZI53I, 활성 탭은 descendants 로 Tab/Icon/Label 색 덮어쓰기) · RoomActionButton (O0O5K) · CoinBadge / game (W2zU7) · RoomEditButton (Vr8fU). 옛 사진 프레임 VFMOx·y7EORN 은 지웠고 회색 배경 사각형 wl9Qs 는 남겼다 2026-09-30 오후: 스크롤로 잘리는 목록 화면 3장(알림함·자산 탭·예산 탭)은 슬롯 안 Frames 행에 844 기기 화면 + \"· 전체 (스크롤 펼침)\" 프레임(내용 높이, radius 16·테두리 1, 알림함 y3B6Cj·자산 탭 luAG7·예산 탭 TMGlS)을 나란히 둔다. 홈 예산 보드 시트(v3Qqrf)는 시트 안 스크롤 구조라 프레임을 늘리지 않고 시트를 내용 높이(787, y 57)로 키웠다. 봉투별 사용률 막대는 코드 규칙(여유 = env-* 정체성 색, 남은 30% 미만 = warning, 초과 = destructive)으로 맞췄고 범례 문구는 코드처럼 뺐다. 홈 ? 버튼 아이콘은 설치된 lucide 이름 circle-question-mark 를 쓴다(circle-help 는 빌드 실패)."
     },
     "P0 화면": {
       "pencil": "L36Q0u",
