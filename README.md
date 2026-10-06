@@ -68,7 +68,8 @@ pnpm start          # pnpm a: Android, pnpm w: 웹
 
 ### 구조와 통신 계층
 
-- `app/`은 라우트 조립만 하고, 기능은 `features/<domain>/`에 `api/`, `components/`, `model.ts`로 나눕니다. 도메인은 auth · settings · link · account · transaction · budget · payment · room · shop · notification · coaching 입니다.
+- `app/`은 라우트 조립만 하고, 기능은 `features/<domain>/`에 `api/`, `components/`, `model.ts`로 나눕니다.<br> 
+도메인은 auth · settings · link · account · transaction · budget · payment · room · shop · notification · coaching 입니다.
 - 공용 axios 인스턴스 하나가 Bearer 헤더, 응답 봉투 해제, 401 시 refresh 1회 재시도를 맡습니다. 토큰 재발급 클라이언트는 인터셉터를 붙이지 않아 재귀를 만들지 않습니다.
 - 각 도메인 API 함수는 첫 줄에서 목 여부를 확인합니다. 백엔드가 도메인별로 순차 배포되는 동안 "인증·연결은 실서버, 거래·결제는 목"처럼 섞어 개발할 수 있게 한 스위치입니다.
 - 서버 데이터는 TanStack Query만 다루고, Query Key 팩토리와 AbortSignal 전달을 규칙으로 둡니다. 클라이언트 전역 상태는 Zustand, 토큰은 SecureStore 입니다.
