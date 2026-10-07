@@ -1,15 +1,22 @@
 # KeyFin
 
+<<<<<<< HEAD
 소비 내역을 자동으로 모아 분류하고, 봉투(소비 카테고리) 7종 예산으로 안내하며,<br> 정기 지출을 위한 결제 계좌 준비 이체를 승인 기반으로 실행하는 생활 금융 관리 앱입니다. <br>방·캐릭터·코인으로 예산 상황을 보여줍니다.
 
 > 저는 **프론트엔드를 담당**했고, 이 문서는 프론트엔드를 중심으로 씁니다.<br>
 > 백엔드·AI 코칭·결제 시뮬레이터는 팀원 담당 영역이며 
 > <br>저장소 구성 절에서 위치만 안내합니다.
+=======
+소비 내역을 자동으로 모아 분류하고, 봉투(소비 카테고리) 7종 예산(교통비, 식비, 여가 등)으로 안내하며, 정기 지출을 위한 결제 계좌 준비 이체를 승인 기반으로 실행하는 생활 금융 관리 앱입니다. 방·캐릭터·코인으로 예산 습관이 이어지게 합니다.
+
+> 저는 **프론트엔드(React Native 앱)를 단독으로 담당**했고, 이 문서는 프론트엔드를 중심으로 씁니다.
+> 백엔드·AI 코칭·결제 시뮬레이터는 팀원들이 담당했습니다.
+>>>>>>> b458cb0d53d997bf0a8a2e0e7595c70a47f01034
 
 <!-- 스크린샷은 frontend/docs/images/ 에 넣고 아래 경로를 맞춘다. frontend 루트의 images/ 는 gitignore 대상이라 GitHub 에 올라가지 않는다. -->
-| 홈(방) | 예산 | 결제 캘린더 | AI 코칭 |
+<!-- | 홈(방) | 예산 | 결제 캘린더 | AI 코칭 |
 | --- | --- | --- | --- |
-| ![홈](frontend/docs/images/home_animation.mp4) | ![예산](frontend/docs/images/budget.png) | ![결제 캘린더](frontend/docs/images/payment-calendar.png) | ![AI 코칭](frontend/docs/images/coaching.png) |
+| ![홈](frontend/docs/images/home_animation.mp4) | ![예산](frontend/docs/images/budget.png) | ![결제 캘린더](frontend/docs/images/payment-calendar.png) | ![AI 코칭](frontend/docs/images/coaching.png) | -->
 
 ## 핵심 기능
 
@@ -87,26 +94,26 @@ pnpm start          # pnpm a: Android, pnpm w: 웹
 ## 디자인 파이프라인
 
 ```
-design.pen (Pencil, 확정 원천 — 변수 51개 + 아트보드)
+design.pen (Pencil, 확정 원천 — 변수 65개 + 아트보드)
   └─ pnpm tokens:sync ─▶ design/tokens.json ─▶ tailwind.config.js · global.css · lib/theme.ts
 ```
 
 - 코드에는 시맨틱 토큰(`bg-background`, `text-muted-foreground`, `text-amount-lg` …)만 노출됩니다. hex, 프리미티브 팔레트, arbitrary value는 `pnpm tokens:check`가 잡습니다.
-- 라이트·다크는 CSS 변수로 전환되어 색상에 `dark:` 변형이 필요 없습니다.
 - 화면을 만들기 전 `design/design-map.json`의 Pencil 노드 id로 시안을 대조하고, 시안이 없는 화면은 `design/DESIGN.md` 기준으로 만들어 "미대조"로 보고합니다.
 
 ## AI 코딩 하네스
 
-에이전트가 디자인 원천과 핀테크 규칙을 일관되게 따르도록 만든 장치입니다. 팀 저장소에서는 프론트 1인 전용이라 추적하지 않았고, 이 저장소에서 공개합니다.
+에이전트가 디자인 원천과 핀테크 규칙을 일관되게 따르도록 만든 장치입니다. 팀 저장소에서는 프론트 1이라 코드 리뷰에 방해될까봐 커밋하지 않았습니다.
+그래서 이 저장소에서 따로 공개 중입니다.
 
 - `frontend/.agents/rules/` 규칙 10개. 기본, React 상태, API·데이터, TypeScript 구조, 스타일·접근성, 오류·보안, 의존성·테스트, 디자인 토큰, 핀테크 보안, 백엔드 계약. 각 규칙은 `paths` frontmatter로 적용 경로를 제한합니다.
 - `frontend/.agents/skills/` 프로젝트 전용 스킬 2개. Pencil 대조·토큰 동기화 절차와 핀테크 UI 패턴 체크리스트.
 - `frontend/.claude/settings.json`의 PostToolUse 훅이 편집 직후 토큰 위반 검사, 산출물 재생성, `.agents` → `.claude` 미러 동기화를 자동 실행합니다.
 - 진입점은 `frontend/AGENTS.md`이고 `CLAUDE.md`는 이를 가리키기만 합니다.
 
-## 백엔드 계약 관리
+## 백엔드 개발자와의 연동 협의 및 관리
 
-- 계약의 원천은 팀 Notion 명세와 배포 서버 Swagger이고, `frontend/docs/api-contract.md`가 클라이언트 쪽 사본입니다. 요청·응답 타입을 TypeScript로 적어 두고 배포 서버와 전수 대조했습니다.
+- 협의는 팀 Notion 명세와 배포 서버 Swagger이고, `frontend/docs/api-contract.md`가 클라이언트 쪽 사본입니다. 요청·응답 타입을 TypeScript로 적어 두고 배포 서버와 전수 대조했습니다.
 - 명세와 배포 서버가 다르면 문서에 날짜와 함께 기록하고 앱은 배포 서버 기준으로 구현했습니다. 목 기간의 차이는 버그가 아니라 계약 차이로 다뤘습니다.
 - 통신 코드를 쓰는 절차는 `frontend/docs/api-guide.md`에 있습니다. DTO ↔ 모델 변환, 오류 봉투, 계약 불일치 오류 타입을 여기서 정합니다.
 
