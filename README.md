@@ -4,10 +4,10 @@
 소비 내역을 자동으로 모아 분류하고, 봉투(소비 카테고리) 7종 예산(교통비, 식비, 여가 등)으로 안내하며, 정기 지출을 위한 결제 계좌 준비 이체를 승인 기반으로 실행하는 생활 금융 관리 앱입니다. 방·캐릭터·코인으로 예산 습관이 이어지게 합니다.
 
 
-<!-- 스크린샷은 frontend/docs/images/ 에 넣고 아래 경로를 맞춘다. frontend 루트의 images/ 는 gitignore 대상이라 GitHub 에 올라가지 않는다. -->
-<!-- | 홈(방) | 예산 | 결제 캘린더 | AI 코칭 |
-| --- | --- | --- | --- |
-| ![홈](frontend/docs/images/home_animation.mp4) | ![예산](frontend/docs/images/budget.png) | ![결제 캘린더](frontend/docs/images/payment-calendar.png) | ![AI 코칭](frontend/docs/images/coaching.png) | -->
+<!-- 스크린샷은 frontend/docs/images/ 에 넣고 아래 경로를 맞춘다. frontend/.gitignore 가 docs/ 를 무시하므로 새 이미지는 git add -f 로 올린다. frontend 루트의 images/ 도 gitignore 대상이다. -->
+| 홈(방) | 결제 캘린더 | AI 코칭 |
+| --- | --- | --- |
+| ![홈](frontend/docs/images/home.png) | ![결제 캘린더](frontend/docs/images/payment-calendar.png) | ![AI 코칭](frontend/docs/images/coaching.png) |
 
 ## 핵심 기능
 
